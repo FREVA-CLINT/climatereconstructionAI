@@ -16,6 +16,8 @@ from places2 import Places2
 from util.io import load_ckpt
 from util.io import save_ckpt
 
+import torch.multiprocessing as mp
+#mp.set_start_method('spawn')
 
 class InfiniteSampler(data.sampler.Sampler):
     def __init__(self, num_samples):
@@ -70,11 +72,11 @@ if not os.path.exists(args.log_dir):
 writer = SummaryWriter(log_dir=args.log_dir)
 
 size = (args.image_size, args.image_size)
+#size = (288, 288)
 img_tf = transforms.Compose(
-    [transforms.Resize(size=size), transforms.ToTensor(),
-     transforms.Normalize(mean=opt.MEAN, std=opt.STD)])
+    [transforms.Normalize(mean=opt.MEAN, std=opt.STD)])
 mask_tf = transforms.Compose(
-    [transforms.Resize(size=size), transforms.ToTensor()])
+    [transforms.ToTensor()])
 
 dataset_train = Places2(args.root, args.mask_root, img_tf, mask_tf, 'train')
 dataset_val = Places2(args.root, args.mask_root, img_tf, mask_tf, 'val')
@@ -108,6 +110,9 @@ for i in tqdm(range(start_iter, args.max_iter)):
     model.train()
 
     image, mask, gt = [x.to(device) for x in next(iterator_train)]
+    #print(image.shape)
+    #print(mask.shape)
+    #print(gt.shape)
     output, _ = model(image, mask)
     loss_dict = criterion(image, mask, output, gt)
 
