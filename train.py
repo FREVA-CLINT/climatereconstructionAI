@@ -17,6 +17,8 @@ from util.io import load_ckpt
 from util.io import save_ckpt
 
 import torch.multiprocessing as mp
+
+print(torch.cuda.is_available())
 #mp.set_start_method('spawn')
 
 class InfiniteSampler(data.sampler.Sampler):
