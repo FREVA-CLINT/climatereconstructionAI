@@ -5,7 +5,7 @@
 #SBATCH -A bb1152
 #SBATCH -n 1
 #SBATCH --cpus-per-task=64
-#SBATCH --time=12:00:00
+#SBATCH --time=1:00:00
 #SBATCH --mem=64G
 ###SBATCH --nodelist=mg206
 

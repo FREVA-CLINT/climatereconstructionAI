@@ -35,7 +35,7 @@ class Places2(torch.utils.data.Dataset):
             
     def __getitem__(self, index):
         h5_file = h5py.File('{:s}'.format(self.paths[0]), 'r')
-        hdata = h5_file.get('tas')
+        hdata = h5_file.get('pr')
         gt_img = hdata[index,:,:]
         #gt_img -= np.mean(gt_img) # the -= means can be read as x = x- np.mean(x)
         #gt_img /= np.std(gt_img) # the /= means can be read as x = x/np.std(x)
@@ -46,7 +46,7 @@ class Places2(torch.utils.data.Dataset):
         #gt_img = self.img_transform(gt_img)
         
         mask_file = h5py.File(self.maskpath)
-        maskdata = mask_file.get('tas')
+        maskdata = mask_file.get('pr')
         N_mask = len((maskdata[:,1,1]))
         #mask = torch.from_numpy(maskdata[index,:,:])
         mask = torch.from_numpy(maskdata[random.randint(0, N_mask - 1),:,:])#.float()
@@ -61,7 +61,7 @@ class Places2(torch.utils.data.Dataset):
 
     def __len__(self):
         h5_file = h5py.File('{:s}'.format(self.paths[0]), 'r')
-        hdata = h5_file.get('tas')
+        hdata = h5_file.get('pr')
         leng = len(hdata[:,1,1])
         return leng
         
