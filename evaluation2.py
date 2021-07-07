@@ -7,8 +7,8 @@ from torchvision.utils import save_image
 from util.image import unnormalize
 
 
-def evaluate2(model, dataset, device, filename):
-    image, mask, gt = zip(*[dataset[i] for i in range(2028)])
+def evaluate2(model, dataset, device, filename, partitions):
+    image, mask, gt = zip(*[dataset[i] for i in range(1632)])
     image = torch.stack(image)
     mask = torch.stack(mask)
     gt = torch.stack(gt)
@@ -17,14 +17,14 @@ def evaluate2(model, dataset, device, filename):
     output = output.to(torch.device('cpu'))
     output_comp = mask * image + (1 - mask) * output
 
-    #grid = make_grid(
+    # grid = make_grid(
     #    torch.cat((unnormalize(image), mask, unnormalize(output),
     #               unnormalize(output_comp), unnormalize(gt)), dim=0))
-    #save_image(grid, filename)
-    
-    cvar = [ image[:,1,:,:] , mask[:,1,:,:], output[:,1,:,:], output_comp[:,1,:,:], gt[:,1,:,:] ]
-    cname = [ 'image', 'mask', 'output', 'output_comp', 'gt' ]
-    dname = [ 'time', 'lat', 'lon' ]
+    # save_image(grid, filename)
+
+    cvar = [image[:, 1, :, :], mask[:, 1, :, :], output[:, 1, :, :], output_comp[:, 1, :, :], gt[:, 1, :, :]]
+    cname = ['image', 'mask', 'output', 'output_comp', 'gt']
+    dname = ['time', 'lat', 'lon']
     for x in range(0, 5):
         h5 = h5py.File('h5/%s' % (cname[x]), 'w')
         h5.create_dataset('tas', data=cvar[x])
