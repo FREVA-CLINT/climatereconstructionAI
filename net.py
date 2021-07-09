@@ -146,7 +146,7 @@ class PCBActiv(nn.Module):
 #                              bn=False, activ=None, conv_bias=True)
 
 class PConvUNet(nn.Module):
-    def __init__(self, layer_size=7, input_channels=1, upsampling_mode='nearest'):
+    def __init__(self, layer_size=7, input_channels=3, upsampling_mode='nearest'):
         super().__init__()
         self.freeze_enc_bn = False
         self.upsampling_mode = upsampling_mode
