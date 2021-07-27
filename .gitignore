@@ -9,6 +9,7 @@ h5/radolan-skaled-box
 h5/skaled-2012
 .idea
 slurm-*
+local_settings.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
