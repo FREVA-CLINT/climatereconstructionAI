@@ -9,10 +9,10 @@ rdir=$(dirname $input)
 rname=$(basename $input)
 output=$rdir/$rname.nc
 
-cat script/radolan_structure.txt >> $rdir/$rname.txt
+cat script/structure.txt >> $rdir/$rname.txt
 ncdump -v pr $input | sed -e '1,/data:/d' >> $rdir/$rname.txt
 ncgen -o $output-tmp $rdir/$rname.txt
 
-cdo -setgrid,../../data/radolan-skaled/test_large/radolan_day_test.h5 $output-tmp $output
+cdo -setgrid,../../data/radolan-complete-skaled/test_large/day.h5 $output-tmp $output
 
 rm $rdir/$rname.txt $output-tmp
