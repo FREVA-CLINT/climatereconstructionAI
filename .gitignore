@@ -2,4 +2,15 @@
 logs
 snapshots
 masks
+reconstructions
+h5/anom-skaled
+h5/radolan-complete-box
+h5/radolan-skaled-box
+h5/skaled-2012
 .idea
+slurm-*
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class

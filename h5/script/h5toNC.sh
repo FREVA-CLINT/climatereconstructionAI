@@ -9,10 +9,10 @@ rdir=$(dirname $input)
 rname=$(basename $input)
 output=$rdir/$rname.nc
 
-cat script/netcdf_structure.txt >> $rdir/$rname.txt
-ncdump -v tas $input | sed -e '1,/data:/d' >> $rdir/$rname.txt
+cat script/radolan_structure.txt >> $rdir/$rname.txt
+ncdump -v pr $input | sed -e '1,/data:/d' >> $rdir/$rname.txt
 ncgen -o $output-tmp $rdir/$rname.txt
 
-cdo -remapcon,../reconstructions/20crAI_HadCRUT4_4.6.0.0_tas_mon_185001-201812.nc $output-tmp $output
+cdo -setgrid,../../data/radolan-skaled/test_large/radolan_day_test.h5 $output-tmp $output
 
 rm $rdir/$rname.txt $output-tmp

@@ -8,7 +8,7 @@ from util.image import unnormalize
 
 
 def evaluate2(model, dataset, device, filename, partitions):
-    image, mask, gt = zip(*[dataset[i] for i in range(1632)])
+    image, mask, gt = zip(*[dataset[i] for i in range(dataset.__len__())])
     image = torch.stack(image)
     mask = torch.stack(mask)
     gt = torch.stack(gt)
@@ -27,7 +27,7 @@ def evaluate2(model, dataset, device, filename, partitions):
     dname = ['time', 'lat', 'lon']
     for x in range(0, 5):
         h5 = h5py.File('h5/%s' % (cname[x]), 'w')
-        h5.create_dataset('tas', data=cvar[x])
+        h5.create_dataset('pr', data=cvar[x])
         for dim in range(0, 3):
-            h5['tas'].dims[dim].label = dname[dim]
+            h5['pr'].dims[dim].label = dname[dim]
         h5.close()
