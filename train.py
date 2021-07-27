@@ -11,7 +11,7 @@ import opt
 import local_settings
 from evaluation import evaluate
 from loss import InpaintingLoss
-from net import PConvUNet
+from net import PConvUNetPercipitation, PConvUNetTemperature
 from net import VGG16FeatureExtractor
 from places2 import Places2
 from util.io import load_ckpt
@@ -67,8 +67,11 @@ iterator_train = iter(data.DataLoader(
     dataset_train, batch_size=local_settings.batch_size,
     sampler=InfiniteSampler(len(dataset_train)),
     num_workers=local_settings.n_threads))
-print(len(dataset_train))
-model = PConvUNet().to(device)
+
+if local_settings.data_type == 'pr':
+    model = PConvUNetPercipitation().to(device)
+elif local_settings.data_type == 'tas':
+    model = PConvUNetTemperature().to(device)
 
 if local_settings.finetune:
     lr = local_settings.lr_finetune
