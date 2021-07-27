@@ -4,6 +4,7 @@ import torch
 #mp.set_start_method('spawn')
 import h5py
 import numpy as np
+import local_settings
 
 from PIL import Image
 from glob import glob
@@ -19,9 +20,9 @@ class Places2(torch.utils.data.Dataset):
         # use about 8M images in the challenge dataset
         print(img_root)
         if split == 'train':
-            self.paths = glob('{:s}/data_large/**/*.h5'.format(img_root),
+            self.paths = glob('{:s}/data_large/*.h5'.format(img_root),
                               recursive=True)
-        else:
+        elif split == 'test':
             self.paths = glob('{:s}/test_large/*.h5'.format(img_root))
         #self.h5_file = h5py.File('{:s}'.format(self.paths[0]), 'r')
         #self.hdata = self.h5_file.get('tas')
@@ -35,7 +36,7 @@ class Places2(torch.utils.data.Dataset):
             
     def __getitem__(self, index):
         h5_file = h5py.File('{:s}'.format(self.paths[0]), 'r')
-        hdata = h5_file.get('pr')
+        hdata = h5_file.get(local_settings.data_type)
         gt_img = hdata[index,:,:]
         #gt_img -= np.mean(gt_img) # the -= means can be read as x = x- np.mean(x)
         #gt_img /= np.std(gt_img) # the /= means can be read as x = x/np.std(x)
@@ -46,7 +47,7 @@ class Places2(torch.utils.data.Dataset):
         #gt_img = self.img_transform(gt_img)
         
         mask_file = h5py.File(self.maskpath)
-        maskdata = mask_file.get('pr')
+        maskdata = mask_file.get(local_settings.data_type)
         N_mask = len((maskdata[:,1,1]))
         if self.split == 'infill':
                 mask = torch.from_numpy(maskdata[index,:,:])
@@ -63,7 +64,7 @@ class Places2(torch.utils.data.Dataset):
 
     def __len__(self):
         h5_file = h5py.File('{:s}'.format(self.paths[0]), 'r')
-        hdata = h5_file.get('pr')
+        hdata = h5_file.get(local_settings.data_type)
         leng = len(hdata[:,1,1])
         return leng
         
