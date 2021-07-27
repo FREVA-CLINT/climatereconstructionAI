@@ -5,9 +5,9 @@
 #SBATCH -A bb1152
 #SBATCH -n 1
 #SBATCH --cpus-per-task=64
-#SBATCH --time=1:00:00
-#SBATCH --mem=64G
-###SBATCH --nodelist=mg206
+#SBATCH --time=12:00:00
+#SBATCH --mem=256G
+#SBATCH --nodelist=mg201
 
 module load cuda/10.0.130
 module load singularity/3.6.1-gcc-9.1.0

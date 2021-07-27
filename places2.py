@@ -13,16 +13,16 @@ class Places2(torch.utils.data.Dataset):
     def __init__(self, img_root, mask_root, img_transform, mask_transform,
                  split='train'):
         super(Places2, self).__init__()
-        
+        self.split = split
         self.img_transform = img_transform
         self.mask_transform = mask_transform
         # use about 8M images in the challenge dataset
+        print(img_root)
         if split == 'train':
             self.paths = glob('{:s}/data_large/**/*.h5'.format(img_root),
                               recursive=True)
         else:
-            self.paths = glob('{:s}/{:s}_large/*.h5'.format(img_root, split))
-
+            self.paths = glob('{:s}/test_large/*.h5'.format(img_root))
         #self.h5_file = h5py.File('{:s}'.format(self.paths[0]), 'r')
         #self.hdata = self.h5_file.get('tas')
         #self.leng = len((self.hdata[:,1,1]))
@@ -48,8 +48,10 @@ class Places2(torch.utils.data.Dataset):
         mask_file = h5py.File(self.maskpath)
         maskdata = mask_file.get('pr')
         N_mask = len((maskdata[:,1,1]))
-        #mask = torch.from_numpy(maskdata[index,:,:])
-        mask = torch.from_numpy(maskdata[random.randint(0, N_mask - 1),:,:])#.float()
+        if self.split == 'infill':
+                mask = torch.from_numpy(maskdata[index,:,:])
+        else:
+                mask = torch.from_numpy(maskdata[random.randint(0, N_mask - 1),:,:])#.float()
         mask = mask.unsqueeze(0)
         b = mask[0,:,:]
         mask = b.repeat(3, 1, 1)

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 ####RAW
-python train.py --root /work/bb1152/k204233/climatereconstructionAI/data --batch_size 18 --n_threads 32 --max_iter 500000 --mask_root /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/masks/radolan_missmask.h5 --save_dir ./snapshots/radolan --log_dir ./logs/radolan
+#python train.py --root /work/bb1152/k204233/climatereconstructionAI/data/radolan-complete-skaled --batch_size 4 --n_threads 64 --max_iter 100000 --mask_root /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/masks/box_mask.h5 --save_dir ./snapshots/radolan-complete-skaled --log_dir ./logs/radolan-complete-skaled
 ####FINE
-#python train.py --root /work/bb1152/k204233/climatereconstructionAI/data --mask_root /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/masks/hadcrut4-missmask.h5 --finetune --resume /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/20cr/ckpt/500000.pth --batch_size 18 --n_threads 4 --max_it$
+#python train.py --root /work/bb1152/k204233/climatereconstructionAI/data/radolan-complete-skaled --mask_root /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/masks/box_mask.h5 --finetune --resume /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/radolan-complete-skaled/ckpt/100000.pth --batch_size 4 --n_threads 64 --max_iter 200000 --save_dir ./snapshots/radolan-complete-skaled --log_dir ./logs/radolan-complete-skaled
 ####TEST
-#python test.py --root /work/bb1152/k204233/climatereconstructionAI/data/ --mask_root /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/masks/hadcrut_missmask_187001-200512.h5 --snapshot /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/20cr/ckpt/1000000.pth --partitions 2
+python test.py --root /work/bb1152/k204233/climatereconstructionAI/data/radolan-complete-skaled --mask_root /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/masks/box_mask.h5 --snapshot /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/radolan-complete-skaled/ckpt/200000.pth --partitions 2
