@@ -6,10 +6,10 @@
 #SBATCH -n 1
 #SBATCH --cpus-per-task=64
 #SBATCH --time=12:00:00
-#SBATCH --mem=256G
-#SBATCH --nodelist=mg201
+#SBATCH --mem=32G
+#SBATCH --nodelist=mg206
 
 module load cuda/10.0.130
 module load singularity/3.6.1-gcc-9.1.0
 export HDF5_USE_FILE_LOCKING='FALSE'
-singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img.sif bash /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/start.sh
+singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img.sif python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/train.py
