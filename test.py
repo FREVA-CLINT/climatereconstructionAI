@@ -6,7 +6,7 @@ import opt
 import local_settings
 from places2 import Places2
 from evaluation2 import evaluate2
-from net import PConvUNet
+from net import PConvUNetPercipitation, PConvUNetTemperature
 from util.io import load_ckpt
 
 device = torch.device(local_settings.device)
@@ -25,8 +25,11 @@ else:
     split = 'test'
 dataset_val = Places2(local_settings.data_root_test_dir, local_settings.mask_test_dir, img_transform, mask_transform, split)
 
-model = PConvUNet().to(device)
-load_ckpt(local_settings.snapshot, [('model', model)])
+if local_settings.data_type == 'pr':
+    model = PConvUNetPercipitation().to(device)
+elif local_settings.data_type == 'tas':
+    model = PConvUNetTemperature().to(device)
+load_ckpt(local_settings.snapshot_dir, [('model', model)])
 
 model.eval()
 evaluate2(model, dataset_val, device, 'result.jpg', local_settings.partitions)
