@@ -172,7 +172,7 @@ class PConvUNet(nn.Module):
 
 
 class PConvUNetPercipitation(PConvUNet):
-    def __init__(self, layer_size=7, input_channels=3, upsampling_mode='nearest'):
+    def __init__(self, layer_size=7, input_channels=2, upsampling_mode='nearest'):
         super().__init__()
         self.freeze_enc_bn = False
         self.upsampling_mode = upsampling_mode
@@ -196,7 +196,7 @@ class PConvUNetPercipitation(PConvUNet):
 
 
 class PConvUNetTemperature(PConvUNet):
-    def __init__(self, layer_size=3, input_channels=3, upsampling_mode='nearest'):
+    def __init__(self, layer_size=3, input_channels=1, upsampling_mode='nearest'):
         super().__init__()
         self.freeze_enc_bn = False
         self.upsampling_mode = upsampling_mode
@@ -220,6 +220,7 @@ class PConvUNetTemperature(PConvUNet):
 
 
 if __name__ == '__main__':
+    print("HEY")
     size = (1, 3, 5, 5)
     input = torch.ones(size)
     input_mask = torch.ones(size)
