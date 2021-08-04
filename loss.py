@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+import local_settings
+
 
 def gram_matrix(feat):
     # https://github.com/pytorch/examples/blob/master/fast_neural_style/neural_style/utils.py
@@ -35,6 +37,16 @@ class InpaintingLoss(nn.Module):
             feat_output_comp = self.extractor(output_comp)
             feat_output = self.extractor(output)
             feat_gt = self.extractor(gt)
+        elif output.shape[1] == 2 and local_settings.time:
+            output_comp = output_comp[:][0][:][:]
+            output_comp = output_comp.unsqueeze(1)
+            output = output[:][0][:][:]
+            output = output.unsqueeze(1)
+            gt = gt[:][0][:][:]
+            gt = gt.unsqueeze(1)
+            feat_output_comp = self.extractor(torch.cat([output_comp]*3, 1))
+            feat_output = self.extractor(torch.cat([output]*3, 1))
+            feat_gt = self.extractor(torch.cat([gt]*3, 1))
         elif output.shape[1] == 1:
             feat_output_comp = self.extractor(torch.cat([output_comp]*3, 1))
             feat_output = self.extractor(torch.cat([output]*3, 1))
