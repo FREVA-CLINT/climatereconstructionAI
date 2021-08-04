@@ -24,6 +24,8 @@ class Places2(torch.utils.data.Dataset):
                               recursive=True)
         elif split == 'test':
             self.paths = glob('{:s}/test_large/*.h5'.format(img_root))
+        elif split == 'val':
+            self.paths = glob('{:s}/val_large/*.h5'.format(img_root))
         #self.h5_file = h5py.File('{:s}'.format(self.paths[0]), 'r')
         #self.hdata = self.h5_file.get('tas')
         #self.leng = len((self.hdata[:,1,1]))
