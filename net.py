@@ -113,8 +113,10 @@ class PCBActiv(nn.Module):
         elif activ == 'leaky':
             self.activation = nn.LeakyReLU(negative_slope=0.2)
 
-    def forward(self, input, input_mask):
+    def forward(self, input, input_mask, time_stamp):
         h, h_mask = self.conv(input, input_mask)
+        if time_stamp:
+            h = torch.cat((h, time_stamp))
         if hasattr(self, 'bn'):
             h = self.bn(h)
         if hasattr(self, 'activation'):
