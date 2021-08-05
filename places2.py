@@ -31,20 +31,16 @@ class Places2(torch.utils.data.Dataset):
     def __getitem__(self, index):
         h5_file = h5py.File('{:s}'.format(self.paths[0]), 'r')
         hdata = h5_file.get(local_settings.data_type)
-        time_data = h5_file.get('time')
 
-        time_stamp = time_data[index]
+        if local_settings.time:
+            time_data = h5_file.get('time')
+            time_stamp = time_data[index]
+        else:
+            time_stamp = None
 
         gt_img = hdata[index,:,:]
         gt_img = torch.from_numpy(gt_img[:,:])
         gt_img = gt_img.unsqueeze(0)
-
-        if local_settings.time:
-            gt_img_time = []
-            time_stamp = torch.empty(gt_img.shape[0], gt_img.shape[1], gt_img.shape[2]).fill_(time_stamp)
-            gt_img_time.append(gt_img)
-            gt_img_time.append(time_stamp)
-            gt_img = torch.cat(gt_img_time)
         
         mask_file = h5py.File(self.maskpath)
         maskdata = mask_file.get(local_settings.data_type)
@@ -55,13 +51,7 @@ class Places2(torch.utils.data.Dataset):
                 mask = torch.from_numpy(maskdata[random.randint(0, N_mask - 1),:,:])
         mask = mask.unsqueeze(0)
 
-        if local_settings.time:
-            mask_time = []
-            ones = torch.ones(mask.shape[0], mask.shape[1], mask.shape[2])
-            mask_time.append(mask)
-            mask_time.append(ones)
-            mask = torch.cat(mask_time)
-        return gt_img * mask, mask, gt_img
+        return gt_img * mask, mask, gt_img, time_stamp
 
     def __len__(self):
         h5_file = h5py.File('{:s}'.format(self.paths[0]), 'r')
