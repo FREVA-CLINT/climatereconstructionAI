@@ -5,6 +5,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
 
+import local_settings
+
 
 def weights_init(init_type='gaussian'):
     def init_fun(m):
@@ -113,10 +115,8 @@ class PCBActiv(nn.Module):
         elif activ == 'leaky':
             self.activation = nn.LeakyReLU(negative_slope=0.2)
 
-    def forward(self, input, input_mask, time_stamp):
+    def forward(self, input, input_mask):
         h, h_mask = self.conv(input, input_mask)
-        if time_stamp:
-            h = torch.cat((h, time_stamp))
         if hasattr(self, 'bn'):
             h = self.bn(h)
         if hasattr(self, 'activation'):
@@ -125,23 +125,22 @@ class PCBActiv(nn.Module):
 
 
 class PConvUNet(nn.Module):
-    def forward(self, input, input_mask, time_stamp):
+    def forward(self, input, input_mask):
         h_dict = {}  # for the output of enc_N
         h_mask_dict = {}  # for the output of enc_N
-        h_timestamp_dict = {}
 
-        h_dict['h_0'], h_mask_dict['h_0'], h_timestamp_dict['h_0'] = input, input_mask, time_stamp
+        h_dict['h_0'], h_mask_dict['h_0'] = input, input_mask
 
         h_key_prev = 'h_0'
         for i in range(1, self.layer_size + 1):
             l_key = 'enc_{:d}'.format(i)
             h_key = 'h_{:d}'.format(i)
-            h_dict[h_key], h_mask_dict[h_key], h_timestamp_dict[h_key] = getattr(self, l_key)(
-                h_dict[h_key_prev], h_mask_dict[h_key_prev], h_timestamp_dict[h_key_prev])
+            h_dict[h_key], h_mask_dict[h_key] = getattr(self, l_key)(
+                h_dict[h_key_prev], h_mask_dict[h_key_prev])
             h_key_prev = h_key
 
         h_key = 'h_{:d}'.format(self.layer_size)
-        h, h_mask, h_timestamp = h_dict[h_key], h_mask_dict[h_key], h_timestamp_dict[h_key]
+        h, h_mask = h_dict[h_key], h_mask_dict[h_key]
 
         # concat upsampled output of h_enc_N-1 and dec_N+1, then do dec_N
         # (exception)
@@ -161,7 +160,7 @@ class PConvUNet(nn.Module):
             h = torch.cat([h, h_dict[enc_h_key]], dim=1)
             h_mask = torch.cat([h_mask, h_mask_dict[enc_h_key]], dim=1)
             h, h_mask = getattr(self, dec_l_key)(h, h_mask)
-        return h, h_mask, h_timestamp
+        return h, h_mask
 
     def train(self, mode=True):
         """
@@ -175,7 +174,7 @@ class PConvUNet(nn.Module):
 
 
 class PConvUNetPercipitation(PConvUNet):
-    def __init__(self, layer_size=7, input_channels=2, upsampling_mode='nearest'):
+    def __init__(self, layer_size=7, input_channels=3 if local_settings.time else 1, upsampling_mode='nearest'):
         super().__init__()
         self.freeze_enc_bn = False
         self.upsampling_mode = upsampling_mode
@@ -199,7 +198,7 @@ class PConvUNetPercipitation(PConvUNet):
 
 
 class PConvUNetTemperature(PConvUNet):
-    def __init__(self, layer_size=3, input_channels=1, upsampling_mode='nearest'):
+    def __init__(self, layer_size=3, input_channels=3 if local_settings.time else 1, upsampling_mode='nearest'):
         super().__init__()
         self.freeze_enc_bn = False
         self.upsampling_mode = upsampling_mode

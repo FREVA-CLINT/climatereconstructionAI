@@ -94,9 +94,9 @@ if local_settings.resume:
 for i in tqdm(range(start_iter, local_settings.max_iter)):
     model.train()
 
-    image, mask, gt, time_stamp = [x.to(device) for x in next(iterator_train)]
+    image, mask, gt = [x.to(device) for x in next(iterator_train)]
 
-    output, _ = model(image, mask, time_stamp)
+    output, _ = model(image, mask)
     loss_dict = criterion(image, mask, output, gt)
 
     loss = 0.0
