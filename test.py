@@ -5,7 +5,7 @@ from torchvision import transforms
 import opt
 import local_settings
 from places2 import Places2
-from evaluation2 import evaluate2
+from evaluation import evaluate
 from net import PConvUNetPercipitation, PConvUNetTemperature
 from util.io import load_ckpt
 
@@ -32,4 +32,4 @@ elif local_settings.data_type == 'tas':
 load_ckpt(local_settings.snapshot_dir, [('model', model)])
 
 model.eval()
-evaluate2(model, dataset_val, device, 'result.jpg', local_settings.partitions)
+evaluate(model, dataset_val, device, 'result.jpg')
