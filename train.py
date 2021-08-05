@@ -62,6 +62,8 @@ mask_tf = transforms.Compose(
 
 dataset_train = Places2(local_settings.data_root_train_dir, local_settings.mask_train_dir, img_tf, mask_tf, 'train')
 dataset_val = Places2(local_settings.data_root_train_dir, local_settings.mask_train_dir, img_tf, mask_tf, 'val')
+dataset_test = Places2(local_settings.data_root_train_dir, local_settings.mask_train_dir, img_tf, mask_tf, 'test')
+
 
 iterator_train = iter(data.DataLoader(
     dataset_train, batch_size=local_settings.batch_size,
@@ -118,5 +120,6 @@ for i in tqdm(range(start_iter, local_settings.max_iter)):
         model.eval()
         evaluate(model, dataset_val, device,
                  '{:s}/images/test_{:d}.jpg'.format(local_settings.save_dir, i + 1))
-
+        evaluate(model, dataset_test, device,
+                 '{:s}/images/testing_{:d}.jpg'.format(local_settings.save_dir, i + 1))
 writer.close()
