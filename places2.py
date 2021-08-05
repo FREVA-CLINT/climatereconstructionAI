@@ -45,6 +45,9 @@ class Places2(torch.utils.data.Dataset):
             gt_img_time.append(gt_img)
             gt_img_time.append(time_stamp)
             gt_img = torch.cat(gt_img_time)
+        else:
+            b = gt_img[0, :, :]
+            gt_img = b.repeat(3, 1, 1)
 
         mask_file = h5py.File(self.maskpath)
         maskdata = mask_file.get(local_settings.data_type)
@@ -62,6 +65,9 @@ class Places2(torch.utils.data.Dataset):
             mask_time.append(mask)
             mask_time.append(ones)
             mask = torch.cat(mask_time)
+        else:
+            b = mask[0, :, :]
+            mask = b.repeat(3, 1, 1)
 
         return gt_img * mask, mask, gt_img
 
