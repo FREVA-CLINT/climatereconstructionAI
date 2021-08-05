@@ -125,22 +125,23 @@ class PCBActiv(nn.Module):
 
 
 class PConvUNet(nn.Module):
-    def forward(self, input, input_mask):
+    def forward(self, input, input_mask, time_stamp):
         h_dict = {}  # for the output of enc_N
         h_mask_dict = {}  # for the output of enc_N
+        h_timestamp_dict = {}
 
-        h_dict['h_0'], h_mask_dict['h_0'] = input, input_mask
+        h_dict['h_0'], h_mask_dict['h_0'], h_timestamp_dict['h_0'] = input, input_mask, time_stamp
 
         h_key_prev = 'h_0'
         for i in range(1, self.layer_size + 1):
             l_key = 'enc_{:d}'.format(i)
             h_key = 'h_{:d}'.format(i)
-            h_dict[h_key], h_mask_dict[h_key] = getattr(self, l_key)(
-                h_dict[h_key_prev], h_mask_dict[h_key_prev])
+            h_dict[h_key], h_mask_dict[h_key], h_timestamp_dict[h_key] = getattr(self, l_key)(
+                h_dict[h_key_prev], h_mask_dict[h_key_prev], h_timestamp_dict[h_key_prev])
             h_key_prev = h_key
 
         h_key = 'h_{:d}'.format(self.layer_size)
-        h, h_mask = h_dict[h_key], h_mask_dict[h_key]
+        h, h_mask, h_timestamp = h_dict[h_key], h_mask_dict[h_key], h_timestamp_dict[h_key]
 
         # concat upsampled output of h_enc_N-1 and dec_N+1, then do dec_N
         # (exception)
@@ -160,7 +161,7 @@ class PConvUNet(nn.Module):
             h = torch.cat([h, h_dict[enc_h_key]], dim=1)
             h_mask = torch.cat([h_mask, h_mask_dict[enc_h_key]], dim=1)
             h, h_mask = getattr(self, dec_l_key)(h, h_mask)
-        return h, h_mask
+        return h, h_mask, h_timestamp
 
     def train(self, mode=True):
         """
