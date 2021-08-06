@@ -34,4 +34,4 @@ elif local_settings.data_type == 'tas':
 load_ckpt(local_settings.snapshot_dir, [('model', model)])
 
 model.eval()
-evaluate2(model, dataset_val, device, 'result.jpg', local_settings.partitions)
+evaluate2(model, dataset_val, device, local_settings.test_image_dir + 'result', local_settings.partitions)
