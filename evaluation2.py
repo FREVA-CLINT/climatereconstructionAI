@@ -54,10 +54,10 @@ def evaluate2(model, dataset, device, filename, partitions):
     output = torch.cat(output)
     output_comp = torch.cat(output_comp)
 
-    grid = make_grid(
-        torch.cat((unnormalize(image), mask, unnormalize(output),
-                   unnormalize(output_comp), unnormalize(gt)), dim=0))
-    save_image(grid, filename)
+    #grid = make_grid(
+    #    torch.cat((unnormalize(image), mask, unnormalize(output),
+    #               unnormalize(output_comp), unnormalize(gt)), dim=0))
+    #save_image(grid, filename)
 
     cvar = [image[:, 1, :, :], mask[:, 1, :, :], output[:, 1, :, :], output_comp[:, 1, :, :], gt[:, 1, :, :]]
     cname = ['image', 'mask', 'output', 'output_comp', 'gt']
