@@ -124,6 +124,6 @@ for i in tqdm(range(start_iter, local_settings.max_iter)):
         evaluate(model, dataset_test, device,
                  '{:s}/images/testing_{:d}.jpg'.format(local_settings.save_dir, i + 1))
         evaluate2(model, dataset_test, device,
-                 '{:s}/images/testings_{:d}.jpg'.format(local_settings.save_dir, i + 1), 1)
+                 '{:s}/images/testings_{:d}.jpg'.format(local_settings.save_dir, i + 1), local_settings.partitions)
 
 writer.close()
