@@ -29,7 +29,7 @@ def evaluate2(model, dataset, device, filename, partitions):
         grid = make_grid(
                 torch.cat((unnormalize(image_part), mask_part, unnormalize(output_part),
                            unnormalize(output_comp_part), unnormalize(gt_part)), dim=0))
-        save_image(grid, filename + str(split))
+        save_image(grid, filename + str(split) + '.jpg')
 
         image.append(image_part)
         mask.append(mask_part)
