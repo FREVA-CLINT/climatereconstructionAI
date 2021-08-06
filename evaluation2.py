@@ -32,6 +32,12 @@ def evaluate2(model, dataset, device, filename, partitions):
         output.append(output_part)
         output_comp.append(output_comp_part)
 
+        grid = make_grid(
+            torch.cat((unnormalize(torch.cat([image_part])), mask, unnormalize(torch.cat([output_part])),
+                       torch.cat([output_comp_part]), unnormalize(torch.cat([gt_part]))), dim=0))
+        save_image(grid, filename + str(split))
+
+
     if dataset.__len__() % partitions != 0:
         image_part, mask_part, gt_part = zip(*[dataset[i + (partitions * (dataset.__len__() // partitions))] for i in range(dataset.__len__() % partitions)])
         image_part = torch.stack(image_part)
@@ -53,11 +59,6 @@ def evaluate2(model, dataset, device, filename, partitions):
     gt = torch.cat(gt)
     output = torch.cat(output)
     output_comp = torch.cat(output_comp)
-
-    #grid = make_grid(
-    #    torch.cat((unnormalize(image), mask, unnormalize(output),
-    #               unnormalize(output_comp), unnormalize(gt)), dim=0))
-    #save_image(grid, filename)
 
     cvar = [image[:, 1, :, :], mask[:, 1, :, :], output[:, 1, :, :], output_comp[:, 1, :, :], gt[:, 1, :, :]]
     cname = ['image', 'mask', 'output', 'output_comp', 'gt']
