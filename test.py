@@ -29,7 +29,10 @@ if local_settings.data_type == 'pr':
     model = PConvUNetPercipitation().to(device)
 elif local_settings.data_type == 'tas':
     model = PConvUNetTemperature().to(device)
-load_ckpt(local_settings.snapshot_dir, [('model', model)])
+
+optimizer = torch.optim.Adam(
+    filter(lambda p: p.requires_grad, model.parameters()), lr=local_settings.lr)
+load_ckpt(local_settings.snapshot_dir, [('model', model)], [('optimizer', optimizer)])
 
 model.eval()
 evaluate(model, dataset_val, device, 'result.jpg')
