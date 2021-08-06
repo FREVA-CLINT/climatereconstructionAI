@@ -64,8 +64,6 @@ def evaluate2(model, dataset, device, filename, partitions):
                    output_comp, gt), dim=0))
     save_image(grid, filename)
 
-    print(image.shape)
-
     cvar = [image[:, 1, :, :], mask[:, 1, :, :], output[:, 1, :, :], output_comp[:, 1, :, :], gt[:, 1, :, :]]
     cname = ['image', 'mask', 'output', 'output_comp', 'gt']
     dname = ['time', 'lat', 'lon']

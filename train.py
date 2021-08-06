@@ -10,6 +10,7 @@ from tqdm import tqdm
 import opt
 import local_settings
 from evaluation import evaluate
+from evaluation2 import evaluate2
 from loss import InpaintingLoss
 from net import PConvUNetPercipitation, PConvUNetTemperature
 from net import VGG16FeatureExtractor
@@ -122,4 +123,7 @@ for i in tqdm(range(start_iter, local_settings.max_iter)):
                  '{:s}/images/test_{:d}.jpg'.format(local_settings.save_dir, i + 1))
         evaluate(model, dataset_test, device,
                  '{:s}/images/testing_{:d}.jpg'.format(local_settings.save_dir, i + 1))
+        evaluate2(model, dataset_test, device,
+                 '{:s}/images/testing_{:d}.jpg'.format(local_settings.save_dir, i + 1), 1)
+
 writer.close()
