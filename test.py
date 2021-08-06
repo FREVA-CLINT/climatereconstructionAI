@@ -4,6 +4,7 @@ from torchvision import transforms
 
 import opt
 import local_settings
+from evaluation2 import evaluate2
 from places2 import Places2
 from evaluation import evaluate
 from net import PConvUNetPercipitation, PConvUNetTemperature
@@ -30,9 +31,5 @@ if local_settings.data_type == 'pr':
 elif local_settings.data_type == 'tas':
     model = PConvUNetTemperature().to(device)
 
-optimizer = torch.optim.Adam(
-    filter(lambda p: p.requires_grad, model.parameters()), lr=local_settings.lr)
-load_ckpt(local_settings.snapshot_dir, [('model', model)], [('optimizer', optimizer)])
-
 model.eval()
-evaluate(model, dataset_val, device, 'result.jpg')
+evaluate2(model, dataset_val, device, 'result.jpg', local_settings.partitions)
