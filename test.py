@@ -31,7 +31,7 @@ if local_settings.data_type == 'pr':
 elif local_settings.data_type == 'tas':
     model = PConvUNetTemperature().to(device)
 
-load_ckpt(local_settings.snapshot_dir, [('model', model)], [('optimizer', optimizer)])
+load_ckpt(local_settings.snapshot_dir, [('model', model)])
 
 model.eval()
 evaluate2(model, dataset_val, device, 'result.jpg', local_settings.partitions)
