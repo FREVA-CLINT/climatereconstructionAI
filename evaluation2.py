@@ -33,8 +33,8 @@ def evaluate2(model, dataset, device, filename, partitions):
         output_comp.append(output_comp_part)
 
         grid = make_grid(
-            torch.cat((unnormalize(torch.cat([image_part])), mask, unnormalize(torch.cat([output_part])),
-                       torch.cat([output_comp_part]), unnormalize(torch.cat([gt_part]))), dim=0))
+            torch.cat((unnormalize(image_part), mask, unnormalize(output_part),
+                       unnormalize(output_comp_part), unnormalize(gt_part)), dim=0))
         save_image(grid, filename + str(split))
 
 
