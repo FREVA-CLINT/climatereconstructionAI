@@ -16,6 +16,9 @@ def evaluate2(model, dataset, device, filename, partitions):
     output_comp = []
     if partitions > dataset.__len__():
         partitions = dataset.__len__()
+    if dataset.__len__() % partitions != 0:
+        print("WARNING: The size of the dataset should be dividable by the number of partitions. The last "
+              + str(dataset.__len__() % partitions) + " time steps will not be infilled.")
     for split in range(partitions):
         image_part, mask_part, gt_part = zip(*[dataset[i + split * (dataset.__len__() // partitions)] for i in range(dataset.__len__() // partitions)])
         image_part = torch.stack(image_part)
@@ -30,23 +33,6 @@ def evaluate2(model, dataset, device, filename, partitions):
                 torch.cat((unnormalize(image_part), mask_part, unnormalize(output_part),
                            unnormalize(output_comp_part), unnormalize(gt_part)), dim=0))
         save_image(grid, filename + str(split) + '.jpg')
-
-        image.append(image_part)
-        mask.append(mask_part)
-        gt.append(gt_part)
-        output.append(output_part)
-        output_comp.append(output_comp_part)
-
-
-    if dataset.__len__() % partitions != 0:
-        image_part, mask_part, gt_part = zip(*[dataset[i + (partitions * (dataset.__len__() // partitions))] for i in range(dataset.__len__() % partitions)])
-        image_part = torch.stack(image_part)
-        mask_part = torch.stack(mask_part)
-        gt_part = torch.stack(gt_part)
-        with torch.no_grad():
-            output_part, _ = model(image_part.to(device), mask_part.to(device))
-        output_part = output_part.to(torch.device('cpu'))
-        output_comp_part = mask_part * image_part + (1 - mask_part) * output_part
 
         image.append(image_part)
         mask.append(mask_part)
