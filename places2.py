@@ -36,15 +36,26 @@ class Places2(torch.utils.data.Dataset):
         gt_img = torch.from_numpy(gt_img[:,:])
         gt_img = gt_img.unsqueeze(0)
 
-        if local_settings.time:
-            time_data = h5_file.get('time')
-            time_stamp = time_data[index]
+        if local_settings.prev_next_train:
+            if index == 0:
+                gt_img_prev = hdata[index, :, :]
+            else:
+                gt_img_prev = hdata[index - 1, :, :]
+            gt_img_prev = torch.from_numpy(gt_img_prev[:, :])
+            gt_img_prev = gt_img_prev.unsqueeze(0)
+            if index == self.__len__() - 1:
+                gt_img_next = hdata[index, :, :]
+            else:
+                gt_img_next = hdata[index + 1, :, :]
+            gt_img_next = torch.from_numpy(gt_img_next[:, :])
+            gt_img_next = gt_img_next.unsqueeze(0)
+            #time_data = h5_file.get('time')
+            #time_stamp = time_data[index]
             gt_img_time = []
-            time_stamp = torch.empty(gt_img.shape[0], gt_img.shape[1], gt_img.shape[2]).fill_(time_stamp)
+            #time_stamp = torch.empty(gt_img.shape[0], gt_img.shape[1], gt_img.shape[2]).fill_(time_stamp)
+            gt_img_time.append(gt_img_prev)
             gt_img_time.append(gt_img)
-            gt_img_time.append(gt_img)
-            gt_img_time.append(time_stamp)
-            gt_img = torch.cat(gt_img_time)
+            gt_img_time.append(gt_img_next)
         else:
             b = gt_img[0, :, :]
             gt_img = b.repeat(3, 1, 1)
@@ -58,16 +69,8 @@ class Places2(torch.utils.data.Dataset):
             mask = torch.from_numpy(maskdata[random.randint(0, N_mask - 1), :, :])
         mask = mask.unsqueeze(0)
 
-        if local_settings.time:
-            mask_time = []
-            ones = torch.ones(mask.shape[0], mask.shape[1], mask.shape[2])
-            mask_time.append(mask)
-            mask_time.append(mask)
-            mask_time.append(ones)
-            mask = torch.cat(mask_time)
-        else:
-            b = mask[0, :, :]
-            mask = b.repeat(3, 1, 1)
+        b = mask[0, :, :]
+        mask = b.repeat(3, 1, 1)
 
         return gt_img * mask, mask, gt_img
 
