@@ -56,6 +56,7 @@ class Places2(torch.utils.data.Dataset):
             gt_img_time.append(gt_img_prev)
             gt_img_time.append(gt_img)
             gt_img_time.append(gt_img_next)
+            gt_img = torch.cat(gt_img_time)
         else:
             b = gt_img[0, :, :]
             gt_img = b.repeat(3, 1, 1)
