@@ -27,6 +27,11 @@ class Places2(torch.utils.data.Dataset):
         elif split == 'val':
             self.paths = glob('{:s}/val_large/*.h5'.format(img_root))
         self.maskpath = mask_root
+
+        # define length
+        h5_file = h5py.File('{:s}'.format(self.paths[0]), 'r')
+        hdata = h5_file.get(local_settings.data_type)
+        self.length = len(hdata[:, 1, 1])
             
     def __getitem__(self, index):
         h5_file = h5py.File('{:s}'.format(self.paths[0]), 'r')
@@ -76,7 +81,4 @@ class Places2(torch.utils.data.Dataset):
         return gt_img * mask, mask, gt_img
 
     def __len__(self):
-        h5_file = h5py.File('{:s}'.format(self.paths[0]), 'r')
-        hdata = h5_file.get(local_settings.data_type)
-        leng = len(hdata[:,1,1])
-        return leng
+        return self.length
