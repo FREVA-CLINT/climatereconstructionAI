@@ -114,9 +114,9 @@ for i in tqdm(range(start_iter, local_settings.max_iter)):
         save_ckpt('{:s}/ckpt/{:d}.pth'.format(local_settings.save_dir, i + 1),
                   [('model', model)], [('optimizer', optimizer)], i + 1)
 
-    if (i + 1) % local_settings.vis_interval == 0:
-        model.eval()
-        evaluate(model, dataset_val, device,
-                 '{:s}/images/test_{:d}.jpg'.format(local_settings.save_dir, i + 1))
+    #if (i + 1) % local_settings.vis_interval == 0:
+    #    model.eval()
+    #    evaluate(model, dataset_val, device,
+    #             '{:s}/images/test_{:d}.jpg'.format(local_settings.save_dir, i + 1))
 
 writer.close()
