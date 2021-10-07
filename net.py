@@ -174,7 +174,7 @@ class PConvUNet(nn.Module):
 
 
 class PConvUNetPercipitation(PConvUNet):
-    def __init__(self, layer_size=7, input_channels=3 if local_settings.prev_next_train else 1, upsampling_mode='nearest'):
+    def __init__(self, layer_size=7, input_channels=3, upsampling_mode='nearest'):
         super().__init__()
         self.freeze_enc_bn = False
         self.upsampling_mode = upsampling_mode
@@ -198,7 +198,7 @@ class PConvUNetPercipitation(PConvUNet):
 
 
 class PConvUNetTemperature(PConvUNet):
-    def __init__(self, layer_size=3, input_channels=3 if local_settings.prev_next_train else 1, upsampling_mode='nearest'):
+    def __init__(self, layer_size=3, input_channels=3, upsampling_mode='nearest'):
         super().__init__()
         self.freeze_enc_bn = False
         self.upsampling_mode = upsampling_mode
