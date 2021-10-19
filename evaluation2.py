@@ -29,10 +29,10 @@ def evaluate2(model, dataset, device, filename, partitions):
         output_part = output_part.to(torch.device('cpu'))
         output_comp_part = mask_part * image_part + (1 - mask_part) * output_part
 
-        grid = make_grid(
-                torch.cat((unnormalize(image_part), mask_part, unnormalize(output_part),
-                           unnormalize(output_comp_part), unnormalize(gt_part)), dim=0))
-        save_image(grid, filename + str(split) + '.jpg')
+        #grid = make_grid(
+        #        torch.cat((unnormalize(image_part), mask_part, unnormalize(output_part),
+        #                   unnormalize(output_comp_part), unnormalize(gt_part)), dim=0))
+        #save_image(grid, filename + str(split) + '.jpg')
 
         image.append(image_part)
         mask.append(mask_part)
