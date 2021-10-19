@@ -22,7 +22,7 @@ class Places2(torch.utils.data.Dataset):
         if split == 'train':
             self.paths = glob('{:s}/data_large/*.h5'.format(img_root),
                               recursive=True)
-        elif split == 'test':
+        elif split == 'test' or split == 'infill':
             self.paths = glob('{:s}/test_large/*.h5'.format(img_root))
         elif split == 'val':
             self.paths = glob('{:s}/val_large/*.h5'.format(img_root))
