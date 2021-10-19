@@ -53,5 +53,5 @@ def evaluate2(model, dataset, device, filename, partitions):
         h5 = h5py.File('h5/%s' % (cname[x]), 'w')
         h5.create_dataset(local_settings.data_type, data=cvar[x])
         for dim in range(0, 3):
-            h5['pr'].dims[dim].label = dname[dim]
+            h5[local_settings.data_type].dims[dim].label = dname[dim]
         h5.close()
