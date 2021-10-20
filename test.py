@@ -1,6 +1,7 @@
 import argparse
 import torch
 from torchvision import transforms
+import time
 
 import opt
 import local_settings
@@ -9,6 +10,7 @@ from places2 import Places2
 from evaluation import evaluate
 from net import PConvUNetPercipitation, PConvUNetTemperature
 from util.io import load_ckpt
+start = time.time()
 
 device = torch.device(local_settings.device)
 
@@ -35,3 +37,5 @@ load_ckpt(local_settings.snapshot_dir, [('model', model)])
 
 model.eval()
 evaluate2(model, dataset_val, device, local_settings.test_image_dir + 'result', local_settings.partitions)
+end = time.time()
+print(start - end)
