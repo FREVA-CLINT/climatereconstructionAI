@@ -11,7 +11,7 @@ import opt
 import local_settings
 from evaluation import evaluate
 from loss import InpaintingLoss
-from net import PConvUNetPercipitation, PConvUNetTemperature
+from net import PConvUNetPrecipitation, PConvUNetTemperature
 from net import VGG16FeatureExtractor
 from places2 import Places2
 from util.io import load_ckpt
@@ -69,7 +69,7 @@ iterator_train = iter(data.DataLoader(
     num_workers=local_settings.n_threads))
 
 if local_settings.data_type == 'pr':
-    model = PConvUNetPercipitation().to(device)
+    model = PConvUNetPrecipitation().to(device)
 elif local_settings.data_type == 'tas':
     model = PConvUNetTemperature().to(device)
 

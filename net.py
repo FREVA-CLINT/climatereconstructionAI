@@ -154,9 +154,6 @@ class PConvUNet(nn.Module):
             h = F.interpolate(h, scale_factor=2, mode=self.upsampling_mode)
             h_mask = F.interpolate(
                 h_mask, scale_factor=2, mode='nearest')
-            #print(enc_h_key)
-            #print(h.shape)
-            #print(dec_l_key)
             h = torch.cat([h, h_dict[enc_h_key]], dim=1)
             h_mask = torch.cat([h_mask, h_mask_dict[enc_h_key]], dim=1)
             h, h_mask = getattr(self, dec_l_key)(h, h_mask)
@@ -173,7 +170,7 @@ class PConvUNet(nn.Module):
                     module.eval()
 
 
-class PConvUNetPercipitation(PConvUNet):
+class PConvUNetPrecipitation(PConvUNet):
     def __init__(self, layer_size=7, input_channels=3, upsampling_mode='nearest'):
         super().__init__()
         self.freeze_enc_bn = False
