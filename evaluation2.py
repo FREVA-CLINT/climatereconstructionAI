@@ -50,7 +50,7 @@ def evaluate2(model, dataset, device, filename, partitions):
     cname = ['image', 'mask', 'output', 'output_comp', 'gt']
     dname = ['time', 'lat', 'lon']
     for x in range(0, 5):
-        h5 = h5py.File('h5/%s' % (cname[x]), 'w')
+        h5 = h5py.File('%s' % (local_settings.result_dir + cname[x]), 'w')
         h5.create_dataset(local_settings.data_type, data=cvar[x])
         for dim in range(0, 3):
             h5[local_settings.data_type].dims[dim].label = dname[dim]
