@@ -8,7 +8,7 @@ import local_settings
 from evaluation2 import evaluate2
 from places2 import Places2
 from evaluation import evaluate
-from net import PConvUNetPercipitation, PConvUNetTemperature
+from net import PConvUNetPrecipitation, PConvUNetTemperature
 from util.io import load_ckpt
 start = time.time()
 
@@ -29,7 +29,7 @@ else:
 dataset_val = Places2(local_settings.data_root_test_dir, local_settings.mask_test_dir, img_transform, mask_transform, split)
 
 if local_settings.data_type == 'pr':
-    model = PConvUNetPercipitation().to(device)
+    model = PConvUNetPrecipitation().to(device)
 elif local_settings.data_type == 'tas':
     model = PConvUNetTemperature().to(device)
 
