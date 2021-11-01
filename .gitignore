@@ -5,16 +5,16 @@
 *.h5
 *.nc
 *.gif
+slurm-*
+.idea
+
 
 # directories
-logs
-snapshots
-masks
-reconstructions
-evaluation
-.idea
-slurm-*
-local_settings.py
+logs/*
+snapshots/*
+masks/*
+evaluation/*
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
