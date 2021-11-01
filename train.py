@@ -29,6 +29,7 @@ arg_parser.add_argument('--resume', type=str, default=False)
 arg_parser.add_argument('--prev-next', type=str, default=True)
 arg_parser.add_argument('--max-iter', type=str, default=100000)
 arg_parser.add_argument('--log-interval', type=str, default=10000)
+arg_parser.add_argument('--save-model-interval', type=str, default=10000)
 args = arg_parser.parse_args()
 
 if args.prev_next:
