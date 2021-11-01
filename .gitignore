@@ -1,15 +1,17 @@
+# evaluation files
 *.txt
 *.pth
 *.jpg
+*.h5
+*.nc
+*.gif
 
+# directories
 logs
 snapshots
 masks
 reconstructions
-evaluation/anom-skaled
-evaluation/radolan-complete-box
-evaluation/radolan-skaled-box
-evaluation/skaled-2012
+evaluation
 .idea
 slurm-*
 local_settings.py
