@@ -5,8 +5,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
 
-import local_settings
-
 
 def weights_init(init_type='gaussian'):
     def init_fun(m):
@@ -216,26 +214,3 @@ class PConvUNetTemperature(PConvUNet):
         self.dec_2 = PCBActiv(36 + 18, 18, activ='leaky')
         self.dec_1 = PCBActiv(18 + input_channels, input_channels,
                               bn=False, activ=None, conv_bias=True)
-
-
-if __name__ == '__main__':
-    print("HEY")
-    size = (1, 3, 5, 5)
-    input = torch.ones(size)
-    input_mask = torch.ones(size)
-    input_mask[:, :, 2:, :][:, :, :, 2:] = 0
-
-    conv = PartialConv(3, 3, 3, 1, 1)
-    l1 = nn.L1Loss()
-    input.requires_grad = True
-
-    output, output_mask = conv(input, input_mask)
-    loss = l1(output, torch.randn(1, 3, 5, 5))
-    loss.backward()
-
-    assert (torch.sum(input.grad != input.grad).item() == 0)
-    assert (torch.sum(torch.isnan(conv.input_conv.weight.grad)).item() == 0)
-    assert (torch.sum(torch.isnan(conv.input_conv.bias.grad)).item() == 0)
-
-    # model = PConvUNet()
-    # output, output_mask = model(input, input_mask)

@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
 
-import local_settings
-
 
 def gram_matrix(feat):
     # https://github.com/pytorch/examples/blob/master/fast_neural_style/neural_style/utils.py
