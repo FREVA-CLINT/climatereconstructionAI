@@ -3,6 +3,7 @@
 data_root=$1
 
 mkdir $data_root/evaluations
+mkdir $data_root/images
 
 # clean output_comp
 cdo gec,0.0 $data_root/output_comp.nc $data_root/tmp.nc
@@ -40,7 +41,7 @@ cdo fldsum -timsum $data_root/infilled_gt.nc $data_root/evaluations/fldsum_gt.nc
 cdo fldsum -timsum $data_root/infilled_output_comp.nc $data_root/evaluations/fldsum_output_comp.nc
 
 # time series of time correlation
-cdo fldcor -setmisstoc,0 $data_root/infilled_output_comp.nc - setmisstoc,0 $data_root/infilled_gt.nc $data_root/evaluations/time_series.nc
+cdo fldcor -setmisstoc,0 $data_root/infilled_output_comp.nc -setmisstoc,0 $data_root/infilled_gt.nc $data_root/evaluations/time_series.nc
 
 # save min max mean
 cdo fldmax $data_root/infilled_gt.nc $data_root/evaluations/gt_max.nc
