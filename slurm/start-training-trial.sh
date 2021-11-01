@@ -8,7 +8,7 @@
 #SBATCH --time=24:00:00
 #SBATCH --mem=256G
 #SBATCH --nodelist=vader2
-module source setup-modules.txt
+module source slurm/setup-modules.txt
 export HDF5_USE_FILE_LOCKING='FALSE'
 
 singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_trial_img.sif python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/train.py
