@@ -2,7 +2,7 @@
 # ALPHA Version
 # Little Helper to come from pytorch output to NETCDF [Changed in the future]
 # USAGE EXAMPLE
-# in h5 dir, bash script/h5toNC.sh image
+# in evaluation dir, bash script/h5toNC.sh image
 # change link and data if necessary
 input=$1
 rdir=$(dirname $input)
