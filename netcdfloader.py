@@ -13,7 +13,6 @@ class NetCDFLoader(torch.utils.data.Dataset):
         self.img_transform = img_transform
         self.mask_transform = mask_transform
         # use about 8M images in the challenge dataset
-        print(img_root)
         if split == 'train':
             self.paths = glob('{:s}/data_large/*.h5'.format(img_root),
                               recursive=True)
