@@ -15,7 +15,6 @@ arg_parser.add_argument('--snapshot-dir', type=str, default='snapshots/precipita
 arg_parser.add_argument('--data-root-dir', type=str, default='../data/radolan-prev-next/')
 arg_parser.add_argument('--mask-dir', type=str, default='masks/single_radar_fail.h5')
 arg_parser.add_argument('--device', type=str, default='cpu')
-arg_parser.add_argument('--image-size', type=str, default=512)
 arg_parser.add_argument('--partitions', type=str, default=2009)
 arg_parser.add_argument('--infill', type=str, default=False)
 arg_parser.add_argument('--prev-next', type=int, default=0)

@@ -6,6 +6,7 @@ from netCDF4 import Dataset
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import imageio
 from fpdf import FPDF
 import os
 
@@ -102,7 +103,6 @@ class Evaluator:
             plt.clf()
 
         if create_video:
-            import imageio
             with imageio.get_writer(self.eval_save_dir + 'images/' + file + '_movie.gif', mode='I') as writer:
                 for i in range(time.__len__()):
                     image = imageio.imread(self.eval_save_dir + 'images/' + file + '_' + str(i) + '.jpg')
