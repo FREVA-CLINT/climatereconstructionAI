@@ -137,15 +137,15 @@ class PConvLSTM(nn.Module):
         self.layer_size = encoding_layers + pooling_layers
 
         # define encoding layers
-        self.enc_1 = PCBActiv(input_channels, image_size / (2**(encoding_layers-1)), bn=False, sample='down-7')
+        self.enc_1 = PCBActiv(input_channels, image_size // (2**(encoding_layers-1)), bn=False, sample='down-7')
         for i in range(1, encoding_layers):
             if i+1 == encoding_layers:
                 sample='down-3'
             else:
                 sample='down-5'
             name = 'enc_{:d}'.format(i + 1)
-            setattr(self, name, PCBActiv(image_size / (2**(encoding_layers-i)),
-                                         image_size / (2**(encoding_layers-i-1)), sample=sample))
+            setattr(self, name, PCBActiv(image_size // (2**(encoding_layers-i)),
+                                         image_size // (2**(encoding_layers-i-1)), sample=sample))
         # define pooling layers
         for i in range(encoding_layers, self.layer_size):
             name = 'enc_{:d}'.format(i + 1)
@@ -156,8 +156,8 @@ class PConvLSTM(nn.Module):
         # define decoding layers
         for i in range(1, encoding_layers):
             name = 'dec_{:d}'.format(encoding_layers-i+1)
-            setattr(self, name, PCBActiv(image_size / (2**(i-1)), image_size / (2**i), activ='leaky'))
-        self.dec_1 = PCBActiv(image_size / (2**(encoding_layers-1)) + input_channels, input_channels,
+            setattr(self, name, PCBActiv(image_size // (2**(i-1)), image_size // (2**i), activ='leaky'))
+        self.dec_1 = PCBActiv(image_size // (2**(encoding_layers-1)) + input_channels, input_channels,
                               bn=False, activ=None, conv_bias=True)
 
     def forward(self, input, input_mask):
