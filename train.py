@@ -26,7 +26,7 @@ arg_parser.add_argument('--finetune', type=bool, default=False)
 arg_parser.add_argument('--lr', type=float, default=2e-4)
 arg_parser.add_argument('--lr-finetune', type=float, default=5e-5)
 arg_parser.add_argument('--resume', type=bool, default=False)
-arg_parser.add_argument('--prev-next', type=bool, default=True)
+arg_parser.add_argument('--prev-next', type=int, default=0)
 arg_parser.add_argument('--max-iter', type=int, default=100000)
 arg_parser.add_argument('--log-interval', type=int, default=10000)
 arg_parser.add_argument('--save-model-interval', type=int, default=50000)
@@ -90,7 +90,7 @@ iterator_train = iter(data.DataLoader(
     num_workers=args.n_threads))
 
 model = PConvLSTM(image_size=args.image_size, encoding_layers=args.encoding_layers, pooling_layers=args.pooling_layers,
-                  input_channels=3 if args.prev_next else 1)
+                  input_channels=1 + args.prev_next)
 
 if args.finetune:
     lr = args.lr_finetune
