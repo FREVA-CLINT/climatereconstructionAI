@@ -8,10 +8,11 @@
 #SBATCH --time=24:00:00
 #SBATCH --mem=256G
 #SBATCH --nodelist=vader2
+
 module source slurm/setup-modules.txt
 export HDF5_USE_FILE_LOCKING='FALSE'
 
-ingularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_trial_img.sif \
+singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_trial_img.sif \
  python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/train.py \
  --device cuda --batch-size 4 --image-size 512 --pooling-layers 3 --encoding-layers 4 --data-type pr \
  --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-complete-scaled/ \
