@@ -34,6 +34,8 @@ class InpaintingLoss(nn.Module):
         # get mid index
         mid_index = (output.shape[1] // 2) + 1
 
+        torch.cat([torch.unsqueeze(output[:][mid_index][:][:], 1)] * 3, 1)
+
         feat_output = self.extractor(torch.cat([torch.unsqueeze(output[:][mid_index][:][:], 1)] * 3, 1))
         feat_output_comp = self.extractor(torch.cat([torch.unsqueeze(output_comp[:][mid_index][:][:], 1)] * 3, 1))
         feat_gt = self.extractor(torch.cat([torch.unsqueeze(gt[:][mid_index][:][:], 1)] * 3, 1))
