@@ -31,17 +31,18 @@ class InpaintingLoss(nn.Module):
         loss_dict['hole'] = self.l1((1 - mask) * output, (1 - mask) * gt)
         loss_dict['valid'] = self.l1(mask * output, mask * gt)
 
-        feat_output_comp = self.extractor(output_comp)
-        feat_output = self.extractor(output)
-        feat_gt = self.extractor(gt)
+        # get mid index
+        mid_index = (output.shape[1] // 2) + 1
+
+        feat_output = self.extractor(torch.cat([torch.unsqueeze(output[:][mid_index][:][:], 1)] * 3, 1))
+        feat_output_comp = self.extractor(torch.cat([torch.unsqueeze(output_comp[:][mid_index][:][:], 1)] * 3, 1))
+        feat_gt = self.extractor(torch.cat([torch.unsqueeze(gt[:][mid_index][:][:], 1)] * 3, 1))
 
         loss_dict['prc'] = 0.0
-        for i in range(output.shape[1]):
+        loss_dict['style'] = 0.0
+        for i in range(3):
             loss_dict['prc'] += self.l1(feat_output[i], feat_gt[i])
             loss_dict['prc'] += self.l1(feat_output_comp[i], feat_gt[i])
-
-        loss_dict['style'] = 0.0
-        for i in range(output.shape[1]):
             loss_dict['style'] += self.l1(gram_matrix(feat_output[i]),
                                           gram_matrix(feat_gt[i]))
             loss_dict['style'] += self.l1(gram_matrix(feat_output_comp[i]),
