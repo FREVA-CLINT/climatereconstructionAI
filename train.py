@@ -79,7 +79,7 @@ iterator_train = iter(data.DataLoader(
     num_workers=args.n_threads))
 
 model = PConvLSTM(image_size=args.image_size, encoding_layers=args.encoding_layers, pooling_layers=args.pooling_layers,
-                  input_channels=1 + 2*args.prev_next)
+                  input_channels=1 + 2*args.prev_next).to(device)
 
 if args.finetune:
     lr = args.lr_finetune
