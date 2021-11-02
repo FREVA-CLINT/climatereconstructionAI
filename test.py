@@ -16,7 +16,7 @@ arg_parser.add_argument('--data-root-dir', type=str, default='../data/radolan-co
 arg_parser.add_argument('--mask-dir', type=str, default='masks/single_radar_fail.h5')
 arg_parser.add_argument('--device', type=str, default='cpu')
 arg_parser.add_argument('--partitions', type=str, default=2009)
-arg_parser.add_argument('--infill', type=str, default=False)
+arg_parser.add_argument('--infill', type=str)
 arg_parser.add_argument('--prev-next', type=int, default=0)
 arg_parser.add_argument('--encoding-layers', type=int, default=4)
 arg_parser.add_argument('--pooling-layers', type=int, default=3)
