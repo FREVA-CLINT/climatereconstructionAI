@@ -10,6 +10,7 @@ from tqdm import tqdm
 from loss import InpaintingLoss
 from net import PConvLSTM
 from net import VGG16FeatureExtractor
+from netcdfloader import SingleNetCDFDataLoader
 from util.io import load_ckpt, save_ckpt
 
 arg_parser = argparse.ArgumentParser()
@@ -76,8 +77,8 @@ img_tf = transforms.Compose(
 mask_tf = transforms.Compose(
     [transforms.ToTensor()])
 
-dataset_train = NetCDFloader(args.data_root_dir, args.mask_dir, img_tf, mask_tf, 'train', args.data_type)
-dataset_val = NetCDFloader(args.data_root_dir, args.mask_dir, img_tf, mask_tf, 'val', args.data_type)
+dataset_train = SingleNetCDFDataLoader(args.data_root_dir, args.mask_dir, img_tf, mask_tf, 'train', args.data_type, args.prev_next)
+dataset_val = SingleNetCDFDataLoader(args.data_root_dir, args.mask_dir, img_tf, mask_tf, 'val', args.data_type, args.prev_next)
 
 iterator_train = iter(data.DataLoader(
     dataset_train, batch_size=args.batch_size,
