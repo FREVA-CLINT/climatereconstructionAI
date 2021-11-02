@@ -4,7 +4,8 @@ import torch
 from torchvision import transforms
 import opt
 from evaluator import Evaluator
-from net import PConvLSTMPrecipitation, PConvLSTMTemperature
+from net import PConvLSTM
+from netcdfloader import SingleNetCDFDataLoader
 from util.io import load_ckpt
 
 arg_parser = argparse.ArgumentParser()
@@ -17,13 +18,11 @@ arg_parser.add_argument('--device', type=str, default='cpu')
 arg_parser.add_argument('--image-size', type=str, default=512)
 arg_parser.add_argument('--partitions', type=str, default=2009)
 arg_parser.add_argument('--infill', type=str, default=False)
-arg_parser.add_argument('--prev-next', type=str, default=True)
+arg_parser.add_argument('--prev-next', type=int, default=0)
+arg_parser.add_argument('--encoding-levels', type=int, default=4)
+arg_parser.add_argument('--pooling-levels', type=int, default=3)
+arg_parser.add_argument('--image-size', type=int, default=512)
 args = arg_parser.parse_args()
-
-if args.prev_next:
-    from netcdfloader import PrevNextImageNetCDFLoader as NetCDFloader
-else:
-    from netcdfloader import SingleImageNetCDFLoader as NetCDFloader
 
 evaluator = Evaluator(args.evaluation_dir, args.mask_dir, args.data_root_dir + 'test_large/', args.data_type)
 device = torch.device(args.device)
@@ -39,12 +38,10 @@ if args.infill:
     split = 'infill'
 else:
     split = 'test'
-dataset_val = NetCDFloader(args.data_root_dir, args.mask_dir, img_transform, mask_transform, split, args.data_type)
+dataset_val = SingleNetCDFDataLoader(args.data_root_dir, args.mask_dir, img_transform, mask_transform, split, args.data_type)
 
-if args.data_type == 'pr':
-    model = PConvLSTMPrecipitation().to(device)
-elif args.data_type == 'tas':
-    model = PConvLSTMTemperature().to(device)
+model = PConvLSTM(image_size=args.image_size, encoding_layers=args.encoding_layers, pooling_layers=args.pooling_layers,
+                  input_channels=1 + args.prev_next)
 
 load_ckpt(args.snapshot_dir, [('model', model)])
 

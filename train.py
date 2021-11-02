@@ -26,19 +26,14 @@ arg_parser.add_argument('--finetune', type=bool, default=False)
 arg_parser.add_argument('--lr', type=float, default=2e-4)
 arg_parser.add_argument('--lr-finetune', type=float, default=5e-5)
 arg_parser.add_argument('--resume', type=bool, default=False)
-arg_parser.add_argument('--prev-next', type=int, default=0)
 arg_parser.add_argument('--max-iter', type=int, default=100000)
 arg_parser.add_argument('--log-interval', type=int, default=10000)
 arg_parser.add_argument('--save-model-interval', type=int, default=50000)
+arg_parser.add_argument('--prev-next', type=int, default=0)
 arg_parser.add_argument('--encoding-levels', type=int, default=4)
 arg_parser.add_argument('--pooling-levels', type=int, default=3)
 arg_parser.add_argument('--image-size', type=int, default=512)
 args = arg_parser.parse_args()
-
-if args.prev_next:
-    from netcdfloader import PrevNextImageNetCDFLoader as NetCDFloader
-else:
-    from netcdfloader import SingleImageNetCDFLoader as NetCDFloader
 
 
 class InfiniteSampler(data.sampler.Sampler):
