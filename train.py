@@ -72,13 +72,8 @@ if not os.path.exists(args.log_dir):
     os.makedirs(args.log_dir)
 writer = SummaryWriter(log_dir=args.log_dir)
 
-img_tf = transforms.Compose(
-    [transforms.Normalize(mean=opt.MEAN, std=opt.STD)])
-mask_tf = transforms.Compose(
-    [transforms.ToTensor()])
-
-dataset_train = SingleNetCDFDataLoader(args.data_root_dir, args.mask_dir, img_tf, mask_tf, 'train', args.data_type, args.prev_next)
-dataset_val = SingleNetCDFDataLoader(args.data_root_dir, args.mask_dir, img_tf, mask_tf, 'val', args.data_type, args.prev_next)
+dataset_train = SingleNetCDFDataLoader(args.data_root_dir, args.mask_dir, 'train', args.data_type, args.prev_next)
+dataset_val = SingleNetCDFDataLoader(args.data_root_dir, args.mask_dir, 'val', args.data_type, args.prev_next)
 
 iterator_train = iter(data.DataLoader(
     dataset_train, batch_size=args.batch_size,
