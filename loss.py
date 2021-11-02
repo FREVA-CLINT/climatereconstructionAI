@@ -34,7 +34,8 @@ class InpaintingLoss(nn.Module):
         # get mid index
         mid_index = (output.shape[1] // 2) + 1
         print(output.shape)
-        print(torch.unsqueeze(output[:][mid_index][:][:], 1).shape)
+        print(mid_index)
+        print(output[:][mid_index][:][:].shape)
         print(([torch.unsqueeze(output[:][mid_index][:][:], 1)] * 3).shape)
         torch.cat([torch.unsqueeze(output[:][mid_index][:][:], 1)] * 3, 1)
 
