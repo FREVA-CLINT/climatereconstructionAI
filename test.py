@@ -33,7 +33,7 @@ else:
 dataset_val = SingleNetCDFDataLoader(args.data_root_dir, args.mask_dir, split, args.data_type, args.prev_next)
 
 model = PConvLSTM(image_size=args.image_size, encoding_layers=args.encoding_layers, pooling_layers=args.pooling_layers,
-                  input_channels=1 + 2*args.prev_next)
+                  input_channels=1 + 2*args.prev_next).to(device)
 
 load_ckpt(args.snapshot_dir, [('model', model)])
 
