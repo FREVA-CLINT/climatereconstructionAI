@@ -5,7 +5,6 @@ import torch
 import opt
 from tensorboardX import SummaryWriter
 from torch.utils import data
-from torchvision import transforms
 from tqdm import tqdm
 from loss import InpaintingLoss
 from net import PConvLSTM
@@ -14,11 +13,11 @@ from netcdfloader import SingleNetCDFDataLoader
 from util.io import load_ckpt, save_ckpt
 
 arg_parser = argparse.ArgumentParser()
-arg_parser.add_argument('--data-type', type=str, default='pr')
+arg_parser.add_argument('--data-type', type=str, default='tas')
 arg_parser.add_argument('--log-dir', type=str, default='logs/')
 arg_parser.add_argument('--snapshot-dir', type=str, default='snapshots/')
-arg_parser.add_argument('--data-root-dir', type=str, default='../data/radolan-complete-scaled/')
-arg_parser.add_argument('--mask-dir', type=str, default='masks/single_radar_fail.h5')
+arg_parser.add_argument('--data-root-dir', type=str, default='../data/20cr/')
+arg_parser.add_argument('--mask-dir', type=str, default='masks/hadcrut4-missmask.h5')
 arg_parser.add_argument('--resume-dir', type=str, default='snapshots/')
 arg_parser.add_argument('--device', type=str, default='cpu')
 arg_parser.add_argument('--batch-size', type=int, default=4)
@@ -30,10 +29,10 @@ arg_parser.add_argument('--resume', type=bool, default=False)
 arg_parser.add_argument('--max-iter', type=int, default=100000)
 arg_parser.add_argument('--log-interval', type=int, default=10000)
 arg_parser.add_argument('--save-model-interval', type=int, default=50000)
-arg_parser.add_argument('--prev-next', type=int, default=0)
-arg_parser.add_argument('--encoding-layers', type=int, default=4)
-arg_parser.add_argument('--pooling-layers', type=int, default=3)
-arg_parser.add_argument('--image-size', type=int, default=512)
+arg_parser.add_argument('--prev-next', type=int, default=2)
+arg_parser.add_argument('--encoding-layers', type=int, default=3)
+arg_parser.add_argument('--pooling-layers', type=int, default=0)
+arg_parser.add_argument('--image-size', type=int, default=72)
 args = arg_parser.parse_args()
 
 
@@ -81,7 +80,7 @@ iterator_train = iter(data.DataLoader(
     num_workers=args.n_threads))
 
 model = PConvLSTM(image_size=args.image_size, encoding_layers=args.encoding_layers, pooling_layers=args.pooling_layers,
-                  input_channels=1 + args.prev_next)
+                  input_channels=1 + 2*args.prev_next)
 
 if args.finetune:
     lr = args.lr_finetune
