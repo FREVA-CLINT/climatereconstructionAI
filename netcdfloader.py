@@ -34,7 +34,7 @@ class NetCDFLoader(torch.utils.data.Dataset):
         return self.img_length
 
 
-class PrevNextImageNetCDFLoader(NetCDFLoader):
+class SingleNetCDFDataLoader(NetCDFLoader):
     def __getitem__(self, index):
         # open netcdf file for img and mask
         img_file = h5py.File('{:s}'.format(self.paths[0]), 'r')
