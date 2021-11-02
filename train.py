@@ -8,7 +8,7 @@ from torch.utils import data
 from torchvision import transforms
 from tqdm import tqdm
 from loss import InpaintingLoss
-from net import PConvUNetPrecipitation, PConvUNetTemperature
+from net import PConvLSTM
 from net import VGG16FeatureExtractor
 from util.io import load_ckpt, save_ckpt
 
@@ -30,6 +30,9 @@ arg_parser.add_argument('--prev-next', type=bool, default=True)
 arg_parser.add_argument('--max-iter', type=int, default=100000)
 arg_parser.add_argument('--log-interval', type=int, default=10000)
 arg_parser.add_argument('--save-model-interval', type=int, default=50000)
+arg_parser.add_argument('--encoding-levels', type=int, default=4)
+arg_parser.add_argument('--pooling-levels', type=int, default=3)
+arg_parser.add_argument('--image-size', type=int, default=512)
 args = arg_parser.parse_args()
 
 if args.prev_next:
@@ -86,10 +89,8 @@ iterator_train = iter(data.DataLoader(
     sampler=InfiniteSampler(len(dataset_train)),
     num_workers=args.n_threads))
 
-if args.data_type == 'pr':
-    model = PConvUNetPrecipitation().to(device)
-elif args.data_type == 'tas':
-    model = PConvUNetTemperature().to(device)
+model = PConvLSTM(image_size=args.image_size, encoding_layers=args.encoding_layers, pooling_layers=args.pooling_layers,
+                  input_channels=3 if args.prev_next else 1)
 
 if args.finetune:
     lr = args.lr_finetune
