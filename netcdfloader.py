@@ -14,19 +14,19 @@ class NetCDFLoader(torch.utils.data.Dataset):
         self.prev_next = prev_next
 
         if split == 'train':
-            self.paths = glob('{:s}/data_large/*.h5'.format(img_root),
-                              recursive=True)
+            self.img_path = glob('{:s}/data_large/*.h5'.format(img_root),
+                              recursive=True)[0]
         elif split == 'test' or split == 'infill':
-            self.paths = glob('{:s}/test_large/*.h5'.format(img_root))
+            self.img_path = glob('{:s}/test_large/*.h5'.format(img_root))[0]
         elif split == 'val':
-            self.paths = glob('{:s}/val_large/*.h5'.format(img_root))
-        self.maskpath = mask_root
+            self.img_path = glob('{:s}/val_large/*.h5'.format(img_root))[0]
+        self.mask_path = mask_root
 
         # define length of image and mask
-        img_file = h5py.File('{:s}'.format(self.paths[0]), 'r')
+        img_file = h5py.File('{:s}'.format(self.img_path), 'r')
         img_data = img_file.get(self.data_type)
         self.img_length = len(img_data[:, 1, 1])
-        mask_file = h5py.File('{:s}'.format(self.maskpath), 'r')
+        mask_file = h5py.File('{:s}'.format(self.mask_path), 'r')
         mask_data = mask_file.get(self.data_type)
         self.mask_length = len((mask_data[:, 1, 1]))
 
@@ -37,9 +37,9 @@ class NetCDFLoader(torch.utils.data.Dataset):
 class SingleNetCDFDataLoader(NetCDFLoader):
     def __getitem__(self, index):
         # open netcdf file for img and mask
-        img_file = h5py.File('{:s}'.format(self.paths[0]), 'r')
+        img_file = h5py.File('{:s}'.format(self.img_path), 'r')
         img_data = img_file.get(self.data_type)
-        mask_file = h5py.File(self.maskpath)
+        mask_file = h5py.File(self.mask_path)
         mask_data = mask_file.get(self.data_type)
 
         # get img and mask from index
