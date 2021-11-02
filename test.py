@@ -4,7 +4,7 @@ import torch
 from torchvision import transforms
 import opt
 from evaluator import Evaluator
-from net import PConvUNetPrecipitation, PConvUNetTemperature
+from net import PConvLSTMPrecipitation, PConvLSTMTemperature
 from util.io import load_ckpt
 
 arg_parser = argparse.ArgumentParser()
@@ -42,9 +42,9 @@ else:
 dataset_val = NetCDFloader(args.data_root_dir, args.mask_dir, img_transform, mask_transform, split, args.data_type)
 
 if args.data_type == 'pr':
-    model = PConvUNetPrecipitation().to(device)
+    model = PConvLSTMPrecipitation().to(device)
 elif args.data_type == 'tas':
-    model = PConvUNetTemperature().to(device)
+    model = PConvLSTMTemperature().to(device)
 
 load_ckpt(args.snapshot_dir, [('model', model)])
 

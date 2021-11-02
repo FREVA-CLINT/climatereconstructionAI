@@ -122,7 +122,44 @@ class PCBActiv(nn.Module):
         return h, h_mask
 
 
-class PConvUNet(nn.Module):
+class PConvLSTM(nn.Module):
+    def __init__(self, image_size=512, encoding_layers=4, pooling_layers=4, input_channels=3, upsampling_mode='nearest'):
+        super().__init__()
+        # adjust encoding layers if it doesn't blend with image size
+        if image_size % (2**(encoding_layers-1)) != 0:
+            for i in range(encoding_layers):
+                if image_size % (2**(encoding_layers-i-1)) == 0:
+                    encoding_layers -= i
+                    break
+            print("WARNING: Number of encoding layers doesn't blend with image size. Using {} encoding layers instead.".format(encoding_layers))
+        self.freeze_enc_bn = False
+        self.upsampling_mode = upsampling_mode
+        self.layer_size = encoding_layers + pooling_layers
+
+        # define encoding layers
+        self.enc_1 = PCBActiv(input_channels, image_size / (2**(encoding_layers-1)), bn=False, sample='down-7')
+        for i in range(1, encoding_layers):
+            if i+1 == encoding_layers:
+                sample='down-3'
+            else:
+                sample='down-5'
+            name = 'enc_{:d}'.format(i + 1)
+            setattr(self, name, PCBActiv(image_size / (2**(encoding_layers-i)),
+                                         image_size / (2**(encoding_layers-i-1)), sample=sample))
+        # define pooling layers
+        for i in range(encoding_layers, self.layer_size):
+            name = 'enc_{:d}'.format(i + 1)
+            setattr(self, name, PCBActiv(image_size, image_size, sample='down-3'))
+        for i in range(4, self.layer_size):
+            name = 'dec_{:d}'.format(i + 1)
+            setattr(self, name, PCBActiv(image_size + image_size, image_size, activ='leaky'))
+        # define decoding layers
+        for i in range(1, encoding_layers):
+            name = 'dec_{:d}'.format(encoding_layers-i+1)
+            setattr(self, name, PCBActiv(image_size / (2**(i-1)), image_size / (2**i), activ='leaky'))
+        self.dec_1 = PCBActiv(image_size / (2**(encoding_layers-1)) + input_channels, input_channels,
+                              bn=False, activ=None, conv_bias=True)
+
     def forward(self, input, input_mask):
         h_dict = {}  # for the output of enc_N
         h_mask_dict = {}  # for the output of enc_N
@@ -139,11 +176,6 @@ class PConvUNet(nn.Module):
 
         h_key = 'h_{:d}'.format(self.layer_size)
         h, h_mask = h_dict[h_key], h_mask_dict[h_key]
-
-        # concat upsampled output of h_enc_N-1 and dec_N+1, then do dec_N
-        # (exception)
-        #                            input         dec_2            dec_1
-        #                            h_enc_7       h_enc_8          dec_8
 
         for i in range(self.layer_size, 0, -1):
             enc_h_key = 'h_{:d}'.format(i - 1)
@@ -167,50 +199,3 @@ class PConvUNet(nn.Module):
                 if isinstance(module, nn.BatchNorm2d) and 'enc' in name:
                     module.eval()
 
-
-class PConvUNetPrecipitation(PConvUNet):
-    def __init__(self, layer_size=7, input_channels=3, upsampling_mode='nearest'):
-        super().__init__()
-        self.freeze_enc_bn = False
-        self.upsampling_mode = upsampling_mode
-        self.layer_size = layer_size
-        self.enc_1 = PCBActiv(input_channels, 64, bn=False, sample='down-7')
-        self.enc_2 = PCBActiv(64, 128, sample='down-5')
-        self.enc_3 = PCBActiv(128, 256, sample='down-5')
-        self.enc_4 = PCBActiv(256, 512, sample='down-3')
-        for i in range(4, self.layer_size):
-            name = 'enc_{:d}'.format(i + 1)
-            setattr(self, name, PCBActiv(512, 512, sample='down-3'))
-
-        for i in range(4, self.layer_size):
-            name = 'dec_{:d}'.format(i + 1)
-            setattr(self, name, PCBActiv(512 + 512, 512, activ='leaky'))
-        self.dec_4 = PCBActiv(512 + 256, 256, activ='leaky')
-        self.dec_3 = PCBActiv(256 + 128, 128, activ='leaky')
-        self.dec_2 = PCBActiv(128 + 64, 64, activ='leaky')
-        self.dec_1 = PCBActiv(64 + input_channels, input_channels,
-                              bn=False, activ=None, conv_bias=True)
-
-
-class PConvUNetTemperature(PConvUNet):
-    def __init__(self, layer_size=3, input_channels=3, upsampling_mode='nearest'):
-        super().__init__()
-        self.freeze_enc_bn = False
-        self.upsampling_mode = upsampling_mode
-        self.layer_size = layer_size
-        self.enc_1 = PCBActiv(input_channels, 18, bn=False, sample='down-7')
-        self.enc_2 = PCBActiv(18, 36, sample='down-5')
-        self.enc_3 = PCBActiv(36, 72, sample='down-5')
-        self.enc_4 = PCBActiv(72, 72, sample='down-3')
-        for i in range(4, self.layer_size):
-            name = 'enc_{:d}'.format(i + 1)
-            setattr(self, name, PCBActiv(72, 72, sample='down-3'))
-
-        for i in range(4, self.layer_size):
-            name = 'dec_{:d}'.format(i + 1)
-            setattr(self, name, PCBActiv(72 + 72, 72, activ='leaky'))
-        self.dec_4 = PCBActiv(72 + 72, 72, activ='leaky')
-        self.dec_3 = PCBActiv(72 + 36, 36, activ='leaky')
-        self.dec_2 = PCBActiv(36 + 18, 18, activ='leaky')
-        self.dec_1 = PCBActiv(18 + input_channels, input_channels,
-                              bn=False, activ=None, conv_bias=True)
