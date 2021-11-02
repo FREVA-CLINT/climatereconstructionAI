@@ -38,7 +38,7 @@ if args.infill:
     split = 'infill'
 else:
     split = 'test'
-dataset_val = SingleNetCDFDataLoader(args.data_root_dir, args.mask_dir, img_transform, mask_transform, split, args.data_type)
+dataset_val = SingleNetCDFDataLoader(args.data_root_dir, args.mask_dir, img_transform, mask_transform, split, args.data_type, args.prev_next)
 
 model = PConvLSTM(image_size=args.image_size, encoding_layers=args.encoding_layers, pooling_layers=args.pooling_layers,
                   input_channels=1 + args.prev_next)
