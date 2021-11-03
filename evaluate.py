@@ -13,15 +13,15 @@ arg_parser.add_argument('--snapshot-dir', type=str, default='snapshots/')
 arg_parser.add_argument('--data-root-dir', type=str, default='../data/')
 arg_parser.add_argument('--mask-dir', type=str, default='masks/')
 arg_parser.add_argument('--device', type=str, default='cuda')
-arg_parser.add_argument('--partitions', type=str, default=1)
+arg_parser.add_argument('--partitions', type=int, default=1)
 arg_parser.add_argument('--prev-next', type=int, default=0)
 arg_parser.add_argument('--encoding-layers', type=int, default=3)
 arg_parser.add_argument('--pooling-layers', type=int, default=0)
 arg_parser.add_argument('--image-size', type=int, default=72)
-arg_parser.add_argument('--infill', type=str)
+arg_parser.add_argument('--infill', type=str, default=None)
 arg_parser.add_argument('--create-images', type=str, default='2017-07-12-14:00,2017-07-12-14:00')
-arg_parser.add_argument('--create-video', type=str)
-arg_parser.add_argument('--create-report', type=str)
+arg_parser.add_argument('--create-video', action='store_true')
+arg_parser.add_argument('--create-report', action='store_true')
 
 args = arg_parser.parse_args()
 
@@ -35,7 +35,7 @@ if args.infill:
     model = PConvLSTM(image_size=args.image_size, encoding_layers=args.encoding_layers, pooling_layers=args.pooling_layers,
                       input_channels=1 + 2*args.prev_next).to(device)
 
-    load_ckpt(args.snapshot_dir, [('model', model)])
+    load_ckpt(args.snapshot_dir, [('model', model)], device)
 
     model.eval()
     evaluator.infill(model, dataset_val, device, args.partitions)
