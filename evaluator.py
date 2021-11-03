@@ -9,6 +9,7 @@ import pandas as pd
 import imageio
 from fpdf import FPDF
 import os
+os.getcwd()
 
 
 def get_data(file):
