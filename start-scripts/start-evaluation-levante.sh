@@ -21,6 +21,6 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --prev-next 3 \
  --partitions 147 \
  --infill test \
-# --create-images \
+# --create-images 2017-07-12-14:00,2017-07-12-14:00 \
 # --create-video \
 # --create-report \
