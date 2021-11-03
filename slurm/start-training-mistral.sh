@@ -11,9 +11,8 @@
 
 module load cuda/10.0.130
 module load singularity/3.6.1-gcc-9.1.0
-export HDF5_USE_FILE_LOCKING='FALSE'
 
-singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img.sif \
+singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img_mistral.sif \
  python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/train.py \
  --device cuda --batch-size 4 --image-size 512 --pooling-layers 3 --encoding-layers 4 --data-type pr \
  --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-complete-scaled/ \

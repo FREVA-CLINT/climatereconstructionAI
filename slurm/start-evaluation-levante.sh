@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+#SBATCH -J JohannesMeuer
+#SBATCH -p amd
+#SBATCH -A bb1152
+#SBATCH -n 1
+#SBATCH --cpus-per-task=128
+#SBATCH --time=12:00:00
+#SBATCH --mem=256G
+#SBATCH --nodelist=vader3
+
+module source slurm/setup-modules.txt
+
+singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img_levante.sif python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/evaluate.py
