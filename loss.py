@@ -24,7 +24,7 @@ class InpaintingLoss(nn.Module):
         self.l1 = nn.L1Loss()
         self.extractor = extractor
 
-    def forward(self, input, mask, output, gt):
+    def forward(self, input, mask, output, gt, device):
         loss_dict = {}
         output_comp = mask * input + (1 - mask) * output
 
@@ -32,10 +32,10 @@ class InpaintingLoss(nn.Module):
         loss_dict['valid'] = self.l1(mask * output, mask * gt)
 
         # get mid indexed element
-        mid_index = torch.tensor([(output.shape[1] // 2)],dtype=torch.long).to('cuda')
+        mid_index = torch.tensor([(output.shape[1] // 2)],dtype=torch.long).to(device)
         output = torch.index_select(output, dim=1, index=mid_index)
-        output_comp = torch.index_select(output_comp, dim=1, index=torch.tensor([mid_index],dtype=torch.long))
-        gt = torch.index_select(gt, dim=1, index=torch.tensor([mid_index],dtype=torch.long))
+        output_comp = torch.index_select(output_comp, dim=1, index=mid_index)
+        gt = torch.index_select(gt, dim=1, index=mid_index)
 
         feat_output = self.extractor(torch.cat([torch.unsqueeze(output, 1)] * 3, 1))
         feat_output_comp = self.extractor(torch.cat([torch.unsqueeze(output_comp, 1)] * 3, 1))
