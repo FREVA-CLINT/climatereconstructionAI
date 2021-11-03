@@ -9,7 +9,7 @@
 #SBATCH --mem=256G
 #SBATCH --nodelist=vader2
 
-module source slurm/setup-modules.txt
+module source start-scripts/setup-modules.txt
 
 singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img_levante.sif \
  python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/train.py \
