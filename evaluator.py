@@ -36,6 +36,8 @@ class Evaluator:
         self.data_type = data_type
 
     def infill(self, model, dataset, device, partitions):
+        if not os.path.exists(self.eval_save_dir):
+            os.makedirs('{:s}'.format(self.eval_save_dir))
         image = []
         mask = []
         gt = []
@@ -78,8 +80,15 @@ class Evaluator:
                 h5[self.data_type].dims[dim].label = dname[dim]
             h5.close()
 
-    def create_evaluation_images(self, file, create_video=False, start_date=None, end_date=None): #start_date='2017-07-12-14:00', end_date='2017-07-12-14:00'):
-        os.popen('mkdir ' + self.eval_save_dir + 'images')
+        # convert to netCDF files
+        self.convert_h5_to_netcdf(True, 'image')
+        self.convert_h5_to_netcdf(False, 'gt')
+        self.convert_h5_to_netcdf(False, 'output')
+        self.convert_h5_to_netcdf(False, 'output_comp')
+
+    def create_evaluation_images(self, file, create_video=False, start_date=None, end_date=None):
+        if not os.path.exists(self.eval_save_dir + 'images'):
+            os.makedirs('{:s}'.format(self.eval_save_dir + 'images'))
         file = self.eval_save_dir + file
 
         data = Dataset(file)
@@ -109,7 +118,8 @@ class Evaluator:
                     writer.append_data(image)
 
     def create_evaluation_report(self, save_dir='evaluations/', create_evalutation_files=True, clean_data=True, infilled=True):
-        os.popen('mkdir ' + self.eval_save_dir + save_dir)
+        if not os.path.exists(self.eval_save_dir + save_dir):
+            os.makedirs('{:s}'.format(self.eval_save_dir + save_dir))
         directory = self.eval_save_dir + save_dir
         if create_evalutation_files:
             self.create_evaluation_files(clean_data, infilled)
