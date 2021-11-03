@@ -105,7 +105,7 @@ for i in tqdm(range(start_iter, args.max_iter)):
     image, mask, gt = [x.to(device) for x in next(iterator_train)]
 
     output, _ = model(image, mask)
-    loss_dict = criterion(image, mask, output, gt)
+    loss_dict = criterion(image, mask, output, gt, device)
 
     loss = 0.0
     for key, coef in opt.LAMBDA_DICT.items():
