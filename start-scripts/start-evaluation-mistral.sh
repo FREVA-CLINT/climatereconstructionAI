@@ -11,6 +11,7 @@
 
 module load cuda/10.0.130
 module load singularity/3.6.1-gcc-9.1.0
+module load cdo
 
 singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img_mistral.sif \
  python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/evaluate.py \
