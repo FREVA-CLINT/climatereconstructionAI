@@ -20,8 +20,8 @@ def save_ckpt(ckpt_name, models, optimizers, n_iter):
     torch.save(ckpt_dict, ckpt_name)
 
 
-def load_ckpt(ckpt_name, models, optimizers=None):
-    ckpt_dict = torch.load(ckpt_name)
+def load_ckpt(ckpt_name, models, device, optimizers=None):
+    ckpt_dict = torch.load(ckpt_name, map_location=device)
     for prefix, model in models:
         assert isinstance(model, nn.Module)
         model.load_state_dict(ckpt_dict[prefix], strict=False)
