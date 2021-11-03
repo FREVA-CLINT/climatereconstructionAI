@@ -32,8 +32,8 @@ class InpaintingLoss(nn.Module):
         loss_dict['valid'] = self.l1(mask * output, mask * gt)
 
         # get mid indexed element
-        mid_index = (output.shape[1] // 2)
-        output = torch.index_select(output, dim=1, index=torch.tensor([mid_index],dtype=torch.long))
+        mid_index = torch.tensor([(output.shape[1] // 2)],dtype=torch.long).to('cuda')
+        output = torch.index_select(output, dim=1, index=mid_index)
         output_comp = torch.index_select(output_comp, dim=1, index=torch.tensor([mid_index],dtype=torch.long))
         gt = torch.index_select(gt, dim=1, index=torch.tensor([mid_index],dtype=torch.long))
 
