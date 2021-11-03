@@ -70,7 +70,10 @@ class Evaluator:
         output = torch.cat(output)
         output_comp = torch.cat(output_comp)
 
-        cvar = [image[:, 1, :, :], mask[:, 1, :, :], output[:, 1, :, :], output_comp[:, 1, :, :], gt[:, 1, :, :]]
+        # get mid index
+        mid_index = image.shape[1] // 2
+
+        cvar = [image[:, mid_index, :, :], mask[:, mid_index, :, :], output[:, mid_index, :, :], output_comp[:, mid_index, :, :], gt[:, mid_index, :, :]]
         cname = ['image', 'mask', 'output', 'output_comp', 'gt']
         dname = ['time', 'lat', 'lon']
         for x in range(0, 5):
