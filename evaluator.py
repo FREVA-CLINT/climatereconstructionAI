@@ -192,13 +192,13 @@ class Evaluator:
                      '2017-06-29T16', '2017-07-12T14', '2017-09-02T13']
         i = 0
         for date in dates:
-            os.popen('cdo select,date=' + date + ' ' + self.eval_save_dir + 'image.nc ' + self.eval_save_dir + 'imagetmp' + str(i) + '.nc')
-            os.popen('cdo select,date=' + date + ' ' + self.eval_save_dir + 'output_comp.nc ' + self.eval_save_dir + 'output_comptmp' + str(i) + '.nc')
-            os.popen('cdo select,date=' + date + ' ' + self.eval_save_dir + 'gt.nc ' + self.eval_save_dir + 'gttmp' + str(i) + '.nc')
-        os.popen('mergetime ' + self.eval_save_dir + 'imagetmp* ' + self.eval_save_dir + 'image_selected.nc')
-        os.popen('mergetime ' + self.eval_save_dir + 'gttmp* ' + self.eval_save_dir + 'gt_selected.nc')
-        os.popen('mergetime ' + self.eval_save_dir + 'output_comptmp* ' + self.eval_save_dir + 'output_comp_selected.nc')
-        os.popen('rm ' + self.eval_save_dir + '*tmp*')
+            os.system('cdo select,date=' + date + ' ' + self.eval_save_dir + 'image.nc ' + self.eval_save_dir + 'imagetmp' + str(i) + '.nc')
+            os.system('cdo select,date=' + date + ' ' + self.eval_save_dir + 'output_comp.nc ' + self.eval_save_dir + 'output_comptmp' + str(i) + '.nc')
+            os.system('cdo select,date=' + date + ' ' + self.eval_save_dir + 'gt.nc ' + self.eval_save_dir + 'gttmp' + str(i) + '.nc')
+        os.system('mergetime ' + self.eval_save_dir + 'imagetmp* ' + self.eval_save_dir + 'image_selected.nc')
+        os.system('mergetime ' + self.eval_save_dir + 'gttmp* ' + self.eval_save_dir + 'gt_selected.nc')
+        os.system('mergetime ' + self.eval_save_dir + 'output_comptmp* ' + self.eval_save_dir + 'output_comp_selected.nc')
+        os.system('rm ' + self.eval_save_dir + '*tmp*')
 
         self.create_evaluation_images(file='image_selected.nc')
         self.create_evaluation_images(file='gt_selected.nc')
@@ -208,42 +208,42 @@ class Evaluator:
         output_comp = 'output_comp.nc'
         gt = 'gt.nc'
         if clean_data:
-            os.popen('cdo gec,0.0 ' + self.eval_save_dir + 'output_comp.nc ' + self.eval_save_dir + 'tmp.nc')
-            os.popen('cdo mul ' + self.eval_save_dir + 'output_comp.nc ' + self.eval_save_dir + 'tmp.nc ' + self.eval_save_dir + 'output_comp_cleaned.nc')
-            os.popen('rm ' + self.eval_save_dir + 'tmp.nc')
+            os.system('cdo gec,0.0 ' + self.eval_save_dir + 'output_comp.nc ' + self.eval_save_dir + 'tmp.nc')
+            os.system('cdo mul ' + self.eval_save_dir + 'output_comp.nc ' + self.eval_save_dir + 'tmp.nc ' + self.eval_save_dir + 'output_comp_cleaned.nc')
+            os.system('rm ' + self.eval_save_dir + 'tmp.nc')
             output_comp = 'output_comp_cleaned.nc'
         if infilled:
-            os.popen('cdo ifnotthen ' + self.mask_dir + ' ' + self.eval_save_dir + output_comp + ' ' + self.eval_save_dir + 'infilled_output_comp.nc')
+            os.system('cdo ifnotthen ' + self.mask_dir + ' ' + self.eval_save_dir + output_comp + ' ' + self.eval_save_dir + 'infilled_output_comp.nc')
             output_comp = 'infilled_output_comp.nc'
-            os.popen('cdo ifnotthen ' + self.mask_dir + ' ' + self.eval_save_dir + gt + ' ' + self.eval_save_dir + 'infilled_gt.nc')
+            os.system('cdo ifnotthen ' + self.mask_dir + ' ' + self.eval_save_dir + gt + ' ' + self.eval_save_dir + 'infilled_gt.nc')
             gt = 'infilled_gt.nc'
 
         # create correlation
-        os.popen('cdo timcor -hourmean -fldmean ' + self.eval_save_dir + output_comp + ' -hourmean -fldmean ' + self.eval_save_dir + gt + ' ' + save_dir + 'timcor.nc')
+        os.system('cdo timcor -hourmean -fldmean ' + self.eval_save_dir + output_comp + ' -hourmean -fldmean ' + self.eval_save_dir + gt + ' ' + save_dir + 'timcor.nc')
         # create sum in field
-        os.popen('cdo timcor -hourmean -fldsum ' + self.eval_save_dir + output_comp + ' -hourmean -fldsum ' + self.eval_save_dir + gt + ' ' + save_dir + 'fldsum_timcor.nc')
+        os.system('cdo timcor -hourmean -fldsum ' + self.eval_save_dir + output_comp + ' -hourmean -fldsum ' + self.eval_save_dir + gt + ' ' + save_dir + 'fldsum_timcor.nc')
         # create mse
-        os.popen('cdo sqrt -timmean -sqr -hourlmean -fldmean ' + self.eval_save_dir + output_comp + ' -hourmean -fldmean ' + self.eval_save_dir + gt + ' ' + save_dir + 'mse.nc')
+        os.system('cdo sqrt -timmean -sqr -hourlmean -fldmean ' + self.eval_save_dir + output_comp + ' -hourmean -fldmean ' + self.eval_save_dir + gt + ' ' + save_dir + 'mse.nc')
         # create total fldsum
-        os.popen('cdo fldsum -timsum ' + self.eval_save_dir + output_comp + ' ' + save_dir + 'fldsum_output_comp.nc')
-        os.popen('cdo fldsum -timsum ' + self.eval_save_dir + gt + ' ' + save_dir + 'fldsum_gt.nc')
+        os.system('cdo fldsum -timsum ' + self.eval_save_dir + output_comp + ' ' + save_dir + 'fldsum_output_comp.nc')
+        os.system('cdo fldsum -timsum ' + self.eval_save_dir + gt + ' ' + save_dir + 'fldsum_gt.nc')
         # create timeseries of time correlation
-        os.popen('cdo fldcor -setmisstoc,0 ' + self.eval_save_dir + output_comp + ' -setmisstoc,0 ' + self.eval_save_dir + gt + ' ' + save_dir + 'time_series.nc')
+        os.system('cdo fldcor -setmisstoc,0 ' + self.eval_save_dir + output_comp + ' -setmisstoc,0 ' + self.eval_save_dir + gt + ' ' + save_dir + 'time_series.nc')
         # create min max mean time series
-        os.popen('cdo fldmax ' + self.eval_save_dir + output_comp + ' ' + save_dir + 'output_comp_max.nc')
-        os.popen('cdo fldmax ' + self.eval_save_dir + gt + ' ' + save_dir + 'gt_max.nc')
-        os.popen('cdo fldmin ' + self.eval_save_dir + output_comp + ' ' + save_dir + 'output_comp_min.nc')
-        os.popen('cdo fldmin ' + self.eval_save_dir + gt + ' ' + save_dir + 'gt_min.nc')
-        os.popen('cdo fldmean ' + self.eval_save_dir + output_comp + ' ' + save_dir + 'output_comp_mean.nc')
-        os.popen('cdo fldmean ' + self.eval_save_dir + gt + ' ' + save_dir + 'gt_mean.nc')
+        os.system('cdo fldmax ' + self.eval_save_dir + output_comp + ' ' + save_dir + 'output_comp_max.nc')
+        os.system('cdo fldmax ' + self.eval_save_dir + gt + ' ' + save_dir + 'gt_max.nc')
+        os.system('cdo fldmin ' + self.eval_save_dir + output_comp + ' ' + save_dir + 'output_comp_min.nc')
+        os.system('cdo fldmin ' + self.eval_save_dir + gt + ' ' + save_dir + 'gt_min.nc')
+        os.system('cdo fldmean ' + self.eval_save_dir + output_comp + ' ' + save_dir + 'output_comp_mean.nc')
+        os.system('cdo fldmean ' + self.eval_save_dir + gt + ' ' + save_dir + 'gt_mean.nc')
 
     def convert_h5_to_netcdf(self, create_structure_template, file):
         if create_structure_template:
-            os.popen('ncdump ' + self.test_dir + '*.h5 > ' + self.eval_save_dir + 'tmp_dump.txt')
-            os.popen('sed "/.*' + self.data_type + ' =.*/{s///;q;}" ' + self.eval_save_dir + 'tmp_dump.txt > ' + self.eval_save_dir + 'structure.txt')
-            os.popen('rm ' + self.eval_save_dir + 'tmp_dump.txt')
-        os.popen('cat ' + self.eval_save_dir + 'structure.txt >> ' + self.eval_save_dir + file + '.txt')
-        os.popen('ncdump -v ' + self.data_type + ' ' + self.eval_save_dir + file + ' | sed -e "1,/data:/d" >> ' + self.eval_save_dir + file + '.txt')
-        os.popen('ncgen -o ' + self.eval_save_dir + 'output-tmp ' + self.eval_save_dir + file + '.txt')
-        os.popen('cdo -setgrid,' + self.test_dir + '*.h5 ' + self.eval_save_dir + 'output-tmp ' + self.eval_save_dir + file + '.nc')
-        os.popen('rm ' + self.eval_save_dir + file + '.txt ' + self.eval_save_dir + 'output-tmp')
+            os.system('ncdump ' + self.test_dir + '*.h5 > ' + self.eval_save_dir + 'tmp_dump.txt')
+            os.system('sed "/.*' + self.data_type + ' =.*/{s///;q;}" ' + self.eval_save_dir + 'tmp_dump.txt > ' + self.eval_save_dir + 'structure.txt')
+            os.system('rm ' + self.eval_save_dir + 'tmp_dump.txt')
+        os.system('cat ' + self.eval_save_dir + 'structure.txt >> ' + self.eval_save_dir + file + '.txt')
+        os.system('ncdump -v ' + self.data_type + ' ' + self.eval_save_dir + file + ' | sed -e "1,/data:/d" >> ' + self.eval_save_dir + file + '.txt')
+        os.system('ncgen -o ' + self.eval_save_dir + 'output-tmp ' + self.eval_save_dir + file + '.txt')
+        os.system('cdo -setgrid,' + self.test_dir + '*.h5 ' + self.eval_save_dir + 'output-tmp ' + self.eval_save_dir + file + '.nc')
+        os.system('rm ' + self.eval_save_dir + file + '.txt ' + self.eval_save_dir + 'output-tmp')
