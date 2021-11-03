@@ -94,7 +94,7 @@ criterion = InpaintingLoss(VGG16FeatureExtractor()).to(device)
 
 if args.resume:
     start_iter = load_ckpt(
-        args.resume, [('model', model)], [('optimizer', optimizer)])
+        args.resume, [('model', model)], device, [('optimizer', optimizer)])
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
     print('Starting from iter ', start_iter)
