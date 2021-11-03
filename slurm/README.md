@@ -1,5 +1,4 @@
-# Infilling spatial precipitation recordings with a memory assisted CNN
-**[Applied implementation] (https://github.com/naoto0804/pytorch-inpainting-with-partial-conv)**
+# Scheduling on Mistral and Levante
 
 In order to run the program on a remote computer, it should be executed in a container that provides all necessary python packages. For this project, a Singularity container was used. A documentation on setting up singularity, see https://sylabs.io/guides/3.0/user-guide/installation.html.
 
