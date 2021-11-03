@@ -20,7 +20,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --evaluation-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/evaluation/precipitation/radolan-prev-next/ \
  --prev-next 3 \
  --partitions 147 \
- --infill \
+ --infill test \
 # --create-images \
 # --create-video \
 # --create-report \
