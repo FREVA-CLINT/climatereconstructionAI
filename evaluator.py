@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 import imageio
 from fpdf import FPDF
+from cdo import *
 import os
-os.getcwd()
 
 
 def get_data(file):
@@ -142,7 +142,7 @@ class Evaluator:
 
         plt.title('Max values')
         plot_data(file=directory + 'gt_max.nc', start=0, label='Ground Truth')
-        plot_data(file=sdirectory + 'output_comp_max.nc', start=0, label='Output')
+        plot_data(file=directory + 'output_comp_max.nc', start=0, label='Output')
         plt.savefig(directory + 'max.png')
         plt.clf()
 
@@ -188,17 +188,18 @@ class Evaluator:
         pdf.output(directory + 'Report.pdf', 'F')
 
     def evaluate_selected_samples(self, dates=None):
+        cdo = Cdo()
         if dates is None:
             dates = ['2017-01-12T23', '2017-04-17T15', '2017-05-02T12', '2017-05-13T12', '2017-06-04T03',
                      '2017-06-29T16', '2017-07-12T14', '2017-09-02T13']
         i = 0
         for date in dates:
-            os.system('cdo select,date=' + date + ' ' + self.eval_save_dir + 'image.nc ' + self.eval_save_dir + 'imagetmp' + str(i) + '.nc')
-            os.system('cdo select,date=' + date + ' ' + self.eval_save_dir + 'output_comp.nc ' + self.eval_save_dir + 'output_comptmp' + str(i) + '.nc')
-            os.system('cdo select,date=' + date + ' ' + self.eval_save_dir + 'gt.nc ' + self.eval_save_dir + 'gttmp' + str(i) + '.nc')
-        os.system('mergetime ' + self.eval_save_dir + 'imagetmp* ' + self.eval_save_dir + 'image_selected.nc')
-        os.system('mergetime ' + self.eval_save_dir + 'gttmp* ' + self.eval_save_dir + 'gt_selected.nc')
-        os.system('mergetime ' + self.eval_save_dir + 'output_comptmp* ' + self.eval_save_dir + 'output_comp_selected.nc')
+            cdo.select('date=' + date, input=self.eval_save_dir + 'image.nc', output=self.eval_save_dir + 'imagetmp' + str(i) + '.nc')
+            cdo.select('date=' + date, input=self.eval_save_dir + 'output_comp.nc', output=self.eval_save_dir + 'output_comptmp' + str(i) + '.nc')
+            cdo.select('date=' + date, input=self.eval_save_dir + 'gt.nc', output=self.eval_save_dir + 'gttmp' + str(i) + '.nc')
+        cdo.mergetime(input=self.eval_save_dir + 'imagetmp*', output=self.eval_save_dir + 'image_selected.nc')
+        cdo.mergetime(input=self.eval_save_dir + 'output_comptmp*', output=self.eval_save_dir + 'output_comp_selected.nc')
+        cdo.mergetime(input=self.eval_save_dir + 'gttmp*', output=self.eval_save_dir + 'gt_selected.nc')
         os.system('rm ' + self.eval_save_dir + '*tmp*')
 
         self.create_evaluation_images(file='image_selected.nc')
@@ -206,45 +207,47 @@ class Evaluator:
         self.create_evaluation_images(file='output_comp_selected.nc')
 
     def create_evaluation_files(self, clean_data, infilled, save_dir):
+        cdo = Cdo()
         output_comp = 'output_comp.nc'
         gt = 'gt.nc'
         if clean_data:
-            os.system('cdo gec,0.0 ' + self.eval_save_dir + 'output_comp.nc ' + self.eval_save_dir + 'tmp.nc')
-            os.system('cdo mul ' + self.eval_save_dir + 'output_comp.nc ' + self.eval_save_dir + 'tmp.nc ' + self.eval_save_dir + 'output_comp_cleaned.nc')
+            cdo.gec(0.0, input=self.eval_save_dir + 'output_comp.nc', output=self.eval_save_dir + 'tmp.nc')
+            cdo.mul(input=self.eval_save_dir + 'output_comp.nc ' + self.eval_save_dir + 'tmp.nc', output=self.eval_save_dir + 'output_comp_cleaned.nc')
             os.system('rm ' + self.eval_save_dir + 'tmp.nc')
             output_comp = 'output_comp_cleaned.nc'
         if infilled:
-            os.system('cdo ifnotthen ' + self.mask_dir + ' ' + self.eval_save_dir + output_comp + ' ' + self.eval_save_dir + 'infilled_output_comp.nc')
+            cdo.ifnotthen(input=self.mask_dir + ' ' + self.eval_save_dir + output_comp, output=self.eval_save_dir + 'infilled_output_comp.nc')
             output_comp = 'infilled_output_comp.nc'
-            os.system('cdo ifnotthen ' + self.mask_dir + ' ' + self.eval_save_dir + gt + ' ' + self.eval_save_dir + 'infilled_gt.nc')
+            cdo.ifnotthen(input=self.mask_dir + ' ' + self.eval_save_dir + gt, output=self.eval_save_dir + 'infilled_gt.nc')
             gt = 'infilled_gt.nc'
 
         # create correlation
-        os.system('cdo timcor -hourmean -fldmean ' + self.eval_save_dir + output_comp + ' -hourmean -fldmean ' + self.eval_save_dir + gt + ' ' + save_dir + 'timcor.nc')
+        cdo.timcor(input='-hourmean -fldmean ' + self.eval_save_dir + output_comp + ' -hourmean -fldmean ' + self.eval_save_dir + gt, output=save_dir + 'timcor.nc')
         # create sum in field
-        os.system('cdo timcor -hourmean -fldsum ' + self.eval_save_dir + output_comp + ' -hourmean -fldsum ' + self.eval_save_dir + gt + ' ' + save_dir + 'fldsum_timcor.nc')
+        cdo.timcor(input='timcor -hourmean -fldsum ' + self.eval_save_dir + output_comp + ' -hourmean -fldsum ' + self.eval_save_dir + gt, output=save_dir + 'fldsum_timcor.nc')
         # create mse
-        os.system('cdo sqrt -timmean -sqr -hourlmean -fldmean ' + self.eval_save_dir + output_comp + ' -hourmean -fldmean ' + self.eval_save_dir + gt + ' ' + save_dir + 'mse.nc')
+        cdo.sqrt(input='-timmean -sqr -hourlmean -fldmean ' + self.eval_save_dir + output_comp + ' -hourmean -fldmean ' + self.eval_save_dir + gt, output=save_dir + 'mse.nc')
         # create total fldsum
-        os.system('cdo fldsum -timsum ' + self.eval_save_dir + output_comp + ' ' + save_dir + 'fldsum_output_comp.nc')
-        os.system('cdo fldsum -timsum ' + self.eval_save_dir + gt + ' ' + save_dir + 'fldsum_gt.nc')
+        cdo.fldsum(input='-timsum ' + self.eval_save_dir + output_comp, output=save_dir + 'fldsum_output_comp.nc')
+        cdo.fldsum(input='-timsum ' + self.eval_save_dir + gt, output=save_dir + 'fldsum_gt.nc')
         # create timeseries of time correlation
-        os.system('cdo fldcor -setmisstoc,0 ' + self.eval_save_dir + output_comp + ' -setmisstoc,0 ' + self.eval_save_dir + gt + ' ' + save_dir + 'time_series.nc')
+        cdo.fldcor(input='-setmisstoc,0 ' + self.eval_save_dir + output_comp + ' -setmisstoc,0 ' + self.eval_save_dir + gt, output=save_dir + 'time_series.nc')
         # create min max mean time series
-        os.system('cdo fldmax ' + self.eval_save_dir + output_comp + ' ' + save_dir + 'output_comp_max.nc')
-        os.system('cdo fldmax ' + self.eval_save_dir + gt + ' ' + save_dir + 'gt_max.nc')
-        os.system('cdo fldmin ' + self.eval_save_dir + output_comp + ' ' + save_dir + 'output_comp_min.nc')
-        os.system('cdo fldmin ' + self.eval_save_dir + gt + ' ' + save_dir + 'gt_min.nc')
-        os.system('cdo fldmean ' + self.eval_save_dir + output_comp + ' ' + save_dir + 'output_comp_mean.nc')
-        os.system('cdo fldmean ' + self.eval_save_dir + gt + ' ' + save_dir + 'gt_mean.nc')
+        cdo.fldmax(input=self.eval_save_dir + output_comp, output=save_dir + 'output_comp_max.nc')
+        cdo.fldmax(input=self.eval_save_dir + gt, output=save_dir + 'gt_max.nc')
+        cdo.fldmin(input=self.eval_save_dir + output_comp, output=save_dir + 'output_comp_min.nc')
+        cdo.fldmin(input=self.eval_save_dir + gt, output=save_dir + 'gt_min.nc')
+        cdo.fldmean(input=self.eval_save_dir + output_comp, output=save_dir + 'output_comp_mean.nc')
+        cdo.fldmean(input=self.eval_save_dir + gt, output=save_dir + 'gt_mean.nc')
 
     def convert_h5_to_netcdf(self, create_structure_template, file):
         if create_structure_template:
             os.system('ncdump ' + self.test_dir + '*.h5 > ' + self.eval_save_dir + 'tmp_dump.txt')
             os.system('sed "/.*' + self.data_type + ' =.*/{s///;q;}" ' + self.eval_save_dir + 'tmp_dump.txt > ' + self.eval_save_dir + 'structure.txt')
             os.system('rm ' + self.eval_save_dir + 'tmp_dump.txt')
+        cdo = Cdo()
         os.system('cat ' + self.eval_save_dir + 'structure.txt >> ' + self.eval_save_dir + file + '.txt')
         os.system('ncdump -v ' + self.data_type + ' ' + self.eval_save_dir + file + ' | sed -e "1,/data:/d" >> ' + self.eval_save_dir + file + '.txt')
         os.system('ncgen -o ' + self.eval_save_dir + 'output-tmp ' + self.eval_save_dir + file + '.txt')
-        os.system('cdo -setgrid,' + self.test_dir + '*.h5 ' + self.eval_save_dir + 'output-tmp ' + self.eval_save_dir + file + '.nc')
+        cdo.setgrid(self.test_dir + '*.h5', input=self.eval_save_dir + 'output-tmp', output=self.eval_save_dir + file + '.nc')
         os.system('rm ' + self.eval_save_dir + file + '.txt ' + self.eval_save_dir + 'output-tmp')
