@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=128
 #SBATCH --time=12:00:00
 #SBATCH --mem=256G
-#SBATCH --nodelist=vader3
+#SBATCH --nodelist=vader1
 
 module source start-scripts/setup-modules.txt
 
