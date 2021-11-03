@@ -31,17 +31,15 @@ class InpaintingLoss(nn.Module):
         loss_dict['hole'] = self.l1((1 - mask) * output, (1 - mask) * gt)
         loss_dict['valid'] = self.l1(mask * output, mask * gt)
 
-        # get mid index
-        mid_index = (output.shape[1] // 2) + 1
-        print(output.shape)
-        print(mid_index)
-        print(output[:][mid_index][:][:].shape)
-        print(([torch.unsqueeze(output[:][mid_index][:][:], 1)] * 3).shape)
-        torch.cat([torch.unsqueeze(output[:][mid_index][:][:], 1)] * 3, 1)
+        # get mid indexed element
+        mid_index = (output.shape[1] // 2)
+        output = torch.index_select(output, dim=1, index=torch.tensor([mid_index],dtype=torch.long))
+        output_comp = torch.index_select(output_comp, dim=1, index=torch.tensor([mid_index],dtype=torch.long))
+        gt = torch.index_select(gt, dim=1, index=torch.tensor([mid_index],dtype=torch.long))
 
-        feat_output = self.extractor(torch.cat([torch.unsqueeze(output[:][mid_index][:][:], 1)] * 3, 1))
-        feat_output_comp = self.extractor(torch.cat([torch.unsqueeze(output_comp[:][mid_index][:][:], 1)] * 3, 1))
-        feat_gt = self.extractor(torch.cat([torch.unsqueeze(gt[:][mid_index][:][:], 1)] * 3, 1))
+        feat_output = self.extractor(torch.cat([torch.unsqueeze(output, 1)] * 3, 1))
+        feat_output_comp = self.extractor(torch.cat([torch.unsqueeze(output_comp, 1)] * 3, 1))
+        feat_gt = self.extractor(torch.cat([torch.unsqueeze(gt, 1)] * 3, 1))
 
         loss_dict['prc'] = 0.0
         loss_dict['style'] = 0.0
