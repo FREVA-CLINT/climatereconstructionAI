@@ -93,9 +93,8 @@ class Evaluator:
     def create_evaluation_images(self, file, create_video=False, start_date=None, end_date=None):
         if not os.path.exists(self.eval_save_dir + 'images'):
             os.makedirs('{:s}'.format(self.eval_save_dir + 'images'))
-        file = self.eval_save_dir + file
 
-        data = Dataset(file)
+        data = Dataset(self.eval_save_dir + file)
         time = data.variables['time']
         time = netCDF4.num2date(time[:], time.units)
 
