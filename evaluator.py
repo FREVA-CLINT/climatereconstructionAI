@@ -125,7 +125,7 @@ class Evaluator:
             os.makedirs('{:s}'.format(self.eval_save_dir + save_dir))
         directory = self.eval_save_dir + save_dir
         if create_evalutation_files:
-            self.create_evaluation_files(clean_data, infilled)
+            self.create_evaluation_files(clean_data, infilled, directory)
 
         mse, _ = get_data(file=directory + 'mse.nc')
         mse = mse[0][0][0]
