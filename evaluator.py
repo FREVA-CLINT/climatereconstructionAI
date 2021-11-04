@@ -223,7 +223,7 @@ class Evaluator:
         # create correlation
         cdo.timcor(input='-hourmean -fldmean ' + self.eval_save_dir + output_comp + ' -hourmean -fldmean ' + self.eval_save_dir + gt, output=save_dir + 'timcor.nc')
         # create sum in field
-        cdo.timcor(input='timcor -hourmean -fldsum ' + self.eval_save_dir + output_comp + ' -hourmean -fldsum ' + self.eval_save_dir + gt, output=save_dir + 'fldsum_timcor.nc')
+        cdo.timcor(input='-hourmean -fldsum ' + self.eval_save_dir + output_comp + ' -hourmean -fldsum ' + self.eval_save_dir + gt, output=save_dir + 'fldsum_timcor.nc')
         # create mse
         cdo.sqrt(input='-timmean -sqr -hourlmean -fldmean ' + self.eval_save_dir + output_comp + ' -hourmean -fldmean ' + self.eval_save_dir + gt, output=save_dir + 'mse.nc')
         # create total fldsum
