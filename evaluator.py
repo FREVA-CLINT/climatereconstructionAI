@@ -161,9 +161,6 @@ class Evaluator:
         df['Ground Truth'] = ['%.5f' % mse, '%.5f' % timcor, total_pr_gt, 0]
         df['Output'] = ['%.5f' % mse, '%.5f' % timcor, total_pr_output_comp, 0]
 
-        print(mse)
-        print(timcor)
-
         pdf = FPDF()
         pdf.add_page()
         pdf.set_xy(0, 0)
