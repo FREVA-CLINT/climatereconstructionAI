@@ -158,7 +158,7 @@ class PConvLSTM(nn.Module):
         for i in range(1, encoding_layers):
             name = 'dec_{:d}'.format(encoding_layers-i+1)
             setattr(self, name, PCBActiv(image_size // (2**(i-1)) + image_size // (2**i), image_size // (2**i), activ='leaky'))
-        self.dec_1 = PCBActiv(image_size // (2**(encoding_layers-1)) + input_channels, input_channels,
+        self.dec_1 = PCBActiv(image_size // (2**(encoding_layers-1)) + input_channels, 1,
                               bn=False, activ=None, conv_bias=True)
 
     def forward(self, input, input_mask):
