@@ -26,16 +26,18 @@ class InpaintingLoss(nn.Module):
 
     def forward(self, input, mask, output, gt, device):
         loss_dict = {}
+
+        # get mid indexed element
+        mid_index = torch.tensor([(output.shape[1] // 2)],dtype=torch.long).to(device)
+        input = torch.index_select(input, dim=1, index=mid_index)
+        gt = torch.index_select(gt, dim=1, index=mid_index)
+        mask = torch.index_select(mask, dim=1, index=mid_index)
+
+        # create output_comp
         output_comp = mask * input + (1 - mask) * output
 
         loss_dict['hole'] = self.l1((1 - mask) * output, (1 - mask) * gt)
         loss_dict['valid'] = self.l1(mask * output, mask * gt)
-
-        # get mid indexed element
-        mid_index = torch.tensor([(output.shape[1] // 2)],dtype=torch.long).to(device)
-        output = torch.index_select(output, dim=1, index=mid_index)
-        output_comp = torch.index_select(output_comp, dim=1, index=mid_index)
-        gt = torch.index_select(gt, dim=1, index=mid_index)
 
         feat_output = self.extractor(torch.cat([output] * 3, 1))
         feat_output_comp = self.extractor(torch.cat([output_comp] * 3, 1))
