@@ -62,7 +62,7 @@ class Evaluator:
             # get results from trained network
             with torch.no_grad():
                 output_part, _ = model(image_part.to(device), mask_part.to(device))
-            output_part = output_part.to(torch.device(device))
+            output_part = output_part.to(torch.device('cpu'))
 
             # only select mid indexed-element
             if not mid_index:
