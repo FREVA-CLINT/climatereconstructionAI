@@ -33,7 +33,6 @@ class VGG16FeatureExtractor(nn.Module):
     def __init__(self):
         super().__init__()
         vgg16 = models.vgg16(pretrained=True)
-        models.vgg
         self.enc_1 = nn.Sequential(*vgg16.features[:5])
         self.enc_2 = nn.Sequential(*vgg16.features[5:10])
         self.enc_3 = nn.Sequential(*vgg16.features[10:17])
@@ -51,7 +50,7 @@ class VGG16FeatureExtractor(nn.Module):
         return results[1:]
 
 
-class PartialConv(nn.Module):
+class PConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1,
                  padding=0, dilation=1, groups=1, bias=True):
         super().__init__()
@@ -68,10 +67,6 @@ class PartialConv(nn.Module):
             param.requires_grad = False
 
     def forward(self, input, mask):
-        # http://masc.cs.gmu.edu/wiki/partialconv
-        # C(X) = W^T * X + b, C(0) = b, D(M) = 1 * M + 0 = sum(M)
-        # W^T* (M .* X) / sum(M) + b = [C(M .* X) – C(0)] / D(M) + C(0)
-
         output = self.input_conv(input * mask)
         if self.input_conv.bias is not None:
             output_bias = self.input_conv.bias.view(1, -1, 1, 1).expand_as(
@@ -94,18 +89,18 @@ class PartialConv(nn.Module):
         return output, new_mask
 
 
-class PCBActiv(nn.Module):
+class PConvBlockActivation(nn.Module):
     def __init__(self, in_ch, out_ch, bn=True, sample='none-3', activ='relu',
                  conv_bias=False):
         super().__init__()
         if sample == 'down-5':
-            self.conv = PartialConv(in_ch, out_ch, 5, 2, 2, bias=conv_bias)
+            self.conv = PConvBlock(in_ch, out_ch, 5, 2, 2, bias=conv_bias)
         elif sample == 'down-7':
-            self.conv = PartialConv(in_ch, out_ch, 7, 2, 3, bias=conv_bias)
+            self.conv = PConvBlock(in_ch, out_ch, 7, 2, 3, bias=conv_bias)
         elif sample == 'down-3':
-            self.conv = PartialConv(in_ch, out_ch, 3, 2, 1, bias=conv_bias)
+            self.conv = PConvBlock(in_ch, out_ch, 3, 2, 1, bias=conv_bias)
         else:
-            self.conv = PartialConv(in_ch, out_ch, 3, 1, 1, bias=conv_bias)
+            self.conv = PConvBlock(in_ch, out_ch, 3, 1, 1, bias=conv_bias)
 
         if bn:
             self.bn = nn.BatchNorm2d(out_ch)
@@ -123,6 +118,33 @@ class PCBActiv(nn.Module):
         return h, h_mask
 
 
+class ConvLSTMBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size):
+        super().__init__()
+
+    def forward(self, input, mask):
+        output = self.input_conv(input * mask)
+        if self.input_conv.bias is not None:
+            output_bias = self.input_conv.bias.view(1, -1, 1, 1).expand_as(
+                output)
+        else:
+            output_bias = torch.zeros_like(output)
+
+        with torch.no_grad():
+            output_mask = self.mask_conv(mask)
+
+        no_update_holes = output_mask == 0
+        mask_sum = output_mask.masked_fill_(no_update_holes, 1.0)
+
+        output_pre = (output - output_bias) / mask_sum + output_bias
+        output = output_pre.masked_fill_(no_update_holes, 0.0)
+
+        new_mask = torch.ones_like(output)
+        new_mask = new_mask.masked_fill_(no_update_holes, 0.0)
+
+        return output, new_mask
+
+
 class PConvLSTM(nn.Module):
     def __init__(self, image_size=512, encoding_layers=4, pooling_layers=4, input_channels=1, upsampling_mode='nearest'):
         super().__init__()
@@ -138,28 +160,28 @@ class PConvLSTM(nn.Module):
         self.layer_size = encoding_layers + pooling_layers
 
         # define encoding layers
-        self.enc_1 = PCBActiv(input_channels, image_size // (2**(encoding_layers-1)), bn=False, sample='down-7')
+        self.enc_1 = PConvBlockActivation(input_channels, image_size // (2 ** (encoding_layers - 1)), bn=False, sample='down-7')
         for i in range(1, encoding_layers):
             if i == encoding_layers-1:
                 sample='down-3'
             else:
                 sample='down-5'
             name = 'enc_{:d}'.format(i + 1)
-            setattr(self, name, PCBActiv(image_size // (2**(encoding_layers-i)),
-                                         image_size // (2**(encoding_layers-i-1)), sample=sample))
+            setattr(self, name, PConvBlockActivation(image_size // (2 ** (encoding_layers - i)),
+                                                     image_size // (2**(encoding_layers-i-1)), sample=sample))
         # define pooling layers
         for i in range(encoding_layers, self.layer_size):
             name = 'enc_{:d}'.format(i + 1)
-            setattr(self, name, PCBActiv(image_size, image_size, sample='down-3'))
+            setattr(self, name, PConvBlockActivation(image_size, image_size, sample='down-3'))
         for i in range(4, self.layer_size):
             name = 'dec_{:d}'.format(i + 1)
-            setattr(self, name, PCBActiv(image_size + image_size, image_size, activ='leaky'))
+            setattr(self, name, PConvBlockActivation(image_size + image_size, image_size, activ='leaky'))
         # define decoding layers
         for i in range(1, encoding_layers):
             name = 'dec_{:d}'.format(encoding_layers-i+1)
-            setattr(self, name, PCBActiv(image_size // (2**(i-1)) + image_size // (2**i), image_size // (2**i), activ='leaky'))
-        self.dec_1 = PCBActiv(image_size // (2**(encoding_layers-1)) + input_channels, 1,
-                              bn=False, activ=None, conv_bias=True)
+            setattr(self, name, PConvBlockActivation(image_size // (2 ** (i - 1)) + image_size // (2 ** i), image_size // (2 ** i), activ='leaky'))
+        self.dec_1 = PConvBlockActivation(image_size // (2 ** (encoding_layers - 1)) + input_channels, 1,
+                                          bn=False, activ=None, conv_bias=True)
 
     def forward(self, input, input_mask):
         h_dict = {}  # for the output of enc_N
