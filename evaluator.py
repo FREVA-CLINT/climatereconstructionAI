@@ -12,15 +12,15 @@ from cdo import *
 import os
 
 
-def get_data(file):
+def get_data(file, var):
     data = Dataset(file)
     time = data.variables['time']
-    pr = data.variables['pr']
-    return pr, time
+    variable = data.variables[var]
+    return variable, time
 
 
-def plot_data(file, start=0, end=None, label=''):
-    data, time = get_data(file=file)
+def plot_data(file, start=0, end=None, label='', var='pr'):
+    data, time = get_data(file=file, var=var)
     if not end:
         end = time.__len__()
     plt.plot(time[start:end], np.squeeze(data)[start:end], label=label)
@@ -30,11 +30,11 @@ def plot_data(file, start=0, end=None, label=''):
 
 
 class Evaluator:
-    def __init__(self, eval_save_dir, mask_dir, test_dir, data_type):
+    def __init__(self, eval_save_dir, mask_dir, test_dir, variable):
         self.eval_save_dir = eval_save_dir
         self.mask_dir = mask_dir
         self.test_dir = test_dir
-        self.data_type = data_type
+        self.variable = variable
 
     def infill(self, model, dataset, device, partitions):
         if not os.path.exists(self.eval_save_dir):
@@ -44,6 +44,10 @@ class Evaluator:
         gt = []
         output = []
         output_comp = []
+
+        # mid index
+        mid_index = None
+
         if partitions > dataset.__len__():
             partitions = dataset.__len__()
         if dataset.__len__() % partitions != 0:
@@ -54,9 +58,20 @@ class Evaluator:
             image_part = torch.stack(image_part)
             mask_part = torch.stack(mask_part)
             gt_part = torch.stack(gt_part)
+
+            # get results from trained network
             with torch.no_grad():
                 output_part, _ = model(image_part.to(device), mask_part.to(device))
-            output_part = output_part.to(torch.device('cpu'))
+            output_part = output_part.to(torch.device(device))
+
+            # only select mid indexed-element
+            if not mid_index:
+                mid_index = torch.tensor([(image_part.shape[1] // 2)],dtype=torch.long).to(device)
+            image_part = torch.index_select(image_part, dim=1, index=mid_index)
+            mask_part = torch.index_select(mask_part, dim=1, index=mid_index)
+            gt_part = torch.index_select(gt_part, dim=1, index=mid_index)
+
+            # create output_comp
             output_comp_part = mask_part * image_part + (1 - mask_part) * output_part
 
             image.append(image_part)
@@ -71,17 +86,14 @@ class Evaluator:
         output = torch.cat(output)
         output_comp = torch.cat(output_comp)
 
-        # get mid index
-        mid_index = image.shape[1] // 2
-
-        cvar = [image[:, mid_index, :, :], mask[:, mid_index, :, :], output[:, mid_index, :, :], output_comp[:, mid_index, :, :], gt[:, mid_index, :, :]]
+        cvar = [image, mask, output, output_comp, gt]
         cname = ['image', 'mask', 'output', 'output_comp', 'gt']
         dname = ['time', 'lat', 'lon']
         for x in range(0, 5):
             h5 = h5py.File('%s' % (self.eval_save_dir + cname[x]), 'w')
-            h5.create_dataset(self.data_type, data=cvar[x])
+            h5.create_dataset(self.variable, data=cvar[x])
             for dim in range(0, 3):
-                h5[self.data_type].dims[dim].label = dname[dim]
+                h5[self.variable].dims[dim].label = dname[dim]
             h5.close()
 
         # convert to netCDF files
@@ -101,11 +113,11 @@ class Evaluator:
         if start_date and end_date:
             start = parser.parse(start_date)
             end = parser.parse(end_date)
-            pr = [data.variables[self.data_type][i, :, :] for i in range(time.__len__()) if
+            pr = [data.variables[self.variable][i, :, :] for i in range(time.__len__()) if
                   time[i] >= start and time[i] <= end]
             time = [time[i] for i in range(time.__len__()) if time[i] >= start and time[i] <= end]
         else:
-            pr = data.variables[self.data_type][:, :, :]
+            pr = data.variables[self.variable][:, :, :]
 
         for i in range(time.__len__()):
             plt.imshow(np.squeeze(pr[i]), vmin=0, vmax=5)
@@ -127,33 +139,33 @@ class Evaluator:
         if create_evalutation_files:
             self.create_evaluation_files(clean_data, infilled, directory)
 
-        mse, _ = get_data(file=directory + 'mse.nc')
+        mse, _ = get_data(file=directory + 'mse.nc', var=self.variable)
         mse = mse[0][0][0]
 
-        timcor, _ = get_data(file=directory + 'timcor.nc')
+        timcor, _ = get_data(file=directory + 'timcor.nc', var=self.variable)
         timcor = timcor[0][0][0]
 
-        total_pr_gt, _ = get_data(file=directory + 'fldsum_gt.nc')
+        total_pr_gt, _ = get_data(file=directory + 'fldsum_gt.nc', var=self.variable)
         total_pr_gt = total_pr_gt[0][0][0]
 
-        total_pr_output_comp, _ = get_data(file=directory + 'fldsum_output_comp.nc')
+        total_pr_output_comp, _ = get_data(file=directory + 'fldsum_output_comp.nc', var=self.variable)
         total_pr_output_comp = total_pr_output_comp[0][0][0]
 
         plt.title('Max values')
-        plot_data(file=directory + 'gt_max.nc', start=0, label='Ground Truth')
-        plot_data(file=directory + 'output_comp_max.nc', start=0, label='Output')
+        plot_data(file=directory + 'gt_max.nc', start=0, label='Ground Truth', var=self.variable)
+        plot_data(file=directory + 'output_comp_max.nc', start=0, label='Output', var=self.variable)
         plt.savefig(directory + 'max.png')
         plt.clf()
 
         plt.title('Min values')
-        plot_data(file=directory + 'gt_min.nc', start=0, label='Ground Truth')
-        plot_data(file=directory + 'output_comp_min.nc', start=0, label='Output')
+        plot_data(file=directory + 'gt_min.nc', start=0, label='Ground Truth', var=self.variable)
+        plot_data(file=directory + 'output_comp_min.nc', start=0, label='Output', var=self.variable)
         plt.savefig(directory + 'min.png')
 
         plt.clf()
         plt.title('Mean values')
-        plot_data(file=directory + 'gt_mean.nc', label='Ground Truth')
-        plot_data(file=directory + 'output_comp_mean.nc', label='Output')
+        plot_data(file=directory + 'gt_mean.nc', label='Ground Truth', var=self.variable)
+        plot_data(file=directory + 'output_comp_mean.nc', label='Output', var=self.variable)
         plt.savefig(directory + 'mean.png')
 
         df = pd.DataFrame()
@@ -242,11 +254,11 @@ class Evaluator:
     def convert_h5_to_netcdf(self, create_structure_template, file):
         if create_structure_template:
             os.system('ncdump ' + self.test_dir + '*.h5 > ' + self.eval_save_dir + 'tmp_dump.txt')
-            os.system('sed "/.*' + self.data_type + ' =.*/{s///;q;}" ' + self.eval_save_dir + 'tmp_dump.txt > ' + self.eval_save_dir + 'structure.txt')
+            os.system('sed "/.*' + self.variable + ' =.*/{s///;q;}" ' + self.eval_save_dir + 'tmp_dump.txt > ' + self.eval_save_dir + 'structure.txt')
             os.system('rm ' + self.eval_save_dir + 'tmp_dump.txt')
         cdo = Cdo()
         os.system('cat ' + self.eval_save_dir + 'structure.txt >> ' + self.eval_save_dir + file + '.txt')
-        os.system('ncdump -v ' + self.data_type + ' ' + self.eval_save_dir + file + ' | sed -e "1,/data:/d" >> ' + self.eval_save_dir + file + '.txt')
+        os.system('ncdump -v ' + self.variable + ' ' + self.eval_save_dir + file + ' | sed -e "1,/data:/d" >> ' + self.eval_save_dir + file + '.txt')
         os.system('ncgen -o ' + self.eval_save_dir + 'output-tmp ' + self.eval_save_dir + file + '.txt')
         cdo.setgrid(self.test_dir + '*.h5', input=self.eval_save_dir + 'output-tmp', output=self.eval_save_dir + file + '.nc')
         os.system('rm ' + self.eval_save_dir + file + '.txt ' + self.eval_save_dir + 'output-tmp')
