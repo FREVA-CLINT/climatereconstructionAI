@@ -22,8 +22,6 @@ class InpaintingLoss(nn.Module):
     def __init__(self, extractor):
         super().__init__()
         self.l1 = nn.L1Loss()
-        self.crossentropy = nn.CrossEntropyLoss()
-        self.mse = nn.MSELoss()
         self.extractor = extractor
 
     def forward(self, input, mask, output, gt, device):
@@ -38,11 +36,6 @@ class InpaintingLoss(nn.Module):
 
         # define different loss functions from output and output_comp
         loss_dict = {}
-        #loss_dict['ce'] = 0.0
-        #for i in range(gt.shape[0]):
-        #    print(torch.squeeze(output_comp[i], dim=0).shape)
-        #    loss_dict['ce'] += self.crossentropy(torch.squeeze(output_comp[i], dim=0), torch.squeeze(gt[i], dim=0))
-        #loss_dict['mse'] = self.mse(output_comp, gt)
         loss_dict['hole'] = self.l1((1 - mask) * output, (1 - mask) * gt)
         loss_dict['valid'] = self.l1(mask * output, mask * gt)
 
@@ -62,5 +55,37 @@ class InpaintingLoss(nn.Module):
                                           gram_matrix(feat_gt[i]))
 
         loss_dict['tv'] = total_variation_loss(output_comp)
+
+        return loss_dict
+
+
+class PrecipitationInpaintingLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.mse = nn.MSELoss()
+
+    def forward(self, input, mask, output, gt, device):
+        # get mid indexed element
+        mid_index = torch.tensor([(input.shape[1] // 2)],dtype=torch.long).to(device)
+        input = torch.index_select(input, dim=1, index=mid_index)
+        gt = torch.index_select(gt, dim=1, index=mid_index)
+        mask = torch.index_select(mask, dim=1, index=mid_index)
+
+        # create output_comp
+        output_comp = mask * input + (1 - mask) * output
+
+        # define different loss functions from output and output_comp
+        loss_dict = {}
+        cos = nn.CosineSimilarity(dim=1, eps=1e-6)
+        loss_dict['pearson'] = 0.0
+        loss_dict['s-index'] = 0.0
+        for i in range(output_comp.shape[0]):
+            voutput_comp = output_comp[i][0] - torch.mean(output_comp[i][0])
+            vgt = gt[i][0] - torch.mean(gt[i][0])
+            vinput = input[i][0] - torch.mean(input[i][0])
+            loss_dict['pearson'] += torch.sum(voutput_comp * vgt) / (torch.sqrt(torch.sum(voutput_comp ** 2)) * torch.sqrt(torch.sum(vgt ** 2)))
+            loss_dict['s-index'] += 1 - (torch.sum((output_comp[i][0] - gt[i][0]) ** 2)) / (torch.sum((torch.abs(output_comp[i][0] - vinput) + torch.abs(gt[i][0])) ** 2))
+
+        loss_dict['rmse'] = torch.sqrt(self.mse(output_comp, gt))
 
         return loss_dict
