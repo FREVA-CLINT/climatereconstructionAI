@@ -55,23 +55,11 @@ class ConvLSTMBlock(nn.Module):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.conv = nn.Conv2d(in_channels + out_channels, out_channels*4, kernel_size, stride, padding, dilation, groups, bias)
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias)
         self.conv.apply(weights_init('kaiming'))
 
-    def forward(self, input, current_state):
-        h_cur, c_cur = current_state
-        combined = torch.cat([input, h_cur], dim=1)  # concatenate along channel axis
-        combined_conv = self.conv(combined)
-        cc_i, cc_f, cc_o, cc_g = torch.split(combined_conv, self.out_channels, dim=1)
-        i = torch.sigmoid(cc_i)
-        f = torch.sigmoid(cc_f)
-        o = torch.sigmoid(cc_o)
-        g = torch.tanh(cc_g)
-
-        c_next = f * c_cur + i * g
-        h_next = o * torch.tanh(c_next)
-
-        return h_next, c_next
+    def forward(self, input):
+        return self.conv(input)
 
     def init_hidden(self, batch_size, image_size):
         return (torch.zeros(batch_size, self.out_channels, image_size, image_size, device=self.conv.weight.device),
@@ -93,8 +81,8 @@ class PConvBlock(nn.Module):
         for param in self.mask_conv.parameters():
             param.requires_grad = False
 
-    def forward(self, input, hidden_state, mask):
-        output, hidden_state = self.input_conv(input * mask, hidden_state)
+    def forward(self, input, mask):
+        output = self.input_conv(input * mask)
         if self.input_conv.conv.bias is not None:
             output_bias = self.input_conv.conv.bias.view(1, -1, 1, 1).expand_as(
                 output)
@@ -113,7 +101,7 @@ class PConvBlock(nn.Module):
         new_mask = torch.ones_like(output)
         new_mask = new_mask.masked_fill_(no_update_holes, 0.0)
 
-        return output, hidden_state, new_mask
+        return output, new_mask
 
 
 class PConvBlockActivation(nn.Module):
@@ -136,13 +124,13 @@ class PConvBlockActivation(nn.Module):
         elif activ == 'leaky':
             self.activation = nn.LeakyReLU(negative_slope=0.2)
 
-    def forward(self, input, hidden_state, input_mask):
-        h, hidden_state, h_mask = self.conv(input, hidden_state, input_mask)
+    def forward(self, input, input_mask):
+        h, h_mask = self.conv(input, input_mask)
         if hasattr(self, 'bn'):
             h = self.bn(h)
         if hasattr(self, 'activation'):
             h = self.activation(h)
-        return h, hidden_state, h_mask
+        return h, h_mask
 
 
 class PConvLSTM(nn.Module):
@@ -160,10 +148,11 @@ class PConvLSTM(nn.Module):
         self.upsampling_mode = upsampling_mode
         self.num_enc_layers = self.num_dec_layers = num_enc_dec_layers
         self.num_pool_layers = num_pool_layers
+        self.num_in_channels = num_in_channels
 
         # define encoding layers
         self.encoding_layers = []
-        self.encoding_layers.append(PConvBlockActivation(num_in_channels, num_in_channels))
+        self.encoding_layers.append(PConvBlockActivation(self.num_in_channels, image_size // (2 ** (self.num_enc_layers - 1)), bn=False, sample='down-7'))
         for i in range(1, self.num_enc_layers):
             if i == self.num_enc_layers-1:
                 sample='down-3'
@@ -184,74 +173,38 @@ class PConvLSTM(nn.Module):
         # define decoding layers
         for i in range(1, self.num_dec_layers):
             self.decoding_layers.append(PConvBlockActivation(image_size // (2 ** (i - 1)) + image_size // (2 ** i), image_size // (2 ** i), activ='leaky'))
-        self.decoding_layers.append(PConvBlockActivation(num_in_channels, num_in_channels,
+        self.decoding_layers.append(PConvBlockActivation(image_size // (2 ** (self.num_dec_layers - 1)) + self.num_in_channels, 1,
                                                          bn=False, activ=None, conv_bias=True))
         self.decoding_layers = nn.ModuleList(self.decoding_layers)
 
-    def forward(self, input, hidden_states, input_mask):
-        # get the number of time steps for LSTM
-        num_time_steps = input.shape[1]
-
+    def forward(self, input, input_mask):
         hs = [input]
         hs_mask = [input_mask]
-        next_hidden = [hidden_states]
 
         # forward pass encoding layers
         for i in range(self.num_enc_layers):
-            print(hidden_states[i].__len__())
-            h, h_hidden = hidden_states[i]
-            hs_inner = []
-            hs_mask_inner = []
-
-            for j in range(num_time_steps):
-                print(hs[i][:,j,:,:,:].shape)
-                print([h, h_hidden].__len__())
-                print(hs_mask[i][:,j,:,:,:].shape)
-                h, h_hidden, h_mask = self.encoding_layers[i](input=hs[i][:,j,:,:,:],
-                                                              hidden_state=hidden_states[i],
-                                                              input_mask=hs_mask[i][:,j,:,:,:])
-                hs_inner.append(h)
-                hs_mask_inner.append(h_mask)
-
-            hs.append(torch.stack(hs_inner, dim=1))
-            next_hidden.append([h, h_hidden])
-            hs_mask.append(torch.stack(hs_mask_inner, dim=1))
+            h, h_mask = self.encoding_layers[i](input=hs[i],
+                                                input_mask=hs_mask[i])
+            hs.append(h)
+            hs_mask.append(h_mask)
 
         # get current states
-        h, h_hidden, h_mask = hs[self.num_enc_layers], next_hidden[self.num_enc_layers], hs_mask[self.num_enc_layers]
+        h, h_mask = hs[self.num_enc_layers], hs_mask[self.num_enc_layers]
 
         # forward pass decoding layers
         for i in range(self.num_dec_layers):
-            # interpolate input, hidden state and mask
+            # interpolate encoder output and mask
             h = F.interpolate(h, scale_factor=2, mode=self.upsampling_mode)
-            h_cur, c_cur = h_hidden
-            h_cur = F.interpolate(h_cur, scale_factor=2, mode=self.upsampling_mode)
-            c_cur = F.interpolate(c_cur, scale_factor=2, mode=self.upsampling_mode)
-            h_mask = F.interpolate(
-                h_mask, scale_factor=2, mode='nearest')
+            h_mask = F.interpolate(h_mask, scale_factor=2, mode='nearest')
 
             # U-Net -> pass results from encoding layers to decoding layers
-            print(h.shape)
-            print(hs[self.num_enc_layers - i].shape)
-            h = torch.cat([h, hs[self.num_enc_layers - i]], dim=1)
-            h_prev, c_prev = next_hidden[self.num_enc_layers - i]
-            h_prev, c_prev = torch.cat([h_cur, h_prev], dim=1), torch.cat([c_cur, c_prev], dim=1)
-            h_mask = torch.cat([h_mask, hs_mask[self.num_enc_layers - i]])
+            h = torch.cat([h, hs[self.num_enc_layers - i - 1]], dim=1)
+            h_mask = torch.cat([h_mask, hs_mask[self.num_enc_layers - i - 1]], dim=1)
 
-            hs_inner = []
-            hs_mask_inner = []
+            h, h_mask = self.decoding_layers[i](input=h,
+                                                input_mask=h_mask)
 
-            for j in range(num_time_steps):
-                h, h_hidden, h_mask = self.encoding_layers[i](input=h[:,j,:,:,:],
-                                                              hidden_state=[h_prev, c_prev],
-                                                              input_mask=h_mask)
-                hs_inner.append(h)
-                hs_mask_inner.append(h_mask)
-
-            hs.append(torch.stack(hs_inner, dim=1))
-            hs_mask.append(torch.stack(hs_mask_inner, dim=1))
-
-        return hs, next_hidden, hs_mask
+        return h, h_mask
 
     def init_hidden(self, batch_size, image_size):
         init_states = []
