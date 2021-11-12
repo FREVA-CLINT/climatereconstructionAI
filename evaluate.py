@@ -32,8 +32,8 @@ device = torch.device(args.device)
 if args.infill:
     dataset_val = SingleNetCDFDataLoader(args.data_root_dir, args.mask_dir, args.infill, args.data_type, args.prev_next)
 
-    model = PConvLSTM(image_size=args.image_size, encoding_layers=args.encoding_layers, pooling_layers=args.pooling_layers,
-                      input_channels=1 + 2*args.prev_next).to(device)
+    model = PConvLSTM(image_size=args.image_size, num_enc_dec_layers=args.encoding_layers, num_pool_layers=args.pooling_layers,
+                      num_in_channels=1 + 2 * args.prev_next).to(device)
 
     load_ckpt(args.snapshot_dir, [('model', model)], device)
 
