@@ -75,6 +75,7 @@ if args.finetune:
 else:
     lr = args.lr
 
+# define optimizer and loss functions
 optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
 criterion = InpaintingLoss(VGG16FeatureExtractor()).to(device)
 
