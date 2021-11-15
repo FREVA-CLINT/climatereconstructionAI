@@ -2,7 +2,7 @@ import argparse
 
 import torch
 from evaluator import Evaluator
-from net import PConvLSTM
+from PConvLSTM import PConvLSTM
 from netcdfloader import PrevNextNetCDFDataLoader
 from util.io import load_ckpt
 

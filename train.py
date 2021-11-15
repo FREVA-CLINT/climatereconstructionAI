@@ -5,8 +5,8 @@ import opt
 from tensorboardX import SummaryWriter
 from torch.utils import data
 from tqdm import tqdm
-from net import PConvLSTM
-from net import VGG16FeatureExtractor
+from PConvLSTM import PConvLSTM
+from PConvLSTM import VGG16FeatureExtractor
 from util.io import load_ckpt, save_ckpt
 
 arg_parser = argparse.ArgumentParser()
