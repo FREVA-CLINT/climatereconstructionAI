@@ -18,12 +18,42 @@ def total_variation_loss(image):
     return loss
 
 
-class PrevNextInpaintingLoss(nn.Module):
+class InpaintingLoss(nn.Module):
     def __init__(self, extractor):
         super().__init__()
         self.l1 = nn.L1Loss()
         self.extractor = extractor
 
+    def forward(self, input, mask, output, gt, device):
+        # create output_comp
+        output_comp = mask * input + (1 - mask) * output
+
+        # define different loss functions from output and output_comp
+        loss_dict = {}
+        loss_dict['hole'] = self.l1((1 - mask) * output, (1 - mask) * gt)
+        loss_dict['valid'] = self.l1(mask * output, mask * gt)
+
+        # define different loss function from features from output and output_comp
+        feat_output = self.extractor(torch.cat([output] * 3, 1))
+        feat_output_comp = self.extractor(torch.cat([output_comp] * 3, 1))
+        feat_gt = self.extractor(torch.cat([gt] * 3, 1))
+
+        loss_dict['prc'] = 0.0
+        loss_dict['style'] = 0.0
+        for i in range(3):
+            loss_dict['prc'] += self.l1(feat_output[i], feat_gt[i])
+            loss_dict['prc'] += self.l1(feat_output_comp[i], feat_gt[i])
+            loss_dict['style'] += self.l1(gram_matrix(feat_output[i]),
+                                          gram_matrix(feat_gt[i]))
+            loss_dict['style'] += self.l1(gram_matrix(feat_output_comp[i]),
+                                          gram_matrix(feat_gt[i]))
+
+        loss_dict['tv'] = total_variation_loss(output_comp)
+
+        return loss_dict
+
+
+class PrevNextInpaintingLoss(InpaintingLoss):
     def forward(self, input, mask, output, gt, device):
         # get mid indexed element
         mid_index = torch.tensor([(input.shape[1] // 2)],dtype=torch.long).to(device)
@@ -59,12 +89,7 @@ class PrevNextInpaintingLoss(nn.Module):
         return loss_dict
 
 
-class LSTMInpaintingLoss(nn.Module):
-    def __init__(self, extractor):
-        super().__init__()
-        self.l1 = nn.L1Loss()
-        self.extractor = extractor
-
+class LSTMInpaintingLoss(InpaintingLoss):
     def forward(self, input, mask, output, gt):
         loss_dict = {}
         loss_dict['hole'] = 0.0
