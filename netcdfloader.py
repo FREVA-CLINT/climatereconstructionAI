@@ -1,8 +1,32 @@
 import random
+
+import numpy as np
 import torch
 import h5py
 from glob import glob
 import torch.utils.data as data
+
+
+class InfiniteSampler(data.sampler.Sampler):
+    def __init__(self, num_samples):
+        self.num_samples = num_samples
+
+    def __iter__(self):
+        return iter(self.loop())
+
+    def __len__(self):
+        return 2 ** 31
+
+    def loop(self):
+        i = 0
+        order = np.random.permutation(self.num_samples)
+        while True:
+            yield order[i]
+            i += 1
+            if i >= self.num_samples:
+                np.random.seed()
+                order = np.random.permutation(self.num_samples)
+                i = 0
 
 
 class NetCDFLoader(torch.utils.data.Dataset):
@@ -29,8 +53,38 @@ class NetCDFLoader(torch.utils.data.Dataset):
         mask_data = mask_file.get(self.data_type)
         self.mask_length = len((mask_data[:, 1, 1]))
 
+    def load_data(self):
+        # open netcdf file for img and mask
+        img_file = h5py.File('{:s}'.format(self.img_path), 'r')
+        img_data = img_file.get(self.data_type)
+        mask_file = h5py.File(self.mask_path)
+        mask_data = mask_file.get(self.data_type)
+
+        return img_data, mask_data
+
     def __len__(self):
         return self.img_length
+
+
+class SimpleNetCDFDataLoader(NetCDFLoader):
+    def __getitem__(self, index):
+        img_data, mask_data = self.load_data()
+
+        # get img and mask from index
+        img_current = img_data[index, :, :]
+        img_current = torch.from_numpy(img_current[:, :])
+        img_current = img_current.unsqueeze(0)
+        if self.split == 'infill':
+            mask_current = mask_data[index, :, :]
+        else:
+            mask_current = mask_data[random.randint(0, self.mask_length - 1), :, :]
+        mask_current = torch.from_numpy(mask_current[:, :])
+        mask_current = mask_current.unsqueeze(0)
+
+        img_total = torch.cat([img_current])
+        mask_total = torch.cat([mask_current])
+
+        return img_total * mask_total, mask_total, img_total
 
 
 class PrevNextNetCDFDataLoader(NetCDFLoader):
@@ -39,11 +93,7 @@ class PrevNextNetCDFDataLoader(NetCDFLoader):
         self.prev_next = prev_next
 
     def __getitem__(self, index):
-        # open netcdf file for img and mask
-        img_file = h5py.File('{:s}'.format(self.img_path), 'r')
-        img_data = img_file.get(self.data_type)
-        mask_file = h5py.File(self.mask_path)
-        mask_data = mask_file.get(self.data_type)
+        img_data, mask_data = self.load_data()
 
         # get img and mask from index
         img_current = img_data[index, :, :]
@@ -111,11 +161,7 @@ class LSTMNetCDFDataLoader(NetCDFLoader):
         self.lstm_steps = lstm_steps
 
     def __getitem__(self, index):
-        # open netcdf file for img and mask
-        img_file = h5py.File('{:s}'.format(self.img_path), 'r')
-        img_data = img_file.get(self.data_type)
-        mask_file = h5py.File(self.mask_path)
-        mask_data = mask_file.get(self.data_type)
+        img_data, mask_data = self.load_data()
 
         # get img and mask from index
         img_current = img_data[index, :, :]
