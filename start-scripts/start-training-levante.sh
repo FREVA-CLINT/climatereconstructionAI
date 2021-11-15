@@ -5,7 +5,7 @@
 #SBATCH -A bb1152
 #SBATCH -n 1
 #SBATCH --cpus-per-task=128
-#SBATCH --time=24:00:00
+#SBATCH --time=100:00:00
 #SBATCH --mem=128GB
 #SBATCH --nodelist=vader3
 
