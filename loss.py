@@ -27,7 +27,6 @@ class InpaintingLoss(nn.Module):
     def forward(self, input, mask, output, gt, device):
         # get mid indexed element
         loss_dict = {}
-
         for t in range(input.shape[1]):
             input_part = input[:,t,:,:,:]
             mask_part = mask[:,t,:,:,:]

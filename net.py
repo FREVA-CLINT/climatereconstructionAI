@@ -52,30 +52,36 @@ class VGG16FeatureExtractor(nn.Module):
 
 class ConvLSTMBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size,
-                 stride, padding, dilation, groups, bias, encode):
+                 stride, padding, dilation, groups, bias):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
 
-        self.conv = nn.Conv2d(in_channels + out_channels, 4*out_channels, kernel_size, stride, padding, dilation, groups, bias)
+        self.conv_input_gate = nn.Conv2d(in_channels + out_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias)
+        self.conv_forget_gate = nn.Conv2d(in_channels + out_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias)
+        self.conv_output_gate = nn.Conv2d(in_channels + out_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias)
+        self.conv_gate_gate = nn.Conv2d(in_channels + out_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias)
+
+        self.conv_input_gate.apply(weights_init('kaiming'))
+        self.conv_forget_gate.apply(weights_init('kaiming'))
+        self.conv_output_gate.apply(weights_init('kaiming'))
+        self.conv_gate_gate.apply(weights_init('kaiming'))
 
     def forward(self, input, hidden_state):
-        h_cur, c_cur = hidden_state
-        input = torch.cat([input, h_cur], dim=1)
-        output = self.conv(input)
+        h_prev, cell = hidden_state
+        combined_input = torch.cat([input, h_prev], dim=1)
 
-        cc_i, cc_f, cc_o, cc_g = torch.split(output, self.out_channels, dim=1)
-        i = torch.sigmoid(cc_i)
-        f = torch.sigmoid(cc_f)
-        o = torch.sigmoid(cc_o)
-        g = torch.tanh(cc_g)
+        input = torch.sigmoid(self.conv_input_gate(combined_input))
+        forget = torch.sigmoid(self.conv_input_gate(combined_input))
+        output = torch.sigmoid(self.conv_input_gate(combined_input))
+        gate = torch.tanh(self.conv_input_gate(combined_input))
 
-        c_next = f * c_cur + i * g
-        h_next = o * torch.tanh(c_next)
+        cell_next = forget * cell + input * gate
+        h = output * torch.tanh(cell_next)
 
-        return h_next, c_next
+        return h, cell_next
 
-    def init_hidden(self, batch_size, image_size, depth, encode=True):
+    def init_lstm_state(self, batch_size, image_size, depth, encode):
         if encode:
             return (torch.zeros(batch_size, self.out_channels, image_size // (2 ** depth), image_size // (2 ** depth)),
                     torch.zeros(batch_size, self.out_channels, image_size // (2 ** (depth + 1)), image_size // (2 ** (depth + 1))))
@@ -84,11 +90,11 @@ class ConvLSTMBlock(nn.Module):
                     torch.zeros(batch_size, self.out_channels, image_size // (2 ** depth), image_size // (2 ** depth)))
 
 class PConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=(1,1), dilation=(1,1), groups=1, bias=True, encode=True):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=(1,1), dilation=(1,1), groups=1, bias=True):
         super().__init__()
         self.padding = kernel_size[0] // 2, kernel_size[1] // 2
         self.input_conv = ConvLSTMBlock(in_channels, out_channels, kernel_size,
-                                    stride, self.padding, dilation, groups, bias, encode)
+                                    stride, self.padding, dilation, groups, bias)
         self.mask_conv = nn.Conv2d(in_channels, out_channels, kernel_size,
                                    stride, self.padding, dilation, groups, False)
 
@@ -100,9 +106,8 @@ class PConvBlock(nn.Module):
 
     def forward(self, input, hidden_state, mask):
         output, hidden_state = self.input_conv(input * mask, hidden_state)
-        if self.input_conv.conv.bias is not None and False:
-            output_bias = self.input_conv.conv.bias.view(1, -1, 1, 1).expand_as(
-                output)
+        if self.input_conv.conv_input_gate.bias is not None and False:
+            output_bias = self.input_conv.conv_input_gate.bias.view(1, -1, 1, 1).expand_as(output)
         else:
             output_bias = torch.zeros_like(output)
 
@@ -122,16 +127,16 @@ class PConvBlock(nn.Module):
 
 class PConvBlockActivation(nn.Module):
     def __init__(self, in_channels, out_channels, bn=True, sample='none-3', activ='relu',
-                 conv_bias=False, encode=True):
+                 conv_bias=False):
         super().__init__()
         if sample == 'down-5':
-            self.conv = PConvBlock(in_channels, out_channels, (5,5), (2,2), bias=conv_bias, encode=encode)
+            self.conv = PConvBlock(in_channels, out_channels, (5,5), (2,2), bias=conv_bias)
         elif sample == 'down-7':
-            self.conv = PConvBlock(in_channels, out_channels, (7,7), (2,2), bias=conv_bias, encode=encode)
+            self.conv = PConvBlock(in_channels, out_channels, (7,7), (2,2), bias=conv_bias)
         elif sample == 'down-3':
-            self.conv = PConvBlock(in_channels, out_channels, (3,3), (2,2), bias=conv_bias, encode=encode)
+            self.conv = PConvBlock(in_channels, out_channels, (3,3), (2,2), bias=conv_bias)
         else:
-            self.conv = PConvBlock(in_channels, out_channels, (3,3), (1,1), bias=conv_bias, encode=encode)
+            self.conv = PConvBlock(in_channels, out_channels, (3,3), (1,1), bias=conv_bias)
 
         if bn:
             self.bn = nn.BatchNorm2d(out_channels)
@@ -165,6 +170,7 @@ class PConvLSTM(nn.Module):
         self.num_enc_dec_layers = num_enc_dec_layers
         self.num_pool_layers = num_pool_layers
         self.num_in_channels = num_in_channels
+        self.net_depth = num_enc_dec_layers + num_pool_layers
 
         # define encoding layers
         self.encoding_layers = []
@@ -176,6 +182,7 @@ class PConvLSTM(nn.Module):
                 sample='down-5'
             self.encoding_layers.append(PConvBlockActivation(image_size // (2 ** (self.num_enc_dec_layers - i)),
                                                              image_size // (2 ** (self.num_enc_dec_layers - i - 1)), sample=sample))
+
         # define ecoding pooling layers
         for i in range(self.num_pool_layers):
             self.encoding_layers.append(PConvBlockActivation(image_size, image_size, sample='down-3'))
@@ -185,28 +192,28 @@ class PConvLSTM(nn.Module):
         self.decoding_layers = []
         for i in range(self.num_pool_layers):
             self.decoding_layers.append(PConvBlockActivation(image_size + image_size, image_size, activ='leaky'))
-        self.decoding_layers = nn.ModuleList(self.decoding_layers)
+
         # define decoding layers
         for i in range(1, self.num_enc_dec_layers):
             self.decoding_layers.append(PConvBlockActivation(image_size // (2 ** (i - 1)) + image_size // (2 ** i), image_size // (2 ** i), activ='leaky'))
         self.decoding_layers.append(PConvBlockActivation(image_size // (2 ** (self.num_enc_dec_layers - 1)) + self.num_in_channels, 1,
-                                                         bn=False, activ=None, conv_bias=True, encode=False))
+                                                         bn=False, activ=None, conv_bias=True))
         self.decoding_layers = nn.ModuleList(self.decoding_layers)
 
-    def forward(self, input, hidden_states, input_mask):
+    def forward(self, input, lstm_states, input_mask):
         # get the number of time steps for LSTM
         num_time_steps = input.shape[1]
         hs = [input]
         hs_mask = [input_mask]
 
         # forward pass encoding layers
-        for i in range(self.num_enc_dec_layers):
+        for i in range(self.net_depth):
             hs_inner = []
             hs_mask_inner = []
 
             for j in range(num_time_steps):
                 h, h_hidden, h_mask = self.encoding_layers[i](input=hs[i][:,j,:,:,:],
-                                                              hidden_state=hidden_states[i],
+                                                              hidden_state=lstm_states[i],
                                                               input_mask=hs_mask[i][:,j,:,:,:])
                 hs_inner.append(h)
                 hs_mask_inner.append(h_mask)
@@ -214,37 +221,46 @@ class PConvLSTM(nn.Module):
             hs.append(torch.stack(hs_inner, dim=1))
             hs_mask.append(torch.stack(hs_mask_inner, dim=1))
 
-        # get current states
-        h_sequence, h_mask_sequence = hs[self.num_enc_dec_layers], hs_mask[self.num_enc_dec_layers]
+        # get output from last encoding layer
+        h_sequence, h_mask_sequence = hs[self.net_depth], hs_mask[self.net_depth]
+
         # forward pass decoding layers
-        for i in range(self.num_enc_dec_layers):
+        for i in range(self.net_depth):
             hs_inner = []
             hs_mask_inner = []
-
             for j in range(num_time_steps):
                 # interpolate input and mask
                 h = F.interpolate(h_sequence[:,j,:,:,:], scale_factor=2, mode=self.upsampling_mode)
                 h_mask = F.interpolate(h_mask_sequence[:,j,:,:,:], scale_factor=2, mode='nearest')
 
                 # U-Net -> pass results from encoding layers to decoding layers
-                h = torch.cat([h, hs[self.num_enc_dec_layers - i - 1][:,j,:,:,:]], dim=1)
-                h_mask = torch.cat([h_mask, hs_mask[self.num_enc_dec_layers - i - 1][:,j,:,:,:]], dim=1)
-                h, h_hidden, h_mask = self.decoding_layers[i](input=h,
-                                                              hidden_state=hidden_states[self.num_enc_dec_layers + i],
+                h = torch.cat([h, hs[self.net_depth - i - 1][:,j,:,:,:]], dim=1)
+                h_mask = torch.cat([h_mask, hs_mask[self.net_depth - i - 1][:,j,:,:,:]], dim=1)
+                h, cell, h_mask = self.decoding_layers[i](input=h,
+                                                              hidden_state=lstm_states[self.net_depth + i],
                                                               input_mask=h_mask)
                 hs_inner.append(h)
                 hs_mask_inner.append(h_mask)
+
             h_sequence = torch.stack(hs_inner, dim=1)
             h_mask_sequence = torch.stack(hs_mask_inner, dim=1)
 
+        # return output from last decoding layer
         return h_sequence
 
-    def init_hidden(self, batch_size, image_size):
+    def init_lstm_states(self, batch_size, image_size):
         init_states = []
+        # encoding layers
         for i in range(self.num_enc_dec_layers):
-            init_states.append(self.encoding_layers[i].conv.input_conv.init_hidden(batch_size, image_size, i, True))
-        for i in range(self.num_enc_dec_layers):
-            init_states.append(self.decoding_layers[i].conv.input_conv.init_hidden(batch_size, image_size, self.num_enc_dec_layers - i - 1, False))
+            init_states.append(self.encoding_layers[i].conv.input_conv.init_lstm_state(batch_size, image_size, i, True))
+        # pooling layers
+        for i in range(self.num_enc_dec_layers, self.net_depth):
+            init_states.append(self.encoding_layers[i].conv.input_conv.init_lstm_state(batch_size, image_size, i, True))
+        for i in range(self.num_pool_layers):
+            init_states.append(self.decoding_layers[i].conv.input_conv.init_lstm_state(batch_size, image_size, self.net_depth - i - 1, False))
+        # decoding layers
+        for i in range(self.num_pool_layers, self.net_depth):
+            init_states.append(self.decoding_layers[i].conv.input_conv.init_lstm_state(batch_size, image_size, self.net_depth - i - 1, False))
         return init_states
 
     def train(self, mode=True):
