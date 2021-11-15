@@ -70,15 +70,15 @@ if not os.path.exists(args.log_dir):
     os.makedirs(args.log_dir)
 writer = SummaryWriter(log_dir=args.log_dir)
 
-dataset_train = SingleNetCDFDataLoader(args.data_root_dir, args.mask_dir, 'train', args.data_type, args.prev_next)
-dataset_val = SingleNetCDFDataLoader(args.data_root_dir, args.mask_dir, 'val', args.data_type, args.prev_next)
+dataset_train = LSTMNetCDFDataLoader(args.data_root_dir, args.mask_dir, 'train', args.data_type, args.prev_next)
+dataset_val = LSTMNetCDFDataLoader(args.data_root_dir, args.mask_dir, 'val', args.data_type, args.prev_next)
 
 iterator_train = iter(data.DataLoader(
     dataset_train, batch_size=args.batch_size,
     sampler=InfiniteSampler(len(dataset_train)),
     num_workers=args.n_threads))
 
-model = PConvLSTM(image_size=args.image_size, num_enc_dec_layers=args.encoding_layers, num_pool_layers=args.pooling_layers, num_in_channels=2*args.prev_next + 1).to(device)
+model = PConvLSTM(image_size=args.image_size, num_enc_dec_layers=args.encoding_layers, num_pool_layers=args.pooling_layers, num_in_channels=1).to(device)
 
 if args.finetune:
     lr = args.lr_finetune
@@ -99,14 +99,13 @@ if args.resume:
     print('Starting from iter ', start_iter)
 
 hidden_state = model.init_hidden(batch_size=args.batch_size, image_size=args.image_size)
-print('hidden_h shape ' + str(len(hidden_state)))
 
 for i in tqdm(range(start_iter, args.max_iter)):
     model.train()
 
     image, mask, gt = [x.to(device) for x in next(iterator_train)]
 
-    output, _ = model(image, mask)
+    output = model(image, hidden_state, mask)
     loss_dict = criterion(image, mask, output, gt, device)
 
     loss = 0.0

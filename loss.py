@@ -26,35 +26,43 @@ class InpaintingLoss(nn.Module):
 
     def forward(self, input, mask, output, gt, device):
         # get mid indexed element
-        mid_index = torch.tensor([(input.shape[1] // 2)],dtype=torch.long).to(device)
-        input = torch.index_select(input, dim=1, index=mid_index)
-        gt = torch.index_select(gt, dim=1, index=mid_index)
-        mask = torch.index_select(mask, dim=1, index=mid_index)
-
-        # create output_comp
-        output_comp = mask * input + (1 - mask) * output
-
-        # define different loss functions from output and output_comp
         loss_dict = {}
-        loss_dict['hole'] = self.l1((1 - mask) * output, (1 - mask) * gt)
-        loss_dict['valid'] = self.l1(mask * output, mask * gt)
 
-        # define different loss function from features from output and output_comp
-        feat_output = self.extractor(torch.cat([output] * 3, 1))
-        feat_output_comp = self.extractor(torch.cat([output_comp] * 3, 1))
-        feat_gt = self.extractor(torch.cat([gt] * 3, 1))
+        for t in range(input.shape[1]):
+            input_part = input[:,t,:,:,:]
+            mask_part = mask[:,t,:,:,:]
+            output_part = output[:,t,:,:,:]
+            gt_part = gt[:,t,:,:,:]
 
-        loss_dict['prc'] = 0.0
-        loss_dict['style'] = 0.0
-        for i in range(3):
-            loss_dict['prc'] += self.l1(feat_output[i], feat_gt[i])
-            loss_dict['prc'] += self.l1(feat_output_comp[i], feat_gt[i])
-            loss_dict['style'] += self.l1(gram_matrix(feat_output[i]),
-                                          gram_matrix(feat_gt[i]))
-            loss_dict['style'] += self.l1(gram_matrix(feat_output_comp[i]),
-                                          gram_matrix(feat_gt[i]))
+            mid_index = torch.tensor([(input_part.shape[1] // 2)],dtype=torch.long).to(device)
+            input_part = torch.index_select(input_part, dim=1, index=mid_index)
+            gt_part = torch.index_select(gt_part, dim=1, index=mid_index)
+            mask_part = torch.index_select(mask_part, dim=1, index=mid_index)
 
-        loss_dict['tv'] = total_variation_loss(output_comp)
+            # create output_comp
+            output_comp = mask_part * input_part + (1 - mask_part) * output_part
+
+            # define different loss functions from output and output_comp
+            loss_dict = {}
+            loss_dict['hole'] = self.l1((1 - mask_part) * output_part, (1 - mask_part) * gt_part)
+            loss_dict['valid'] = self.l1(mask_part * output_part, mask_part * gt_part)
+
+            # define different loss function from features from output and output_comp
+            feat_output = self.extractor(torch.cat([output_part] * 3, 1))
+            feat_output_comp = self.extractor(torch.cat([output_comp] * 3, 1))
+            feat_gt = self.extractor(torch.cat([gt_part] * 3, 1))
+
+            loss_dict['prc'] = 0.0
+            loss_dict['style'] = 0.0
+            for i in range(3):
+                loss_dict['prc'] += self.l1(feat_output[i], feat_gt[i])
+                loss_dict['prc'] += self.l1(feat_output_comp[i], feat_gt[i])
+                loss_dict['style'] += self.l1(gram_matrix(feat_output[i]),
+                                              gram_matrix(feat_gt[i]))
+                loss_dict['style'] += self.l1(gram_matrix(feat_output_comp[i]),
+                                              gram_matrix(feat_gt[i]))
+
+            loss_dict['tv'] = total_variation_loss(output_comp)
 
         return loss_dict
 
