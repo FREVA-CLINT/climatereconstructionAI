@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 python /home/joe/PycharmProjects/climatereconstructionAI/climatereconstructionAI/train.py \
- --device cpu --batch-size 1 --image-size 72 --pooling-layers 0 --encoding-layers 1 --data-type tas \
+ --device cpu --batch-size 1 --image-size 72 --pooling-layers 0 --encoding-layers 3 --data-type tas \
  --data-root-dir ../data/20cr/ \
  --mask-dir masks/hadcrut4-missmask.h5 \
  --snapshot-dir snapshots/temperature/20cr/ \
