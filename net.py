@@ -67,8 +67,8 @@ class ConvLSTMBlock(nn.Module):
         self.conv_output_gate.apply(weights_init('kaiming'))
         self.conv_gate_gate.apply(weights_init('kaiming'))
 
-    def forward(self, input, hidden_state):
-        h_prev, cell = hidden_state
+    def forward(self, input, lstm_state):
+        h_prev, cell = lstm_state
         combined_input = torch.cat([input, h_prev], dim=1)
 
         input = torch.sigmoid(self.conv_input_gate(combined_input))
@@ -86,8 +86,8 @@ class ConvLSTMBlock(nn.Module):
             return (torch.zeros(batch_size, self.out_channels, image_size // (2 ** depth), image_size // (2 ** depth)).to(device),
                     torch.zeros(batch_size, self.out_channels, image_size // (2 ** (depth + 1)), image_size // (2 ** (depth + 1))).to(device))
         else:
-            return (torch.zeros(batch_size, self.out_channels, image_size // (2 ** depth), image_size // (2 ** depth)),
-                    torch.zeros(batch_size, self.out_channels, image_size // (2 ** depth), image_size // (2 ** depth)))
+            return (torch.zeros(batch_size, self.out_channels, image_size // (2 ** depth), image_size // (2 ** depth)).to(device),
+                    torch.zeros(batch_size, self.out_channels, image_size // (2 ** depth), image_size // (2 ** depth)).to(device))
 
 class PConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride=(1,1), dilation=(1,1), groups=1, bias=True):
@@ -104,8 +104,8 @@ class PConvBlock(nn.Module):
         for param in self.mask_conv.parameters():
             param.requires_grad = False
 
-    def forward(self, input, hidden_state, mask):
-        output, hidden_state = self.input_conv(input * mask, hidden_state)
+    def forward(self, input, lstm_state, mask):
+        output, lstm_state = self.input_conv(input * mask, lstm_state)
         if self.input_conv.conv_input_gate.bias is not None and False:
             output_bias = self.input_conv.conv_input_gate.bias.view(1, -1, 1, 1).expand_as(output)
         else:
@@ -122,7 +122,7 @@ class PConvBlock(nn.Module):
         new_mask = torch.ones_like(output)
         new_mask = new_mask.masked_fill_(no_update_holes, 0.0)
 
-        return output, hidden_state, new_mask
+        return output, lstm_state, new_mask
 
 
 class PConvBlockActivation(nn.Module):
@@ -145,13 +145,13 @@ class PConvBlockActivation(nn.Module):
         elif activ == 'leaky':
             self.activation = nn.LeakyReLU(negative_slope=0.2)
 
-    def forward(self, input, hidden_state, input_mask):
-        h, hidden_state, h_mask = self.conv(input, hidden_state, input_mask)
+    def forward(self, input, lstm_state, input_mask):
+        h, lstm_state, h_mask = self.conv(input, lstm_state, input_mask)
         if hasattr(self, 'bn'):
             h = self.bn(h)
         if hasattr(self, 'activation'):
             h = self.activation(h)
-        return h, hidden_state, h_mask
+        return h, lstm_state, h_mask
 
 
 class PConvLSTM(nn.Module):
@@ -212,9 +212,9 @@ class PConvLSTM(nn.Module):
             hs_mask_inner = []
 
             for j in range(num_time_steps):
-                h, h_hidden, h_mask = self.encoding_layers[i](input=hs[i][:,j,:,:,:],
-                                                              hidden_state=lstm_states[i],
-                                                              input_mask=hs_mask[i][:,j,:,:,:])
+                h, cell, h_mask = self.encoding_layers[i](input=hs[i][:,j,:,:,:],
+                                                          lstm_state=lstm_states[i],
+                                                          input_mask=hs_mask[i][:,j,:,:,:])
                 hs_inner.append(h)
                 hs_mask_inner.append(h_mask)
 
@@ -237,8 +237,8 @@ class PConvLSTM(nn.Module):
                 h = torch.cat([h, hs[self.net_depth - i - 1][:,j,:,:,:]], dim=1)
                 h_mask = torch.cat([h_mask, hs_mask[self.net_depth - i - 1][:,j,:,:,:]], dim=1)
                 h, cell, h_mask = self.decoding_layers[i](input=h,
-                                                              hidden_state=lstm_states[self.net_depth + i],
-                                                              input_mask=h_mask)
+                                                          lstm_state=lstm_states[self.net_depth + i],
+                                                          input_mask=h_mask)
                 hs_inner.append(h)
                 hs_mask_inner.append(h_mask)
 
