@@ -6,7 +6,7 @@
 #SBATCH -n 1
 #SBATCH --cpus-per-task=128
 #SBATCH --time=24:00:00
-#SBATCH --mem=512G
+#SBATCH --mem=128GB
 #SBATCH --nodelist=vader3
 
 module source start-scripts/setup-modules.txt
@@ -19,7 +19,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/precipitation/radolan-lstm/ \
  --log-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/logs/precipitation/radolan-lstm/ \
  --prev-next 0 \
- --lstm-steps 8 \
+ --lstm-steps 5 \
  --max-iter 100000
 singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img_levante.sif \
  python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/train.py \
@@ -29,7 +29,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/precipitation/radolan-lstm/ \
  --log-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/logs/precipitation/radolan-lstm/ \
  --prev-next 0 \
- --lstm-steps 8 \
+ --lstm-steps 5 \
  --max-iter 200000 \
  --resume /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/precipitation/radolan-lstm/ckpt/100000.pth \
  --finetune
