@@ -6,7 +6,8 @@ python /home/joe/PycharmProjects/climatereconstructionAI/climatereconstructionAI
  --mask-dir masks/hadcrut4-missmask.h5 \
  --snapshot-dir snapshots/temperature/20cr/ \
  --log-dir logs/temperature/20cr/ \
- --prev-next 3 \
+ --lstm-steps 3 \
+ --prev-next 0 \
  --save-model-interval 1000 \
 # --resume snapshots/precipitation/20cr/ckpt/100000.pth \
 # --finetune

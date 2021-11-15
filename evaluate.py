@@ -3,7 +3,7 @@ import argparse
 import torch
 from evaluator import Evaluator
 from net import PConvLSTM
-from netcdfloader import SingleNetCDFDataLoader
+from netcdfloader import PrevNextNetCDFDataLoader
 from util.io import load_ckpt
 
 arg_parser = argparse.ArgumentParser()
@@ -30,7 +30,7 @@ device = torch.device(args.device)
 
 
 if args.infill:
-    dataset_val = SingleNetCDFDataLoader(args.data_root_dir, args.mask_dir, args.infill, args.data_type, args.prev_next)
+    dataset_val = PrevNextNetCDFDataLoader(args.data_root_dir, args.mask_dir, args.infill, args.data_type, args.prev_next)
 
     model = PConvLSTM(image_size=args.image_size, num_enc_dec_layers=args.encoding_layers, num_pool_layers=args.pooling_layers,
                       num_in_channels=1 + 2 * args.prev_next).to(device)
