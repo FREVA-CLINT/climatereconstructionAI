@@ -100,7 +100,7 @@ if args.resume:
     print('Starting from iter ', start_iter)
 
 # initialize lstm states
-lstm_states = model.init_lstm_states(batch_size=args.batch_size, image_size=args.image_size)
+lstm_states = model.init_lstm_states(batch_size=args.batch_size, image_size=args.image_size, device=device)
 
 for i in tqdm(range(start_iter, args.max_iter)):
     model.train()

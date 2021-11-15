@@ -81,10 +81,10 @@ class ConvLSTMBlock(nn.Module):
 
         return h, cell_next
 
-    def init_lstm_state(self, batch_size, image_size, depth, encode):
+    def init_lstm_state(self, device, batch_size, image_size, depth, encode):
         if encode:
-            return (torch.zeros(batch_size, self.out_channels, image_size // (2 ** depth), image_size // (2 ** depth)),
-                    torch.zeros(batch_size, self.out_channels, image_size // (2 ** (depth + 1)), image_size // (2 ** (depth + 1))))
+            return (torch.zeros(batch_size, self.out_channels, image_size // (2 ** depth), image_size // (2 ** depth)).to(device),
+                    torch.zeros(batch_size, self.out_channels, image_size // (2 ** (depth + 1)), image_size // (2 ** (depth + 1))).to(device))
         else:
             return (torch.zeros(batch_size, self.out_channels, image_size // (2 ** depth), image_size // (2 ** depth)),
                     torch.zeros(batch_size, self.out_channels, image_size // (2 ** depth), image_size // (2 ** depth)))
@@ -248,19 +248,19 @@ class PConvLSTM(nn.Module):
         # return output from last decoding layer
         return h_sequence
 
-    def init_lstm_states(self, batch_size, image_size):
+    def init_lstm_states(self, device, batch_size, image_size):
         init_states = []
         # encoding layers
         for i in range(self.num_enc_dec_layers):
-            init_states.append(self.encoding_layers[i].conv.input_conv.init_lstm_state(batch_size, image_size, i, True))
+            init_states.append(self.encoding_layers[i].conv.input_conv.init_lstm_state(device, batch_size, image_size, i, True))
         # pooling layers
         for i in range(self.num_enc_dec_layers, self.net_depth):
-            init_states.append(self.encoding_layers[i].conv.input_conv.init_lstm_state(batch_size, image_size, i, True))
+            init_states.append(self.encoding_layers[i].conv.input_conv.init_lstm_state(device, batch_size, image_size, i, True))
         for i in range(self.num_pool_layers):
-            init_states.append(self.decoding_layers[i].conv.input_conv.init_lstm_state(batch_size, image_size, self.net_depth - i - 1, False))
+            init_states.append(self.decoding_layers[i].conv.input_conv.init_lstm_state(device, batch_size, image_size, self.net_depth - i - 1, False))
         # decoding layers
         for i in range(self.num_pool_layers, self.net_depth):
-            init_states.append(self.decoding_layers[i].conv.input_conv.init_lstm_state(batch_size, image_size, self.net_depth - i - 1, False))
+            init_states.append(self.decoding_layers[i].conv.input_conv.init_lstm_state(device, batch_size, image_size, self.net_depth - i - 1, False))
         return init_states
 
     def train(self, mode=True):
