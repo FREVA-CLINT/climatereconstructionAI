@@ -19,7 +19,8 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/precipitation/radolan-lstm/ \
  --log-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/logs/precipitation/radolan-lstm/ \
  --lstm-steps 4 \
- --max-iter 100000
+ --max-iter 100000 \
+ --save-model-interval 10000
 singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img_levante.sif \
  python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/train.py \
  --device cuda --batch-size 4 --image-size 512 --pooling-layers 3 --encoding-layers 4 --data-type pr \
@@ -30,4 +31,5 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --lstm-steps 4 \
  --max-iter 200000 \
  --resume /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/precipitation/radolan-lstm/ckpt/100000.pth \
- --finetune
+ --finetune \
+ --save-model-interval 10000
