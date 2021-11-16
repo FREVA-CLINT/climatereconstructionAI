@@ -112,7 +112,7 @@ class PConvBlock(nn.Module):
 
     def forward(self, input, lstm_state, mask):
         output, lstm_state = self.input_conv(input * mask, lstm_state)
-        if self.input_conv.bias is not None:
+        if self.input_conv.conv_input_gate.bias is not None:
             output_bias = self.input_conv.conv_input_gate.bias.view(1, -1, 1, 1).expand_as(output)
         else:
             output_bias = torch.zeros_like(output)
