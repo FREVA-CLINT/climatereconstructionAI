@@ -7,7 +7,7 @@ from torch.utils import data
 from tqdm import tqdm
 from MultiChannelPConvUnet import MultiChannelPConvUNet
 from PConvLSTM import VGG16FeatureExtractor
-from loss import PrevNextInpaintingLoss
+from loss import PrevNextInpaintingLoss, PrecipitationInpaintingLoss
 from util.io import load_ckpt, save_ckpt
 from netcdfloader import PrevNextNetCDFDataLoader as NetCDFDataLoader, InfiniteSampler
 
@@ -68,7 +68,7 @@ else:
 
 # define optimizer and loss functions
 optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
-criterion = PrevNextInpaintingLoss(VGG16FeatureExtractor()).to(device)
+criterion = PrecipitationInpaintingLoss().to(device)
 
 # define start point
 start_iter = 0

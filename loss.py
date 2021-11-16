@@ -130,32 +130,25 @@ class LSTMInpaintingLoss(InpaintingLoss):
 
 
 class PrecipitationInpaintingLoss(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.mse = nn.MSELoss()
 
     def forward(self, input, mask, output, gt, device):
         # get mid indexed element
         mid_index = torch.tensor([(input.shape[1] // 2)],dtype=torch.long).to(device)
-        input = torch.index_select(input, dim=1, index=mid_index)
-        gt = torch.index_select(gt, dim=1, index=mid_index)
-        mask = torch.index_select(mask, dim=1, index=mid_index)
+        input = input[:,mid_index,:,:]
+        gt = gt[:,mid_index,:,:]
+        mask = mask[:,mid_index,:,:]
 
         # create output_comp
         output_comp = mask * input + (1 - mask) * output
 
         # define different loss functions from output and output_comp
         loss_dict = {}
-        cos = nn.CosineSimilarity(dim=1, eps=1e-6)
-        loss_dict['pearson'] = 0.0
-        loss_dict['s-index'] = 0.0
-        for i in range(output_comp.shape[0]):
-            voutput_comp = output_comp[i][0] - torch.mean(output_comp[i][0])
-            vgt = gt[i][0] - torch.mean(gt[i][0])
-            vinput = input[i][0] - torch.mean(input[i][0])
-            loss_dict['pearson'] += torch.sum(voutput_comp * vgt) / (torch.sqrt(torch.sum(voutput_comp ** 2)) * torch.sqrt(torch.sum(vgt ** 2)))
-            loss_dict['s-index'] += 1 - (torch.sum((output_comp[i][0] - gt[i][0]) ** 2)) / (torch.sum((torch.abs(output_comp[i][0] - vinput) + torch.abs(gt[i][0])) ** 2))
-
-        loss_dict['rmse'] = torch.sqrt(self.mse(output_comp, gt))
-
+        c = 20
+        L20 = torch.sum(
+            (torch.sigmoid((output_comp - 20) * c) - torch.sigmoid((gt - 20) * c)) ** 2
+        )
+        L30 = torch.sum(
+            (torch.sigmoid((output_comp - 30) * c) - torch.sigmoid((gt - 30) * c)) ** 2
+        )
+        loss_dict['SSL'] = L20 + L30
         return loss_dict
