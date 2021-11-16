@@ -129,16 +129,16 @@ class MultiChannelPConvUNet(nn.Module):
         self.encoding_layers = []
         self.encoding_layers.append(
             MultiChannelPConvActivationBlock(self.num_in_channels, image_size // (2 ** (self.num_enc_dec_layers - 1)),
-                                     (7, 7), (2, 2), nn.ReLU()))
+                                             (7, 7), (2, 2), nn.ReLU()))
         for i in range(1, self.num_enc_dec_layers):
             if i == self.num_enc_dec_layers - 1:
                 self.encoding_layers.append(MultiChannelPConvActivationBlock(image_size // (2 ** (self.num_enc_dec_layers - i)),
-                                                                     image_size // (2 ** (self.num_enc_dec_layers - i - 1)),
-                                                                     (3, 3), (2, 2), nn.ReLU()))
+                                                                             image_size // (2 ** (self.num_enc_dec_layers - i - 1)),
+                                                                             (3, 3), (2, 2), nn.ReLU()))
             else:
                 self.encoding_layers.append(MultiChannelPConvActivationBlock(image_size // (2 ** (self.num_enc_dec_layers - i)),
-                                                                     image_size // (2 ** (self.num_enc_dec_layers - i - 1)),
-                                                                     (5, 5), (2, 2), nn.ReLU()))
+                                                                             image_size // (2 ** (self.num_enc_dec_layers - i - 1)),
+                                                                             (5, 5), (2, 2), nn.ReLU()))
 
         # define ecoding pooling layers
         for i in range(self.num_pool_layers):
@@ -149,16 +149,16 @@ class MultiChannelPConvUNet(nn.Module):
         self.decoding_layers = []
         for i in range(self.num_pool_layers):
             self.decoding_layers.append(MultiChannelPConvActivationBlock(image_size + image_size, image_size,
-                                                                 (3, 3), (1, 1), nn.LeakyReLU()))
+                                                                         (3, 3), (1, 1), nn.LeakyReLU()))
 
         # define decoding layers
         for i in range(1, self.num_enc_dec_layers):
             self.decoding_layers.append(
                 MultiChannelPConvActivationBlock(image_size // (2 ** (i - 1)) + image_size // (2 ** i), image_size // (2 ** i),
-                                         (3, 3), (1, 1), nn.LeakyReLU()))
+                                                 (3, 3), (1, 1), nn.LeakyReLU()))
         self.decoding_layers.append(
             MultiChannelPConvActivationBlock(image_size // (2 ** (self.num_enc_dec_layers - 1)) + self.num_in_channels, 1,
-                                     (3, 3), (1, 1), bn=False, bias=True))
+                                             (3, 3), (1, 1), bn=False, bias=True))
         self.decoding_layers = nn.ModuleList(self.decoding_layers)
 
     def forward(self, input, input_mask):
@@ -166,24 +166,24 @@ class MultiChannelPConvUNet(nn.Module):
         hs_mask = [input_mask]
 
         # forward pass encoding layers
-        for i in range(self.num_enc_dec_layers):
+        for i in range(self.net_depth):
             h, h_mask = self.encoding_layers[i](input=hs[i],
                                                 input_mask=hs_mask[i])
             hs.append(h)
             hs_mask.append(h_mask)
 
         # get current states
-        h, h_mask = hs[self.num_enc_dec_layers], hs_mask[self.num_enc_dec_layers]
+        h, h_mask = hs[self.net_depth], hs_mask[self.net_depth]
 
         # forward pass decoding layers
-        for i in range(self.num_enc_dec_layers):
+        for i in range(self.net_depth):
             # interpolate encoder output and mask
             h = F.interpolate(h, scale_factor=2, mode='nearest')
             h_mask = F.interpolate(h_mask, scale_factor=2, mode='nearest')
 
             # U-Net -> pass results from encoding layers to decoding layers
-            h = torch.cat([h, hs[self.num_enc_dec_layers - i - 1]], dim=1)
-            h_mask = torch.cat([h_mask, hs_mask[self.num_enc_dec_layers - i - 1]], dim=1)
+            h = torch.cat([h, hs[self.net_depth - i - 1]], dim=1)
+            h_mask = torch.cat([h_mask, hs_mask[self.net_depth - i - 1]], dim=1)
 
             h, h_mask = self.decoding_layers[i](input=h,
                                                 input_mask=h_mask)
