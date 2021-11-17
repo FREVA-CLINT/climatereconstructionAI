@@ -130,6 +130,9 @@ class LSTMInpaintingLoss(InpaintingLoss):
 
 
 class PrecipitationInpaintingLoss(nn.Module):
+    def __init__(self, extractor):
+        super().__init__()
+        self.CELoss = nn.CrossEntropyLoss()
 
     def forward(self, input, mask, output, gt, device):
         # get mid indexed element
@@ -143,12 +146,14 @@ class PrecipitationInpaintingLoss(nn.Module):
 
         # define different loss functions from output and output_comp
         loss_dict = {}
-        c = 20
+        """c = 20
         L20 = torch.sum(
             (torch.sigmoid((output_comp - 20) * c) - torch.sigmoid((gt - 20) * c)) ** 2
         )
         L30 = torch.sum(
             (torch.sigmoid((output_comp - 30) * c) - torch.sigmoid((gt - 30) * c)) ** 2
         )
-        loss_dict['SSL'] = L20 + L30
+        loss_dict['SSL'] = L20 + L30"""
+        loss_dict['SSL'] = self.CELoss(output, gt)
+        loss_dict['SSL'] += self.CELoss(output_comp, gt)
         return loss_dict
