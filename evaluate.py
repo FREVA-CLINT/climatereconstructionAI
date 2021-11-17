@@ -1,8 +1,9 @@
 import argparse
 
 import torch
+
+from MultiChannelPConvUNet import MultiChannelPConvUNet
 from evaluator import Evaluator
-from PConvLSTM import PConvLSTM
 from netcdfloader import PrevNextNetCDFDataLoader
 from util.io import load_ckpt
 
@@ -32,7 +33,7 @@ device = torch.device(args.device)
 if args.infill:
     dataset_val = PrevNextNetCDFDataLoader(args.data_root_dir, args.mask_dir, args.infill, args.data_type, args.prev_next)
 
-    model = PConvLSTM(image_size=args.image_size, num_enc_dec_layers=args.encoding_layers, num_pool_layers=args.pooling_layers,
+    model = MultiChannelPConvUNet(image_size=args.image_size, num_enc_dec_layers=args.encoding_layers, num_pool_layers=args.pooling_layers,
                       num_in_channels=1 + 2 * args.prev_next).to(device)
 
     load_ckpt(args.snapshot_dir, [('model', model)], device)

@@ -5,7 +5,7 @@ import opt
 from tensorboardX import SummaryWriter
 from torch.utils import data
 from tqdm import tqdm
-from MultiChannelPConvUnet import MultiChannelPConvUNet
+from MultiChannelPConvUNet import MultiChannelPConvUNet
 from PConvLSTM import VGG16FeatureExtractor
 from loss import PrevNextInpaintingLoss, PrecipitationInpaintingLoss
 from util.io import load_ckpt, save_ckpt
