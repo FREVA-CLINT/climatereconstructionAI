@@ -279,6 +279,6 @@ class PConvLSTM(nn.Module):
     def train(self, mode=True):
         super().train(mode)
         if self.freeze_enc_bn:
-            for i in range(self.num_enc_dec_layers):
+            for i in range(self.net_depth):
                 if isinstance(self.encoding_layers[i].bn, nn.BatchNorm2d):
                     self.encoding_layers[i].eval()
