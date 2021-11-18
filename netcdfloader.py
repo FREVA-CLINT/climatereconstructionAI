@@ -195,7 +195,7 @@ class LSTMNetCDFDataLoader(NetCDFLoader):
                 next_index = self.mask_length-1
             # get next mask
             if self.split == 'infill':
-                mask_next = mask_data[next_index, :, :]
+                mask_next = mask_data[new_index, :, :]
             else:
                 mask_next = mask_data[random.randint(0, self.mask_length - 1), :, :]
             mask_next = torch.from_numpy(mask_next[:, :])
