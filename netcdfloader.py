@@ -192,7 +192,7 @@ class LSTMNetCDFDataLoader(NetCDFLoader):
             # mask
             new_index = i
             if new_index > self.mask_length-1:
-                next_index = self.mask_length-1
+                new_index = self.mask_length-1
             # get next mask
             if self.split == 'infill':
                 mask_next = mask_data[new_index, :, :]
