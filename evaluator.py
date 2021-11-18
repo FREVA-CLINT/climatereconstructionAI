@@ -36,72 +36,6 @@ class Evaluator:
         self.test_dir = test_dir
         self.variable = variable
 
-    def infill(self, model, dataset, device, partitions):
-        if not os.path.exists(self.eval_save_dir):
-            os.makedirs('{:s}'.format(self.eval_save_dir))
-        image = []
-        mask = []
-        gt = []
-        output = []
-        output_comp = []
-
-        # mid index
-        mid_index = None
-
-        if partitions > dataset.__len__():
-            partitions = dataset.__len__()
-        if dataset.__len__() % partitions != 0:
-            print("WARNING: The size of the dataset should be dividable by the number of partitions. The last "
-                  + str(dataset.__len__() % partitions) + " time steps will not be infilled.")
-        for split in range(partitions):
-            image_part, mask_part, gt_part = zip(*[dataset[i + split * (dataset.__len__() // partitions)] for i in range(dataset.__len__() // partitions)])
-            image_part = torch.stack(image_part)
-            mask_part = torch.stack(mask_part)
-            gt_part = torch.stack(gt_part)
-
-            # get results from trained network
-            with torch.no_grad():
-                output_part, _ = model(image_part.to(device), mask_part.to(device))
-            output_part = output_part.to(torch.device('cpu'))
-
-            # only select mid indexed-element
-            if not mid_index:
-                mid_index = torch.tensor([(image_part.shape[1] // 2)],dtype=torch.long)
-            image_part = torch.index_select(image_part, dim=1, index=mid_index)
-            mask_part = torch.index_select(mask_part, dim=1, index=mid_index)
-            gt_part = torch.index_select(gt_part, dim=1, index=mid_index)
-
-            # create output_comp
-            output_comp_part = mask_part * image_part + (1 - mask_part) * output_part
-
-            image.append(image_part)
-            mask.append(mask_part)
-            gt.append(gt_part)
-            output.append(output_part)
-            output_comp.append(output_comp_part)
-
-        image = torch.cat(image)
-        mask = torch.cat(mask)
-        gt = torch.cat(gt)
-        output = torch.cat(output)
-        output_comp = torch.cat(output_comp)
-
-        cvar = [image, mask, output, output_comp, gt]
-        cname = ['image', 'mask', 'output', 'output_comp', 'gt']
-        dname = ['time', 'lat', 'lon']
-        for x in range(0, 5):
-            h5 = h5py.File('%s' % (self.eval_save_dir + cname[x]), 'w')
-            h5.create_dataset(self.variable, data=cvar[x])
-            for dim in range(0, 3):
-                h5[self.variable].dims[dim].label = dname[dim]
-            h5.close()
-
-        # convert to netCDF files
-        self.convert_h5_to_netcdf(True, 'image')
-        self.convert_h5_to_netcdf(False, 'gt')
-        self.convert_h5_to_netcdf(False, 'output')
-        self.convert_h5_to_netcdf(False, 'output_comp')
-
     def create_evaluation_images(self, file, create_video=False, start_date=None, end_date=None):
         if not os.path.exists(self.eval_save_dir + 'images'):
             os.makedirs('{:s}'.format(self.eval_save_dir + 'images'))
@@ -262,3 +196,154 @@ class Evaluator:
         os.system('ncgen -o ' + self.eval_save_dir + 'output-tmp ' + self.eval_save_dir + file + '.txt')
         cdo.setgrid(self.test_dir + '*.h5', input=self.eval_save_dir + 'output-tmp', output=self.eval_save_dir + file + '.nc')
         os.system('rm ' + self.eval_save_dir + file + '.txt ' + self.eval_save_dir + 'output-tmp')
+
+
+class LSTMEvaluator(Evaluator):
+    def infill(self, model, dataset, device, partitions):
+        partitions = 10
+        if not os.path.exists(self.eval_save_dir):
+            os.makedirs('{:s}'.format(self.eval_save_dir))
+        image = []
+        mask = []
+        gt = []
+        output = []
+        output_comp = []
+
+        # mid index
+        mid_index = None
+
+        if partitions > dataset.__len__():
+            partitions = dataset.__len__()
+        if dataset.__len__() % partitions != 0:
+            print("WARNING: The size of the dataset should be dividable by the number of partitions. The last "
+                  + str(dataset.__len__() % partitions) + " time steps will not be infilled.")
+        for split in range(partitions):
+            image_part, mask_part, gt_part = zip(*[dataset[i + split * (dataset.__len__() // partitions)] for i in range(100 // partitions)])
+            image_part = torch.stack(image_part)
+            mask_part = torch.stack(mask_part)
+            gt_part = torch.stack(gt_part)
+
+            # get results from trained network
+            with torch.no_grad():
+                # initialize lstm states
+                lstm_states = model.init_lstm_states(batch_size=image_part.shape[0], image_size=image_part.shape[3],
+                                                     device=device)
+                print(image_part.shape)
+                output_part = model(image_part.to(device), lstm_states, mask_part.to(device))
+            output_part = output_part.to(torch.device('cpu'))
+
+            # only select mid indexed-element
+            if not mid_index:
+                mid_index = torch.tensor([(image_part.shape[1] // 2)],dtype=torch.long)
+            image_part = torch.index_select(image_part, dim=1, index=mid_index)
+            mask_part = torch.index_select(mask_part, dim=1, index=mid_index)
+            gt_part = torch.index_select(gt_part, dim=1, index=mid_index)
+
+            # create output_comp
+            output_comp_part = mask_part * image_part + (1 - mask_part) * output_part
+
+            image.append(image_part)
+            mask.append(mask_part)
+            gt.append(gt_part)
+            output.append(output_part)
+            output_comp.append(output_comp_part)
+
+        image = torch.cat(image)[:,0,0,:,:]
+        mask = torch.cat(mask)[:,0,0,:,:]
+        gt = torch.cat(gt)[:,0,0,:,:]
+
+        lstm_steps = output[0].shape[1]
+
+        first_states_output = output[0][0,:lstm_steps-1,0,:,:]
+        next_states_output = torch.cat([output[i][:,lstm_steps-1,0,:,:] for i in range(1, output.__len__()-1)])
+        last_states_output = output[output.__len__()-1][:-(lstm_steps-1),lstm_steps-1,0,:,:]
+        output = torch.cat([first_states_output, next_states_output, last_states_output], dim=0)
+
+        first_states_output_comp = output_comp[0][0,:lstm_steps-1,0,:,:]
+        next_states_output_comp = torch.cat([output_comp[i][:,lstm_steps-1,0,:,:] for i in range(1, output_comp.__len__()-1)])
+        last_states_output_comp = output_comp[output_comp.__len__()-1][:-(lstm_steps-1),lstm_steps-1,0,:,:]
+        output_comp = torch.cat([first_states_output_comp, next_states_output_comp, last_states_output_comp], dim=0)
+
+        cvar = [image, mask, output, output_comp, gt]
+        cname = ['image', 'mask', 'output', 'output_comp', 'gt']
+        dname = ['time', 'lat', 'lon']
+        for x in range(0, 5):
+            h5 = h5py.File('%s' % (self.eval_save_dir + cname[x]), 'w')
+            h5.create_dataset(self.variable, data=cvar[x])
+            for dim in range(0, 3):
+                h5[self.variable].dims[dim].label = dname[dim]
+            h5.close()
+        print("Infilled images saved!")
+        # convert to netCDF files
+        self.convert_h5_to_netcdf(True, 'image')
+        self.convert_h5_to_netcdf(False, 'gt')
+        self.convert_h5_to_netcdf(False, 'output')
+        self.convert_h5_to_netcdf(False, 'output_comp')
+
+
+class MultiCEvaluator(Evaluator):
+    def infill(self, model, dataset, device, partitions):
+        if not os.path.exists(self.eval_save_dir):
+            os.makedirs('{:s}'.format(self.eval_save_dir))
+        image = []
+        mask = []
+        gt = []
+        output = []
+        output_comp = []
+
+        # mid index
+        mid_index = None
+
+        if partitions > dataset.__len__():
+            partitions = dataset.__len__()
+        if dataset.__len__() % partitions != 0:
+            print("WARNING: The size of the dataset should be dividable by the number of partitions. The last "
+                  + str(dataset.__len__() % partitions) + " time steps will not be infilled.")
+        for split in range(partitions):
+            image_part, mask_part, gt_part = zip(*[dataset[i + split * (dataset.__len__() // partitions)] for i in range(dataset.__len__() // partitions)])
+            image_part = torch.stack(image_part)
+            mask_part = torch.stack(mask_part)
+            gt_part = torch.stack(gt_part)
+
+            # get results from trained network
+            with torch.no_grad():
+                output_part, _ = model(image_part.to(device), mask_part.to(device))
+            output_part = output_part.to(torch.device('cpu'))
+
+            # only select mid indexed-element
+            if not mid_index:
+                mid_index = torch.tensor([(image_part.shape[1] // 2)],dtype=torch.long)
+            image_part = torch.index_select(image_part, dim=1, index=mid_index)
+            mask_part = torch.index_select(mask_part, dim=1, index=mid_index)
+            gt_part = torch.index_select(gt_part, dim=1, index=mid_index)
+
+            # create output_comp
+            output_comp_part = mask_part * image_part + (1 - mask_part) * output_part
+
+            image.append(image_part)
+            mask.append(mask_part)
+            gt.append(gt_part)
+            output.append(output_part)
+            output_comp.append(output_comp_part)
+
+        image = torch.cat(image)
+        mask = torch.cat(mask)
+        gt = torch.cat(gt)
+        output = torch.cat(output)
+        output_comp = torch.cat(output_comp)
+
+        cvar = [image, mask, output, output_comp, gt]
+        cname = ['image', 'mask', 'output', 'output_comp', 'gt']
+        dname = ['time', 'lat', 'lon']
+        for x in range(0, 5):
+            h5 = h5py.File('%s' % (self.eval_save_dir + cname[x]), 'w')
+            h5.create_dataset(self.variable, data=cvar[x])
+            for dim in range(0, 3):
+                h5[self.variable].dims[dim].label = dname[dim]
+            h5.close()
+
+        # convert to netCDF files
+        self.convert_h5_to_netcdf(True, 'image')
+        self.convert_h5_to_netcdf(False, 'gt')
+        self.convert_h5_to_netcdf(False, 'output')
+        self.convert_h5_to_netcdf(False, 'output_comp')
