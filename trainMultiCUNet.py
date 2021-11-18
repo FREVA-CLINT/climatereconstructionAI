@@ -68,7 +68,7 @@ else:
 
 # define optimizer and loss functions
 optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
-criterion = PrecipitationInpaintingLoss().to(device)
+criterion = PrevNextInpaintingLoss(VGG16FeatureExtractor()).to(device)
 
 # define start point
 start_iter = 0
@@ -88,7 +88,7 @@ for i in tqdm(range(start_iter, args.max_iter)):
 
     # calculate loss function and apply backpropagation
     loss = 0.0
-    for key, coef in opt.LAMBDA_DICT_PR_INPAINTING.items():
+    for key, coef in opt.LAMBDA_DICT_IMG_INPAINTING.items():
         value = coef * loss_dict[key]
         loss += value
         if (i + 1) % args.log_interval == 0:
