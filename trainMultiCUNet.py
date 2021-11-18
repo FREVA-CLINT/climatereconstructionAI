@@ -56,9 +56,8 @@ def evaluate(model, dataset, device, filename):
     gt = torch.index_select(gt, dim=1, index=mid_index)
     mask = torch.index_select(mask, dim=1, index=mid_index)
 
-    output = output.to(torch.device('cpu'))
+    output = output.to(torch.device(device))
     output_comp = mask * image + (1 - mask) * output
-    print(output.shape)
 
     grid = make_grid(
         torch.cat(((image), mask, (output),
@@ -130,7 +129,7 @@ for i in tqdm(range(start_iter, args.max_iter)):
                   [('model', model)], [('optimizer', optimizer)], i + 1)
 
     # create snapshot image
-    if True:#(i + 1) % args.log_interval == 0:
+    if (i + 1) % args.log_interval == 0:
         model.eval()
         evaluate(model, dataset_val, device,
                  '{:s}/images/test_{:d}.jpg'.format(args.snapshot_dir, i + 1))
