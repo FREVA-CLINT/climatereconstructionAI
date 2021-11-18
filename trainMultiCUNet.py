@@ -47,12 +47,18 @@ def evaluate(model, dataset, device, filename):
     mask = torch.stack(mask)
     gt = torch.stack(gt)
 
-    print(gt.shape)
-
     with torch.no_grad():
         output, _ = model(image.to(device), mask.to(device))
+
+    # get mid indexed element
+    mid_index = torch.tensor([(image.shape[1] // 2)], dtype=torch.long).to(device)
+    image = torch.index_select(image, dim=1, index=mid_index)
+    gt = torch.index_select(gt, dim=1, index=mid_index)
+    mask = torch.index_select(mask, dim=1, index=mid_index)
+
     output = output.to(torch.device('cpu'))
     output_comp = mask * image + (1 - mask) * output
+    print(output.shape)
 
     grid = make_grid(
         torch.cat(((image), mask, (output),
@@ -124,7 +130,7 @@ for i in tqdm(range(start_iter, args.max_iter)):
                   [('model', model)], [('optimizer', optimizer)], i + 1)
 
     # create snapshot image
-    if (i + 1) % args.log_interval == 0:
+    if True:#(i + 1) % args.log_interval == 0:
         model.eval()
         evaluate(model, dataset_val, device,
                  '{:s}/images/test_{:d}.jpg'.format(args.snapshot_dir, i + 1))
