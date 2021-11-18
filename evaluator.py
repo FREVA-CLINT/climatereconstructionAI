@@ -66,7 +66,8 @@ class Evaluator:
                     image = imageio.imread(self.eval_save_dir + 'images/' + file + '_' + str(i) + '.jpg')
                     writer.append_data(image)
 
-    def create_evaluation_report(self, save_dir='evaluations/', create_evalutation_files=True, clean_data=True, infilled=True):
+    def create_evaluation_report(self, save_dir='evaluations/', create_evalutation_files=True, clean_data=True,
+                                 infilled=True):
         if not os.path.exists(self.eval_save_dir + save_dir):
             os.makedirs('{:s}'.format(self.eval_save_dir + save_dir))
         directory = self.eval_save_dir + save_dir
@@ -139,11 +140,15 @@ class Evaluator:
                      '2017-06-29T16', '2017-07-12T14', '2017-09-02T13']
         i = 0
         for date in dates:
-            cdo.select('date=' + date, input=self.eval_save_dir + 'image.nc', output=self.eval_save_dir + 'imagetmp' + str(i) + '.nc')
-            cdo.select('date=' + date, input=self.eval_save_dir + 'output_comp.nc', output=self.eval_save_dir + 'output_comptmp' + str(i) + '.nc')
-            cdo.select('date=' + date, input=self.eval_save_dir + 'gt.nc', output=self.eval_save_dir + 'gttmp' + str(i) + '.nc')
+            cdo.select('date=' + date, input=self.eval_save_dir + 'image.nc',
+                       output=self.eval_save_dir + 'imagetmp' + str(i) + '.nc')
+            cdo.select('date=' + date, input=self.eval_save_dir + 'output_comp.nc',
+                       output=self.eval_save_dir + 'output_comptmp' + str(i) + '.nc')
+            cdo.select('date=' + date, input=self.eval_save_dir + 'gt.nc',
+                       output=self.eval_save_dir + 'gttmp' + str(i) + '.nc')
         cdo.mergetime(input=self.eval_save_dir + 'imagetmp*', output=self.eval_save_dir + 'image_selected.nc')
-        cdo.mergetime(input=self.eval_save_dir + 'output_comptmp*', output=self.eval_save_dir + 'output_comp_selected.nc')
+        cdo.mergetime(input=self.eval_save_dir + 'output_comptmp*',
+                      output=self.eval_save_dir + 'output_comp_selected.nc')
         cdo.mergetime(input=self.eval_save_dir + 'gttmp*', output=self.eval_save_dir + 'gt_selected.nc')
         os.system('rm ' + self.eval_save_dir + '*tmp*')
 
@@ -157,26 +162,37 @@ class Evaluator:
         gt = 'gt.nc'
         if clean_data:
             cdo.gec(0.0, input=self.eval_save_dir + 'output_comp.nc', output=self.eval_save_dir + 'tmp.nc')
-            cdo.mul(input=self.eval_save_dir + 'output_comp.nc ' + self.eval_save_dir + 'tmp.nc', output=self.eval_save_dir + 'output_comp_cleaned.nc')
+            cdo.mul(input=self.eval_save_dir + 'output_comp.nc ' + self.eval_save_dir + 'tmp.nc',
+                    output=self.eval_save_dir + 'output_comp_cleaned.nc')
             os.system('rm ' + self.eval_save_dir + 'tmp.nc')
             output_comp = 'output_comp_cleaned.nc'
         if infilled:
-            cdo.ifnotthen(input=self.mask_dir + ' ' + self.eval_save_dir + output_comp, output=self.eval_save_dir + 'infilled_output_comp.nc')
+            cdo.ifnotthen(input=self.mask_dir + ' ' + self.eval_save_dir + output_comp,
+                          output=self.eval_save_dir + 'infilled_output_comp.nc')
             output_comp = 'infilled_output_comp.nc'
-            cdo.ifnotthen(input=self.mask_dir + ' ' + self.eval_save_dir + gt, output=self.eval_save_dir + 'infilled_gt.nc')
+            cdo.ifnotthen(input=self.mask_dir + ' ' + self.eval_save_dir + gt,
+                          output=self.eval_save_dir + 'infilled_gt.nc')
             gt = 'infilled_gt.nc'
 
         # create correlation
-        cdo.timcor(input='-hourmean -fldmean ' + self.eval_save_dir + output_comp + ' -hourmean -fldmean ' + self.eval_save_dir + gt, output=save_dir + 'timcor.nc')
+        cdo.timcor(
+            input='-hourmean -fldmean ' + self.eval_save_dir + output_comp + ' -hourmean -fldmean ' + self.eval_save_dir + gt,
+            output=save_dir + 'timcor.nc')
         # create sum in field
-        cdo.timcor(input='-hourmean -fldsum ' + self.eval_save_dir + output_comp + ' -hourmean -fldsum ' + self.eval_save_dir + gt, output=save_dir + 'fldsum_timcor.nc')
+        cdo.timcor(
+            input='-hourmean -fldsum ' + self.eval_save_dir + output_comp + ' -hourmean -fldsum ' + self.eval_save_dir + gt,
+            output=save_dir + 'fldsum_timcor.nc')
         # create mse
-        cdo.sqrt(input='-timmean -sqr -sub -hourmean -fldmean ' + self.eval_save_dir + output_comp + ' -hourmean -fldmean ' + self.eval_save_dir + gt, output=save_dir + 'mse.nc')
+        cdo.sqrt(
+            input='-timmean -sqr -sub -hourmean -fldmean ' + self.eval_save_dir + output_comp + ' -hourmean -fldmean ' + self.eval_save_dir + gt,
+            output=save_dir + 'mse.nc')
         # create total fldsum
         cdo.fldsum(input='-timsum ' + self.eval_save_dir + output_comp, output=save_dir + 'fldsum_output_comp.nc')
         cdo.fldsum(input='-timsum ' + self.eval_save_dir + gt, output=save_dir + 'fldsum_gt.nc')
         # create timeseries of time correlation
-        cdo.fldcor(input='-setmisstoc,0 ' + self.eval_save_dir + output_comp + ' -setmisstoc,0 ' + self.eval_save_dir + gt, output=save_dir + 'time_series.nc')
+        cdo.fldcor(
+            input='-setmisstoc,0 ' + self.eval_save_dir + output_comp + ' -setmisstoc,0 ' + self.eval_save_dir + gt,
+            output=save_dir + 'time_series.nc')
         # create min max mean time series
         cdo.fldmax(input=self.eval_save_dir + output_comp, output=save_dir + 'output_comp_max.nc')
         cdo.fldmax(input=self.eval_save_dir + gt, output=save_dir + 'gt_max.nc')
@@ -188,19 +204,21 @@ class Evaluator:
     def convert_h5_to_netcdf(self, create_structure_template, file):
         if create_structure_template:
             os.system('ncdump ' + self.test_dir + '*.h5 > ' + self.eval_save_dir + 'tmp_dump.txt')
-            os.system('sed "/.*' + self.variable + ' =.*/{s///;q;}" ' + self.eval_save_dir + 'tmp_dump.txt > ' + self.eval_save_dir + 'structure.txt')
+            os.system(
+                'sed "/.*' + self.variable + ' =.*/{s///;q;}" ' + self.eval_save_dir + 'tmp_dump.txt > ' + self.eval_save_dir + 'structure.txt')
             os.system('rm ' + self.eval_save_dir + 'tmp_dump.txt')
         cdo = Cdo()
         os.system('cat ' + self.eval_save_dir + 'structure.txt >> ' + self.eval_save_dir + file + '.txt')
-        os.system('ncdump -v ' + self.variable + ' ' + self.eval_save_dir + file + ' | sed -e "1,/data:/d" >> ' + self.eval_save_dir + file + '.txt')
+        os.system(
+            'ncdump -v ' + self.variable + ' ' + self.eval_save_dir + file + ' | sed -e "1,/data:/d" >> ' + self.eval_save_dir + file + '.txt')
         os.system('ncgen -o ' + self.eval_save_dir + 'output-tmp ' + self.eval_save_dir + file + '.txt')
-        cdo.setgrid(self.test_dir + '*.h5', input=self.eval_save_dir + 'output-tmp', output=self.eval_save_dir + file + '.nc')
+        cdo.setgrid(self.test_dir + '*.h5', input=self.eval_save_dir + 'output-tmp',
+                    output=self.eval_save_dir + file + '.nc')
         os.system('rm ' + self.eval_save_dir + file + '.txt ' + self.eval_save_dir + 'output-tmp')
 
 
 class LSTMEvaluator(Evaluator):
     def infill(self, model, dataset, device, partitions):
-        partitions = 10
         if not os.path.exists(self.eval_save_dir):
             os.makedirs('{:s}'.format(self.eval_save_dir))
         image = []
@@ -218,50 +236,50 @@ class LSTMEvaluator(Evaluator):
             print("WARNING: The size of the dataset should be dividable by the number of partitions. The last "
                   + str(dataset.__len__() % partitions) + " time steps will not be infilled.")
         for split in range(partitions):
-            image_part, mask_part, gt_part = zip(*[dataset[i + split * (dataset.__len__() // partitions)] for i in range(100 // partitions)])
+            image_part, mask_part, gt_part = zip(
+                *[dataset[i + split * (dataset.__len__() // partitions)] for i in range(dataset.__len__() // partitions)])
             image_part = torch.stack(image_part)
             mask_part = torch.stack(mask_part)
             gt_part = torch.stack(gt_part)
-
             # get results from trained network
             with torch.no_grad():
                 # initialize lstm states
                 lstm_states = model.init_lstm_states(batch_size=image_part.shape[0], image_size=image_part.shape[3],
                                                      device=device)
                 output_part = model(image_part.to(device), lstm_states, mask_part.to(device))
+
             output_part = output_part.to(torch.device('cpu'))
 
-            # only select mid indexed-element
-            if not mid_index:
-                mid_index = torch.tensor([(image_part.shape[1] // 2)],dtype=torch.long)
-            image_part = torch.index_select(image_part, dim=1, index=mid_index)
-            mask_part = torch.index_select(mask_part, dim=1, index=mid_index)
-            gt_part = torch.index_select(gt_part, dim=1, index=mid_index)
+            image_part = image_part[:, 0, 0, :, :]
+            mask_part = mask_part[:, 0, 0, :, :]
+            gt_part = gt_part[:, 0, 0, :, :]
 
-            # create output_comp
-            output_comp_part = mask_part * image_part + (1 - mask_part) * output_part
+            lstm_steps = output_part.shape[1]
+
+            if split == 0:
+                if split != partitions - 1:
+                    output_part = torch.cat(
+                        [output_part[0, :lstm_steps - 1, 0, :, :], output_part[:, lstm_steps - 1, 0, :, :]])
+                else:
+                    output_part = torch.cat([output_part[0, :lstm_steps - 1, 0, :, :],
+                                             output_part[:-(lstm_steps - 1), lstm_steps - 1, 0, :, :]])
+            elif split == partitions - 1:
+                output_part = output_part[:-(lstm_steps - 1), lstm_steps - 1, 0, :, :]
+            else:
+                output_part = output_part[:, lstm_steps - 1, 0, :, :]
 
             image.append(image_part)
             mask.append(mask_part)
             gt.append(gt_part)
             output.append(output_part)
-            output_comp.append(output_comp_part)
 
-        image = torch.cat(image)[:,0,0,:,:]
-        mask = torch.cat(mask)[:,0,0,:,:]
-        gt = torch.cat(gt)[:,0,0,:,:]
+        image = torch.cat(image)
+        mask = torch.cat(mask)
+        gt = torch.cat(gt)
+        output = torch.cat(output)
 
-        lstm_steps = output[0].shape[1]
-
-        first_states_output = output[0][0,:lstm_steps-1,0,:,:]
-        next_states_output = torch.cat([output[i][:,lstm_steps-1,0,:,:] for i in range(output.__len__()-1)])
-        last_states_output = output[output.__len__()-1][:-(lstm_steps-1),lstm_steps-1,0,:,:]
-        output = torch.cat([first_states_output, next_states_output, last_states_output], dim=0)
-
-        first_states_output_comp = output_comp[0][0,:lstm_steps-1,0,:,:]
-        next_states_output_comp = torch.cat([output_comp[i][:,lstm_steps-1,0,:,:] for i in range(output_comp.__len__()-1)])
-        last_states_output_comp = output_comp[output_comp.__len__()-1][:-(lstm_steps-1),lstm_steps-1,0,:,:]
-        output_comp = torch.cat([first_states_output_comp, next_states_output_comp, last_states_output_comp], dim=0)
+        # create output_comp
+        output_comp = mask * image + (1 - mask) * output
 
         cvar = [image, mask, output, output_comp, gt]
         cname = ['image', 'mask', 'output', 'output_comp', 'gt']
@@ -299,7 +317,8 @@ class MultiCEvaluator(Evaluator):
             print("WARNING: The size of the dataset should be dividable by the number of partitions. The last "
                   + str(dataset.__len__() % partitions) + " time steps will not be infilled.")
         for split in range(partitions):
-            image_part, mask_part, gt_part = zip(*[dataset[i + split * (dataset.__len__() // partitions)] for i in range(dataset.__len__() // partitions)])
+            image_part, mask_part, gt_part = zip(*[dataset[i + split * (dataset.__len__() // partitions)] for i in
+                                                   range(dataset.__len__() // partitions)])
             image_part = torch.stack(image_part)
             mask_part = torch.stack(mask_part)
             gt_part = torch.stack(gt_part)
@@ -311,7 +330,7 @@ class MultiCEvaluator(Evaluator):
 
             # only select mid indexed-element
             if not mid_index:
-                mid_index = torch.tensor([(image_part.shape[1] // 2)],dtype=torch.long)
+                mid_index = torch.tensor([(image_part.shape[1] // 2)], dtype=torch.long)
             image_part = torch.index_select(image_part, dim=1, index=mid_index)
             mask_part = torch.index_select(mask_part, dim=1, index=mid_index)
             gt_part = torch.index_select(gt_part, dim=1, index=mid_index)
