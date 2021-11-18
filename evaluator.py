@@ -298,7 +298,7 @@ class LSTMEvaluator(Evaluator):
         self.convert_h5_to_netcdf(False, 'output_comp')
 
 
-class MultiCEvaluator(Evaluator):
+class MultiChEvaluator(Evaluator):
     def infill(self, model, dataset, device, partitions):
         if not os.path.exists(self.eval_save_dir):
             os.makedirs('{:s}'.format(self.eval_save_dir))

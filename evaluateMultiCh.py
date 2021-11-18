@@ -3,7 +3,7 @@ import argparse
 import torch
 
 from MultiChannelPConvUNet import MultiChannelPConvUNet
-from evaluator import Evaluator
+from evaluator import MultiChEvaluator
 from netcdfloader import PrevNextNetCDFDataLoader
 from util.io import load_ckpt
 
@@ -26,7 +26,7 @@ arg_parser.add_argument('--create-report', action='store_true')
 
 args = arg_parser.parse_args()
 
-evaluator = Evaluator(args.evaluation_dir, args.mask_dir, args.data_root_dir + 'test_large/', args.data_type)
+evaluator = MultiChEvaluator(args.evaluation_dir, args.mask_dir, args.data_root_dir + 'test_large/', args.data_type)
 device = torch.device(args.device)
 
 
