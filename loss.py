@@ -161,7 +161,7 @@ class PrecipitationInpaintingLoss(nn.Module):
         L30 = torch.sum(
             (torch.sigmoid((output_comp - 30) * c) - torch.sigmoid((gt - 30) * c)) ** 2
         )
-        loss_dict['SSL-OUT-COMP'] = -(L20 + L30)
+        loss_dict['SSL-OUT-COMP'] = (L20 + L30)
 
         loss_dict['L1-OUT'] = self.l1(output, gt)
         loss_dict['L1-OUT-COMP'] = self.l1(output_comp, gt)
