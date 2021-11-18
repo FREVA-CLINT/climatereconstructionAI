@@ -228,7 +228,6 @@ class LSTMEvaluator(Evaluator):
                 # initialize lstm states
                 lstm_states = model.init_lstm_states(batch_size=image_part.shape[0], image_size=image_part.shape[3],
                                                      device=device)
-                print(image_part.shape)
                 output_part = model(image_part.to(device), lstm_states, mask_part.to(device))
             output_part = output_part.to(torch.device('cpu'))
 
@@ -255,12 +254,12 @@ class LSTMEvaluator(Evaluator):
         lstm_steps = output[0].shape[1]
 
         first_states_output = output[0][0,:lstm_steps-1,0,:,:]
-        next_states_output = torch.cat([output[i][:,lstm_steps-1,0,:,:] for i in range(1, output.__len__()-1)])
+        next_states_output = torch.cat([output[i][:,lstm_steps-1,0,:,:] for i in range(output.__len__()-1)])
         last_states_output = output[output.__len__()-1][:-(lstm_steps-1),lstm_steps-1,0,:,:]
         output = torch.cat([first_states_output, next_states_output, last_states_output], dim=0)
 
         first_states_output_comp = output_comp[0][0,:lstm_steps-1,0,:,:]
-        next_states_output_comp = torch.cat([output_comp[i][:,lstm_steps-1,0,:,:] for i in range(1, output_comp.__len__()-1)])
+        next_states_output_comp = torch.cat([output_comp[i][:,lstm_steps-1,0,:,:] for i in range(output_comp.__len__()-1)])
         last_states_output_comp = output_comp[output_comp.__len__()-1][:-(lstm_steps-1),lstm_steps-1,0,:,:]
         output_comp = torch.cat([first_states_output_comp, next_states_output_comp, last_states_output_comp], dim=0)
 
