@@ -22,7 +22,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --evaluation-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/evaluation/precipitation/radolan-lstm/ \
  --lstm-steps 3 \
  --partitions 10 \
- --infill infill \
+ --infill test \
 # --create-images 2017-07-12-14:00,2017-07-12-14:00 \
 # --create-video \
 # --create-report \
