@@ -1,6 +1,8 @@
 import argparse
 import os
 import torch
+from torchvision.utils import make_grid, save_image
+
 import opt
 from tensorboardX import SummaryWriter
 from torch.utils import data
@@ -25,7 +27,7 @@ arg_parser.add_argument('--finetune', action='store_true')
 arg_parser.add_argument('--lr', type=float, default=2e-4)
 arg_parser.add_argument('--lr-finetune', type=float, default=5e-5)
 arg_parser.add_argument('--max-iter', type=int, default=1000000)
-arg_parser.add_argument('--log-interval', type=int, default=10000)
+arg_parser.add_argument('--log-interval', type=int, default=1000)
 arg_parser.add_argument('--save-model-interval', type=int, default=50000)
 arg_parser.add_argument('--prev-next', type=int, default=0)
 arg_parser.add_argument('--lstm-steps', type=int, default=0)
@@ -39,6 +41,24 @@ parser = argparse.ArgumentParser()
 torch.backends.cudnn.benchmark = True
 device = torch.device(args.device)
 
+def evaluate(model, dataset, device, filename):
+    image, mask, gt = zip(*[dataset[i] for i in range(8)])
+    image = torch.stack(image)
+    mask = torch.stack(mask)
+    gt = torch.stack(gt)
+
+    print(gt.shape)
+
+    with torch.no_grad():
+        output, _ = model(image.to(device), mask.to(device))
+    output = output.to(torch.device('cpu'))
+    output_comp = mask * image + (1 - mask) * output
+
+    grid = make_grid(
+        torch.cat(((image), mask, (output),
+                   (output_comp), (gt)), dim=0))
+    save_image(grid, filename)
+
 if not os.path.exists(args.snapshot_dir):
     os.makedirs('{:s}/images'.format(args.snapshot_dir))
     os.makedirs('{:s}/ckpt'.format(args.snapshot_dir))
@@ -49,6 +69,7 @@ writer = SummaryWriter(log_dir=args.log_dir)
 
 # define data set + iterator
 dataset_train = NetCDFDataLoader(args.data_root_dir, args.mask_dir, 'train', args.data_type, args.prev_next)
+dataset_val = NetCDFDataLoader(args.data_root_dir, args.mask_dir, 'val', args.data_type, args.prev_next)
 iterator_train = iter(data.DataLoader(dataset_train, batch_size=args.batch_size,
                                       sampler=InfiniteSampler(len(dataset_train)),
                                       num_workers=args.n_threads))
@@ -102,4 +123,11 @@ for i in tqdm(range(start_iter, args.max_iter)):
         save_ckpt('{:s}/ckpt/{:d}.pth'.format(args.snapshot_dir, i + 1),
                   [('model', model)], [('optimizer', optimizer)], i + 1)
 
+    # create snapshot image
+    if (i + 1) % args.log_interval == 0:
+        model.eval()
+        evaluate(model, dataset_val, device,
+                 '{:s}/images/test_{:d}.jpg'.format(args.snapshot_dir, i + 1))
+
 writer.close()
+
