@@ -10,6 +10,8 @@ from tqdm import tqdm
 from PConvLSTM import PConvLSTM
 from PConvLSTM import VGG16FeatureExtractor
 from util.io import load_ckpt, save_ckpt
+from netcdfloader import LSTMNetCDFDataLoader as NetCDFDataLoader, InfiniteSampler
+from loss import LSTMInpaintingLoss as InpaintingLoss
 
 arg_parser = argparse.ArgumentParser()
 arg_parser.add_argument('--data-type', type=str, default='tas')
@@ -33,17 +35,6 @@ arg_parser.add_argument('--encoding-layers', type=int, default=3)
 arg_parser.add_argument('--pooling-layers', type=int, default=0)
 arg_parser.add_argument('--image-size', type=int, default=72)
 args = arg_parser.parse_args()
-
-if args.lstm_steps != 0:
-    from netcdfloader import LSTMNetCDFDataLoader as NetCDFDataLoader, InfiniteSampler
-    from loss import LSTMInpaintingLoss as InpaintingLoss
-elif args.prev_next != 0:
-    from netcdfloader import PrevNextNetCDFDataLoader as NetCDFDataLoader
-    from loss import PrevNextInpaintingLoss as InpaintingLoss
-else:
-    from netcdfloader import SimpleNetCDFDataLoader as NetCDFDataLoader
-    from loss import InpaintingLoss
-
 
 parser = argparse.ArgumentParser()
 
