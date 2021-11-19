@@ -96,7 +96,7 @@ for i in tqdm(range(start_iter, args.max_iter)):
     model.train()
     image, mask, gt = [x.to(device) for x in next(iterator_train)]
     output = model(image, lstm_states, mask)
-    loss_dict = criterion(image, mask, output, gt)
+    loss_dict = criterion(image, mask, output, gt, device)
 
     # calculate loss function and apply backpropagation
     loss = 0.0

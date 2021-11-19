@@ -249,24 +249,11 @@ class LSTMEvaluator(Evaluator):
                 output_part = model(image_part.to(device), lstm_states, mask_part.to(device))
 
             output_part = output_part.to(torch.device('cpu'))
+            lstm_steps = output_part.shape[1] - 1
 
-            image_part = image_part[:, 0, 0, :, :]
-            mask_part = mask_part[:, 0, 0, :, :]
-            gt_part = gt_part[:, 0, 0, :, :]
-
-            lstm_steps = output_part.shape[1]
-
-            if split == 0:
-                if split != partitions - 1:
-                    output_part = torch.cat(
-                        [output_part[0, :lstm_steps - 1, 0, :, :], output_part[:, lstm_steps - 1, 0, :, :]])
-                else:
-                    output_part = torch.cat([output_part[0, :lstm_steps - 1, 0, :, :],
-                                             output_part[:-(lstm_steps - 1), lstm_steps - 1, 0, :, :]])
-            elif split == partitions - 1:
-                output_part = output_part[:-(lstm_steps - 1), lstm_steps - 1, 0, :, :]
-            else:
-                output_part = output_part[:, lstm_steps - 1, 0, :, :]
+            image_part = image_part[:, lstm_steps, :, :, :]
+            mask_part = mask_part[:, lstm_steps, :, :, :]
+            gt_part = gt_part[:, lstm_steps, :, :, :]
 
             image.append(image_part)
             mask.append(mask_part)

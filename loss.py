@@ -16,7 +16,7 @@ def gram_matrix(feat):
 def total_variation_loss(image):
     # shift one pixel and get difference (for both x and y direction)
     loss = torch.mean(torch.abs(image[:, :, :, :-1] - image[:, :, :, 1:])) + \
-        torch.mean(torch.abs(image[:, :, :-1, :] - image[:, :, 1:, :]))
+           torch.mean(torch.abs(image[:, :, :-1, :] - image[:, :, 1:, :]))
     return loss
 
 
@@ -58,7 +58,7 @@ class InpaintingLoss(nn.Module):
 class PrevNextInpaintingLoss(InpaintingLoss):
     def forward(self, input, mask, output, gt, device):
         # get mid indexed element
-        mid_index = torch.tensor([(input.shape[1] // 2)],dtype=torch.long).to(device)
+        mid_index = torch.tensor([(input.shape[1] // 2)], dtype=torch.long).to(device)
         input = torch.index_select(input, dim=1, index=mid_index)
         gt = torch.index_select(gt, dim=1, index=mid_index)
         mask = torch.index_select(mask, dim=1, index=mid_index)
@@ -92,7 +92,7 @@ class PrevNextInpaintingLoss(InpaintingLoss):
 
 
 class LSTMInpaintingLoss(InpaintingLoss):
-    def forward(self, input, mask, output, gt):
+    def forward(self, input, mask, output, gt, device):
         loss_dict = {}
         loss_dict['hole'] = 0.0
         loss_dict['valid'] = 0.0
@@ -100,33 +100,34 @@ class LSTMInpaintingLoss(InpaintingLoss):
         loss_dict['style'] = 0.0
         loss_dict['tv'] = 0.0
 
-        for t in range(input.shape[1]):
-            input_part = input[:,t,:,:,:]
-            mask_part = mask[:,t,:,:,:]
-            output_part = output[:,t,:,:,:]
-            gt_part = gt[:,t,:,:,:]
+        lstm_steps = input.shape[1] - 1
 
-            # create output_comp
-            output_comp = mask_part * input_part + (1 - mask_part) * output_part
+        input_part = input[:, lstm_steps, :, :, :]
+        mask_part = mask[:, lstm_steps, :, :, :]
+        output_part = output[:, lstm_steps, :, :, :]
+        gt_part = gt[:, lstm_steps, :, :, :]
 
-            # define different loss function from features from output and output_comp
-            feat_output = self.extractor(torch.cat([output_part] * 3, 1))
-            feat_output_comp = self.extractor(torch.cat([output_comp] * 3, 1))
-            feat_gt = self.extractor(torch.cat([gt_part] * 3, 1))
+        # create output_comp
+        output_comp = mask_part * input_part + (1 - mask_part) * output_part
 
-            # add loss functions from output and output_comp
-            loss_dict['hole'] += self.l1((1 - mask_part) * output_part, (1 - mask_part) * gt_part)
-            loss_dict['valid'] += self.l1(mask_part * output_part, mask_part * gt_part)
+        # define different loss function from features from output and output_comp
+        feat_output = self.extractor(torch.cat([output_part] * 3, 1))
+        feat_output_comp = self.extractor(torch.cat([output_comp] * 3, 1))
+        feat_gt = self.extractor(torch.cat([gt_part] * 3, 1))
 
-            for i in range(3):
-                loss_dict['prc'] += self.l1(feat_output[i], feat_gt[i])
-                loss_dict['prc'] += self.l1(feat_output_comp[i], feat_gt[i])
-                loss_dict['style'] += self.l1(gram_matrix(feat_output[i]),
-                                              gram_matrix(feat_gt[i]))
-                loss_dict['style'] += self.l1(gram_matrix(feat_output_comp[i]),
-                                              gram_matrix(feat_gt[i]))
+        # add loss functions from output and output_comp
+        loss_dict['hole'] += self.l1((1 - mask_part) * output_part, (1 - mask_part) * gt_part)
+        loss_dict['valid'] += self.l1(mask_part * output_part, mask_part * gt_part)
 
-            loss_dict['tv'] += total_variation_loss(output_comp)
+        for i in range(3):
+            loss_dict['prc'] += self.l1(feat_output[i], feat_gt[i])
+            loss_dict['prc'] += self.l1(feat_output_comp[i], feat_gt[i])
+            loss_dict['style'] += self.l1(gram_matrix(feat_output[i]),
+                                          gram_matrix(feat_gt[i]))
+            loss_dict['style'] += self.l1(gram_matrix(feat_output_comp[i]),
+                                          gram_matrix(feat_gt[i]))
+
+        loss_dict['tv'] += total_variation_loss(output_comp)
 
         return loss_dict
 
@@ -139,7 +140,7 @@ class PrecipitationInpaintingLoss(nn.Module):
     def forward(self, input, mask, output, gt, device):
         loss_dict = {}
         # get mid indexed element
-        mid_index = torch.tensor([(input.shape[1] // 2)],dtype=torch.long).to(device)
+        mid_index = torch.tensor([(input.shape[1] // 2)], dtype=torch.long).to(device)
         input = torch.index_select(input, dim=1, index=mid_index)
         gt = torch.index_select(gt, dim=1, index=mid_index)
         mask = torch.index_select(mask, dim=1, index=mid_index)
@@ -174,7 +175,7 @@ class PrecipitationInpaintingLoss(nn.Module):
         loss_dict['prc'] = self.l1(output, gt)
         loss_dict['prc'] += self.l1(output_comp, gt)
         loss_dict['style'] = self.l1(gram_matrix(output),
-                                      gram_matrix(gt))
+                                     gram_matrix(gt))
         loss_dict['style'] += self.l1(gram_matrix(output_comp),
                                       gram_matrix(gt))
 
@@ -202,7 +203,7 @@ def rainfall_to_pixel(rainfall_intensity, a=58.53, b=1.56):
 
 
 def dBZ_to_rainfall(dBZ, a=58.53, b=1.56):
-    return np.power(10, (dBZ - 10 * np.log10(a))/(10*b))
+    return np.power(10, (dBZ - 10 * np.log10(a)) / (10 * b))
 
 
 class CrossEntropyLoss(nn.Module):

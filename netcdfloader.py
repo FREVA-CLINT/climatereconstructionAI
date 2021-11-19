@@ -163,44 +163,31 @@ class LSTMNetCDFDataLoader(NetCDFLoader):
     def __getitem__(self, index):
         img_data, mask_data = self.load_data()
 
-        # get img and mask from index
-        img_current = img_data[index, :, :]
-        img_current = torch.from_numpy(img_current[:, :])
-        img_current = img_current.unsqueeze(0)
-        if self.split == 'infill':
-            mask_current = mask_data[index, :, :]
-        else:
-            mask_current = mask_data[random.randint(0, self.mask_length - 1), :, :]
-        mask_current = torch.from_numpy(mask_current[:, :])
-        mask_current = mask_current.unsqueeze(0)
-        # get images previous and next to image
         img_total = []
-        img_total.append(img_current)
         mask_total = []
-        mask_total.append(mask_current)
-        for i in range(index, index + self.lstm_steps):
+        for i in range(self.lstm_steps + 1):
             # img
-            new_index = i
-            if new_index > self.img_length - 1:
-                new_index = self.img_length - 1
+            new_index = index - i
+            if new_index < 0:
+                new_index = 0
             # get next img
-            img_next = img_data[new_index, :, :]
-            img_next = torch.from_numpy(img_next[:, :])
-            img_next = img_next.unsqueeze(0)
-            img_total.append(img_next)
+            img_prev = img_data[new_index, :, :]
+            img_prev = torch.from_numpy(img_prev[:, :])
+            img_prev = img_prev.unsqueeze(0)
+            img_total.insert(0, img_prev)
 
             # mask
-            new_index = i
-            if new_index > self.mask_length-1:
-                new_index = self.mask_length-1
+            new_index = index - i
+            if new_index < 0:
+                new_index = 0
             # get next mask
             if self.split == 'infill':
-                mask_next = mask_data[new_index, :, :]
+                mask_prev = mask_data[new_index, :, :]
             else:
-                mask_next = mask_data[random.randint(0, self.mask_length - 1), :, :]
-            mask_next = torch.from_numpy(mask_next[:, :])
-            mask_next = mask_next.unsqueeze(0)
-            mask_total.append(mask_next)
+                mask_prev = mask_data[random.randint(0, self.mask_length - 1), :, :]
+            mask_prev = torch.from_numpy(mask_prev[:, :])
+            mask_prev = mask_prev.unsqueeze(0)
+            mask_total.insert(0, mask_prev)
         img_total = torch.cat(img_total)
         mask_total = torch.cat(mask_total)
 
