@@ -1,6 +1,8 @@
 import argparse
 import os
 import torch
+from torchvision.utils import make_grid, save_image
+
 import opt
 from tensorboardX import SummaryWriter
 from torch.utils import data
@@ -47,6 +49,35 @@ parser = argparse.ArgumentParser()
 
 torch.backends.cudnn.benchmark = True
 device = torch.device(args.device)
+
+def evaluate(model, dataset, device, filename):
+    image, mask, gt = zip(*[dataset[i] for i in range(8)])
+    image = torch.stack(image).to(device)
+    mask = torch.stack(mask).to(device)
+    gt = torch.stack(gt).to(device)
+
+    with torch.no_grad():
+        output, _ = model(image.to(device), mask.to(device))
+
+    lstm_states = image.shape[1] - 1
+    image = image[:,lstm_states,:,:,:]
+    gt = gt[:,lstm_states,:,:,:]
+    mask = mask[:,lstm_states,:,:,:]
+    output = output[:,lstm_states,:,:,:]
+
+    # get mid indexed element
+    mid_index = torch.tensor([(image.shape[1] // 2)], dtype=torch.long).to(device)
+    image = torch.index_select(image, dim=1, index=mid_index)
+    gt = torch.index_select(gt, dim=1, index=mid_index)
+    mask = torch.index_select(mask, dim=1, index=mid_index)
+
+    output = output.to(torch.device(device))
+    output_comp = mask * image + (1 - mask) * output
+
+    grid = make_grid(
+        torch.cat(((image), mask, (output),
+                   (output_comp), (gt)), dim=0))
+    save_image(grid, filename)
 
 if not os.path.exists(args.snapshot_dir):
     os.makedirs('{:s}/images'.format(args.snapshot_dir))
