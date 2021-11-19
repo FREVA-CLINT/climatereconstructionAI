@@ -146,7 +146,7 @@ class PrecipitationInpaintingLoss(nn.Module):
         # create output_comp
         output_comp = mask * input + (1 - mask) * output
 
-        c = 20
+        """c = 20
         L20 = torch.sum(
             (torch.sigmoid((output - 20) * c) - torch.sigmoid((gt - 20) * c)) ** 2
         )
@@ -154,20 +154,31 @@ class PrecipitationInpaintingLoss(nn.Module):
             (torch.sigmoid((output - 30) * c) - torch.sigmoid((gt - 30) * c)) ** 2
         )
         loss_dict['SSL-OUT'] = -(L20 + L30)
-
+    
         L20 = torch.sum(
             (torch.sigmoid((output_comp - 20) * c) - torch.sigmoid((gt - 20) * c)) ** 2
         )
         L30 = torch.sum(
             (torch.sigmoid((output_comp - 30) * c) - torch.sigmoid((gt - 30) * c)) ** 2
         )
-        loss_dict['SSL-OUT-COMP'] = (L20 + L30)
+        loss_dict['SSL-OUT-COMP'] = (L20 + L30)"""
 
-        loss_dict['L1-OUT'] = self.l1(output, gt)
-        loss_dict['L1-OUT-COMP'] = self.l1(output_comp, gt)
-        loss_dict['HOLE'] = self.l1((1 - mask) * output, (1 - mask) * gt)
-        loss_dict['STYLE-OUT'] = self.l1(gram_matrix(output), gram_matrix(gt))
-        loss_dict['STYLE-OUT-COMP'] = self.l1(gram_matrix(output_comp), gram_matrix(gt))
+        print(output.shape)
+        print(gt.shape)
+        print(output_comp.shape)
+
+        # add loss functions from output and output_comp
+        loss_dict['hole'] = self.l1((1 - mask) * output, (1 - mask) * gt)
+        loss_dict['valid'] = self.l1(mask * output, mask * gt)
+
+        loss_dict['prc'] = self.l1(output, gt)
+        loss_dict['prc'] += self.l1(output_comp, gt)
+        loss_dict['style'] = self.l1(gram_matrix(output),
+                                      gram_matrix(gt))
+        loss_dict['style'] += self.l1(gram_matrix(output_comp),
+                                      gram_matrix(gt))
+
+        loss_dict['tv'] = total_variation_loss(output_comp)
 
         return loss_dict
 
