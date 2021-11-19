@@ -25,7 +25,7 @@ arg_parser.add_argument('--finetune', action='store_true')
 arg_parser.add_argument('--lr', type=float, default=2e-4)
 arg_parser.add_argument('--lr-finetune', type=float, default=5e-5)
 arg_parser.add_argument('--max-iter', type=int, default=1000000)
-arg_parser.add_argument('--log-interval', type=int, default=1000)
+arg_parser.add_argument('--log-interval', type=int, default=100)
 arg_parser.add_argument('--save-model-interval', type=int, default=50000)
 arg_parser.add_argument('--prev-next', type=int, default=0)
 arg_parser.add_argument('--lstm-steps', type=int, default=0)
@@ -52,12 +52,16 @@ device = torch.device(args.device)
 
 def evaluate(model, dataset, device, filename):
     image, mask, gt = zip(*[dataset[i] for i in range(8)])
+    lstm_states = model.init_lstm_states(batch_size=8, image_size=args.image_size, device=device)
+
     image = torch.stack(image).to(device)
     mask = torch.stack(mask).to(device)
     gt = torch.stack(gt).to(device)
-
+    print(image.shape)
+    print(mask.shape)
+    print(gt.shape)
     with torch.no_grad():
-        output, _ = model(image.to(device), mask.to(device))
+        output = model(image.to(device), lstm_states, mask.to(device))
 
     lstm_states = image.shape[1] - 1
     image = image[:,lstm_states,:,:,:]
@@ -89,6 +93,7 @@ writer = SummaryWriter(log_dir=args.log_dir)
 
 # define data set + iterator
 dataset_train = NetCDFDataLoader(args.data_root_dir, args.mask_dir, 'train', args.data_type, args.lstm_steps)
+dataset_val = NetCDFDataLoader(args.data_root_dir, args.mask_dir, 'val', args.data_type, args.lstm_steps)
 iterator_train = iter(data.DataLoader(dataset_train, batch_size=args.batch_size,
                                       sampler=InfiniteSampler(len(dataset_train)),
                                       num_workers=args.n_threads))
@@ -144,5 +149,11 @@ for i in tqdm(range(start_iter, args.max_iter)):
     if (i + 1) % args.save_model_interval == 0 or (i + 1) == args.max_iter:
         save_ckpt('{:s}/ckpt/{:d}.pth'.format(args.snapshot_dir, i + 1),
                   [('model', model)], [('optimizer', optimizer)], i + 1)
+
+    # create snapshot image
+    if (i + 1) % args.log_interval == 0:
+        model.eval()
+        evaluate(model, dataset_val, device,
+                 '{:s}/images/test_{:d}.jpg'.format(args.snapshot_dir, i + 1))
 
 writer.close()
