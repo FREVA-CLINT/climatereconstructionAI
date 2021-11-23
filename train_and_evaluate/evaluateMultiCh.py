@@ -1,11 +1,12 @@
 import argparse
-
 import torch
+import sys
+sys.path.append('./')
 
-from MultiChannelPConvUNet import MultiChannelPConvUNet
-from evaluator import MultiChEvaluator
-from netcdfloader import PrevNextNetCDFDataLoader
-from util.io import load_ckpt
+from model.MultiChannelPConvUNet import MultiChannelPConvUNet
+from utils.evaluator import MultiChEvaluator
+from utils.netcdfloader import PrevNextNetCDFDataLoader
+from utils.io import load_ckpt
 
 arg_parser = argparse.ArgumentParser()
 arg_parser.add_argument('--data-type', type=str, default='tas')

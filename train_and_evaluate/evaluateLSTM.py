@@ -1,11 +1,12 @@
 import argparse
-
 import torch
+import sys
+sys.path.append('./')
 
-from PConvLSTM import PConvLSTM
-from evaluator import LSTMEvaluator
-from netcdfloader import LSTMNetCDFDataLoader
-from util.io import load_ckpt
+from model.PConvLSTM import PConvLSTM
+from utils.evaluator import LSTMEvaluator
+from utils.netcdfloader import LSTMNetCDFDataLoader
+from utils.io import load_ckpt
 
 arg_parser = argparse.ArgumentParser()
 arg_parser.add_argument('--data-type', type=str, default='tas')

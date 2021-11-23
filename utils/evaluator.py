@@ -1,15 +1,46 @@
 import h5py
 import torch
-from dateutil import parser
 import netCDF4
-from netCDF4 import Dataset
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import imageio
+import matplotlib.pyplot as plt
+
+from dateutil import parser
+from netCDF4 import Dataset
 from fpdf import FPDF
 from cdo import *
-import os
+from torchvision.utils import make_grid, save_image
+import config as cfg
+
+
+def create_snapshot_image(model, dataset, filename, lstm_steps=None):
+    image, mask, gt = zip(*[dataset[i] for i in range(8)])
+
+    image = torch.stack(image).to(cfg.device)
+    mask = torch.stack(mask).to(cfg.device)
+    gt = torch.stack(gt).to(cfg.device)
+    with torch.no_grad():
+        output = model(image.to(cfg.device), mask.to(cfg.device)).to(cfg.device)
+
+    if lstm_steps is not None:
+        print("YO")
+        image = image[:,lstm_steps,:,:,:]
+        gt = gt[:,lstm_steps,:,:,:]
+        mask = mask[:,lstm_steps,:,:,:]
+
+    # get mid indexed channel
+    mid_index = torch.tensor([(image.shape[1] // 2)], dtype=torch.long).to(cfg.device)
+    image = torch.index_select(image, dim=1, index=mid_index)
+    gt = torch.index_select(gt, dim=1, index=mid_index)
+    mask = torch.index_select(mask, dim=1, index=mid_index)
+
+    output_comp = mask * image + (1 - mask) * output
+
+    grid = make_grid(
+        torch.cat(((image), mask, (output),
+                   (output_comp), (gt)), dim=0))
+    save_image(grid, filename)
 
 
 def get_data(file, var):
