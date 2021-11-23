@@ -13,7 +13,7 @@ module load cuda/10.0.130
 module load singularity/3.6.1-gcc-9.1.0
 
 singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img_mistral.sif \
- python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/trainLSTM.py \
+ python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/train_and_evaluate/trainLSTM.py \
  --device cuda --batch-size 4 --image-size 512 --pooling-layers 3 --encoding-layers 4 --data-type pr \
  --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-complete-scaled/ \
  --mask-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/masks/single_radar_fail.h5 \
