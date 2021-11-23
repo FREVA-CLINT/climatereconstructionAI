@@ -24,7 +24,6 @@ def create_snapshot_image(model, dataset, filename, lstm_steps=None):
         output = model(image.to(cfg.device), mask.to(cfg.device)).to(cfg.device)
 
     if lstm_steps is not None:
-        print("YO")
         image = image[:,lstm_steps,:,:,:]
         gt = gt[:,lstm_steps,:,:,:]
         mask = mask[:,lstm_steps,:,:,:]
