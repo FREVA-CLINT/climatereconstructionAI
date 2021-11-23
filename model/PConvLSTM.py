@@ -5,12 +5,12 @@ import config as cfg
 
 
 class ConvLSTMBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel, stride, padding, dilation, groups, image_size, bias):
+    def __init__(self, in_channels, out_channels, image_size, kernel, stride, padding, dilation, groups, bias):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
-
-        self.lstm_conv = nn.Conv2d(in_channels + out_channels, 4*out_channels, kernel, stride, padding, dilation, groups, True)
+        self.image_size = image_size
+        self.lstm_conv = nn.Conv2d(in_channels + out_channels, 4*out_channels, kernel, stride, padding, dilation, groups, bias)
         self.mem_cell_conv = nn.Conv2d(in_channels // 2, out_channels, kernel, (1,1), padding, dilation, groups, False)
 
         self.Wci = nn.Parameter(torch.zeros(1, out_channels, image_size, image_size)).to(cfg.device)
@@ -32,7 +32,6 @@ class ConvLSTMBlock(nn.Module):
         combined_output = self.lstm_conv(combined_input)
 
         input, forget, gate, output = torch.split(combined_output, self.out_channels, dim=1)
-
         input = torch.sigmoid(input + self.Wci*mem_cell)
         forget = torch.sigmoid(forget + self.Wcf*mem_cell)
         gate = torch.tanh(gate + self.Wcg*mem_cell)
@@ -44,11 +43,10 @@ class ConvLSTMBlock(nn.Module):
 
 
 class PConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, in_channels_mask, kernel, stride, dilation=(1, 1), groups=1, image_size=72, bias=False):
+    def __init__(self, in_channels, out_channels, in_channels_mask, image_size, kernel, stride, dilation=(1, 1), groups=1, bias=False):
         super().__init__()
         padding = kernel[0] // 2, kernel[1] // 2
-        self.input_conv = ConvLSTMBlock(in_channels, out_channels, kernel, stride, padding, dilation, groups, image_size, bias)
-
+        self.input_conv = ConvLSTMBlock(in_channels, out_channels, image_size, kernel, stride, padding, dilation, groups, bias)
         self.mask_conv = nn.Conv2d(in_channels_mask, out_channels, kernel, stride, padding, dilation, groups, False)
 
         torch.nn.init.constant_(self.mask_conv.weight, 1.0)
@@ -79,10 +77,10 @@ class PConvBlock(nn.Module):
 
 
 class PConvLSTMActivationBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, in_channels_mask, kernel=(3, 3), stride=(1, 1),
-                 activation=None, image_size=72, bn=True, bias=False):
+    def __init__(self, in_channels, out_channels, in_channels_mask, image_size, kernel=(3, 3), stride=(1, 1),
+                 activation=None, bn=True, bias=False):
         super().__init__()
-        self.conv = PConvBlock(in_channels, out_channels, in_channels_mask, kernel, stride, image_size=image_size, bias=bias)
+        self.conv = PConvBlock(in_channels, out_channels, in_channels_mask, image_size, kernel, stride, bias=bias)
 
         if bn:
             self.bn = nn.BatchNorm2d(out_channels)
@@ -120,42 +118,66 @@ class PConvLSTM(nn.Module):
         self.net_depth = num_enc_dec_layers + num_pool_layers
 
         # define encoding layers
-        self.encoding_layers = []
-        self.encoding_layers.append(
-            PConvLSTMActivationBlock(self.num_in_channels, image_size // (2 ** (self.num_enc_dec_layers - 1)),self.num_in_channels,
-                                     (7, 7), (2, 2), nn.ReLU(), image_size // 2))
+        encoding_layers = []
+        encoding_layers.append(
+            PConvLSTMActivationBlock(
+                in_channels=self.num_in_channels,
+                out_channels=image_size // (2 ** (self.num_enc_dec_layers - 1)),
+                in_channels_mask=self.num_in_channels,
+                image_size=image_size // 2,
+                kernel=(7, 7), stride=(2, 2), activation=nn.ReLU()))
         for i in range(1, self.num_enc_dec_layers):
             if i == self.num_enc_dec_layers - 1:
-                self.encoding_layers.append(PConvLSTMActivationBlock(image_size // (2 ** (self.num_enc_dec_layers - i)),
-                                                                     image_size // (2 ** (
-                                                                             self.num_enc_dec_layers - i - 1)),image_size // (2 ** (self.num_enc_dec_layers - i)),
-                                                                     (3, 3), (2, 2), nn.ReLU(), image_size // (2**(i+1))))
+                encoding_layers.append(PConvLSTMActivationBlock(
+                    in_channels=image_size//(2**(self.num_enc_dec_layers-i)),
+                    out_channels=image_size//(2**(self.num_enc_dec_layers-i-1)),
+                    in_channels_mask=image_size // (2 ** (self.num_enc_dec_layers - i)),
+                    image_size=image_size // (2**(i+1)),
+                    kernel=(3, 3), stride=(2, 2), activation=nn.ReLU()))
             else:
-                self.encoding_layers.append(PConvLSTMActivationBlock(image_size // (2 ** (self.num_enc_dec_layers - i)),
-                                                                     image_size // (2 ** (
-                                                                             self.num_enc_dec_layers - i - 1)),image_size // (2 ** (self.num_enc_dec_layers - i)),
-                                                                     (5, 5), (2, 2), nn.ReLU(), image_size // (2**(i+1))))
-
+                encoding_layers.append(PConvLSTMActivationBlock(
+                    in_channels=image_size // (2 ** (self.num_enc_dec_layers - i)),
+                    out_channels=image_size // (2 ** (self.num_enc_dec_layers - i - 1)),
+                    in_channels_mask=image_size // (2 ** (self.num_enc_dec_layers - i)),
+                    image_size=image_size // (2 ** (i + 1)),
+                    kernel=(5, 5), stride=(2, 2), activation=nn.ReLU()))
         # define encoding pooling layers
         for i in range(self.num_pool_layers):
-            self.encoding_layers.append(PConvLSTMActivationBlock(image_size, image_size, (3, 3), (2, 2), nn.ReLU()))
-        self.encoding_layers = nn.ModuleList(self.encoding_layers)
+            encoding_layers.append(PConvLSTMActivationBlock(
+                in_channels=image_size,
+                out_channels=image_size,
+                in_channels_mask=image_size,
+                image_size=image_size // (2 ** (self.num_enc_dec_layers + i + 1)),
+                kernel=(3, 3), stride=(2, 2), activation=nn.ReLU()))
+        self.encoder = nn.ModuleList(encoding_layers)
 
         # define decoding pooling layers
-        self.decoding_layers = []
+        decoding_layers = []
         for i in range(self.num_pool_layers):
-            self.decoding_layers.append(PConvLSTMActivationBlock(image_size + image_size, image_size,
-                                                                 (3, 3), (1, 1), nn.LeakyReLU()))
+            decoding_layers.append(PConvLSTMActivationBlock(
+                in_channels=image_size + image_size,
+                out_channels=image_size,
+                in_channels_mask=image_size + image_size,
+                image_size=image_size // (2 ** (self.net_depth - i - 1)),
+                kernel=(3, 3), stride=(1, 1), activation=nn.LeakyReLU()))
 
         # define decoding layers
         for i in range(1, self.num_enc_dec_layers):
-            self.decoding_layers.append(
-                PConvLSTMActivationBlock(image_size // (2 ** (i - 1)) + image_size // (2 ** (i - 1)), image_size // (2 ** i), image_size // (2 ** (i - 1)) + image_size // (2 ** i),
-                                         (3, 3), (1, 1), nn.LeakyReLU(), image_size // (2 ** (self.net_depth - i))))
-        self.decoding_layers.append(
-            PConvLSTMActivationBlock(image_size // (2 ** (self.num_enc_dec_layers - 1)) + self.num_in_channels + 17, 1,image_size // (2 ** (self.num_enc_dec_layers - 1)) + self.num_in_channels,
-                                     (3, 3), (1, 1), None, image_size, bn=False, bias=True))
-        self.decoding_layers = nn.ModuleList(self.decoding_layers)
+            decoding_layers.append(
+                PConvLSTMActivationBlock(
+                    in_channels=image_size // (2 ** (i - 1)) + image_size // (2 ** (i - 1)),
+                    out_channels=image_size // (2 ** i),
+                    in_channels_mask=image_size // (2 ** (i - 1)) + image_size // (2 ** i),
+                    image_size=image_size // (2 ** (self.net_depth - self.num_pool_layers - i)),
+                    kernel=(3, 3), stride=(1, 1), activation=nn.LeakyReLU()))
+        decoding_layers.append(
+            PConvLSTMActivationBlock(
+                in_channels=2*(image_size // (2 ** (self.num_enc_dec_layers - 1))) + self.num_in_channels - 1,
+                out_channels=1,
+                in_channels_mask=image_size // (2 ** (self.num_enc_dec_layers - 1)) + self.num_in_channels,
+                image_size=image_size,
+                kernel=(3, 3), stride=(1, 1), activation=None, bn=False, bias=True))
+        self.decoder = nn.ModuleList(decoding_layers)
 
     def forward(self, input, input_mask):
         # get the number of time steps for LSTM
@@ -172,13 +194,15 @@ class PConvLSTM(nn.Module):
             hs_inner = []
             lstm_states_inner = []
             hs_mask_inner = []
+            print(str(i) + "enc")
             for j in range(num_time_steps):
-                h, lstm_state, h_mask = self.encoding_layers[i](input=hs[i][:, j, :, :, :],
-                                                                lstm_state=None,
-                                                                input_mask=hs_mask[i][:, j, :, :, :])
+                h, lstm_state, h_mask = self.encoder[i](input=hs[i][:, j, :, :, :],
+                                                        lstm_state=None,
+                                                        input_mask=hs_mask[i][:, j, :, :, :])
                 hs_inner.append(h)
                 lstm_states_inner.append(lstm_state)
                 hs_mask_inner.append(h_mask)
+                print(h.shape)
 
             hs.append(torch.stack(hs_inner, dim=1))
             lstm_states.append(lstm_states_inner)
@@ -187,6 +211,8 @@ class PConvLSTM(nn.Module):
         h_sequence, h_mask_sequence = hs[self.net_depth], hs_mask[self.net_depth]
         # forward pass decoding layers
         for i in range(self.net_depth):
+            print(str(i) + "dec")
+
             hs_inner = []
             hs_mask_inner = []
             for j in range(num_time_steps):
@@ -198,14 +224,14 @@ class PConvLSTM(nn.Module):
                 lstm_state_h, lstm_state_c = lstm_states[self.net_depth - 1 - i][j]
                 lstm_state_h = F.interpolate(lstm_state_h, scale_factor=2, mode='nearest')
                 lstm_state_c = F.interpolate(lstm_state_c, scale_factor=2, mode='nearest')
-                lstm_state_c = self.decoding_layers[i].conv.input_conv.mem_cell_conv(lstm_state_c)
+                lstm_state_c = self.decoder[i].conv.input_conv.mem_cell_conv(lstm_state_c)
 
-                # U-Net -> pass results from encoding layers to decoding layers
+                # skip layers: pass results from encoding layers to decoding layers
                 h = torch.cat([h, hs[self.net_depth - i - 1][:, j, :, :, :]], dim=1)
                 h_mask = torch.cat([h_mask, hs_mask[self.net_depth - i - 1][:, j, :, :, :]], dim=1)
-                h, lstm_state, h_mask = self.decoding_layers[i](input=h,
-                                                                lstm_state=(lstm_state_h, lstm_state_c),
-                                                                input_mask=h_mask)
+                h, lstm_state, h_mask = self.decoder[i](input=h,
+                                                        lstm_state=(lstm_state_h, lstm_state_c),
+                                                        input_mask=h_mask)
                 hs_inner.append(h)
                 hs_mask_inner.append(h_mask)
 
@@ -219,5 +245,5 @@ class PConvLSTM(nn.Module):
         super().train(mode)
         if self.freeze_enc_bn:
             for i in range(self.net_depth):
-                if isinstance(self.encoding_layers[i].bn, nn.BatchNorm2d):
-                    self.encoding_layers[i].eval()
+                if isinstance(self.encoder[i].bn, nn.BatchNorm2d):
+                    self.encoder[i].eval()
