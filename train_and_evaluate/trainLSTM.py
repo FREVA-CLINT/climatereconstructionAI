@@ -46,13 +46,13 @@ else:
 
 # define optimizer and loss functions
 optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
-criterion = InpaintingLoss(VGG16FeatureExtractor()).to(cfg.device)
+criterion = InpaintingLoss().to(cfg.device)
 
 # define start point
 start_iter = 0
 if cfg.resume:
     start_iter = load_ckpt(
-        cfg.resume, [('model', model)], device, [('optimizer', optimizer)])
+        cfg.resume, [('model', model)], cfg.device, [('optimizer', optimizer)])
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
     print('Starting from iter ', start_iter)

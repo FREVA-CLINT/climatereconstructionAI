@@ -40,9 +40,9 @@ class InpaintingLoss(nn.Module):
             feat_output_comp = self.extractor(torch.cat([output_comp] * 3, 1))
             feat_gt = self.extractor(torch.cat([gt] * 3, 1))
         else:
-            feat_output = torch.cat([output] * 3, 1)
-            feat_output_comp = torch.cat([output_comp] * 3, 1)
-            feat_gt = torch.cat([gt] * 3, 1)
+            feat_output = torch.cat([output] * 3, 1).permute(1,0,2,3).unsqueeze(1)
+            feat_output_comp = torch.cat([output_comp] * 3, 1).permute(1,0,2,3).unsqueeze(1)
+            feat_gt = torch.cat([gt] * 3, 1).permute(1,0,2,3).unsqueeze(1)
 
         loss_dict['prc'] = 0.0
         loss_dict['style'] = 0.0
