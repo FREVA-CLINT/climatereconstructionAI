@@ -35,9 +35,14 @@ class ConvLSTMBlock(nn.Module):
 
         input, forget, gate, output = torch.split(combined_output, self.out_channels, dim=1)
 
-        input = torch.sigmoid(input + self.Wci*mem_cell)
-        forget = torch.sigmoid(forget + self.Wcf*mem_cell)
-        output = torch.sigmoid(output + self.Wco*mem_cell)
+        if self.activation:
+            input = torch.sigmoid(input + self.Wci*mem_cell)
+            forget = torch.sigmoid(forget + self.Wcf*mem_cell)
+            output = torch.sigmoid(output + self.Wco*mem_cell)
+        else:
+            input = (input + self.Wci*mem_cell)
+            forget = (forget + self.Wcf*mem_cell)
+            output = (output + self.Wco*mem_cell)
 
         if self.activation:
             gate = self.activation(gate + self.Wcg*mem_cell)
