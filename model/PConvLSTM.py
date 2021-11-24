@@ -119,7 +119,6 @@ class PConvLSTM(nn.Module):
         self.net_depth = num_enc_dec_layers + num_pool_layers
 
         # define encoding layers
-        print("enc 1")
         encoding_layers = []
         encoding_layers.append(
             PConvLSTMActivationBlock(
@@ -129,8 +128,6 @@ class PConvLSTM(nn.Module):
                 image_size=image_size // 2,
                 kernel=(7, 7), stride=(2, 2), activation=nn.ReLU()))
         for i in range(1, self.num_enc_dec_layers):
-            print("enc "+str(i))
-
             if i == self.num_enc_dec_layers - 1:
                 encoding_layers.append(PConvLSTMActivationBlock(
                     in_channels=image_size//(2**(self.num_enc_dec_layers-i)),
@@ -167,8 +164,6 @@ class PConvLSTM(nn.Module):
 
         # define decoding layers
         for i in range(1, self.num_enc_dec_layers):
-            print("dec "+str(i))
-
             decoding_layers.append(
                 PConvLSTMActivationBlock(
                     in_channels=image_size // (2 ** (i - 1)) + image_size // (2 ** (i - 1)),
@@ -176,7 +171,6 @@ class PConvLSTM(nn.Module):
                     in_channels_mask=image_size // (2 ** (i - 1)) + image_size // (2 ** i),
                     image_size=image_size // (2 ** (self.net_depth - self.num_pool_layers - i)),
                     kernel=(3, 3), stride=(1, 1), activation=nn.LeakyReLU(), decoder=True))
-        print("dec 4")
 
         decoding_layers.append(
             PConvLSTMActivationBlock(
