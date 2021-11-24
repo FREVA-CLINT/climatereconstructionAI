@@ -91,8 +91,8 @@ class PConvLSTMActivationBlock(nn.Module):
         h, lstm_state, h_mask = self.conv(input, lstm_state, input_mask)
         if hasattr(self, 'bn'):
             h = self.bn(h)
-        if hasattr(self, 'activation'):
-            h = self.activation(h)
+        #if hasattr(self, 'activation'):
+        #    h = self.activation(h)
         return h, lstm_state, h_mask
 
 
@@ -194,7 +194,6 @@ class PConvLSTM(nn.Module):
             hs_inner = []
             lstm_states_inner = []
             hs_mask_inner = []
-            print(str(i) + "enc")
             for j in range(num_time_steps):
                 h, lstm_state, h_mask = self.encoder[i](input=hs[i][:, j, :, :, :],
                                                         lstm_state=None,
@@ -202,7 +201,6 @@ class PConvLSTM(nn.Module):
                 hs_inner.append(h)
                 lstm_states_inner.append(lstm_state)
                 hs_mask_inner.append(h_mask)
-                print(h.shape)
 
             hs.append(torch.stack(hs_inner, dim=1))
             lstm_states.append(lstm_states_inner)
@@ -211,8 +209,6 @@ class PConvLSTM(nn.Module):
         h_sequence, h_mask_sequence = hs[self.net_depth], hs_mask[self.net_depth]
         # forward pass decoding layers
         for i in range(self.net_depth):
-            print(str(i) + "dec")
-
             hs_inner = []
             hs_mask_inner = []
             for j in range(num_time_steps):
