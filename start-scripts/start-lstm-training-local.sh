@@ -6,6 +6,6 @@ python /home/joe/PycharmProjects/climatereconstructionAI/climatereconstructionAI
  --mask-dir /home/joe/PycharmProjects/climatereconstructionAI/climatereconstructionAI/masks/hadcrut4-missmask.h5 \
  --snapshot-dir /home/joe/PycharmProjects/climatereconstructionAI/climatereconstructionAI/snapshots/temperature/20cr-lstm/ \
  --log-dir /home/joe/PycharmProjects/climatereconstructionAI/climatereconstructionAI/logs/temperature/20cr-lstm// \
- --lstm-steps 0 \
+ --lstm-steps 3 \
  --max-iter 1000000 \
  --save-model-interval 10000
