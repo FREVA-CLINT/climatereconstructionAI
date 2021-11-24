@@ -13,13 +13,13 @@ module source start-scripts/setup-modules.txt
 
 singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img_levante.sif \
  python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/train_and_evaluate/trainLSTM.py \
- --device cuda --batch-size 4 --image-size 512 --pooling-layers 3 --encoding-layers 4 --data-type pr \
- --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-complete-scaled/ \
- --mask-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/masks/single_radar_fail.h5 \
- --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/precipitation/radolan-lstm/ \
- --log-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/logs/precipitation/radolan-lstm/ \
- --lstm-steps 3 \
- --max-iter 100000 \
+ --device cuda --batch-size 2 --image-size 72 --pooling-layers 0 --encoding-layers 3 --data-type tas \
+ --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/20cr/ \
+ --mask-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/masks/hadcrut4-missmask.h5 \
+ --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/temperature/20cr-lstm/ \
+ --log-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/logs/temperature/20cr-lstm// \
+ --lstm-steps 0 \
+ --max-iter 1000000 \
  --save-model-interval 10000
 singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img_levante.sif \
  python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/trainLSTM.py \
