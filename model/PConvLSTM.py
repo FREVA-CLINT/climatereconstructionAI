@@ -5,16 +5,14 @@ import config as cfg
 
 
 class ConvLSTMBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, image_size, kernel, stride, padding, dilation, groups, bias):
+    def __init__(self, in_channels, out_channels, image_size, kernel, stride, padding, dilation, groups, bias, decoder=False):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.image_size = image_size
         self.lstm_conv = nn.Conv2d(in_channels + out_channels, 4*out_channels, kernel, stride, padding, dilation, groups, bias)
-        print("img size: " + str(image_size))
-        print("in channel size: " + str(in_channels // 2))
-        print("out channel size: " + str(out_channels))
-        self.mem_cell_conv = nn.Conv2d(in_channels // 2, out_channels, kernel, (1,1), padding, dilation, groups, False)
+        if decoder:
+            self.mem_cell_conv = nn.Conv2d(in_channels // 2, out_channels, kernel, (1,1), padding, dilation, groups, False)
 
         self.Wci = nn.Parameter(torch.zeros(1, out_channels, image_size, image_size)).to(cfg.device)
         self.Wcf = nn.Parameter(torch.zeros(1, out_channels, image_size, image_size)).to(cfg.device)
@@ -46,10 +44,10 @@ class ConvLSTMBlock(nn.Module):
 
 
 class PConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, in_channels_mask, image_size, kernel, stride, dilation=(1, 1), groups=1, bias=False):
+    def __init__(self, in_channels, out_channels, in_channels_mask, image_size, kernel, stride, dilation=(1, 1), groups=1, bias=False, decoder=False):
         super().__init__()
         padding = kernel[0] // 2, kernel[1] // 2
-        self.input_conv = ConvLSTMBlock(in_channels, out_channels, image_size, kernel, stride, padding, dilation, groups, bias)
+        self.input_conv = ConvLSTMBlock(in_channels, out_channels, image_size, kernel, stride, padding, dilation, groups, bias, decoder)
         self.mask_conv = nn.Conv2d(in_channels_mask, out_channels, kernel, stride, padding, dilation, groups, False)
 
         torch.nn.init.constant_(self.mask_conv.weight, 1.0)
@@ -81,9 +79,9 @@ class PConvBlock(nn.Module):
 
 class PConvLSTMActivationBlock(nn.Module):
     def __init__(self, in_channels, out_channels, in_channels_mask, image_size, kernel=(3, 3), stride=(1, 1),
-                 activation=None, bn=True, bias=False):
+                 activation=None, bn=True, bias=False, decoder=False):
         super().__init__()
-        self.conv = PConvBlock(in_channels, out_channels, in_channels_mask, image_size, kernel, stride, bias=bias)
+        self.conv = PConvBlock(in_channels, out_channels, in_channels_mask, image_size, kernel, stride, bias=bias, decoder=decoder)
 
         if bn:
             self.bn = nn.BatchNorm2d(out_channels)
@@ -165,7 +163,7 @@ class PConvLSTM(nn.Module):
                 out_channels=image_size,
                 in_channels_mask=image_size + image_size,
                 image_size=image_size // (2 ** (self.net_depth - i - 1)),
-                kernel=(3, 3), stride=(1, 1), activation=nn.LeakyReLU()))
+                kernel=(3, 3), stride=(1, 1), activation=nn.LeakyReLU(), decoder=True))
 
         # define decoding layers
         for i in range(1, self.num_enc_dec_layers):
@@ -177,7 +175,7 @@ class PConvLSTM(nn.Module):
                     out_channels=image_size // (2 ** i),
                     in_channels_mask=image_size // (2 ** (i - 1)) + image_size // (2 ** i),
                     image_size=image_size // (2 ** (self.net_depth - self.num_pool_layers - i)),
-                    kernel=(3, 3), stride=(1, 1), activation=nn.LeakyReLU()))
+                    kernel=(3, 3), stride=(1, 1), activation=nn.LeakyReLU(), decoder=True))
         print("dec 4")
 
         decoding_layers.append(
@@ -186,7 +184,7 @@ class PConvLSTM(nn.Module):
                 out_channels=1,
                 in_channels_mask=image_size // (2 ** (self.num_enc_dec_layers - 1)) + self.num_in_channels,
                 image_size=image_size,
-                kernel=(3, 3), stride=(1, 1), activation=None, bn=False, bias=True))
+                kernel=(3, 3), stride=(1, 1), activation=None, bn=False, bias=True, decoder=True))
         self.decoder = nn.ModuleList(decoding_layers)
 
     def forward(self, input, input_mask):
