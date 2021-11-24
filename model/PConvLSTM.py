@@ -11,6 +11,9 @@ class ConvLSTMBlock(nn.Module):
         self.out_channels = out_channels
         self.image_size = image_size
         self.lstm_conv = nn.Conv2d(in_channels + out_channels, 4*out_channels, kernel, stride, padding, dilation, groups, bias)
+        print("img size: " + str(image_size))
+        print("in channel size: " + str(in_channels // 2))
+        print("out channel size: " + str(out_channels))
         self.mem_cell_conv = nn.Conv2d(in_channels // 2, out_channels, kernel, (1,1), padding, dilation, groups, False)
 
         self.Wci = nn.Parameter(torch.zeros(1, out_channels, image_size, image_size)).to(cfg.device)
