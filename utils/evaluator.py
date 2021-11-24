@@ -35,7 +35,6 @@ def create_snapshot_image(model, dataset, filename, lstm_steps=None):
     mask = torch.index_select(mask, dim=1, index=mid_index)
 
     output_comp = mask * image + (1 - mask) * output
-
     grid = make_grid(
         torch.cat(((image), mask, (output),
                    (output_comp), (gt)), dim=0))

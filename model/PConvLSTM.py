@@ -89,8 +89,8 @@ class PConvLSTMActivationBlock(nn.Module):
 
     def forward(self, input, lstm_state, input_mask):
         h, lstm_state, h_mask = self.conv(input, lstm_state, input_mask)
-        if hasattr(self, 'bn'):
-            h = self.bn(h)
+        #if hasattr(self, 'bn'):
+        #    h = self.bn(h)
         #if hasattr(self, 'activation'):
         #    h = self.activation(h)
         return h, lstm_state, h_mask
