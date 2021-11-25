@@ -46,7 +46,7 @@ else:
 
 # define optimizer and loss functions
 optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
-criterion = InpaintingLoss().to(cfg.device)
+criterion = InpaintingLoss(VGG16FeatureExtractor()).to(cfg.device)
 
 # define start point
 start_iter = 0
