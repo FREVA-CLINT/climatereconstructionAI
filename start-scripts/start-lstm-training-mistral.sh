@@ -19,7 +19,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --mask-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/masks/single_temp_mask.h5 \
  --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/temperature/20cr-lstm-Pconv/ \
  --log-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/logs/temperature/20cr-lstm/ \
- --lstm-steps 0 \
+ --lstm-steps 3 \
  --max-iter 1000000 \
  --save-model-interval 10000 \
  --log-interval 1000
