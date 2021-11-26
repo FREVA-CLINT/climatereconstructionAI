@@ -75,6 +75,11 @@ for i in tqdm(range(start_iter, cfg.max_iter)):
     loss.backward()
     optimizer.step()
 
+    new_out = (output*(1-mask))[:,:, 21:51, 21:51]
+    print(new_out)
+    print(torch.sum(new_out))
+    print(torch.sum(gt[:,:, 21:51, 21:51]))
+
     # save checkpoint
     if (i + 1) % cfg.save_model_interval == 0 or (i + 1) == cfg.max_iter:
         save_ckpt('{:s}/ckpt/{:d}.pth'.format(cfg.snapshot_dir, i + 1),

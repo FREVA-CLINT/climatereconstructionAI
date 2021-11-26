@@ -14,39 +14,28 @@ class ConvLSTMBlock(nn.Module):
         self.lstm_conv = nn.Conv2d(in_channels + out_channels, 4 * out_channels, kernel, stride, padding, dilation,
                                    groups, bias)
 
-        self.Wci = nn.Parameter(torch.zeros(1, out_channels, image_size, image_size)).to(cfg.device)
-        self.Wcf = nn.Parameter(torch.zeros(1, out_channels, image_size, image_size)).to(cfg.device)
-        self.Wco = nn.Parameter(torch.zeros(1, out_channels, image_size, image_size)).to(cfg.device)
-        self.Wcg = nn.Parameter(torch.zeros(1, out_channels, image_size, image_size)).to(cfg.device)
-
-    def forward(self, inputs, lstm_state=None):
-        lstm_steps = inputs.shape[1]
+    def forward(self, input, lstm_state=None):
         if lstm_state is None:
-            batch_size = inputs.shape[0]
+            batch_size = input.shape[0]
             h = torch.zeros((batch_size, self.out_channels, self.image_size,
                             self.image_size), dtype=torch.float).to(cfg.device)
             mem_cell = torch.zeros((batch_size, self.out_channels, self.image_size,
                                     self.image_size), dtype=torch.float).to(cfg.device)
         else:
             h, mem_cell = lstm_state
+        combined_input = torch.cat([input, h], dim=1)
+        combined_output = self.lstm_conv(combined_input)
 
-        next_hs = []
+        input, forget, gate, output = torch.split(combined_output, self.out_channels, dim=1)
+        input = torch.sigmoid(input)
+        forget = torch.sigmoid(forget)
+        output = torch.sigmoid(output)
+        gate = torch.tanh(gate)
 
-        for i in range(lstm_steps):
-            input = inputs[:,i,:,:,:]
-            combined_input = torch.cat([input, h], dim=1)
-            combined_output = self.lstm_conv(combined_input)
+        next_mem_cell = forget * mem_cell + input * gate
+        next_h = output * torch.tanh(next_mem_cell)
 
-            input, forget, gate, output = torch.split(combined_output, self.out_channels, dim=1)
-            input = torch.sigmoid(input + self.Wci*mem_cell)
-            forget = torch.sigmoid(forget + self.Wcf*mem_cell)
-            output = torch.sigmoid(output + self.Wco*mem_cell)
-            gate = torch.tanh(gate + self.Wcg*mem_cell)
-
-            mem_cell = forget * mem_cell + input * gate
-            h = output * torch.tanh(mem_cell)
-            next_hs.append(h)
-        return torch.stack(next_hs, dim=1), (h, mem_cell)
+        return next_h, (next_h, next_mem_cell)
 
 
 class PConvBlock(nn.Module):
@@ -103,23 +92,14 @@ class EncoderBlock(nn.Module):
             self.mem_cell_conv = nn.Conv2d(in_channels, out_channels, kernel, (1, 1), padding, dilation, groups, False)
 
     def forward(self, input, mask, lstm_state=None):
-        batch_size = input.shape[0]
-
-        input = torch.reshape(input, (-1, input.shape[2], input.shape[3], input.shape[4]))
-        mask = torch.reshape(mask, (-1, mask.shape[2], mask.shape[3], mask.shape[4]))
         output, mask = self.partial_conv(input, mask)
 
+        if hasattr(self, 'lstm_conv'):
+            output, lstm_state = self.lstm_conv(output, lstm_state)
         if hasattr(self.partial_conv, 'bn'):
             output = self.partial_conv.bn(output)
         if hasattr(self.partial_conv, 'activation'):
             output = self.partial_conv.activation(output)
-
-        output = torch.reshape(output, (batch_size, cfg.lstm_steps+1, output.shape[1], output.shape[2], output.shape[3]))
-        mask = torch.reshape(mask, (batch_size, cfg.lstm_steps+1, mask.shape[1], mask.shape[2], mask.shape[3]))
-
-        if hasattr(self, 'lstm_conv'):
-            output, lstm_state = self.lstm_conv(output, lstm_state)
-
         return output, mask, lstm_state
 
 
@@ -132,39 +112,19 @@ class DecoderBlock(nn.Module):
                                        activation, bn)
 
         if lstm:
-            self.lstm_conv = ConvLSTMBlock(in_channels - out_channels, in_channels - out_channels, image_size//2, kernel, (1, 1), padding,
+            self.lstm_conv = ConvLSTMBlock(in_channels - out_channels, in_channels, image_size, kernel, (1, 1), padding,
                                            (1, 1), groups, bias)
-            self.mem_cell_conv = nn.Conv2d(in_channels, in_channels, kernel, (1,1), padding, dilation, groups, False)
+            self.mem_cell_conv = nn.Conv2d(in_channels - out_channels, in_channels, kernel, (1,1), padding, dilation, groups, False)
 
-    def forward(self, input, skip_input, mask, skip_mask, lstm_state=None):
-        batch_size = input.shape[0]
-
+    def forward(self, input, mask, lstm_state=None):
         if hasattr(self, 'lstm_conv'):
             output, lstm_state = self.lstm_conv(input, lstm_state)
 
-        input = torch.reshape(input, (-1, input.shape[2], input.shape[3], input.shape[4]))
-        mask = torch.reshape(mask, (-1, mask.shape[2], mask.shape[3], mask.shape[4]))
-
-        # interpolate input and mask
-        h = F.interpolate(input, scale_factor=2, mode='nearest')
-        h_mask = F.interpolate(mask, scale_factor=2, mode='nearest')
-
-        # skip layers: pass results from encoding layers to decoding layers
-        skip_input = torch.reshape(skip_input, (-1, skip_input.shape[2], skip_input.shape[3], skip_input.shape[4]))
-        skip_mask = torch.reshape(skip_mask, (-1, skip_mask.shape[2], skip_mask.shape[3], skip_mask.shape[4]))
-        h = torch.cat([h, skip_input], dim=1)
-        h_mask = torch.cat([h_mask, skip_mask], dim=1)
-
-        output, mask = self.partial_conv(h, h_mask)
-
+        output, mask = self.partial_conv(input, mask)
         if hasattr(self.partial_conv, 'bn'):
             output = self.partial_conv.bn(output)
         if hasattr(self.partial_conv, 'activation'):
             output = self.partial_conv.activation(output)
-
-        output = torch.reshape(output, (batch_size, cfg.lstm_steps+1, output.shape[1], output.shape[2], output.shape[3]))
-        mask = torch.reshape(mask, (batch_size, cfg.lstm_steps+1, mask.shape[1], mask.shape[2], mask.shape[3]))
-
         return output, mask, lstm_state
 
 
@@ -257,28 +217,54 @@ class PConvLSTM(nn.Module):
 
         # forward pass encoding layers
         for i in range(self.net_depth):
-            h, h_mask, lstm_state = self.encoder[i](hs[i],
-                                                    hs_mask[i],
-                                                    None)
-            hs.append(h)
-            lstm_states.append(lstm_state)
-            hs_mask.append(h_mask)
+            hs_inner = []
+            lstm_states_inner = []
+            hs_mask_inner = []
+            for j in range(num_time_steps):
+                h, h_mask, lstm_state = self.encoder[i](hs[i][:, j, :, :, :],
+                                                        hs_mask[i][:, j, :, :, :],
+                                                        None)
+                hs_inner.append(h)
+                lstm_states_inner.append(lstm_state)
+                hs_mask_inner.append(h_mask)
+
+            hs.append(torch.stack(hs_inner, dim=1))
+            lstm_states.append(lstm_states_inner)
+            hs_mask.append(torch.stack(hs_mask_inner, dim=1))
 
         # get output from last encoding layer
-        h, h_mask = hs[self.net_depth], hs_mask[self.net_depth]
+        h_sequence, h_mask_sequence = hs[self.net_depth], hs_mask[self.net_depth]
         # forward pass decoding layers
         for i in range(self.net_depth):
-            lstm_state_h, lstm_state_c = None, None
+            hs_inner = []
+            hs_mask_inner = []
+            for j in range(num_time_steps):
+                # interpolate input and mask
+                h = F.interpolate(h_sequence[:, j, :, :, :], scale_factor=2, mode='nearest')
+                h_mask = F.interpolate(h_mask_sequence[:, j, :, :, :], scale_factor=2, mode='nearest')
+                lstm_state_h, lstm_state_c = None, None
 
-            if self.lstm:
-                lstm_state_h, lstm_state_c = lstm_states[self.net_depth - 1 - i]
+                if self.lstm:
+                    # interpolate hidden state
+                    lstm_state_h, lstm_state_c = lstm_states[self.net_depth - 1 - i][j]
+                    lstm_state_h = F.interpolate(lstm_state_h, scale_factor=2, mode='nearest')
+                    lstm_state_c = F.interpolate(lstm_state_c, scale_factor=2, mode='nearest')
+                    lstm_state_c = self.decoder[i].mem_cell_conv(lstm_state_c)
 
-            h, h_mask, lstm_state = self.decoder[i](h, hs[self.net_depth - i - 1],
-                                                    h_mask, hs_mask[self.net_depth - i - 1],
-                                                    (lstm_state_h, lstm_state_c))
+                # skip layers: pass results from encoding layers to decoding layers
+                h = torch.cat([h, hs[self.net_depth - i - 1][:, j, :, :, :]], dim=1)
+                h_mask = torch.cat([h_mask, hs_mask[self.net_depth - i - 1][:, j, :, :, :]], dim=1)
+                h, h_mask, lstm_state = self.decoder[i](h,
+                                                        h_mask,
+                                                        (lstm_state_h, lstm_state_c))
+                hs_inner.append(h)
+                hs_mask_inner.append(h_mask)
+
+            h_sequence = torch.stack(hs_inner, dim=1)
+            h_mask_sequence = torch.stack(hs_mask_inner, dim=1)
 
         # return last element of output from last decoding layer
-        return h
+        return h_sequence[:, num_time_steps - 1, :, :, :]
 
     def train(self, mode=True):
         super().train(mode)
