@@ -1,6 +1,7 @@
 import os
 import torch
 import sys
+
 sys.path.append('./')
 
 from tensorboardX import SummaryWriter
@@ -32,10 +33,14 @@ iterator_train = iter(data.DataLoader(dataset_train, batch_size=cfg.batch_size,
                                       num_workers=cfg.n_threads))
 
 # define network model
+lstm = True
+if cfg.lstm_steps == 0:
+    lstm = False
 model = PConvLSTM(image_size=cfg.image_size,
                   num_enc_dec_layers=cfg.encoding_layers,
                   num_pool_layers=cfg.pooling_layers,
-                  num_in_channels=1).to(cfg.device)
+                  num_in_channels=1,
+                  lstm=lstm).to(cfg.device)
 
 # define learning rate
 if cfg.finetune:
@@ -64,7 +69,8 @@ for i in tqdm(range(start_iter, cfg.max_iter)):
     output = model(image, mask)
 
     # calculate loss function and apply backpropagation
-    loss_dict = criterion(image[:, cfg.lstm_steps, :, :, :], mask[:, cfg.lstm_steps, :, :, :], output[:, cfg.lstm_steps,:, :, :],
+    loss_dict = criterion(image[:, cfg.lstm_steps, :, :, :], mask[:, cfg.lstm_steps, :, :, :],
+                          output[:, cfg.lstm_steps, :, :, :],
                           gt[:, cfg.lstm_steps, :, :, :])
     loss = 0.0
     for key, coef in cfg.LAMBDA_DICT_IMG_INPAINTING.items():

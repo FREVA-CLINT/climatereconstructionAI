@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-python /home/joe/PycharmProjects/climatereconstructionAI/climatereconstructionAI/train_and_evaluate/evaluateLSTM.py \
+python /home/joe/PycharmProjects/climatereconstructionAI/climatereconstructionAI/train_and_evaluate/evaluate.py \
  --device cpu --image-size 72 --pooling-layers 0 --encoding-layers 1 --data-type tas \
  --data-root-dir ../data/20cr/ \
  --mask-dir masks/hadcrut4-missmask.h5 \
