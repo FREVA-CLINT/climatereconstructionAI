@@ -215,7 +215,7 @@ class PConvLSTM(nn.Module):
             encoding_layers.append(EncoderBlock(
                 in_channels=image_size,
                 out_channels=image_size,
-                image_size=image_size // (2 ** (self.num_enc_dec_layers + i + 1)),
+                image_size=image_size // (2 ** (self.num_enc_dec_layers + i)),
                 kernel=(3, 3), stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
         self.encoder = nn.ModuleList(encoding_layers)
 
