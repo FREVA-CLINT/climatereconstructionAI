@@ -27,7 +27,7 @@ def create_snapshot_image(model, dataset, filename, lstm_steps=None):
         image = image[:,lstm_steps,:,:,:]
         gt = gt[:,lstm_steps,:,:,:]
         mask = mask[:,lstm_steps,:,:,:]
-        output = output[:,lstm_steps,:,:,:]
+        #output = output[:,lstm_steps,:,:,:]
 
     # get mid indexed channel
     mid_index = torch.tensor([(image.shape[1] // 2)], dtype=torch.long).to(cfg.device)
