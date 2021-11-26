@@ -7,6 +7,7 @@
 **Note that this is an ongoing re-implementation and is designed for climate reconstructions using numerial model input and output!**
 
 This is an unofficial pytorch implementation of a paper, [Image Inpainting for Irregular Holes Using Partial Convolutions](https://arxiv.org/abs/1804.07723) [Liu+, arXiv2018].
+https://github.com/czifan/ConvLSTM.pytorch
 
 ## Requirements
 - Python 3.7+

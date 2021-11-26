@@ -5,45 +5,43 @@ import config as cfg
 
 
 class ConvLSTMBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, image_size, kernel, stride, padding, dilation, groups, bias):
+    def __init__(self, in_channels, out_channels, image_size, kernel, stride, padding, dilation, groups):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.image_size = image_size
 
         self.lstm_conv = nn.Conv2d(in_channels + out_channels, 4 * out_channels, kernel, stride, padding, dilation,
-                                   groups, bias)
+                                   groups, True)
 
         self.Wci = nn.Parameter(torch.zeros(1, out_channels, image_size, image_size)).to(cfg.device)
         self.Wcf = nn.Parameter(torch.zeros(1, out_channels, image_size, image_size)).to(cfg.device)
         self.Wco = nn.Parameter(torch.zeros(1, out_channels, image_size, image_size)).to(cfg.device)
-        self.Wcg = nn.Parameter(torch.zeros(1, out_channels, image_size, image_size)).to(cfg.device)
 
     def forward(self, inputs, lstm_state=None):
         lstm_steps = inputs.shape[1]
+        next_hs = []
+
         if lstm_state is None:
             batch_size = inputs.shape[0]
             h = torch.zeros((batch_size, self.out_channels, self.image_size,
-                            self.image_size), dtype=torch.float).to(cfg.device)
+                             self.image_size), dtype=torch.float).to(cfg.device)
             mem_cell = torch.zeros((batch_size, self.out_channels, self.image_size,
                                     self.image_size), dtype=torch.float).to(cfg.device)
         else:
             h, mem_cell = lstm_state
 
-        next_hs = []
-
+        # iterate through time steps
         for i in range(lstm_steps):
-            input = inputs[:,i,:,:,:]
-            combined_input = torch.cat([input, h], dim=1)
-            combined_output = self.lstm_conv(combined_input)
-
-            input, forget, gate, output = torch.split(combined_output, self.out_channels, dim=1)
-            input = torch.sigmoid(input + self.Wci*mem_cell)
-            forget = torch.sigmoid(forget + self.Wcf*mem_cell)
-            output = torch.sigmoid(output + self.Wco*mem_cell)
-            gate = torch.tanh(gate + self.Wcg*mem_cell)
-
-            mem_cell = forget * mem_cell + input * gate
+            input = inputs[:, i, :, :, :]
+            input_memory = torch.cat([input, h], dim=1)
+            gates = self.lstm_conv(input_memory)
+            # lstm convolution
+            input, forget, cell, output = torch.split(gates, self.out_channels, dim=1)
+            input = torch.sigmoid(input + self.Wci * mem_cell)
+            forget = torch.sigmoid(forget + self.Wcf * mem_cell)
+            mem_cell = forget * mem_cell + input * torch.tanh(cell)
+            output = torch.sigmoid(output + self.Wco * mem_cell)
             h = output * torch.tanh(mem_cell)
             next_hs.append(h)
         return torch.stack(next_hs, dim=1), (h, mem_cell)
@@ -99,8 +97,7 @@ class EncoderBlock(nn.Module):
 
         if lstm:
             self.lstm_conv = ConvLSTMBlock(out_channels, out_channels, image_size // 2, kernel, (1, 1), padding, (1, 1),
-                                           groups, False)
-            self.mem_cell_conv = nn.Conv2d(in_channels, out_channels, kernel, (1, 1), padding, dilation, groups, False)
+                                           groups)
 
     def forward(self, input, mask, lstm_state=None):
         batch_size = input.shape[0]
@@ -114,8 +111,9 @@ class EncoderBlock(nn.Module):
         if hasattr(self.partial_conv, 'activation'):
             output = self.partial_conv.activation(output)
 
-        output = torch.reshape(output, (batch_size, cfg.lstm_steps+1, output.shape[1], output.shape[2], output.shape[3]))
-        mask = torch.reshape(mask, (batch_size, cfg.lstm_steps+1, mask.shape[1], mask.shape[2], mask.shape[3]))
+        output = torch.reshape(output,
+                               (batch_size, cfg.lstm_steps + 1, output.shape[1], output.shape[2], output.shape[3]))
+        mask = torch.reshape(mask, (batch_size, cfg.lstm_steps + 1, mask.shape[1], mask.shape[2], mask.shape[3]))
 
         if hasattr(self, 'lstm_conv'):
             output, lstm_state = self.lstm_conv(output, lstm_state)
@@ -132,9 +130,9 @@ class DecoderBlock(nn.Module):
                                        activation, bn)
 
         if lstm:
-            self.lstm_conv = ConvLSTMBlock(in_channels - out_channels, in_channels - out_channels, image_size//2, kernel, (1, 1), padding,
-                                           (1, 1), groups, bias)
-            self.mem_cell_conv = nn.Conv2d(in_channels, in_channels, kernel, (1,1), padding, dilation, groups, False)
+            self.lstm_conv = ConvLSTMBlock(in_channels - out_channels, in_channels - out_channels, image_size // 2,
+                                           kernel, (1, 1), padding,
+                                           (1, 1), groups)
 
     def forward(self, input, skip_input, mask, skip_mask, lstm_state=None):
         batch_size = input.shape[0]
@@ -162,8 +160,9 @@ class DecoderBlock(nn.Module):
         if hasattr(self.partial_conv, 'activation'):
             output = self.partial_conv.activation(output)
 
-        output = torch.reshape(output, (batch_size, cfg.lstm_steps+1, output.shape[1], output.shape[2], output.shape[3]))
-        mask = torch.reshape(mask, (batch_size, cfg.lstm_steps+1, mask.shape[1], mask.shape[2], mask.shape[3]))
+        output = torch.reshape(output,
+                               (batch_size, cfg.lstm_steps + 1, output.shape[1], output.shape[2], output.shape[3]))
+        mask = torch.reshape(mask, (batch_size, cfg.lstm_steps + 1, mask.shape[1], mask.shape[2], mask.shape[3]))
 
         return output, mask, lstm_state
 
