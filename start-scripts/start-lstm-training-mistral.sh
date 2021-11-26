@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=64
 #SBATCH --time=12:00:00
 #SBATCH --mem=32G
-#SBATCH --nodelist=mg206
+#SBATCH --nodelist=mg207
 
 module load cuda/10.0.130
 module load singularity/3.6.1-gcc-9.1.0
@@ -17,7 +17,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --device cuda --batch-size 4 --image-size 72 --pooling-layers 0 --encoding-layers 3 --data-type tas \
  --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/20cr/ \
  --mask-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/masks/single_temp_mask.h5 \
- --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/temperature/20cr-lstm-old/ \
+ --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/temperature/20cr-lstm-Pconv/ \
  --log-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/logs/temperature/20cr-lstm/ \
  --lstm-steps 3 \
  --max-iter 1000000 \

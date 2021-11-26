@@ -75,3 +75,12 @@ class WeightedCrossEntropyLoss(nn.Module):
         error = F.cross_entropy(input, class_index, weight=self._weight, reduction='none')
         error = error.unsqueeze(2)
         return torch.mean(error*(mask))
+
+class CrossEntropyLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, outputs, targets):
+        loss = -torch.mean(targets * torch.log(outputs) +
+                          (1-targets) * torch.log(1-outputs))
+        return loss
