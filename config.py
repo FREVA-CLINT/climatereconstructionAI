@@ -1,11 +1,12 @@
 import argparse
+
 import torch
 
 LAMBDA_DICT_IMG_INPAINTING = {
     'valid': 1.0, 'hole': 6.0, 'tv': 0.1, 'prc': 0.05, 'style': 120.0
 }
 LAMBDA_DICT_PR_INPAINTING = {
-    'SSL-OUT': 1.0, #'SSL-OUT-COMP': 1.0, 'valid': 1.0, 'hole': 6.0, 'tv': 0.1, 'prc': 0.05, 'style': 120.0
+    'SSL-OUT': 1.0,  # 'SSL-OUT-COMP': 1.0, 'valid': 1.0, 'hole': 6.0, 'tv': 0.1, 'prc': 0.05, 'style': 120.0
 }
 
 data_type = None
@@ -103,7 +104,9 @@ def set_train_args():
     pooling_layers = args.pooling_layers
     image_size = args.image_size
 
-def set_evaluation_args(arg_parser):
+
+def set_evaluation_args():
+    arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument('--data-type', type=str, default='tas')
     arg_parser.add_argument('--evaluation-dir', type=str, default='evaluation/')
     arg_parser.add_argument('--snapshot-dir', type=str, default='snapshots/')
@@ -112,6 +115,7 @@ def set_evaluation_args(arg_parser):
     arg_parser.add_argument('--device', type=str, default='cuda')
     arg_parser.add_argument('--partitions', type=int, default=1)
     arg_parser.add_argument('--prev-next', type=int, default=0)
+    arg_parser.add_argument('--lstm-steps', type=int, default=0)
     arg_parser.add_argument('--encoding-layers', type=int, default=3)
     arg_parser.add_argument('--pooling-layers', type=int, default=0)
     arg_parser.add_argument('--image-size', type=int, default=72)
@@ -129,6 +133,7 @@ def set_evaluation_args(arg_parser):
     global device
     global partitions
     global prev_next
+    global lstm_steps
     global encoding_layers
     global pooling_layers
     global image_size
@@ -146,6 +151,7 @@ def set_evaluation_args(arg_parser):
     device = torch.device(args.device)
     partitions = args.partitions
     prev_next = args.prev_next
+    lstm_steps = args.lstm_steps
     encoding_layers = args.encoding_layers
     pooling_layers = args.pooling_layers
     image_size = args.image_size
