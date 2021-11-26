@@ -6,7 +6,7 @@ sys.path.append('./')
 from tensorboardX import SummaryWriter
 from torch.utils import data
 from tqdm import tqdm
-from model.LSTM_1 import PConvLSTM
+from model.PConvLSTM import PConvLSTM
 from utils.featurizer import VGG16FeatureExtractor
 from utils.io import load_ckpt, save_ckpt
 from utils.netcdfloader import LSTMNetCDFDataLoader as NetCDFDataLoader, InfiniteSampler
@@ -64,7 +64,7 @@ for i in tqdm(range(start_iter, cfg.max_iter)):
     output = model(image, mask)
 
     # calculate loss function and apply backpropagation
-    loss_dict = criterion(image[:, cfg.lstm_steps, :, :, :], mask[:, cfg.lstm_steps, :, :, :], output,
+    loss_dict = criterion(image[:, cfg.lstm_steps, :, :, :], mask[:, cfg.lstm_steps, :, :, :], output[:, cfg.lstm_steps,:, :, :],
                           gt[:, cfg.lstm_steps, :, :, :])
     loss = 0.0
     for key, coef in cfg.LAMBDA_DICT_IMG_INPAINTING.items():
