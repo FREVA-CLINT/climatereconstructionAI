@@ -92,14 +92,14 @@ class PConvLSTMEvaluator:
 
             lstm_steps = output_part.shape[1] - 1
 
-            image_part = image_part[:, lstm_steps, :, :, :].to(cfg.device)
-            mask_part = mask_part[:, lstm_steps, :, :, :].to(cfg.device)
-            gt_part = gt_part[:, lstm_steps, :, :, :].to(cfg.device)
-            output_part = output_part[:, lstm_steps, :, :, :].to(cfg.device)
+            image_part = image_part[:, lstm_steps, :, :, :].to(torch.device('cpu'))
+            mask_part = mask_part[:, lstm_steps, :, :, :].to(torch.device('cpu'))
+            gt_part = gt_part[:, lstm_steps, :, :, :].to(torch.device('cpu'))
+            output_part = output_part[:, lstm_steps, :, :, :].to(torch.device('cpu'))
 
             # only select mid indexed-element
             if not mid_index:
-                mid_index = torch.tensor([(image_part.shape[1] // 2)], dtype=torch.long).to(cfg.device)
+                mid_index = torch.tensor([(image_part.shape[1] // 2)], dtype=torch.long)
             image_part = torch.index_select(image_part, dim=1, index=mid_index)
             mask_part = torch.index_select(mask_part, dim=1, index=mid_index)
             gt_part = torch.index_select(gt_part, dim=1, index=mid_index)
