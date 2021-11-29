@@ -19,7 +19,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/precipitation/radolan-lstm/ckpt/200000.pth \
  --evaluation-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/evaluation/precipitation/radolan-lstm/ \
  --lstm-steps 3 \
- --partitions 2009 \
+ --partitions 6027 \
  --infill test \
  --create-images 2017-07-12-14:00,2017-07-12-14:00 \
  --create-video \
