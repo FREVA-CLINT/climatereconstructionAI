@@ -90,13 +90,12 @@ class PConvLSTMEvaluator:
             with torch.no_grad():
                 output_part = model(image_part.to(cfg.device), mask_part.to(cfg.device))
 
-            output_part = output_part.to(cfg.device)
             lstm_steps = output_part.shape[1] - 1
 
-            image_part = image_part[:, lstm_steps, :, :, :]
-            mask_part = mask_part[:, lstm_steps, :, :, :]
-            gt_part = gt_part[:, lstm_steps, :, :, :]
-            output_part = output_part[:, lstm_steps, :, :, :]
+            image_part = image_part[:, lstm_steps, :, :, :].to(cfg.device)
+            mask_part = mask_part[:, lstm_steps, :, :, :].to(cfg.device)
+            gt_part = gt_part[:, lstm_steps, :, :, :].to(cfg.device)
+            output_part = output_part[:, lstm_steps, :, :, :].to(cfg.device)
 
             # only select mid indexed-element
             if not mid_index:
