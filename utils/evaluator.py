@@ -122,7 +122,7 @@ class PConvLSTMEvaluator:
         dname = ['time', 'lat', 'lon']
         for x in range(0, 5):
             h5 = h5py.File('%s' % (self.eval_save_dir + cname[x]), 'w')
-            h5.create_dataset(self.variable, data=cvar[x])
+            h5.create_dataset(self.variable, data=cvar[x].to(torch.device('cpu')))
             for dim in range(0, 3):
                 h5[self.variable].dims[dim].label = dname[dim]
             h5.close()
