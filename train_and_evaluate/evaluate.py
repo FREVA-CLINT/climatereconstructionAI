@@ -27,7 +27,7 @@ if cfg.infill:
 
     model.eval()
 
-    evaluator.infill(model, dataset_val, cfg.device, cfg.partitions)
+    evaluator.infill(model, dataset_val, cfg.partitions)
 
 if cfg.create_images:
     start_date = cfg.create_images.split(',')[0]
