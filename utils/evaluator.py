@@ -99,7 +99,7 @@ class PConvLSTMEvaluator:
 
             # only select mid indexed-element
             if not mid_index:
-                mid_index = torch.tensor([(image_part.shape[1] // 2)], dtype=torch.long)
+                mid_index = torch.tensor([(image_part.shape[1] // 2)], dtype=torch.long).to(cfg.device)
             image_part = torch.index_select(image_part, dim=1, index=mid_index)
             mask_part = torch.index_select(mask_part, dim=1, index=mid_index)
             gt_part = torch.index_select(gt_part, dim=1, index=mid_index)
