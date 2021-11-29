@@ -96,6 +96,7 @@ class PConvLSTMEvaluator:
             image_part = image_part[:, lstm_steps, :, :, :]
             mask_part = mask_part[:, lstm_steps, :, :, :]
             gt_part = gt_part[:, lstm_steps, :, :, :]
+            output_part = output_part[:, lstm_steps, :, :, :]
 
             # only select mid indexed-element
             if not mid_index:
