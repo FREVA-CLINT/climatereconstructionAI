@@ -16,8 +16,8 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --device cuda --image-size 512 --pooling-layers 3 --encoding-layers 4 --data-type pr \
  --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-complete-scaled/ \
  --mask-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/masks/single_radar_fail.h5 \
- --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/precipitation/radolan-lstm/ckpt/200000.pth \
- --evaluation-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/evaluation/precipitation/radolan-lstm/ \
+ --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/precipitation/radolan-single-radar-fail/ckpt/200000.pth \
+ --evaluation-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/evaluation/precipitation/radolan-single-radar-fail/ \
  --lstm-steps 3 \
  --partitions 6027 \
  --create-report \
