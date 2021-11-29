@@ -29,7 +29,7 @@ if cfg.infill:
 
     evaluator.infill(model, dataset_val, cfg.partitions)
 
-if cfg.create_images:
+if False:#cfg.create_images:
     start_date = cfg.create_images.split(',')[0]
     end_date = cfg.create_images.split(',')[1]
     create_video = False
