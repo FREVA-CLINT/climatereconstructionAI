@@ -163,7 +163,7 @@ class PConvLSTMEvaluator:
                     image = imageio.imread(self.eval_save_dir + 'images/' + file + '_' + str(i) + '.jpg')
                     writer.append_data(image)
 
-    def create_evaluation_report(self, save_dir='evaluations/', create_evalutation_files=True, clean_data=True,
+    def create_evaluation_report(self, save_dir='evaluations/', create_evalutation_files=False, clean_data=True,
                                  infilled=True):
         if not os.path.exists(self.eval_save_dir + save_dir):
             os.makedirs('{:s}'.format(self.eval_save_dir + save_dir))
@@ -200,6 +200,11 @@ class PConvLSTMEvaluator:
         plot_data(file=directory + 'output_comp_mean.nc', label='Output', var=self.variable)
         plt.savefig(directory + 'mean.png')
 
+        plt.clf()
+        plt.title('Field Correlation')
+        plot_data(file=directory + 'gtVSout_fldcor.nc', label='Field correlation GT vs Output', var=self.variable)
+        plt.savefig(directory + 'fldcor.png')
+
         df = pd.DataFrame()
         df['Statistical Value'] = ["MSE", "Time Correlation", "Total Precipitation", "Other"]
         df['Ground Truth'] = ['%.5f' % mse, '%.5f' % timcor, total_pr_gt, 0]
@@ -228,6 +233,7 @@ class PConvLSTMEvaluator:
         pdf.image(directory + 'max.png', x=None, y=None, w=0, h=0, type='', link='')
         pdf.image(directory + 'min.png', x=None, y=None, w=0, h=0, type='', link='')
         pdf.image(directory + 'mean.png', x=None, y=None, w=0, h=0, type='', link='')
+        pdf.image(directory + 'fldcor.png', x=None, y=None, w=0, h=0, type='', link='')
         pdf.output(directory + 'Report.pdf', 'F')
 
     def evaluate_selected_samples(self, dates=None):
@@ -286,7 +292,7 @@ class PConvLSTMEvaluator:
         # create total fldsum
         cdo.fldsum(input='-timsum ' + self.eval_save_dir + output_comp, output=save_dir + 'fldsum_output_comp.nc')
         cdo.fldsum(input='-timsum ' + self.eval_save_dir + gt, output=save_dir + 'fldsum_gt.nc')
-        # create timeseries of time correlation
+        # create timeseries of field correlation
         cdo.fldcor(
             input='-setmisstoc,0 ' + self.eval_save_dir + output_comp + ' -setmisstoc,0 ' + self.eval_save_dir + gt,
             output=save_dir + 'time_series.nc')
