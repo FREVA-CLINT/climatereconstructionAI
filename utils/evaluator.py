@@ -183,6 +183,9 @@ class PConvLSTMEvaluator:
         total_pr_output_comp, _ = get_data(file=directory + 'fldsum_output_comp.nc', var=self.variable)
         total_pr_output_comp = total_pr_output_comp[0][0][0]
 
+        mean_fldcor, _ = get_data(file=directory + 'gtVSout_fldcor.nc', var=self.variable)
+        mean_fldcor = mean_fldcor[0][0][0]
+
         plt.title('Max values')
         plot_data(file=directory + 'gt_max.nc', start=0, label='Ground Truth', var=self.variable)
         plot_data(file=directory + 'output_comp_max.nc', start=0, label='Output', var=self.variable)
@@ -206,9 +209,9 @@ class PConvLSTMEvaluator:
         plt.savefig(directory + 'fldcor.png')
 
         df = pd.DataFrame()
-        df['Statistical Value'] = ["MSE", "Time Correlation", "Total Precipitation", "Other"]
-        df['Ground Truth'] = ['%.5f' % mse, '%.5f' % timcor, total_pr_gt, 0]
-        df['Output'] = ['%.5f' % mse, '%.5f' % timcor, total_pr_output_comp, 0]
+        df['Statistical Value'] = ["MSE", "Time Correlation", "Total Precipitation", "Mean Fldcor"]
+        df['Ground Truth'] = ['%.5f' % mse, '%.5f' % timcor, total_pr_gt, '%.5f' % mean_fldcor]
+        df['Output'] = ['%.5f' % mse, '%.5f' % timcor, total_pr_output_comp, '%.5f' % mean_fldcor]
 
         pdf = FPDF()
         pdf.add_page()
@@ -234,6 +237,7 @@ class PConvLSTMEvaluator:
         pdf.image(directory + 'min.png', x=None, y=None, w=0, h=0, type='', link='')
         pdf.image(directory + 'mean.png', x=None, y=None, w=0, h=0, type='', link='')
         pdf.image(directory + 'fldcor.png', x=None, y=None, w=0, h=0, type='', link='')
+        pdf.image(directory + 'timcor.png', x=None, y=None, w=0, h=0, type='', link='')
         pdf.output(directory + 'Report.pdf', 'F')
 
     def evaluate_selected_samples(self, dates=None):
@@ -292,10 +296,13 @@ class PConvLSTMEvaluator:
         # create total fldsum
         cdo.fldsum(input='-timsum ' + self.eval_save_dir + output_comp, output=save_dir + 'fldsum_output_comp.nc')
         cdo.fldsum(input='-timsum ' + self.eval_save_dir + gt, output=save_dir + 'fldsum_gt.nc')
-        # create timeseries of field correlation
+        # create timeseries of field correlation and mean
         cdo.fldcor(
-            input='-setmisstoc,0 ' + self.eval_save_dir + output_comp + ' -setmisstoc,0 ' + self.eval_save_dir + gt,
-            output=save_dir + 'time_series.nc')
+            input='-setmissval,1e20 ' + self.eval_save_dir + output_comp + ' -setmissval,1e20 ' + self.eval_save_dir + gt,
+            output=save_dir + 'gtVSout_fldcor.nc')
+        cdo.timmean(
+            input='-fldcor -setmissval,1e20 ' + self.eval_save_dir + output_comp + ' -setmissval,1e20 ' + self.eval_save_dir + gt,
+            output=save_dir + 'gtVSout_fldcor_timmean.nc')
         # create min max mean time series
         cdo.fldmax(input=self.eval_save_dir + output_comp, output=save_dir + 'output_comp_max.nc')
         cdo.fldmax(input=self.eval_save_dir + gt, output=save_dir + 'gt_max.nc')
