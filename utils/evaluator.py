@@ -183,7 +183,7 @@ class PConvLSTMEvaluator:
         total_pr_output_comp, _ = get_data(file=directory + 'fldsum_output_comp.nc', var=self.variable)
         total_pr_output_comp = total_pr_output_comp[0][0][0]
 
-        mean_fldcor, _ = get_data(file=directory + 'gtVSout_fldcor.nc', var=self.variable)
+        mean_fldcor, _ = get_data(file=directory + 'gtVSout_fldcor_timmean.nc', var=self.variable)
         mean_fldcor = mean_fldcor[0][0][0]
 
         timsum_fldcor, _ = get_data(file=directory + 'gtVSout_fldcor_timsum.nc', var=self.variable)
@@ -307,7 +307,7 @@ class PConvLSTMEvaluator:
             output=save_dir + 'gtVSout_fldcor_timmean.nc')
         # create fldcor over year sum
         cdo.fldcor(
-            input='-timsum -setmissval,1e20 ' + self.eval_save_dir + output_comp + ' -setmissval,1e20 ' + self.eval_save_dir + gt,
+            input='-timsum -setmissval,1e20 ' + self.eval_save_dir + output_comp + ' -timsum -setmissval,1e20 ' + self.eval_save_dir + gt,
             output=save_dir + 'gtVSout_fldcor_timsum.nc')
 
         # create min max mean time series
