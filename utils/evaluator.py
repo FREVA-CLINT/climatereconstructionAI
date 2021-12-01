@@ -28,11 +28,10 @@ def create_snapshot_image(model, dataset, filename, lstm_steps):
     mask = mask[:, lstm_steps, :, :, :]
     output = output[:, lstm_steps, :, :, :]
 
-    # get mid indexed channel
-    mid_index = torch.tensor([(image.shape[1] // 2)], dtype=torch.long).to(cfg.device)
-    image = torch.index_select(image, dim=1, index=mid_index)
-    gt = torch.index_select(gt, dim=1, index=mid_index)
-    mask = torch.index_select(mask, dim=1, index=mid_index)
+    # get only first channel
+    image = torch.unsqueeze(image[:, 0, :, :], dim=1)
+    gt = torch.unsqueeze(gt[:, 0, :, :], dim=1)
+    mask = torch.unsqueeze(mask[:, 0, :, :], dim=1)
 
     output_comp = mask * image + (1 - mask) * output
     grid = make_grid(
@@ -98,11 +97,9 @@ class PConvLSTMEvaluator:
             output_part = output_part[:, lstm_steps, :, :, :].to(torch.device('cpu'))
 
             # only select mid indexed-element
-            if not mid_index:
-                mid_index = torch.tensor([(image_part.shape[1] // 2)], dtype=torch.long)
-            image_part = torch.index_select(image_part, dim=1, index=mid_index)
-            mask_part = torch.index_select(mask_part, dim=1, index=mid_index)
-            gt_part = torch.index_select(gt_part, dim=1, index=mid_index)
+            image_part = torch.unsqueeze(image_part[:, 0, :, :], dim=1)
+            gt_part = torch.unsqueeze(gt_part[:, 0, :, :], dim=1)
+            mask_part = torch.unsqueeze(mask_part[:, 0, :, :], dim=1)
 
             image.append(image_part)
             mask.append(mask_part)
