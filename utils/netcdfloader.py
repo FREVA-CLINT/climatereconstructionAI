@@ -54,9 +54,13 @@ class NetCDFLoader(torch.utils.data.Dataset):
         for i in range(len(self.data_types)):
             img_file = h5py.File('{}{}'.format(self.data_path, self.img_names[i]), 'r')
             img_data = img_file.get(self.data_types[i])
+            if img_data.ndim == 4:
+                img_data = img_data[:,0,:,:]
             img_lengths.append(len(img_data[:, 0, 0]))
             mask_file = h5py.File('{}{}'.format(self.mask_path, self.mask_names[i]), 'r')
             mask_data = mask_file.get(self.data_types[i])
+            if mask_data.ndim == 4:
+                mask_data = mask_data[:,0,:,:]
             self.mask_lengths.append(len((mask_data[:, 0, 0])))
 
 
@@ -66,14 +70,20 @@ class NetCDFLoader(torch.utils.data.Dataset):
 
     def load_data(self):
         # open netcdf file for img and mask
-        img_data = []
-        mask_data = []
+        imgs = []
+        masks = []
         for i in range(len(self.data_types)):
             img_file = h5py.File('{}{}'.format(self.data_path, self.img_names[i]), 'r')
-            img_data.append(img_file.get(self.data_types[i]))
+            img_data = img_file.get(self.data_types[i])
+            if img_data.ndim == 4:
+                img_data = img_data[:,0,:,:]
+            imgs.append(img_data)
             mask_file = h5py.File('{}{}'.format(self.mask_path, self.mask_names[i]))
-            mask_data.append(mask_file.get(self.data_types[i]))
-        return img_data, mask_data
+            mask_data = mask_file.get(self.data_types[i])
+            if mask_data.ndim == 4:
+                mask_data = mask_data[:,0,:,:]
+            masks.append(mask_data)
+        return imgs, masks
 
     def __getitem__(self, index):
         img_data, mask_data = self.load_data()
