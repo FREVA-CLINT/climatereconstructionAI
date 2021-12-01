@@ -26,10 +26,9 @@ class InpaintingLoss(nn.Module):
         self.extractor = extractor
 
     def forward(self, input, mask, output, gt):
-        # only select first channel of all tensors
+        # only select first channel
         input = torch.unsqueeze(input[:, 0, :, :], dim=1)
         mask = torch.unsqueeze(mask[:, 0, :, :], dim=1)
-        output = torch.unsqueeze(output[:, 0, :, :], dim=1)
         gt = torch.unsqueeze(gt[:, 0, :, :], dim=1)
 
         # create output_comp

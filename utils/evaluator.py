@@ -96,7 +96,7 @@ class PConvLSTMEvaluator:
             gt_part = gt_part[:, lstm_steps, :, :, :].to(torch.device('cpu'))
             output_part = output_part[:, lstm_steps, :, :, :].to(torch.device('cpu'))
 
-            # only select mid indexed-element
+            # only select first channel
             image_part = torch.unsqueeze(image_part[:, 0, :, :], dim=1)
             gt_part = torch.unsqueeze(gt_part[:, 0, :, :], dim=1)
             mask_part = torch.unsqueeze(mask_part[:, 0, :, :], dim=1)

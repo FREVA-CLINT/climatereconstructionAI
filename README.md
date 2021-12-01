@@ -1,14 +1,5 @@
 # Infilling spatial precipitation recordings with a memory assisted CNN
 
-**[Applied implementation] (https://github.com/naoto0804/pytorch-inpainting-with-partial-conv)**
-
-**[Official implementation](https://github.com/NVIDIA/partialconv) is released by the authors.**
-
-**Note that this is an ongoing re-implementation and is designed for climate reconstructions using numerial model input and output!**
-
-This is an unofficial pytorch implementation of a paper, [Image Inpainting for Irregular Holes Using Partial Convolutions](https://arxiv.org/abs/1804.07723) [Liu+, arXiv2018].
-https://github.com/czifan/ConvLSTM.pytorch
-
 ## Requirements
 - Python 3.7+
 
@@ -24,16 +15,18 @@ Download climate data. The dataset should contain `data_large`, `val_large`, and
 ### Training
 The training process can be started by executing 
 
-`python train.py`
+`python train_and_evaluate/train.py`
 
 To specify additional args such as the data root directory, use `--arg arg_value`.
 Here are some important args:
-- `--root-dir` -> root directory of the data
+- `--data-root-dir` -> root directory of training and validation data
 - `--snapshot-dir` -> directory of training checkpoints
-- `--mask-dir` -> directory of mask file
+- `--mask-dir` -> directory of mask files
+- `--img-names` -> comma separated list of training data files stored in the data root directory, have to be same shape!
+- `--mask-names` -> comma separated list of mask files stored in the mask directory, need to correspond to order in img-names
+- `--data-types` -> comma separated list of types of variable, need to correspond to order in img-names and mask-names
 - `--device` -> cuda or cpu
-- `--data-type` -> type of variable in netCDF file
-- `--prev-next` -> Number of previous and following states that should be considered for training process
+- `--lstm-steps` -> Number of considered sequences for lstm, set to zero, if lstm module should be deactivated
 - `--encoding-layers` -> number of encoding layers in the CNN
 - `--pooling-layers` -> number of pooling layers in the CNN
 - `--image-size` -> size of image, must be of shape NxN
@@ -41,11 +34,17 @@ Here are some important args:
 ### Evaluate
 The evaluation process can be started by executing
 
-`python evaluate.py`
+`python train_and_evaluate/evaluate.py`
 
 Important args:
-- `--root-dir` -> root directory of the data
 - `--evaluation-dir` -> directory where evaluations will be stored
+- `--data-root-dir` -> root directory of test data
+- `--mask-dir` -> directory of mask files
+- `--img-names` -> comma separated list of training data files stored in the data root directory, have to be same shape!
+- `--mask-names` -> comma separated list of mask files stored in the mask directory, need to correspond to order in img-names
+- `--data-types` -> comma separated list of types of variable, need to correspond to order in img-names and mask-names
+- `--device` -> cuda or cpu
+- `--lstm-steps` -> Number of considered sequences for lstm, set to zero, if lstm module should be deactivated
 - `--infill` -> 'test', if mask order is irrelevant, 'infill', if mask order is relevant
 - `--create-images` -> creates images for time window in format 'YYY-MM-DD-HH:MM,YYYY-MM-DD-HH:MM'
 - `--create-video` -> creates video. Images need to be created as well
