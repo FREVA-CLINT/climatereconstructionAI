@@ -54,6 +54,8 @@ class NetCDFLoader(torch.utils.data.Dataset):
         for i in range(len(self.data_types)):
             img_file = h5py.File('{}{}'.format(self.data_path, self.img_names[i]), 'r')
             img_data = img_file.get(self.data_types[i])
+            print(self.img_names[i])
+            print(self.data_types[i])
             img_lengths.append(len(img_data[:, 1, 1]))
             mask_file = h5py.File('{}{}'.format(self.mask_path, self.mask_names[i]), 'r')
             mask_data = mask_file.get(self.data_types[i])
