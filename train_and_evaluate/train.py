@@ -10,7 +10,7 @@ from tqdm import tqdm
 from model.PConvLSTM import PConvLSTM
 from utils.featurizer import VGG16FeatureExtractor
 from utils.io import load_ckpt, save_ckpt
-from utils.netcdfloader import LSTMNetCDFDataLoader as NetCDFDataLoader, InfiniteSampler
+from utils.netcdfloader import NetCDFLoader, InfiniteSampler
 from utils.evaluator import create_snapshot_image
 from model.loss import InpaintingLoss
 import config as cfg
@@ -26,8 +26,8 @@ if not os.path.exists(cfg.log_dir):
 writer = SummaryWriter(log_dir=cfg.log_dir)
 
 # define data set + iterator
-dataset_train = NetCDFDataLoader(cfg.data_root_dir, cfg.mask_dir, 'train', cfg.data_type, cfg.lstm_steps)
-dataset_val = NetCDFDataLoader(cfg.data_root_dir, cfg.mask_dir, 'val', cfg.data_type, cfg.lstm_steps)
+dataset_train = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, 'train', cfg.data_types, cfg.lstm_steps)
+dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, 'val', cfg.data_types, cfg.lstm_steps)
 iterator_train = iter(data.DataLoader(dataset_train, batch_size=cfg.batch_size,
                                       sampler=InfiniteSampler(len(dataset_train)),
                                       num_workers=cfg.n_threads))
@@ -39,7 +39,7 @@ if cfg.lstm_steps == 0:
 model = PConvLSTM(image_size=cfg.image_size,
                   num_enc_dec_layers=cfg.encoding_layers,
                   num_pool_layers=cfg.pooling_layers,
-                  num_in_channels=1,
+                  num_in_channels=len(cfg.data_types),
                   lstm=lstm).to(cfg.device)
 
 # define learning rate

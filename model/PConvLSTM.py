@@ -123,14 +123,14 @@ class EncoderBlock(nn.Module):
 
 class DecoderBlock(nn.Module):
     def __init__(self, in_channels, out_channels, image_size, kernel, stride, activation, dilation=(1, 1), groups=1,
-                 lstm=False, bias=False, bn=True):
+                 lstm=False, bias=False, bn=True, init_in_channels=1):
         super().__init__()
         padding = kernel[0] // 2, kernel[1] // 2
         self.partial_conv = PConvBlock(in_channels, out_channels, kernel, stride, padding, dilation, groups, bias,
                                        activation, bn)
 
         if lstm:
-            self.lstm_conv = ConvLSTMBlock(in_channels - out_channels, in_channels - out_channels, image_size // 2,
+            self.lstm_conv = ConvLSTMBlock(in_channels - (out_channels + init_in_channels - 1), in_channels - (out_channels + init_in_channels - 1), image_size // 2,
                                            kernel, (1, 1), padding,
                                            (1, 1), groups)
 
@@ -242,7 +242,7 @@ class PConvLSTM(nn.Module):
                 in_channels=image_size // (2 ** (self.num_enc_dec_layers - 1)) + self.num_in_channels,
                 out_channels=1,
                 image_size=image_size,
-                kernel=(3, 3), stride=(1, 1), activation=None, lstm=lstm, bn=False, bias=True))
+                kernel=(3, 3), stride=(1, 1), activation=None, lstm=lstm, bn=False, bias=True, init_in_channels=self.num_in_channels))
         self.decoder = nn.ModuleList(decoding_layers)
 
     def forward(self, input, input_mask):
