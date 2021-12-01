@@ -27,10 +27,10 @@ class InpaintingLoss(nn.Module):
 
     def forward(self, input, mask, output, gt):
         # only select first channel of all tensors
-        input = torch.unsqueeze(input[:,0,:,:], dim=1)
-        mask = torch.unsqueeze(mask[:,0,:,:], dim=1)
-        output = torch.unsqueeze(output[:,0,:,:], dim=1)
-        gt = torch.unsqueeze(gt[:,0,:,:], dim=1)
+        input = torch.unsqueeze(input[:, 0, :, :], dim=1)
+        mask = torch.unsqueeze(mask[:, 0, :, :], dim=1)
+        output = torch.unsqueeze(output[:, 0, :, :], dim=1)
+        gt = torch.unsqueeze(gt[:, 0, :, :], dim=1)
 
         # create output_comp
         output_comp = mask * input + (1 - mask) * output
@@ -46,9 +46,9 @@ class InpaintingLoss(nn.Module):
             feat_output_comp = self.extractor(torch.cat([output_comp] * 3, 1))
             feat_gt = self.extractor(torch.cat([gt] * 3, 1))
         else:
-            feat_output = torch.cat([output] * 3, 1).permute(1,0,2,3).unsqueeze(1)
-            feat_output_comp = torch.cat([output_comp] * 3, 1).permute(1,0,2,3).unsqueeze(1)
-            feat_gt = torch.cat([gt] * 3, 1).permute(1,0,2,3).unsqueeze(1)
+            feat_output = torch.cat([output] * 3, 1).permute(1, 0, 2, 3).unsqueeze(1)
+            feat_output_comp = torch.cat([output_comp] * 3, 1).permute(1, 0, 2, 3).unsqueeze(1)
+            feat_gt = torch.cat([gt] * 3, 1).permute(1, 0, 2, 3).unsqueeze(1)
 
         loss_dict['prc'] = 0.0
         loss_dict['style'] = 0.0
@@ -80,7 +80,8 @@ class WeightedCrossEntropyLoss(nn.Module):
 
         error = F.cross_entropy(input, class_index, weight=self._weight, reduction='none')
         error = error.unsqueeze(2)
-        return torch.mean(error*(mask))
+        return torch.mean(error * (mask))
+
 
 class CrossEntropyLoss(nn.Module):
     def __init__(self):
@@ -88,5 +89,5 @@ class CrossEntropyLoss(nn.Module):
 
     def forward(self, outputs, targets):
         loss = -torch.mean(targets * torch.log(outputs) +
-                          (1-targets) * torch.log(1-outputs))
+                           (1 - targets) * torch.log(1 - outputs))
         return loss

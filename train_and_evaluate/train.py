@@ -26,8 +26,10 @@ if not os.path.exists(cfg.log_dir):
 writer = SummaryWriter(log_dir=cfg.log_dir)
 
 # define data set + iterator
-dataset_train = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, 'train', cfg.data_types, cfg.lstm_steps)
-dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, 'val', cfg.data_types, cfg.lstm_steps)
+dataset_train = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, 'train', cfg.data_types,
+                             cfg.lstm_steps)
+dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, 'val', cfg.data_types,
+                           cfg.lstm_steps)
 iterator_train = iter(data.DataLoader(dataset_train, batch_size=cfg.batch_size,
                                       sampler=InfiniteSampler(len(dataset_train)),
                                       num_workers=cfg.n_threads))

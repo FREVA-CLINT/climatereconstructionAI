@@ -124,7 +124,7 @@ def set_evaluation_args():
     arg_parser.add_argument('--pooling-layers', type=int, default=0)
     arg_parser.add_argument('--image-size', type=int, default=72)
     arg_parser.add_argument('--infill', type=str, default=None)
-    arg_parser.add_argument('--create-images', type=str, default='2017-07-12-14:00,2017-07-12-14:00')
+    arg_parser.add_argument('--create-images', type=str, default=None)
     arg_parser.add_argument('--create-video', action='store_true')
     arg_parser.add_argument('--create-report', action='store_true')
     args = arg_parser.parse_args()
