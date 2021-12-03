@@ -22,7 +22,7 @@ Here are some important args:
 - `--data-root-dir` -> root directory of training and validation data
 - `--snapshot-dir` -> directory of training checkpoints
 - `--mask-dir` -> directory of mask files
-- `--img-names` -> comma separated list of training data files stored in the data root directory, have to be same shape!
+- `--img-names` -> comma separated list of training data files stored in the data root directory, have to be same shape! First image is ground truth
 - `--mask-names` -> comma separated list of mask files stored in the mask directory, need to correspond to order in img-names
 - `--data-types` -> comma separated list of types of variable, need to correspond to order in img-names and mask-names
 - `--device` -> cuda or cpu
