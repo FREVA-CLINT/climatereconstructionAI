@@ -48,14 +48,20 @@ class NetCDFLoader(torch.utils.data.Dataset):
 
         img_lengths = []
         self.mask_lengths = []
+        self.img_data = []
+        self.mask_data = []
         # define lengths of image and mask
         for i in range(len(self.data_types)):
             img_file = h5py.File('{}{}'.format(self.data_path, self.img_names[i]), 'r')
-            img_data = img_file.get(self.data_types[i])
-            img_lengths.append(img_data.shape[0])
+            self.img_data.append(img_file.get(self.data_types[i]))
+            img_lengths.append(self.img_data[i].shape[0])
+            if self.img_data[i].ndim == 4:
+                self.img_data[i] = self.img_data[i][:, 0, :, :]
             mask_file = h5py.File('{}{}'.format(self.mask_path, self.mask_names[i]), 'r')
-            mask_data = mask_file.get(self.data_types[i])
-            self.mask_lengths.append(mask_data.shape[0])
+            self.mask_data.append(mask_file.get(self.data_types[i]))
+            self.mask_lengths.append(self.mask_data[i].shape[0])
+            if self.mask_data[i].ndim == 4:
+                self.mask_data[i] = self.mask_data[i][:, 0, :, :]
 
         # check if images all have same length
         assert img_lengths[:-1] == img_lengths[1:]
@@ -70,20 +76,10 @@ class NetCDFLoader(torch.utils.data.Dataset):
         images = []
         masks = []
         # iterate each defined netcdf file
-        for i in range(len(self.data_types)):
-            # open netcdf file for img and mask
-            img_file = h5py.File('{}{}'.format(self.data_path, self.img_names[i]), 'r')
-            img_data = img_file.get(self.data_types[i])
-            if img_data.ndim == 4:
-                images.append(torch.from_numpy(img_data[img_ranges[i][0]:img_ranges[i][1], 0, :, :]))
-            else:
-                images.append(torch.from_numpy(img_data[img_ranges[i][0]:img_ranges[i][1], :, :]))
-            mask_file = h5py.File('{}{}'.format(self.mask_path, self.mask_names[i]))
-            mask_data = mask_file.get(self.data_types[i])
-            if mask_data.ndim == 4:
-                masks.append(torch.from_numpy(mask_data[mask_ranges[i][0]:mask_ranges[i][1], 0, :, :]))
-            else:
-                masks.append(torch.from_numpy(mask_data[mask_ranges[i][0]:mask_ranges[i][1], :, :]))
+        for i in range(len(self.img_data)):
+            # get img and mask for ranges
+            images.append(torch.from_numpy(self.img_data[i][img_ranges[i][0]:img_ranges[i][1], :, :]))
+            masks.append(torch.from_numpy(self.mask_data[i][mask_ranges[i][0]:mask_ranges[i][1], :, :]))
         return images, masks
 
     def __getitem__(self, index):
