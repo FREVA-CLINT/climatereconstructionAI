@@ -11,17 +11,17 @@
 
 module source start-scripts/setup-modules.txt
 
-singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img_levante.sif \
- python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/train_and_evaluate/train.py \
- --device cuda --batch-size 4 --image-size 512 --pooling-layers 3 --encoding-layers 4 --data-types pr,pr \
- --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-complete-scaled/ \
- --mask-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/masks/ \
- --img-names train.h5,train.h5 --mask-names single_radar_fail.h5,single_radar_fail.h5 \
- --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/precipitation/radolan-old/ \
- --log-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/logs/precipitation/radolan-old/ \
- --lstm-steps 0 \
- --max-iter 100000 \
- --save-model-interval 10000
+#singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img_levante.sif \
+# python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/train_and_evaluate/train.py \
+# --device cuda --batch-size 4 --image-size 512 --pooling-layers 3 --encoding-layers 4 --data-types pr,pr \
+# --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-complete-scaled/ \
+# --mask-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/masks/ \
+# --img-names train.h5,train.h5 --mask-names single_radar_fail.h5,single_radar_fail.h5 \
+# --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/precipitation/radolan-old/ \
+# --log-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/logs/precipitation/radolan-old/ \
+# --lstm-steps 0 \
+# --max-iter 100000 \
+# --save-model-interval 10000
 singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img_levante.sif \
  python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/train_and_evaluate/train.py \
  --device cuda --batch-size 4 --image-size 512 --pooling-layers 3 --encoding-layers 4 --data-types pr,tas \
@@ -32,6 +32,6 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --log-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/logs/precipitation/radolan-rea2-tas/ \
  --lstm-steps 0 \
  --max-iter 200000 \
- --resume /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/precipitation/radolan-rea2-tas/ckpt/200000.pth \
+ --resume /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/precipitation/radolan-rea2-tas/ckpt/100000.pth \
  --finetune \
  --save-model-interval 10000
