@@ -10,7 +10,7 @@ import config as cfg
 
 cfg.set_evaluation_args()
 
-evaluator = PConvLSTMEvaluator(cfg.evaluation_dir, cfg.mask_dir, cfg.data_root_dir + 'test_large/', cfg.data_types)
+evaluator = PConvLSTMEvaluator(cfg.evaluation_dir, cfg.mask_dir+cfg.mask_names[0], cfg.data_root_dir + 'test_large/', cfg.data_types[0])
 
 if cfg.infill:
     dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, cfg.infill, cfg.data_types, cfg.lstm_steps)

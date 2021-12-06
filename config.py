@@ -111,7 +111,9 @@ def set_train_args():
 
 def set_evaluation_args():
     arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument('--data-type', type=str, default='tas')
+    arg_parser.add_argument('--data-types', type=str, default='tas')
+    arg_parser.add_argument('--img-names', type=str, default='train.h5')
+    arg_parser.add_argument('--mask-names', type=str, default='mask.h5')
     arg_parser.add_argument('--evaluation-dir', type=str, default='evaluation/')
     arg_parser.add_argument('--snapshot-dir', type=str, default='snapshots/')
     arg_parser.add_argument('--data-root-dir', type=str, default='../data/')
@@ -129,7 +131,9 @@ def set_evaluation_args():
     arg_parser.add_argument('--create-report', action='store_true')
     args = arg_parser.parse_args()
 
-    global data_type
+    global data_types
+    global img_names
+    global mask_names
     global evaluation_dir
     global snapshot_dir
     global data_root_dir
@@ -146,7 +150,9 @@ def set_evaluation_args():
     global create_video
     global create_report
 
-    data_type = args.data_type
+    data_types = args.data_types.split(',')
+    img_names = args.img_names.split(',')
+    mask_names = args.mask_names.split(',')
     evaluation_dir = args.evaluation_dir
     snapshot_dir = args.snapshot_dir
     data_root_dir = args.data_root_dir
