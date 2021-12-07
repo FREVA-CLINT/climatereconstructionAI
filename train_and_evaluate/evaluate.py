@@ -51,6 +51,10 @@ if cfg.create_report:
             if output.ndim == 4:
                 output = output[:, 0, :, :]
             outputs[cfg.eval_names[i]] = output
+        for i in range(len(gt.flatten())):
+            if gt.flatten()[i] is None:
+                print("HEY das geht ja gar nicht!")
+        print("Alles gut!")
     create_evaluation_report(gt, outputs)
 
 if cfg.create_images:
