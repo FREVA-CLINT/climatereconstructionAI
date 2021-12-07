@@ -161,7 +161,7 @@ class PConvLSTMEvaluator:
                     writer.append_data(image)
 
     def create_evaluation_report(self, save_dir='evaluations/', create_evalutation_files=True, clean_data=False,
-                                 infilled=False):
+                                 infilled=True):
         if not os.path.exists(self.eval_save_dir + save_dir):
             os.makedirs('{:s}'.format(self.eval_save_dir + save_dir))
         directory = self.eval_save_dir + save_dir
