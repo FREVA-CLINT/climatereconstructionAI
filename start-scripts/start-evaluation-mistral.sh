@@ -17,7 +17,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/train_and_evaluate/evaluate.py \
  --device cuda --image-size 72 --pooling-layers 0 --encoding-layers 3 --data-types tas \
  --img-names tas_20cr_RECONSTRUCT_187001-200512.h5 --mask-names hadcrut_missmask_187001-200512.h5 \
- --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-rea2/ \
+ --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/20cr/ \
  --mask-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/masks/ \
  --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/temperature/cmip/1000000.pth \
  --evaluation-dirs evaluation/temperature/cmip/ \
