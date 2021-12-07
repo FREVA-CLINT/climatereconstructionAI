@@ -59,8 +59,8 @@ def plot_data(time_series_dict, subplot):
 
 
 def infill(model, dataset, partitions):
-    if not os.path.exists(cfg.evaluation_dir):
-        os.makedirs('{:s}'.format(cfg.evaluation_dir))
+    if not os.path.exists(cfg.evaluation_dirs[0]):
+        os.makedirs('{:s}'.format(cfg.evaluation_dirs[0]))
     image = []
     mask = []
     gt = []
