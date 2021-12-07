@@ -29,17 +29,7 @@ if cfg.infill:
     model.eval()
 
     gt, output = infill(model, dataset_val, cfg.partitions)
-
-if cfg.create_images:
-    start_date = cfg.create_images.split(',')[0]
-    end_date = cfg.create_images.split(',')[1]
-    create_video = False
-    if cfg.create_video:
-        create_video = True
-    create_evaluation_images('image.nc', create_video, start_date, end_date)
-    create_evaluation_images('gt.nc', create_video, start_date, end_date)
-    create_evaluation_images('output.nc', create_video, start_date, end_date)
-    create_evaluation_images('output_comp.nc', create_video, start_date, end_date)
+    outputs = {cfg.eval_names[0]: output}
 
 if cfg.create_report:
     if gt is None or outputs is None:
@@ -57,3 +47,14 @@ if cfg.create_report:
                 output = output[:, 0, :, :]
             outputs[cfg.eval_names[i]] = output
     create_evaluation_report(gt, outputs)
+
+if cfg.create_images:
+    start_date = cfg.create_images.split(',')[0]
+    end_date = cfg.create_images.split(',')[1]
+    create_video = False
+    if cfg.create_video:
+        create_video = True
+    create_evaluation_images('image.nc', create_video, start_date, end_date)
+    create_evaluation_images('gt.nc', create_video, start_date, end_date)
+    create_evaluation_images('output.nc', create_video, start_date, end_date)
+    create_evaluation_images('output_comp.nc', create_video, start_date, end_date)
