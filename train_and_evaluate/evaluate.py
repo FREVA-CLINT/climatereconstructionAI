@@ -42,9 +42,9 @@ if cfg.create_report:
         if cfg.mask_zero:
             mask[gt < cfg.mask_zero] = 1
         mask = np.delete(mask, 120, 0)
+        gt = np.delete(gt, 120, 0)
 
         gt = ma.masked_array(gt, mask)[:, :, :]
-        gt = np.delete(gt, 120, 0)
         outputs = {}
         for i in range(len(cfg.evaluation_dirs)):
             output = h5py.File('{}{}'.format(cfg.evaluation_dirs[i], 'output'), 'r').get(cfg.data_types[0])[:, :, :]
