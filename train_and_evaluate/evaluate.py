@@ -32,7 +32,6 @@ if cfg.infill:
     outputs = {cfg.eval_names[0]: output}
 
 if cfg.create_report:
-    r = (100,150)
     if gt is None or outputs is None:
         gt = h5py.File('{}{}'.format(cfg.evaluation_dirs[0], 'gt'), 'r').get(cfg.data_types[0])[:, :, :]
         mask = h5py.File('{}{}'.format(cfg.evaluation_dirs[0], 'mask'), 'r').get(cfg.data_types[0])[:, :, :]
@@ -42,7 +41,8 @@ if cfg.create_report:
             mask = mask[:, 0, :, :]
         if cfg.mask_zero:
             mask[gt < cfg.mask_zero] = 1
-        gt = ma.masked_array(gt, mask)[r[0]:r[1], :, :]
+        gt = ma.masked_array(gt, mask)[:, :, :]
+        gt = np.delete(gt, 121, 0, 0)
         outputs = {}
         for i in range(len(cfg.evaluation_dirs)):
             output = h5py.File('{}{}'.format(cfg.evaluation_dirs[i], 'output'), 'r').get(cfg.data_types[0])[:, :, :]
@@ -50,6 +50,7 @@ if cfg.create_report:
             output[output < 0.0] = 0.0
             if output.ndim == 4:
                 output = output[:, 0, :, :]
+            output = np.delete(output, 121, 0, 0)
             outputs[cfg.eval_names[i]] = output
     create_evaluation_report(gt, outputs)
 
