@@ -13,7 +13,7 @@ cfg.set_evaluation_args()
 evaluator = PConvLSTMEvaluator(cfg.evaluation_dirs[0], cfg.mask_dir+cfg.mask_names[0], cfg.data_root_dir + 'test_large/', cfg.data_types[0])
 
 if cfg.infill:
-    dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, cfg.infill, cfg.data_types, cfg.lstm_steps)
+    """dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, cfg.infill, cfg.data_types, cfg.lstm_steps)
     lstm = True
     if cfg.lstm_steps == 0:
         lstm = False
@@ -25,9 +25,9 @@ if cfg.infill:
 
     load_ckpt(cfg.snapshot_dir, [('model', model)], cfg.device)
 
-    model.eval()
+    model.eval()"""
 
-    evaluator.infill(model, dataset_val, cfg.partitions)
+    evaluator.infill(None, None, None)
 
 if cfg.create_images:
     start_date = cfg.create_images.split(',')[0]

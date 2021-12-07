@@ -65,7 +65,7 @@ class PConvLSTMEvaluator:
         self.variable = variable
 
     def infill(self, model, dataset, partitions):
-        if not os.path.exists(self.eval_save_dir):
+        """if not os.path.exists(self.eval_save_dir):
             os.makedirs('{:s}'.format(self.eval_save_dir))
         image = []
         mask = []
@@ -123,7 +123,7 @@ class PConvLSTMEvaluator:
             for dim in range(0, 3):
                 h5[self.variable].dims[dim].label = dname[dim]
             h5.close()
-        print("Infilled images saved!")
+        print("Infilled images saved!")"""
         # convert to netCDF files
         self.convert_h5_to_netcdf(True, 'image')
         self.convert_h5_to_netcdf(False, 'gt')
