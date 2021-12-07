@@ -6,11 +6,11 @@ python /home/joe/PycharmProjects/climatereconstructionAI/climatereconstructionAI
  --data-root-dir ../data/20cr/ \
  --mask-dir masks/ \
  --snapshot-dir snapshots/temperature/cmip/ckpt/500000.pth \
- --evaluation-dirs evaluation/precipitation/test/,evaluation/precipitation/test/,evaluation/precipitation/test/,evaluation/precipitation/test/ \
+ --evaluation-dirs evaluation/precipitation/test/ \
  --create-report \
  --lstm-steps 0 \
  --partitions 1 \
- --eval-names Output1,Output2,Output3,Output4 \
+ --eval-names Output \
 # --mask-zero 0.05
 # --infill test \
 # --create-video \
