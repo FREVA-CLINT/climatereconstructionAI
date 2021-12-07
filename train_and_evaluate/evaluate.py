@@ -46,7 +46,7 @@ if cfg.create_report:
         outputs = {}
         for i in range(len(cfg.evaluation_dirs)):
             output = h5py.File('{}{}'.format(cfg.evaluation_dirs[i], 'output'), 'r').get(cfg.data_types[0])[:, :, :]
-            output = ma.masked_array(output, mask)[r[0]:r[1], :, :]
+            output = ma.masked_array(output, mask)[:, :, :]
             output[output < 0.0] = 0.0
             if output.ndim == 4:
                 output = output[:, 0, :, :]
