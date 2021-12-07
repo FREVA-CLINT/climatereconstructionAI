@@ -117,7 +117,7 @@ def infill(model, dataset, partitions):
             h5[cfg.data_types[0]].dims[dim].label = dname[dim]
         h5.close()
 
-    return ma.masked_array(gt, mask)[:, 0, :, :].numpy(), ma.masked_array(output_comp, mask)[:, 0, :, :].numpy()
+    return ma.masked_array(gt, mask)[:, 0, :, :], ma.masked_array(output_comp, mask)[:, 0, :, :]
 
 
 def convert_all_to_netcdf():
