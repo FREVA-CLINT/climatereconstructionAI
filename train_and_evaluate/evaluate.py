@@ -32,7 +32,7 @@ if cfg.infill:
     outputs = {cfg.eval_names[0]: output}
 
 if cfg.create_report:
-    r = (0,300)
+    r = (100,110)
     if gt is None or outputs is None:
         gt = h5py.File('{}{}'.format(cfg.evaluation_dirs[0], 'gt'), 'r').get(cfg.data_types[0])[:, :, :]
         mask = h5py.File('{}{}'.format(cfg.evaluation_dirs[0], 'mask'), 'r').get(cfg.data_types[0])[:, :, :]
@@ -51,11 +51,6 @@ if cfg.create_report:
             if output.ndim == 4:
                 output = output[:, 0, :, :]
             outputs[cfg.eval_names[i]] = output
-        gtflat = gt.flatten()
-        for i in range(len(gtflat)):
-            if gtflat[i] is None:
-                print("HEY das geht ja gar nicht!")
-        print("Alles gut!")
     create_evaluation_report(gt, outputs)
 
 if cfg.create_images:
