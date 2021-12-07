@@ -111,7 +111,7 @@ def infill(model, dataset, partitions):
     cname = ['image', 'mask', 'output', 'output_comp', 'gt']
     dname = ['time', 'lat', 'lon']
     for x in range(0, 5):
-        h5 = h5py.File('%s' % (cfg.evaluation_dir + cname[x]), 'w')
+        h5 = h5py.File('%s' % (cfg.evaluation_dirs[0] + cname[x]), 'w')
         h5.create_dataset(cfg.data_types[0], data=cvar[x].to(torch.device('cpu')))
         for dim in range(0, 3):
             h5[cfg.data_types[0]].dims[dim].label = dname[dim]
