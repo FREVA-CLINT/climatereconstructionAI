@@ -216,7 +216,7 @@ def create_evaluation_report(gt, outputs, timeseries_range=None):
     plt.clf()
 
     # Create PDF plot
-    bins = int(np.max(np.sum(gt, axis=(1, 2))) / 3)
+    bins = 30
     labels = ['GT']
     data = [np.sum(gt, axis=(1, 2))]
     for output_name,output in outputs.items():
