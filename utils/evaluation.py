@@ -189,8 +189,8 @@ def create_evaluation_report(gt, outputs, timeseries_range=None):
         # calculate time series
         """max_timeseries[output_name] = metrics.max_timeseries(output[timeseries_range[0]:timeseries_range[1]])
         min_timeseries[output_name] = metrics.min_timeseries(output[timeseries_range[0]:timeseries_range[1]])
-        mean_timeseries[output_name] = metrics.mean_timeseries(output[timeseries_range[0]:timeseries_range[1]])
-        fldcor_timeseries[output_name] = metrics.fldcor_timeseries(gt[timeseries_range[0]:timeseries_range[1]], output[timeseries_range[0]:timeseries_range[1]])"""
+        mean_timeseries[output_name] = metrics.mean_timeseries(output[timeseries_range[0]:timeseries_range[1]])"""
+        fldcor_timeseries[output_name] = metrics.fldcor_timeseries(gt[timeseries_range[0]:timeseries_range[1]], output[timeseries_range[0]:timeseries_range[1]])
 
     # create dataframe for metrics
     df = pd.DataFrame()
