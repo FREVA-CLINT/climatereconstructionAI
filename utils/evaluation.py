@@ -52,6 +52,7 @@ def get_data(file, var):
 
 def plot_data(time_series_dict, subplot):
     for name,time_series in time_series_dict.items():
+        print(np.squeeze(time_series))
         subplot.plot([i for i in range(0, time_series.shape[0])], np.squeeze(time_series), label=name)
     subplot.set_xlabel("Timesteps")
     subplot.set_ylabel("Precipitation")
