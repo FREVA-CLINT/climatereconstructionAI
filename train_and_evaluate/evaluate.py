@@ -43,7 +43,6 @@ if cfg.create_report:
         if cfg.mask_zero:
             mask[gt < cfg.mask_zero] = 1
         gt = ma.masked_array(gt, mask)[:, :, :]
-        gt = np.delete(gt, 119, 0)
         outputs = {}
         for i in range(len(cfg.evaluation_dirs)):
             output = h5py.File('{}{}'.format(cfg.evaluation_dirs[i], 'output'), 'r').get(cfg.data_types[0])[r[0]:r[1], :, :]
@@ -51,7 +50,6 @@ if cfg.create_report:
             output[output < 0.0] = 0.0
             if output.ndim == 4:
                 output = output[:, 0, :, :]
-            output = np.delete(output, 119, 0)
             outputs[cfg.eval_names[i]] = output
     create_evaluation_report(gt, outputs)
 
