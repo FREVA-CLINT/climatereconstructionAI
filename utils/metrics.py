@@ -21,6 +21,7 @@ def mean_timeseries(input):
     sums = []
     for i in range(input.shape[0]):
         sum = np.sum(input[i])
+        print(input[i].shape)
         sums.append(sum / (input[i].shape[0] * input[i].shape[1]))
 
     return sums
