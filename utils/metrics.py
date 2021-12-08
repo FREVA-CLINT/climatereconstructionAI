@@ -30,10 +30,8 @@ def fldcor_timeseries(gt, output):
     for i in range(gt.shape[0]):
         gt_flat = gt[i].flatten()
         output_flat = output[i].flatten()
-        if np.all(gt_flat == gt_flat[0]) or np.all(output_flat):
+        if np.max(gt_flat) == np.min(gt_flat) or np.max(output_flat) == np.min(output_flat):
             print(i)
-        else:
-            print(gt_flat[0])
         time_series.append(np.corrcoef(gt_flat, output_flat)[0][1])
     return np.array(time_series)
 
