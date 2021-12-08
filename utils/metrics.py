@@ -1,4 +1,5 @@
 import numpy as np
+from numpy import ma
 
 
 def rmse(gt, output):
@@ -26,17 +27,16 @@ def total_sum(input):
 
 
 def fldcor_timeseries(gt, output):
-    time_series = []
+    time_series = np.zeros(gt.shape[0])
+    mask = np.zeros(gt.shape[0])
     for i in range(gt.shape[0]):
         gt_flat = gt[i].flatten()
         output_flat = output[i].flatten()
         if np.max(gt_flat) == np.min(gt_flat) or np.max(output_flat) == np.min(output_flat):
-            print(np.max(gt_flat))
-            print(np.min(gt_flat))
-            print(np.max(output_flat))
-            print(np.min(output_flat))
-        time_series.append(np.corrcoef(gt_flat, output_flat)[0][1])
-    return np.array(time_series)
+            mask[i] = 1
+        else:
+            time_series[i] = np.corrcoef(gt_flat, output_flat)[0][1]
+    return ma.masked_array(np.array(time_series), mask)
 
 
 def fldor_timsum(gt, output):
