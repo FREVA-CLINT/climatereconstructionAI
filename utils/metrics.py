@@ -30,8 +30,8 @@ def fldcor_timeseries(gt, output):
     time_series = np.zeros(gt.shape[0])
     mask = np.zeros(gt.shape[0])
     for i in range(gt.shape[0]):
-        gt_flat = gt[i].flatten()
-        output_flat = output[i].flatten()
+        gt_flat = gt[i].flatten().compressed()
+        output_flat = output[i].flatten().compressed()
         if np.max(gt_flat) == np.min(gt_flat) or np.max(output_flat) == np.min(output_flat):
             mask[i] = 1
         else:
