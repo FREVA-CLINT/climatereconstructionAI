@@ -170,7 +170,7 @@ def create_evaluation_report(gt, outputs):
     data_sets = ['GT']
     rmses = ['0.0']
     time_cors = ['1.0']
-    total_prs = ['%.5f' % metrics.total_sum(gt)]
+    total_prs = [int(metrics.total_sum(gt))]
     mean_fld_cors = ['1.0']
     fld_cor_total_sum = ['1.0']
 
@@ -180,7 +180,7 @@ def create_evaluation_report(gt, outputs):
         data_sets.append(output_name)
         rmses.append('%.5f' % metrics.rmse(gt, output))
         time_cors.append('%.5f' % metrics.timcor(gt, output))
-        total_prs.append('%.5f' % metrics.total_sum(output))
+        total_prs.append(int(metrics.total_sum(output)))
         mean_fld_cors.append('%.5f' % metrics.timmean_fldor(gt, output))
         fld_cor_total_sum.append('%.5f' % metrics.fldor_timsum(gt, output))
         # calculate time series
