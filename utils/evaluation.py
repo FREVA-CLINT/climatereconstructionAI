@@ -180,6 +180,7 @@ def create_evaluation_report(gt, outputs):
     # define output metrics
     for output_name,output in outputs.items():
         # append values
+        print("go")
         data_sets.append(output_name)
         rmses.append('%.5f' % metrics.rmse(gt, output))
         time_cors.append('%.5f' % metrics.timcor(gt, output))
