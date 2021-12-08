@@ -224,10 +224,11 @@ def create_evaluation_report(gt, outputs):
 
     # Create PDF plot
     labels = ['GT']
-    data = [np.sum(gt, axis=(1, 2))]
+    data = []
     for output_name,output in outputs.items():
         labels.append(output_name)
         data.append(np.sum(output, axis=(1, 2)))
+    data.append(np.sum(gt, axis=(1, 2)))
     plt.hist(data, bins=cfg.PDF_BINS, label=labels, edgecolor='black')
 
     plt.title('Probabilistic density Histogram')
