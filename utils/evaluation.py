@@ -268,7 +268,6 @@ def create_evaluation_report(gt, outputs):
     pdf.cell(130, 20, " ", 0, 2, 'C')
 
     pdf.image(cfg.evaluation_dirs[0] + 'ts.png', x=None, y=None, w=208, h=156, type='', link='')
-    pdf.cell(-10)
     pdf.image(cfg.evaluation_dirs[0] + 'pdf.png', x=None, y=None,  w=208, h=156, type='', link='')
     pdf.output(cfg.evaluation_dirs[0] + 'Report.pdf', 'F')
 
