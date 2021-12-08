@@ -9,6 +9,8 @@ LAMBDA_DICT_PR_INPAINTING = {
     'SSL-OUT': 1.0,  # 'SSL-OUT-COMP': 1.0, 'valid': 1.0, 'hole': 6.0, 'tv': 0.1, 'prc': 0.05, 'style': 120.0
 }
 
+PDF_BINS = [0, 0.05, 0.1, 0.2, 0.5, 1.0, 5, 10, 15, 20, 50, 100, 300, 500, 2000, 5000, 10000, 20000, 40000, 80000, 120000]
+
 data_types = None
 mask_names = None
 img_names = None
@@ -20,6 +22,7 @@ create_video = None
 create_report = None
 log_dir = None
 snapshot_dir = None
+snapshot_dirs = None
 data_root_dir = None
 mask_dir = None
 resume = None
@@ -39,6 +42,7 @@ image_size = None
 eval_names = None
 mask_zero = None
 eval_range = None
+ts_range = None
 
 
 def set_train_args():
@@ -118,7 +122,7 @@ def set_evaluation_args():
     arg_parser.add_argument('--img-names', type=str, default='train.h5')
     arg_parser.add_argument('--mask-names', type=str, default='mask.h5')
     arg_parser.add_argument('--evaluation-dirs', type=str, default='evaluation/')
-    arg_parser.add_argument('--snapshot-dir', type=str, default='snapshots/')
+    arg_parser.add_argument('--snapshot-dirs', type=str, default='snapshots/')
     arg_parser.add_argument('--data-root-dir', type=str, default='../data/')
     arg_parser.add_argument('--mask-dir', type=str, default='masks/')
     arg_parser.add_argument('--device', type=str, default='cuda')
@@ -134,6 +138,7 @@ def set_evaluation_args():
     arg_parser.add_argument('--create-report', action='store_true')
     arg_parser.add_argument('--eval-names', type=str, default='Output')
     arg_parser.add_argument('--eval-range', type=str, default=None)
+    arg_parser.add_argument('--ts-range', type=str, default=None)
     arg_parser.add_argument('--mask-zero', type=float, default=None)
     args = arg_parser.parse_args()
 
@@ -141,7 +146,7 @@ def set_evaluation_args():
     global img_names
     global mask_names
     global evaluation_dirs
-    global snapshot_dir
+    global snapshot_dirs
     global data_root_dir
     global mask_dir
     global device
@@ -158,12 +163,13 @@ def set_evaluation_args():
     global eval_names
     global mask_zero
     global eval_range
+    global ts_range
 
     data_types = args.data_types.split(',')
     img_names = args.img_names.split(',')
     mask_names = args.mask_names.split(',')
     evaluation_dirs = args.evaluation_dirs.split(',')
-    snapshot_dir = args.snapshot_dir
+    snapshot_dirs = args.snapshot_dirs.split(',')
     data_root_dir = args.data_root_dir
     mask_dir = args.mask_dir
     torch.backends.cudnn.benchmark = True
@@ -181,5 +187,7 @@ def set_evaluation_args():
     eval_names = args.eval_names.split(',')
     if args.eval_range:
         eval_range = args.eval_range.split(',')
+    if args.ts_range:
+        ts_range = args.ts_range.split(',')
     mask_zero = args.mask_zero
 
