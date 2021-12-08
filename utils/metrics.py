@@ -28,10 +28,11 @@ def total_sum(input):
 def fldcor_timeseries(gt, output):
     time_series = []
     for i in range(gt.shape[0]):
-        print(i)
-        flat_gt = gt[i].flatten()
+        gt_flat = gt[i].flatten()
         output_flat = output[i].flatten()
-        time_series.append(np.corrcoef(flat_gt, output_flat)[0][1])
+        if np.all(gt_flat == gt_flat[0]) or np.all(output_flat):
+            print(i)
+        time_series.append(np.corrcoef(gt_flat, output_flat)[0][1])
     return np.array(time_series)
 
 
