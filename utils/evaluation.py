@@ -163,7 +163,7 @@ def create_evaluation_report(gt, outputs):
     # define gt metrics
     print("max")
     max_timeseries = {'Ground Truth': metrics.max_timeseries(gt)}
-    print(len(max_timeseries))
+    print((max_timeseries))
     print("min")
     min_timeseries = {'Ground Truth': metrics.min_timeseries(gt)}
     print(min_timeseries.__len__())
