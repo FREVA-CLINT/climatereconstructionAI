@@ -164,8 +164,11 @@ def create_evaluation_report(gt, outputs, timeseries_range=None):
         timeseries_range = (0, gt.shape[0])
 
     # define gt metrics
+    print("1")
     max_timeseries = {'Ground Truth': metrics.max_timeseries(gt[timeseries_range[0]:timeseries_range[1]])}
+    print("1")
     min_timeseries = {'Ground Truth': metrics.min_timeseries(gt[timeseries_range[0]:timeseries_range[1]])}
+    print("3")
     mean_timeseries = {'Ground Truth': metrics.mean_timeseries(gt[timeseries_range[0]:timeseries_range[1]])}
     fldcor_timeseries = {}
 
