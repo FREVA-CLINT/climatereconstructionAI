@@ -163,13 +163,13 @@ def create_evaluation_report(gt, outputs):
     # define gt metrics
     print("max")
     max_timeseries = {'Ground Truth': metrics.max_timeseries(gt)}
-    print(max_timeseries.shape)
+    print(len(max_timeseries))
     print("min")
     min_timeseries = {'Ground Truth': metrics.min_timeseries(gt)}
-    print(min_timeseries.shape)
+    print(min_timeseries.__len__())
     print("mean")
     mean_timeseries = {'Ground Truth': metrics.mean_timeseries(gt)}
-    print(mean_timeseries.shape)
+    print(mean_timeseries.__len__())
     fldcor_timeseries = {}
 
     # define arrays for dataframe
