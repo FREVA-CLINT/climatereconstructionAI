@@ -33,7 +33,7 @@ if cfg.infill:
 
 if cfg.create_report:
     if gt is None or outputs is None:
-        r = int(cfg.eval_range[0]), int(cfg.eval_range[1])
+        r = (int(cfg.eval_range[0]), int(cfg.eval_range[1]))
         gt = h5py.File('{}{}'.format(cfg.evaluation_dirs[0], 'gt'), 'r').get(cfg.data_types[0])[r[0]:r[1], :, :]
         mask = h5py.File('{}{}'.format(cfg.evaluation_dirs[0], 'mask'), 'r').get(cfg.data_types[0])[r[0]:r[1], :, :]
         if gt.ndim == 4:
