@@ -187,9 +187,13 @@ def create_evaluation_report(gt, outputs, timeseries_range=None):
         mean_fld_cors.append('%.5f' % metrics.timmean_fldor(gt, output))
         fld_cor_total_sum.append('%.5f' % metrics.fldor_timsum(gt, output))
         # calculate time series
+        print("1")
         max_timeseries[output_name] = metrics.max_timeseries(output[timeseries_range[0]:timeseries_range[1]])
+        print("2")
         min_timeseries[output_name] = metrics.min_timeseries(output[timeseries_range[0]:timeseries_range[1]])
+        print("3")
         mean_timeseries[output_name] = metrics.mean_timeseries(output[timeseries_range[0]:timeseries_range[1]])
+        print("4")
         fldcor_timeseries[output_name] = metrics.fldcor_timeseries(gt[timeseries_range[0]:timeseries_range[1]], output[timeseries_range[0]:timeseries_range[1]])
 
     # create dataframe for metrics
