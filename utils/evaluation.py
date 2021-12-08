@@ -161,12 +161,15 @@ def create_evaluation_images(self, file, create_video=False, start_date=None, en
 
 def create_evaluation_report(gt, outputs):
     # define gt metrics
-    print("1")
+    print("max")
     max_timeseries = {'Ground Truth': metrics.max_timeseries(gt)}
-    print("2")
+    print(max_timeseries.shape)
+    print("min")
     min_timeseries = {'Ground Truth': metrics.min_timeseries(gt)}
-    print("3")
+    print(min_timeseries.shape)
+    print("mean")
     mean_timeseries = {'Ground Truth': metrics.mean_timeseries(gt)}
+    print(mean_timeseries.shape)
     fldcor_timeseries = {}
 
     # define arrays for dataframe
