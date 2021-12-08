@@ -33,7 +33,10 @@ if cfg.infill:
 
 if cfg.create_report:
     if gt is None or outputs is None:
-        r = (int(cfg.eval_range[0]), int(cfg.eval_range[1]))
+        if cfg.eval_range:
+            r = (int(cfg.eval_range[0]), int(cfg.eval_range[1]))
+        else:
+            r = (0, _)
         gt = h5py.File('{}{}'.format(cfg.evaluation_dirs[0], 'gt'), 'r').get(cfg.data_types[0])[r[0]:r[1], :, :]
         mask = h5py.File('{}{}'.format(cfg.evaluation_dirs[0], 'mask'), 'r').get(cfg.data_types[0])[r[0]:r[1], :, :]
         if gt.ndim == 4:
@@ -44,6 +47,7 @@ if cfg.create_report:
             mask[gt < cfg.mask_zero] = 1
         gt = ma.masked_array(gt, mask)[:, :, :]
         outputs = {}
+        print(gt.shape)
         for i in range(len(cfg.evaluation_dirs)):
             output = h5py.File('{}{}'.format(cfg.evaluation_dirs[i], 'output'), 'r').get(cfg.data_types[0])[r[0]:r[1], :, :]
             output = ma.masked_array(output, mask)[:, :, :]
@@ -51,6 +55,7 @@ if cfg.create_report:
             if output.ndim == 4:
                 output = output[:, 0, :, :]
             outputs[cfg.eval_names[i]] = output
+            print(output.shape)
     create_evaluation_report(gt, outputs)
 
 if cfg.create_images:
