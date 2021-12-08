@@ -51,8 +51,6 @@ if cfg.create_report:
             if output.ndim == 4:
                 output = output[:, 0, :, :]
             outputs[cfg.eval_names[i]] = output
-    print(gt.shape)
-    print(output.shape)
     create_evaluation_report(gt, outputs)
 
 if cfg.create_images:
