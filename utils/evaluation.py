@@ -159,17 +159,14 @@ def create_evaluation_images(self, file, create_video=False, start_date=None, en
                 writer.append_data(image)
 
 
-def create_evaluation_report(gt, outputs, timeseries_range=None):
-    if timeseries_range is None:
-        timeseries_range = (0, gt.shape[0])
-
+def create_evaluation_report(gt, outputs):
     # define gt metrics
     print("1")
-    max_timeseries = {'Ground Truth': metrics.max_timeseries(gt[timeseries_range[0]:timeseries_range[1]])}
-    print("1")
-    min_timeseries = {'Ground Truth': metrics.min_timeseries(gt[timeseries_range[0]:timeseries_range[1]])}
+    max_timeseries = {'Ground Truth': metrics.max_timeseries(gt)}
+    print("2")
+    min_timeseries = {'Ground Truth': metrics.min_timeseries(gt)}
     print("3")
-    mean_timeseries = {'Ground Truth': metrics.mean_timeseries(gt[timeseries_range[0]:timeseries_range[1]])}
+    mean_timeseries = {'Ground Truth': metrics.mean_timeseries(gt)}
     fldcor_timeseries = {}
 
     # define arrays for dataframe
@@ -191,13 +188,13 @@ def create_evaluation_report(gt, outputs, timeseries_range=None):
         fld_cor_total_sum.append('%.5f' % metrics.fldor_timsum(gt, output))
         # calculate time series
         print("1")
-        max_timeseries[output_name] = metrics.max_timeseries(output[timeseries_range[0]:timeseries_range[1]])
+        max_timeseries[output_name] = metrics.max_timeseries(output)
         print("2")
-        min_timeseries[output_name] = metrics.min_timeseries(output[timeseries_range[0]:timeseries_range[1]])
+        min_timeseries[output_name] = metrics.min_timeseries(output)
         print("3")
-        mean_timeseries[output_name] = metrics.mean_timeseries(output[timeseries_range[0]:timeseries_range[1]])
+        mean_timeseries[output_name] = metrics.mean_timeseries(output)
         print("4")
-        fldcor_timeseries[output_name] = metrics.fldcor_timeseries(gt[timeseries_range[0]:timeseries_range[1]], output[timeseries_range[0]:timeseries_range[1]])
+        fldcor_timeseries[output_name] = metrics.fldcor_timeseries(gt, output)
 
     # create dataframe for metrics
     df = pd.DataFrame()
