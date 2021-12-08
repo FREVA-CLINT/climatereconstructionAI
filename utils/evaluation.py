@@ -161,11 +161,8 @@ def create_evaluation_images(self, file, create_video=False, start_date=None, en
 
 def create_evaluation_report(gt, outputs):
     # define gt metrics
-    print("max")
     max_timeseries = {'Ground Truth': metrics.max_timeseries(gt)}
-    print("min")
     min_timeseries = {'Ground Truth': metrics.min_timeseries(gt)}
-    print("mean")
     mean_timeseries = {'Ground Truth': metrics.mean_timeseries(gt)}
     fldcor_timeseries = {}
 
@@ -180,26 +177,16 @@ def create_evaluation_report(gt, outputs):
     # define output metrics
     for output_name,output in outputs.items():
         # append values
-        print("go")
         data_sets.append(output_name)
-        print("1")
         rmses.append('%.5f' % metrics.rmse(gt, output))
-        print("2")
         time_cors.append('%.5f' % metrics.timcor(gt, output))
-        print("3")
         total_prs.append('%.5f' % metrics.total_sum(output))
-        print("4")
         mean_fld_cors.append('%.5f' % metrics.timmean_fldor(gt, output))
-        print("5")
         fld_cor_total_sum.append('%.5f' % metrics.fldor_timsum(gt, output))
         # calculate time series
-        print("6")
         max_timeseries[output_name] = metrics.max_timeseries(output)
-        print("7")
         min_timeseries[output_name] = metrics.min_timeseries(output)
-        print("8")
         mean_timeseries[output_name] = metrics.mean_timeseries(output)
-        print("9")
         fldcor_timeseries[output_name] = metrics.fldcor_timeseries(gt, output)
 
     # create dataframe for metrics
