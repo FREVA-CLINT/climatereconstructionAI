@@ -32,7 +32,7 @@ if cfg.infill:
     outputs = {cfg.eval_names[0]: output}
 
 if cfg.create_report:
-    r = (0,130)
+    r = cfg.eval_range[0], cfg.eval_range[1]
     if gt is None or outputs is None:
         gt = h5py.File('{}{}'.format(cfg.evaluation_dirs[0], 'gt'), 'r').get(cfg.data_types[0])[r[0]:r[1], :, :]
         mask = h5py.File('{}{}'.format(cfg.evaluation_dirs[0], 'mask'), 'r').get(cfg.data_types[0])[r[0]:r[1], :, :]
