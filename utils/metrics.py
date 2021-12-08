@@ -40,7 +40,7 @@ def fldcor_timeseries(gt, output):
 
 
 def fldor_timsum(gt, output):
-    return np.corrcoef(np.sum(gt, axis=0).flatten(), np.sum(output, axis=0).flatten())[0][1]
+    return np.corrcoef(np.sum(gt, axis=0).flatten().compressed(), np.sum(output, axis=0).flatten().compressed())[0][1]
 
 
 def timmean_fldor(gt, output):
