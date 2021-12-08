@@ -160,10 +160,15 @@ def create_evaluation_images(self, file, create_video=False, start_date=None, en
 
 
 def create_evaluation_report(gt, outputs):
-    # define gt metrics
-    max_timeseries = {'Ground Truth': metrics.max_timeseries(gt)}
-    min_timeseries = {'Ground Truth': metrics.min_timeseries(gt)}
-    mean_timeseries = {'Ground Truth': metrics.mean_timeseries(gt)}
+    if cfg.ts_range is None:
+        ts_range = (0, gt.shape[0])
+    else:
+        ts_range = (int(cfg.ts_range[0]), int(cfg.ts_range[1]))
+
+    # define dicts for time series
+    max_timeseries = {}
+    min_timeseries = {}
+    mean_timeseries = {}
     fldcor_timeseries = {}
 
     # define arrays for dataframe
@@ -184,10 +189,15 @@ def create_evaluation_report(gt, outputs):
         mean_fld_cors.append('%.5f' % metrics.timmean_fldor(gt, output))
         fld_cor_total_sum.append('%.5f' % metrics.fldor_timsum(gt, output))
         # calculate time series
-        max_timeseries[output_name] = metrics.max_timeseries(output)
-        min_timeseries[output_name] = metrics.min_timeseries(output)
-        mean_timeseries[output_name] = metrics.mean_timeseries(output)
-        fldcor_timeseries[output_name] = metrics.fldcor_timeseries(gt, output)
+        max_timeseries[output_name] = metrics.max_timeseries(output[ts_range[0]:ts_range[1]])
+        min_timeseries[output_name] = metrics.min_timeseries(output[ts_range[0]:ts_range[1]])
+        mean_timeseries[output_name] = metrics.mean_timeseries(output[ts_range[0]:ts_range[1]])
+        fldcor_timeseries[output_name] = metrics.fldcor_timeseries(gt, output[ts_range[0]:ts_range[1]])
+
+    # set GT time series
+    max_timeseries['Ground Truth'] = metrics.max_timeseries(gt[ts_range[0]:ts_range[1]])
+    min_timeseries['Ground Truth'] = metrics.min_timeseries(gt[ts_range[0]:ts_range[1]])
+    mean_timeseries['Ground Truth'] = metrics.mean_timeseries(gt[ts_range[0]:ts_range[1]])
 
     # create dataframe for metrics
     df = pd.DataFrame()
@@ -209,23 +219,22 @@ def create_evaluation_report(gt, outputs):
     ax3.set_title('Field Cor vs GT')
     plot_data(fldcor_timeseries, ax3)
     fig.tight_layout()
-    plt.savefig(cfg.evaluation_dirs[0] + 'ts.png')
+    plt.savefig(cfg.evaluation_dirs[0] + 'ts.png', dpi=300)
     plt.clf()
 
     # Create PDF plot
-    bins = 25
     labels = ['GT']
     data = [np.sum(gt, axis=(1, 2))]
     for output_name,output in outputs.items():
         labels.append(output_name)
         data.append(np.sum(output, axis=(1, 2)))
-    plt.hist(data, bins=bins, label=labels, edgecolor='black')
+    plt.hist(data, bins=cfg.PDF_BINS, label=labels, edgecolor='black')
 
     plt.title('Probabilistic density Histogram')
     plt.xlabel('Total precipitation fall')
     plt.ylabel('Number of hours')
     plt.legend()
-    plt.savefig(cfg.evaluation_dirs[0] + 'pdf.png')
+    plt.savefig(cfg.evaluation_dirs[0] + 'pdf.png', dpi=300)
     plt.clf()
 
     # create PDF
@@ -257,6 +266,7 @@ def create_evaluation_report(gt, outputs):
     pdf.cell(130, 20, " ", 0, 2, 'C')
 
     pdf.image(cfg.evaluation_dirs[0] + 'ts.png', x=None, y=None, w=208, h=156, type='', link='')
+    pdf.cell(-10)
     pdf.image(cfg.evaluation_dirs[0] + 'pdf.png', x=None, y=None,  w=208, h=156, type='', link='')
     pdf.output(cfg.evaluation_dirs[0] + 'Report.pdf', 'F')
 
