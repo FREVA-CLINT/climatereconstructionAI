@@ -18,6 +18,8 @@ def min_timeseries(input):
 
 
 def mean_timeseries(input):
+    n = input.shape[0]
+    print(n)
     return np.mean(input, axis=(1, 2))
 
 
