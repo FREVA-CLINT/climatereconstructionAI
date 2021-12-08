@@ -185,7 +185,7 @@ def create_evaluation_report(gt, outputs):
         print("1")
         rmses.append('%.5f' % metrics.rmse(gt, output))
         print("2")
-        time_cos.append('%.5f' % metrics.timcor(gt, output))
+        time_cors.append('%.5f' % metrics.timcor(gt, output))
         print("3")
         total_prs.append('%.5f' % metrics.total_sum(output))
         print("4")
