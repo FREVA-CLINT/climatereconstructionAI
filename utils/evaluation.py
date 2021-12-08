@@ -223,11 +223,12 @@ def create_evaluation_report(gt, outputs):
     plt.clf()
 
     # Create PDF plot
-    labels = ['GT']
+    labels = []
     data = []
     for output_name,output in outputs.items():
         labels.append(output_name)
         data.append(np.sum(output, axis=(1, 2)))
+    labels.append(['GT'])
     data.append(np.sum(gt, axis=(1, 2)))
     plt.hist(data, bins=cfg.PDF_BINS, label=labels, edgecolor='black')
 
