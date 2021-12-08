@@ -26,6 +26,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --create-report \
  --eval-names Simple,Prev-Next,LSTM \
  --create-report \
+ --eval-range 1,118
 # --mask-zero 0.2 \
 # --infill infill \
 # --create-images 2017-07-12-14:00,2017-07-12-14:00 \

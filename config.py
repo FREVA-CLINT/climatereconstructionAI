@@ -38,6 +38,7 @@ pooling_layers = None
 image_size = None
 eval_names = None
 mask_zero = None
+eval_range = None
 
 
 def set_train_args():
@@ -132,6 +133,7 @@ def set_evaluation_args():
     arg_parser.add_argument('--create-video', action='store_true')
     arg_parser.add_argument('--create-report', action='store_true')
     arg_parser.add_argument('--eval-names', type=str, default='Output')
+    arg_parser.add_argument('--eval-range', type=str, default='1,100')
     arg_parser.add_argument('--mask-zero', type=float, default=None)
     args = arg_parser.parse_args()
 
@@ -155,6 +157,7 @@ def set_evaluation_args():
     global create_report
     global eval_names
     global mask_zero
+    global eval_range
 
     data_types = args.data_types.split(',')
     img_names = args.img_names.split(',')
@@ -176,5 +179,6 @@ def set_evaluation_args():
     create_video = args.create_video
     create_report = args.create_report
     eval_names = args.eval_names.split(',')
+    eval_range = args.eval_range.split(',')
     mask_zero = args.mask_zero
 
