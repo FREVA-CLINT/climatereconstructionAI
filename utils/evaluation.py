@@ -52,7 +52,6 @@ def get_data(file, var):
 
 def plot_data(time_series_dict, subplot):
     for name,time_series in time_series_dict.items():
-        print((time_series.shape))
         subplot.plot([i for i in range(0, time_series.shape[0])], time_series, label=name)
     subplot.set_xlabel("Timesteps")
     subplot.set_ylabel("Precipitation")
@@ -164,13 +163,10 @@ def create_evaluation_report(gt, outputs):
     # define gt metrics
     print("max")
     max_timeseries = {'Ground Truth': metrics.max_timeseries(gt)}
-    print((max_timeseries))
     print("min")
     min_timeseries = {'Ground Truth': metrics.min_timeseries(gt)}
-    print(min_timeseries.__len__())
     print("mean")
     mean_timeseries = {'Ground Truth': metrics.mean_timeseries(gt)}
-    print(mean_timeseries.__len__())
     fldcor_timeseries = {}
 
     # define arrays for dataframe
