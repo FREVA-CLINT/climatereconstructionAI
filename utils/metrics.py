@@ -32,6 +32,8 @@ def fldcor_timeseries(gt, output):
         output_flat = output[i].flatten()
         if np.all(gt_flat == gt_flat[0]) or np.all(output_flat):
             print(i)
+        else:
+            print(gt_flat[0])
         time_series.append(np.corrcoef(gt_flat, output_flat)[0][1])
     return np.array(time_series)
 
