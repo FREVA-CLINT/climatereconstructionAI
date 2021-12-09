@@ -16,6 +16,7 @@ sys.path.append('./')
 
 import utils.metrics as metrics
 
+
 def create_snapshot_image(model, dataset, filename, lstm_steps):
     image, mask, gt = zip(*[dataset[int(i)] for i in cfg.eval_timesteps])
 
@@ -30,10 +31,6 @@ def create_snapshot_image(model, dataset, filename, lstm_steps):
     mask = mask[:, lstm_steps, :, :, :]
     output = output[:, lstm_steps, :, :, :]
 
-    # get only first channel
-    image = torch.unsqueeze(image[:, 0, :, :], dim=1)
-    gt = torch.unsqueeze(gt[:, 0, :, :], dim=1)
-    mask = torch.unsqueeze(mask[:, 0, :, :], dim=1)
     output_comp = mask * image + (1 - mask) * output
 
     # set mask
@@ -42,17 +39,18 @@ def create_snapshot_image(model, dataset, filename, lstm_steps):
 
     mask = ma.masked_array(mask, mask)
 
-    data_list = [image, mask, output, output_comp, gt]
+    for c in range(output.shape[1]):
+        data_list = [image[:, c, :, :], mask[:, c, :, :], output[:, c, :, :], output_comp[:, c, :, :], gt[:, c, :, :]]
 
-    # plot and save data
-    fig, axes = plt.subplots(nrows=len(data_list), ncols=image.shape[0], figsize=(20,20))
-    fig.patch.set_facecolor('black')
-    for i in range(len(data_list)):
-        for j in range(image.shape[0]):
-            axes[i,j].axis("off")
-            axes[i,j].imshow(np.squeeze(data_list[i][j]), vmin=0, vmax=5)
-    plt.subplots_adjust(wspace=0.012, hspace=0.012)
-    plt.savefig(filename, bbox_inches='tight', pad_inches=0)
+        # plot and save data
+        fig, axes = plt.subplots(nrows=len(data_list), ncols=image.shape[0], figsize=(20, 20))
+        fig.patch.set_facecolor('black')
+        for i in range(len(data_list)):
+            for j in range(image.shape[0]):
+                axes[i, j].axis("off")
+                axes[i, j].imshow(np.squeeze(data_list[i][j]), vmin=0, vmax=5)
+        plt.subplots_adjust(wspace=0.012, hspace=0.012)
+        plt.savefig(filename + '_' + str(c) + '.jpg', bbox_inches='tight', pad_inches=0)
 
 
 def get_data(file, var):
@@ -63,7 +61,7 @@ def get_data(file, var):
 
 
 def plot_data(time_series_dict, subplot):
-    for name,time_series in time_series_dict.items():
+    for name, time_series in time_series_dict.items():
         subplot.plot([i for i in range(0, time_series.shape[0])], time_series, label=name)
     subplot.set_xlabel("Timesteps")
     subplot.set_ylabel("Precipitation")
@@ -192,7 +190,7 @@ def create_evaluation_report(gt, outputs):
     fld_cor_total_sum = ['1.0']
 
     # define output metrics
-    for output_name,output in outputs.items():
+    for output_name, output in outputs.items():
         # append values
         data_sets.append(output_name)
         rmses.append('%.5f' % metrics.rmse(gt, output))
@@ -237,7 +235,7 @@ def create_evaluation_report(gt, outputs):
     # Create PDF plot
     labels = []
     data = []
-    for output_name,output in outputs.items():
+    for output_name, output in outputs.items():
         labels.append(output_name)
         data.append(np.sum(output, axis=(1, 2)) / 3600)
     labels.append('GT')
@@ -281,7 +279,7 @@ def create_evaluation_report(gt, outputs):
     pdf.cell(130, 20, " ", 0, 2, 'C')
 
     pdf.image(cfg.evaluation_dirs[0] + 'ts.png', x=None, y=None, w=208, h=156, type='', link='')
-    pdf.image(cfg.evaluation_dirs[0] + 'pdf.png', x=None, y=None,  w=208, h=156, type='', link='')
+    pdf.image(cfg.evaluation_dirs[0] + 'pdf.png', x=None, y=None, w=208, h=156, type='', link='')
     pdf.output(cfg.evaluation_dirs[0] + 'Report.pdf', 'F')
 
 
@@ -323,4 +321,3 @@ def convert_h5_to_netcdf(self, create_structure_template, file):
     cdo.setgrid(self.test_dir + '*.h5', input=self.eval_save_dir + 'output-tmp',
                 output=self.eval_save_dir + file + '.nc')
     os.system('rm ' + self.eval_save_dir + file + '.txt ' + self.eval_save_dir + 'output-tmp')
-

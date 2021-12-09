@@ -44,6 +44,7 @@ mask_zero = None
 eval_range = None
 ts_range = None
 eval_timesteps = None
+out_channels = None
 
 
 def set_train_args():
@@ -69,6 +70,7 @@ def set_train_args():
     arg_parser.add_argument('--encoding-layers', type=int, default=3)
     arg_parser.add_argument('--pooling-layers', type=int, default=0)
     arg_parser.add_argument('--image-size', type=int, default=72)
+    arg_parser.add_argument('--out-channels', type=int, default=1)
     arg_parser.add_argument('--eval-timesteps', type=str, default="0,1,2,3,4")
     args = arg_parser.parse_args()
 
@@ -94,6 +96,7 @@ def set_train_args():
     global pooling_layers
     global image_size
     global eval_timesteps
+    global out_channels
 
     data_types = args.data_types.split(',')
     img_names = args.img_names.split(',')
@@ -118,6 +121,7 @@ def set_train_args():
     encoding_layers = args.encoding_layers
     pooling_layers = args.pooling_layers
     image_size = args.image_size
+    out_channels = args.out_channels
 
 
 def set_evaluation_args():
@@ -143,6 +147,7 @@ def set_evaluation_args():
     arg_parser.add_argument('--eval-names', type=str, default='Output')
     arg_parser.add_argument('--eval-range', type=str, default=None)
     arg_parser.add_argument('--ts-range', type=str, default=None)
+    arg_parser.add_argument('--out-channels', type=int, default=1)
     arg_parser.add_argument('--mask-zero', type=float, default=None)
     args = arg_parser.parse_args()
 
@@ -168,6 +173,7 @@ def set_evaluation_args():
     global mask_zero
     global eval_range
     global ts_range
+    global out_channels
 
     data_types = args.data_types.split(',')
     img_names = args.img_names.split(',')
@@ -194,4 +200,5 @@ def set_evaluation_args():
     if args.ts_range:
         ts_range = args.ts_range.split(',')
     mask_zero = args.mask_zero
+    out_channels = args.out_channels
 

@@ -42,6 +42,7 @@ model = PConvLSTM(image_size=cfg.image_size,
                   num_enc_dec_layers=cfg.encoding_layers,
                   num_pool_layers=cfg.pooling_layers,
                   num_in_channels=len(cfg.data_types),
+                  num_out_channels=cfg.out_channels,
                   lstm=lstm).to(cfg.device)
 
 # define learning rate
@@ -92,7 +93,7 @@ for i in tqdm(range(start_iter, cfg.max_iter)):
     # create snapshot image
     if (i + 1) % cfg.log_interval == 0:
         model.eval()
-        create_snapshot_image(model, dataset_val, '{:s}/images/test_{:d}.jpg'.format(cfg.snapshot_dir, i + 1),
+        create_snapshot_image(model, dataset_val, '{:s}/images/test_{:d}'.format(cfg.snapshot_dir, i + 1),
                               cfg.lstm_steps)
 
 writer.close()

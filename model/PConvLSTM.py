@@ -123,16 +123,16 @@ class EncoderBlock(nn.Module):
 
 class DecoderBlock(nn.Module):
     def __init__(self, in_channels, out_channels, image_size, kernel, stride, activation, dilation=(1, 1), groups=1,
-                 lstm=False, bias=False, bn=True, init_in_channels=1):
+                 lstm=False, bias=False, bn=True, init_in_channels=1, init_out_channels=1):
         super().__init__()
         padding = kernel[0] // 2, kernel[1] // 2
         self.partial_conv = PConvBlock(in_channels, out_channels, kernel, stride, padding, dilation, groups, bias,
                                        activation, bn)
 
         if lstm:
-            self.lstm_conv = ConvLSTMBlock(in_channels - (out_channels + init_in_channels - 1), in_channels - (out_channels + init_in_channels - 1), image_size // 2,
-                                           kernel, (1, 1), padding,
-                                           (1, 1), groups)
+            self.lstm_conv = ConvLSTMBlock(in_channels - (out_channels + init_in_channels - init_out_channels),
+                                           in_channels - (out_channels + init_in_channels - init_out_channels),
+                                           image_size // 2, kernel, (1, 1), padding, (1, 1), groups)
 
     def forward(self, input, skip_input, mask, skip_mask, lstm_state=None):
         batch_size = input.shape[0]
@@ -168,7 +168,7 @@ class DecoderBlock(nn.Module):
 
 
 class PConvLSTM(nn.Module):
-    def __init__(self, image_size=512, num_enc_dec_layers=4, num_pool_layers=4, num_in_channels=1, lstm=True):
+    def __init__(self, image_size=512, num_enc_dec_layers=4, num_pool_layers=4, num_in_channels=1, num_out_channels=1, lstm=True):
         super().__init__()
 
         # adjust encoding layers if it doesn't blend with image size
@@ -186,6 +186,7 @@ class PConvLSTM(nn.Module):
         self.num_enc_dec_layers = num_enc_dec_layers
         self.num_pool_layers = num_pool_layers
         self.num_in_channels = num_in_channels
+        self.num_out_channels = num_out_channels
         self.net_depth = num_enc_dec_layers + num_pool_layers
         self.lstm = lstm
 
@@ -240,9 +241,10 @@ class PConvLSTM(nn.Module):
         decoding_layers.append(
             DecoderBlock(
                 in_channels=image_size // (2 ** (self.num_enc_dec_layers - 1)) + self.num_in_channels,
-                out_channels=1,
+                out_channels=self.num_out_channels,
                 image_size=image_size,
-                kernel=(3, 3), stride=(1, 1), activation=None, lstm=lstm, bn=False, bias=True, init_in_channels=self.num_in_channels))
+                kernel=(3, 3), stride=(1, 1), activation=None, lstm=lstm, bn=False, bias=True,
+                init_in_channels=self.num_in_channels, init_out_channels=self.num_out_channels))
         self.decoder = nn.ModuleList(decoding_layers)
 
     def forward(self, input, input_mask):

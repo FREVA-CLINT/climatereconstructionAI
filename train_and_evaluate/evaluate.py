@@ -23,6 +23,7 @@ if cfg.infill:
                           num_enc_dec_layers=cfg.encoding_layers,
                           num_pool_layers=cfg.pooling_layers,
                           num_in_channels=len(cfg.data_types),
+                          num_out_channels=cfg.out_channels,
                           lstm=lstm).to(cfg.device)
 
         load_ckpt(snapshot, [('model', model)], cfg.device)
