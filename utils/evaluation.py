@@ -183,15 +183,24 @@ def create_evaluation_report(gt, outputs):
     for output_name,output in outputs.items():
         # append values
         data_sets.append(output_name)
+        print("RMSE")
         rmses.append('%.5f' % metrics.rmse(gt, output))
+        print("TIMCOR")
         time_cors.append('%.5f' % metrics.timcor(gt, output))
+        print("TOTSUM")
         total_prs.append(int(metrics.total_sum(output)))
+        print("FLDCOR")
         mean_fld_cors.append('%.5f' % metrics.timmean_fldor(gt, output))
+        print("FLDCORFLDSUM")
         fld_cor_total_sum.append('%.5f' % metrics.fldor_timsum(gt, output))
         # calculate time series
+        print("TSMAX")
         max_timeseries[output_name] = metrics.max_timeseries(output[ts_range[0]:ts_range[1]])
+        print("TSMIN")
         min_timeseries[output_name] = metrics.min_timeseries(output[ts_range[0]:ts_range[1]])
+        print("TSMEAN")
         mean_timeseries[output_name] = metrics.mean_timeseries(output[ts_range[0]:ts_range[1]])
+        print("TSFLDCOR")
         fldcor_timeseries[output_name] = metrics.fldcor_timeseries(gt, output[ts_range[0]:ts_range[1]])
 
     # set GT time series
