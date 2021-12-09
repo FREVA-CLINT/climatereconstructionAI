@@ -40,6 +40,10 @@ def create_snapshot_image(model, dataset, filename, lstm_steps):
     mask = ma.masked_array(mask, mask)
 
     for c in range(output.shape[1]):
+        if cfg.data_types[i] == 'pr':
+            vmin, vmax = (0, 5)
+        elif cfg.data_types[i] == 'tas':
+            vmin, vmax = (-10, 35)
         data_list = [image[:, c, :, :], mask[:, c, :, :], output[:, c, :, :], output_comp[:, c, :, :], gt[:, c, :, :]]
 
         # plot and save data
@@ -48,7 +52,7 @@ def create_snapshot_image(model, dataset, filename, lstm_steps):
         for i in range(len(data_list)):
             for j in range(image.shape[0]):
                 axes[i, j].axis("off")
-                axes[i, j].imshow(np.squeeze(data_list[i][j]), vmin=0, vmax=5)
+                axes[i, j].imshow(np.squeeze(data_list[i][j]), vmin=vmin, vmax=vmax)
         plt.subplots_adjust(wspace=0.012, hspace=0.012)
         plt.savefig(filename + '_' + str(c) + '.jpg', bbox_inches='tight', pad_inches=0)
 
