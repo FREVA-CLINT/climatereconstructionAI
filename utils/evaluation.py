@@ -26,10 +26,10 @@ def create_snapshot_image(model, dataset, filename, lstm_steps):
     with torch.no_grad():
         output = model(image.to(cfg.device), mask.to(cfg.device)).to(cfg.device)
 
-    image = image[:, lstm_steps, :, :, :]
-    gt = gt[:, lstm_steps, :, :, :]
-    mask = mask[:, lstm_steps, :, :, :]
-    output = output[:, lstm_steps, :, :, :]
+    image = image[:, lstm_steps, :, :, :].to(torch.device('cpu'))
+    gt = gt[:, lstm_steps, :, :, :].to(torch.device('cpu'))
+    mask = mask[:, lstm_steps, :, :, :].to(torch.device('cpu'))
+    output = output[:, lstm_steps, :, :, :].to(torch.device('cpu'))
 
     output_comp = mask * image + (1 - mask) * output
 
