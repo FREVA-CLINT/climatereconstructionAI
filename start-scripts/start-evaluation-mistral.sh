@@ -20,11 +20,11 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-complete-scaled/ \
  --mask-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/masks/ \
  --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/temperature/cmip/ckpt/1000000.pth \
- --evaluation-dirs evaluation/precipitation/radolan-simple-2007-2013/,evaluation/precipitation/radolan-rea2-tas/ \
+ --evaluation-dirs evaluation/precipitation/radolan-single-radar-fail/,evaluation/precipitation/radolan-prev-next/,evaluation/precipitation/radolan-lstm/ \
  --lstm-steps 0 \
  --partitions 1177 \
  --create-report \
- --eval-names Simple,Rea2 \
+ --eval-names Simple,Prev-Next,LSTM \
  --create-report \
 # --eval-range 0,150
 # --mask-zero 0.2 \
