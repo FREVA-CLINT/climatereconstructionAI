@@ -40,9 +40,9 @@ def create_snapshot_image(model, dataset, filename, lstm_steps):
     mask = ma.masked_array(mask, mask)
 
     for c in range(output.shape[1]):
-        if cfg.data_types[i] == 'pr':
+        if cfg.data_types[c] == 'pr':
             vmin, vmax = (0, 5)
-        elif cfg.data_types[i] == 'tas':
+        elif cfg.data_types[c] == 'tas':
             vmin, vmax = (-10, 35)
         data_list = [image[:, c, :, :], mask[:, c, :, :], output[:, c, :, :], output_comp[:, c, :, :], gt[:, c, :, :]]
 
