@@ -9,7 +9,7 @@ LAMBDA_DICT_PR_INPAINTING = {
     'SSL-OUT': 1.0,  # 'SSL-OUT-COMP': 1.0, 'valid': 1.0, 'hole': 6.0, 'tv': 0.1, 'prc': 0.05, 'style': 120.0
 }
 
-PDF_BINS = [0, 0.02, 0.05, 0.1, 1, 2, 10]
+PDF_BINS = [0, 0.01, 0.02, 0.1, 1, 2, 10, 100]
 
 data_types = None
 mask_names = None
