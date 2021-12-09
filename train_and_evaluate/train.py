@@ -79,7 +79,7 @@ for i in tqdm(range(start_iter, cfg.max_iter)):
     for key, coef in cfg.LAMBDA_DICT_IMG_INPAINTING.items():
         value = coef * loss_dict[key]
         loss += value
-        if (i + 1) % cfg.log_interval == 0:
+        if cfg.log_interval and (i + 1) % cfg.log_interval == 0:
             writer.add_scalar('loss_{:s}'.format(key), value.item(), i + 1)
     optimizer.zero_grad()
     loss.backward()
@@ -91,7 +91,7 @@ for i in tqdm(range(start_iter, cfg.max_iter)):
                   [('model', model)], [('optimizer', optimizer)], i + 1)
 
     # create snapshot image
-    if (i + 1) % cfg.log_interval == 0:
+    if cfg.log_interval and (i + 1) % cfg.log_interval == 0:
         model.eval()
         create_snapshot_image(model, dataset_val, '{:s}/images/test_{:d}'.format(cfg.snapshot_dir, i + 1),
                               cfg.lstm_steps)
