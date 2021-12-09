@@ -231,11 +231,12 @@ def create_evaluation_report(gt, outputs):
     labels.append('GT')
     data.append(np.sum(gt, axis=(1, 2)) / 3600)
     plt.hist(data, bins=cfg.PDF_BINS, label=labels, edgecolor='black')
-    plt.xticks(range(len(cfg.PDF_BINS)), cfg.PDF_BINS)
     plt.title('Probabilistic density Histogram')
     plt.xlabel('Total precipitation fall')
     plt.ylabel('Number of hours')
     plt.legend()
+    plt.xscale("log")
+
     plt.savefig(cfg.evaluation_dirs[0] + 'pdf.png', dpi=300)
     plt.clf()
 
