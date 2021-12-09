@@ -18,7 +18,7 @@ sys.path.append('./')
 import utils.metrics as metrics
 
 def create_snapshot_image(model, dataset, filename, lstm_steps):
-    image, mask, gt = zip(*[dataset[i] for i in range(8)])
+    image, mask, gt = zip(*[dataset[int(i)] for i in cfg.eval_timesteps])
 
     image = torch.stack(image).to(cfg.device)
     mask = torch.stack(mask).to(cfg.device)
@@ -35,12 +35,25 @@ def create_snapshot_image(model, dataset, filename, lstm_steps):
     image = torch.unsqueeze(image[:, 0, :, :], dim=1)
     gt = torch.unsqueeze(gt[:, 0, :, :], dim=1)
     mask = torch.unsqueeze(mask[:, 0, :, :], dim=1)
-
     output_comp = mask * image + (1 - mask) * output
-    grid = make_grid(
-        torch.cat(((image), mask, (output),
-                   (output_comp), (gt)), dim=0))
-    save_image(grid, filename)
+
+    # set mask
+    mask = 1 - mask
+    image = ma.masked_array(image, mask)
+
+    mask = ma.masked_array(mask, mask)
+
+    data_list = [image, mask, output, output_comp, gt]
+
+    # plot and save data
+    fig, axes = plt.subplots(nrows=len(data_list), ncols=image.shape[0], figsize=(20,20))
+    fig.patch.set_facecolor('black')
+    for i in range(len(data_list)):
+        for j in range(image.shape[0]):
+            axes[i,j].axis("off")
+            axes[i,j].imshow(np.squeeze(data_list[i][j]), vmin=0, vmax=5)
+    plt.subplots_adjust(wspace=0.012, hspace=0.012)
+    plt.savefig(filename, bbox_inches='tight', pad_inches=0)
 
 
 def get_data(file, var):
