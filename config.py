@@ -43,6 +43,7 @@ eval_names = None
 mask_zero = None
 eval_range = None
 ts_range = None
+eval_timesteps = None
 
 
 def set_train_args():
@@ -68,6 +69,7 @@ def set_train_args():
     arg_parser.add_argument('--encoding-layers', type=int, default=3)
     arg_parser.add_argument('--pooling-layers', type=int, default=0)
     arg_parser.add_argument('--image-size', type=int, default=72)
+    arg_parser.add_argument('--eval-timesteps', type=str, default="0,1,2,3,4")
     args = arg_parser.parse_args()
 
     global data_types
@@ -91,10 +93,12 @@ def set_train_args():
     global encoding_layers
     global pooling_layers
     global image_size
+    global eval_timesteps
 
     data_types = args.data_types.split(',')
     img_names = args.img_names.split(',')
     mask_names = args.mask_names.split(',')
+    eval_timesteps = args.eval_timesteps.split(',')
     log_dir = args.log_dir
     snapshot_dir = args.snapshot_dir
     data_root_dir = args.data_root_dir
