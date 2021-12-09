@@ -10,7 +10,6 @@ from netCDF4 import Dataset
 from fpdf import FPDF
 from cdo import *
 from numpy import ma
-from torchvision.utils import make_grid, save_image
 import config as cfg
 
 sys.path.append('./')
