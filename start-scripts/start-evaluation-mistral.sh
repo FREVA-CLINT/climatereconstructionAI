@@ -15,19 +15,17 @@ module load cdo
 
 singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img_mistral.sif \
  python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/train_and_evaluate/evaluate.py \
- --device cuda --image-size 72 --pooling-layers 0 --encoding-layers 3 --data-types pr \
+ --device cuda --image-size 512 --pooling-layers 3 --encoding-layers 4 --data-types pr,tas \
  --img-names radolan.h5,rea2-tas-celsius.h5 --mask-names single_radar_fail.h5,mask_ones_tas.h5 \
- --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-complete-scaled/ \
- --mask-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/masks/ \
- --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/temperature/cmip/ckpt/1000000.pth \
+ --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-rea2/ \
+ --mask-dir masks/ \
+ --snapshot-dir snapshots/precipitation/radolan-rea2-celsius/ckpt/200000.pth \
  --evaluation-dirs evaluation/precipitation/radolan-rea2-celsius/ \
  --lstm-steps 0 \
  --partitions 1177 \
- --create-report \
  --eval-names Celsius \
- --create-report \
-# --eval-range 0,150
-# --mask-zero 0.2 \
-# --infill infill \
+ --infill test \
+ --out-channels 1 \
+# --create-report \
 # --create-images 2017-07-12-14:00,2017-07-12-14:00 \
 # --create-video \
