@@ -134,7 +134,10 @@ class NetCDFLoader(torch.utils.data.Dataset):
         else:
             mask_indices = []
             for i in range(len(self.data_types)):
-                mask_indices.append(sorted(random.sample(range(0, self.mask_lengths[i] - 1), prev_steps + next_steps + 1)))
+                indices = []
+                for j in range(prev_steps + next_steps + 1):
+                    indices.append(random.randint(0, self.mask_lengths[i]))
+                mask_indices.append(sorted(indices))
 
         # load data from ranges
         images, masks = self.load_data(img_indices, mask_indices)
