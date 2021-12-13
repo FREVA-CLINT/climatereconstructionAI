@@ -136,7 +136,7 @@ class NetCDFLoader(torch.utils.data.Dataset):
             for i in range(len(self.data_types)):
                 indices = []
                 for j in range(prev_steps + next_steps + 1):
-                    indices.append(random.randint(0, self.mask_lengths[i]))
+                    indices.append(random.randint(0, self.mask_lengths[i] - 1))
                 mask_indices.append(sorted(indices))
 
         # load data from ranges
