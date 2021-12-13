@@ -27,9 +27,9 @@ writer = SummaryWriter(log_dir=cfg.log_dir)
 
 # define data set + iterator
 dataset_train = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, 'train', cfg.data_types,
-                             cfg.lstm_steps)
+                             cfg.lstm_steps, cfg.prev_next_steps)
 dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, 'val', cfg.data_types,
-                           cfg.lstm_steps)
+                           cfg.lstm_steps, cfg.prev_next_steps)
 iterator_train = iter(data.DataLoader(dataset_train, batch_size=cfg.batch_size,
                                       sampler=InfiniteSampler(len(dataset_train)),
                                       num_workers=cfg.n_threads))
@@ -41,7 +41,7 @@ if cfg.lstm_steps == 0:
 model = PConvLSTM(image_size=cfg.image_size,
                   num_enc_dec_layers=cfg.encoding_layers,
                   num_pool_layers=cfg.pooling_layers,
-                  num_in_channels=len(cfg.data_types),
+                  num_in_channels=len(cfg.data_types) * (2 * cfg.prev_next_steps + 1),
                   num_out_channels=cfg.out_channels,
                   lstm=lstm).to(cfg.device)
 
@@ -72,9 +72,9 @@ for i in tqdm(range(start_iter, cfg.max_iter)):
     output = model(image, mask)
 
     # calculate loss function and apply backpropagation
-    loss_dict = criterion(image[:, cfg.lstm_steps, :, :, :], mask[:, cfg.lstm_steps, :, :, :],
+    loss_dict = criterion(mask[:, cfg.lstm_steps, cfg.gt_channels, :, :],
                           output[:, cfg.lstm_steps, :, :, :],
-                          gt[:, cfg.lstm_steps, :, :, :])
+                          gt[:, cfg.lstm_steps, cfg.gt_channels, :, :])
     loss = 0.0
     for key, coef in cfg.LAMBDA_DICT_IMG_INPAINTING.items():
         value = coef * loss_dict[key]

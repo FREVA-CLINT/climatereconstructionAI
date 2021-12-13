@@ -36,6 +36,7 @@ max_iter = None
 log_interval = None
 save_model_interval = None
 lstm_steps = None
+prev_next_steps = None
 encoding_layers = None
 pooling_layers = None
 image_size = None
@@ -45,6 +46,7 @@ eval_range = None
 ts_range = None
 eval_timesteps = None
 out_channels = None
+gt_channels = None
 
 
 def set_train_args():
@@ -67,6 +69,7 @@ def set_train_args():
     arg_parser.add_argument('--log-interval', type=int, default=None)
     arg_parser.add_argument('--save-model-interval', type=int, default=50000)
     arg_parser.add_argument('--lstm-steps', type=int, default=0)
+    arg_parser.add_argument('--prev-next-steps', type=int, default=0)
     arg_parser.add_argument('--encoding-layers', type=int, default=3)
     arg_parser.add_argument('--pooling-layers', type=int, default=0)
     arg_parser.add_argument('--image-size', type=int, default=72)
@@ -92,11 +95,13 @@ def set_train_args():
     global log_interval
     global save_model_interval
     global lstm_steps
+    global prev_next_steps
     global encoding_layers
     global pooling_layers
     global image_size
     global eval_timesteps
     global out_channels
+    global gt_channels
 
     data_types = args.data_types.split(',')
     img_names = args.img_names.split(',')
@@ -118,10 +123,14 @@ def set_train_args():
     log_interval = args.log_interval
     save_model_interval = args.save_model_interval
     lstm_steps = args.lstm_steps
+    prev_next_steps = args.prev_next_steps
     encoding_layers = args.encoding_layers
     pooling_layers = args.pooling_layers
     image_size = args.image_size
     out_channels = args.out_channels
+    gt_channels = []
+    for i in range(out_channels):
+        gt_channels.append((i + 1) * prev_next_steps + i * (prev_next_steps + 1))
 
 
 def set_evaluation_args():
@@ -160,8 +169,8 @@ def set_evaluation_args():
     global mask_dir
     global device
     global partitions
-    global prev_next
     global lstm_steps
+    global prev_next_steps
     global encoding_layers
     global pooling_layers
     global image_size
@@ -185,8 +194,8 @@ def set_evaluation_args():
     torch.backends.cudnn.benchmark = True
     device = torch.device(args.device)
     partitions = args.partitions
-    prev_next = args.prev_next
     lstm_steps = args.lstm_steps
+    prev_next_steps = args.prev_next_steps
     encoding_layers = args.encoding_layers
     pooling_layers = args.pooling_layers
     image_size = args.image_size

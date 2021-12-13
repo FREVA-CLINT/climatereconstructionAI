@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import config as cfg
 
 
 def gram_matrix(feat):
@@ -25,7 +26,7 @@ class InpaintingLoss(nn.Module):
         self.l1 = nn.L1Loss()
         self.extractor = extractor
 
-    def forward(self, input, mask, output, gt):
+    def forward(self, mask, output, gt):
         loss_dict = {
             'hole': 0.0,
             'valid': 0.0,
@@ -33,8 +34,9 @@ class InpaintingLoss(nn.Module):
             'style': 0.0,
             'tv': 0.0
         }
+
         # create output_comp
-        output_comp = mask * input + (1 - mask) * output
+        output_comp = mask * gt + (1 - mask) * output
 
         # calculate loss for all channels
         for c in range(output.shape[1]):
