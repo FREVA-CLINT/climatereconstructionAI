@@ -15,14 +15,14 @@ outputs = None
 if cfg.infill:
     for snapshot in cfg.snapshot_dirs:
         dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, cfg.infill,
-                                   cfg.data_types, cfg.lstm_steps)
+                                   cfg.data_types, cfg.lstm_steps, cfg.prev_next_steps)
         lstm = True
         if cfg.lstm_steps == 0:
             lstm = False
         model = PConvLSTM(image_size=cfg.image_size,
                           num_enc_dec_layers=cfg.encoding_layers,
                           num_pool_layers=cfg.pooling_layers,
-                          num_in_channels=len(cfg.data_types),
+                          num_in_channels=len(cfg.data_types) * (2 * cfg.prev_next_steps + 1),
                           num_out_channels=cfg.out_channels,
                           lstm=lstm).to(cfg.device)
 
