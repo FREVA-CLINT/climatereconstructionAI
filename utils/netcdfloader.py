@@ -28,8 +28,9 @@ class InfiniteSampler(data.sampler.Sampler):
 
 
 class NetCDFLoader(torch.utils.data.Dataset):
-    def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, lstm_steps):
+    def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, lstm_steps, prev_next_steps):
         super(NetCDFLoader, self).__init__()
+        assert lstm_steps == 0 or prev_next_steps == 0
         assert len(img_names) == len(mask_names) == len(data_types)
 
         self.split = split
@@ -37,6 +38,7 @@ class NetCDFLoader(torch.utils.data.Dataset):
         self.img_names = img_names
         self.mask_names = mask_names
         self.lstm_steps = lstm_steps
+        self.prev_next_steps = prev_next_steps
 
         if split == 'train':
             self.data_path = '{:s}/data_large/'.format(data_root)
@@ -48,8 +50,6 @@ class NetCDFLoader(torch.utils.data.Dataset):
 
         img_lengths = []
         self.mask_lengths = []
-        self.img_data = []
-        self.mask_data = []
         # define lengths of image and mask
         for i in range(len(self.data_types)):
             img_file = h5py.File('{}{}'.format(self.data_path, self.img_names[i]), 'r')
@@ -68,7 +68,7 @@ class NetCDFLoader(torch.utils.data.Dataset):
             assert self.mask_lengths[:-1] == self.mask_lengths[1:]
             assert self.img_length == self.mask_lengths[0]
 
-    def load_data(self, img_ranges, mask_ranges):
+    def load_data(self, img_indices, mask_indices):
         images = []
         masks = []
         # iterate each defined netcdf file
@@ -76,57 +76,76 @@ class NetCDFLoader(torch.utils.data.Dataset):
             # open netcdf file for img and mask
             img_file = h5py.File('{}{}'.format(self.data_path, self.img_names[i]), 'r')
             img_data = img_file.get(self.data_types[i])
-            if img_data.ndim == 4:
-                images.append(torch.from_numpy(img_data[img_ranges[i][0]:img_ranges[i][1], 0, :, :]))
-            else:
-                images.append(torch.from_numpy(img_data[img_ranges[i][0]:img_ranges[i][1], :, :]))
+            try:
+                if img_data.ndim == 4:
+                    images.append(torch.from_numpy(img_data[img_indices[i], 0, :, :]))
+                else:
+                    images.append(torch.from_numpy(img_data[img_indices[i], :, :]))
+            except TypeError:
+                # get indices that occur more than once
+                unique, counts = np.unique(img_indices[i], return_counts=True)
+                copy_indices = [(index, counts[index] - 1) for index in range(len(counts)) if counts[index] > 1]
+                if img_data.ndim == 4:
+                    data = torch.from_numpy(img_data[unique, 0, :, :])
+                else:
+                    data = torch.from_numpy(img_data[unique, :, :])
+                if unique[copy_indices[0][0]] == 0:
+                    total_data = torch.cat([torch.stack(copy_indices[0][1] * [data[copy_indices[0][0]]]), data])
+                else:
+                    total_data = torch.cat([data, torch.stack(copy_indices[0][1] * [data[copy_indices[0][0]]])])
+                images.append(total_data)
             mask_file = h5py.File('{}{}'.format(self.mask_path, self.mask_names[i]))
             mask_data = mask_file.get(self.data_types[i])
-            if mask_data.ndim == 4:
-                masks.append(torch.from_numpy(mask_data[mask_ranges[i][0]:mask_ranges[i][1], 0, :, :]))
-            else:
-                masks.append(torch.from_numpy(mask_data[mask_ranges[i][0]:mask_ranges[i][1], :, :]))
-        for i in range(len(self.img_data)):
-            # get img and mask for ranges
-            images.append(torch.from_numpy(self.img_data[i][img_ranges[i][0]:img_ranges[i][1], :, :]))
-            masks.append(torch.from_numpy(self.mask_data[i][mask_ranges[i][0]:mask_ranges[i][1], :, :]))
+            try:
+                if mask_data.ndim == 4:
+                    masks.append(torch.from_numpy(mask_data[mask_indices[i], 0, :, :]))
+                else:
+                    masks.append(torch.from_numpy(mask_data[mask_indices[i], :, :]))
+            except TypeError:
+                # get indices that occur more than once
+                unique, counts = np.unique(mask_indices[i], return_counts=True)
+                copy_indices = [(index, counts[index] - 1) for index in range(len(counts)) if counts[index] > 1]
+                if img_data.ndim == 4:
+                    data = torch.from_numpy(mask_data[unique, 0, :, :])
+                else:
+                    data = torch.from_numpy(mask_data[unique, :, :])
+                if unique[copy_indices[0][0]] == 0:
+                    total_data = torch.cat([torch.stack(copy_indices[0][1] * [data[copy_indices[0][0]]]), data])
+                else:
+                    total_data = torch.cat([data, torch.stack(copy_indices[0][1] * [data[copy_indices[0][0]]])])
+                masks.append(total_data)
+
         return images, masks
 
     def __getitem__(self, index):
-        copy_first_img = 0
-        copy_first_mask = 0
+        if self.lstm_steps == 0:
+            prev_steps = next_steps = self.prev_next_steps
+        else:
+            prev_steps = self.lstm_steps
+            next_steps = 0
 
         # define range of lstm steps -> adjust, if out of boundaries
-        if index < self.lstm_steps:
-            img_ranges = len(self.data_types) * [(0, index + 1)]
-            copy_first_img = self.lstm_steps - index
-        else:
-            img_ranges = len(self.data_types) * [(index - self.lstm_steps, index + 1)]
+        img_indices = np.array(list(range(index - prev_steps, index + next_steps + 1)))
+        img_indices[img_indices < 0] = 0
+        img_indices[img_indices > self.img_length - 1] = self.img_length - 1
+        img_indices = len(self.data_types) * [img_indices]
         if self.split == 'infill':
-            mask_ranges = img_ranges
+            mask_indices = img_indices
         else:
-            mask_ranges = []
+            mask_indices = []
             for i in range(len(self.data_types)):
-                mask_index = random.randint(0, self.mask_lengths[i] - 1)
-                mask_ranges.append((mask_index, mask_index + 1))
-            copy_first_mask = self.lstm_steps
+                mask_indices.append(sorted(random.sample(range(0, self.mask_lengths[i] - 1), prev_steps + next_steps + 1)))
 
         # load data from ranges
-        images, masks = self.load_data(img_ranges, mask_ranges)
+        images, masks = self.load_data(img_indices, mask_indices)
 
-        # copy first image if necessary
-        images = torch.stack(images, dim=1)
-        if copy_first_img != 0:
-            image = images[0, :, :, :]
-            image = torch.stack(copy_first_img * [image], dim=0)
-            images = torch.cat([image, images], dim=0)
-        # copy first mask if necessary
-        masks = torch.stack(masks, dim=1)
-        if copy_first_mask != 0:
-            mask = masks[0, :, :, :]
-            mask = torch.stack(copy_first_mask * [mask], dim=0)
-            masks = torch.cat([mask, masks], dim=0)
-
+        # stack to correct dimensions
+        if self.lstm_steps == 0:
+            images = torch.cat(images, dim=0).unsqueeze(0)
+            masks = torch.cat(masks, dim=0).unsqueeze(0)
+        else:
+            images = torch.stack(images, dim=1)
+            masks = torch.stack(masks, dim=1)
         return images * masks, masks, images
 
     def __len__(self):

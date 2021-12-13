@@ -26,9 +26,9 @@ def create_snapshot_image(model, dataset, filename, lstm_steps):
     with torch.no_grad():
         output = model(image.to(cfg.device), mask.to(cfg.device)).to(cfg.device)
 
-    image = image[:, lstm_steps, :, :, :].to(torch.device('cpu'))
-    gt = gt[:, lstm_steps, :, :, :].to(torch.device('cpu'))
-    mask = mask[:, lstm_steps, :, :, :].to(torch.device('cpu'))
+    image = image[:, lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
+    gt = gt[:, lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
+    mask = mask[:, lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
     output = output[:, lstm_steps, :, :, :].to(torch.device('cpu'))
 
     output_comp = mask * image + (1 - mask) * output
@@ -55,6 +55,8 @@ def create_snapshot_image(model, dataset, filename, lstm_steps):
                 axes[i, j].imshow(np.squeeze(data_list[i][j]), vmin=vmin, vmax=vmax)
         plt.subplots_adjust(wspace=0.012, hspace=0.012)
         plt.savefig(filename + '_' + str(c) + '.jpg', bbox_inches='tight', pad_inches=0)
+    plt.clf()
+    plt.close('all')
 
 
 def get_data(file, var):
