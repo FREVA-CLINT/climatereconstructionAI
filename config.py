@@ -146,6 +146,7 @@ def set_evaluation_args():
     arg_parser.add_argument('--partitions', type=int, default=1)
     arg_parser.add_argument('--prev-next', type=int, default=0)
     arg_parser.add_argument('--lstm-steps', type=int, default=0)
+    arg_parser.add_argument('--prev-next-steps', type=int, default=0)
     arg_parser.add_argument('--encoding-layers', type=int, default=3)
     arg_parser.add_argument('--pooling-layers', type=int, default=0)
     arg_parser.add_argument('--image-size', type=int, default=72)
@@ -210,4 +211,7 @@ def set_evaluation_args():
         ts_range = args.ts_range.split(',')
     mask_zero = args.mask_zero
     out_channels = args.out_channels
+    gt_channels = []
+    for i in range(out_channels):
+        gt_channels.append((i + 1) * prev_next_steps + i * (prev_next_steps + 1))
 
