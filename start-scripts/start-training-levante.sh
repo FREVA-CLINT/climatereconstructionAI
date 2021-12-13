@@ -21,7 +21,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --log-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/logs/precipitation/radolan-prev-next-2007-2013/ \
  --out-channels 1 \
  --lstm-steps 0 \
- --prev-next-steps 0 \
+ --prev-next-steps 1 \
  --max-iter 100000 \
  --log-interval 100 \
  --eval-timesteps 2143,2144,2145,2146,2147 \
@@ -35,7 +35,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/precipitation/radolan-prev-next-2007-2013/ \
  --log-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/logs/precipitation/radolan-prev-next-2007-2013/ \
  --lstm-steps 0 \
- --prev-next-steps 0 \
+ --prev-next-steps 1 \
  --out-channels 1 \
  --max-iter 200000 \
  --resume /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/precipitation/radolan-prev-next-2007-2013/ckpt/100000.pth \
