@@ -81,7 +81,7 @@ class NetCDFLoader(torch.utils.data.Dataset):
                     images.append(torch.from_numpy(img_data[img_indices[i], 0, :, :]))
                 else:
                     images.append(torch.from_numpy(img_data[img_indices[i], :, :]))
-            except (ValueError, TypeError):
+            except TypeError:
                 # get indices that occur more than once
                 unique, counts = np.unique(img_indices[i], return_counts=True)
                 copy_indices = [(index, counts[index] - 1) for index in range(len(counts)) if counts[index] > 1]
@@ -96,18 +96,16 @@ class NetCDFLoader(torch.utils.data.Dataset):
                 images.append(total_data)
             mask_file = h5py.File('{}{}'.format(self.mask_path, self.mask_names[i]))
             mask_data = mask_file.get(self.data_types[i])
-            print(i)
             try:
-                print(mask_indices)
                 if mask_data.ndim == 4:
                     masks.append(torch.from_numpy(mask_data[mask_indices[i], 0, :, :]))
                 else:
                     masks.append(torch.from_numpy(mask_data[mask_indices[i], :, :]))
-            except (ValueError, TypeError):
+            except TypeError:
                 # get indices that occur more than once
                 unique, counts = np.unique(mask_indices[i], return_counts=True)
                 copy_indices = [(index, counts[index] - 1) for index in range(len(counts)) if counts[index] > 1]
-                if img_data.ndim == 4:
+                if mask_data.ndim == 4:
                     data = torch.from_numpy(mask_data[unique, 0, :, :])
                 else:
                     data = torch.from_numpy(mask_data[unique, :, :])
