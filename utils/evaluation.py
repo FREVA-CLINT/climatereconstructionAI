@@ -26,13 +26,12 @@ def create_snapshot_image(model, dataset, filename, lstm_steps):
     with torch.no_grad():
         output = model(image.to(cfg.device), mask.to(cfg.device)).to(cfg.device)
 
+    # select last element of lstm sequence as evaluation element
     image = image[:, lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
     gt = gt[:, lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
     mask = mask[:, lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
-    output = output[:, lstm_steps, :, :, :].to(torch.device('cpu'))
+    output = output[:, 0, :, :, :].to(torch.device('cpu'))
 
-    # reverse output along lstm sequences to match gt
-    output = torch.flip(output, (1,))
     output_comp = mask * image + (1 - mask) * output
 
     # set mask
