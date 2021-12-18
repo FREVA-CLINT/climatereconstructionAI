@@ -39,7 +39,7 @@ class InpaintingLoss(nn.Module):
         output_comp = mask * gt + (1 - mask) * output
 
         # calculate loss for all channels
-        for channel in range(output.shape[2]):
+        for channel in range(output.shape[1]):
             # only select first channel
             mask_ch = torch.unsqueeze(mask[:, channel, :, :], dim=1)
             gt_ch = torch.unsqueeze(gt[:, channel, :, :], dim=1)
