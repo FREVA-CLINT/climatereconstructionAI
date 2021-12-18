@@ -23,6 +23,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --lstm-steps 3 \
  --prev-next-steps 0 \
  --max-iter 100000 \
+ --resume-iter 10000 \
  --log-interval 100 \
  --eval-timesteps 2143,2144,2145,2146,2147 \
  --save-model-interval 10000
@@ -38,7 +39,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --prev-next-steps 0 \
  --out-channels 1 \
  --max-iter 200000 \
- --resume-iter 140000 \
+ --resume-iter 100000 \
  --finetune \
  --log-interval 100 \
  --eval-timesteps 2143,2144,2145,2146,2147 \
