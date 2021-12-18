@@ -138,6 +138,11 @@ class DecoderBlock(nn.Module):
         batch_size = input.shape[0]
 
         if hasattr(self, 'lstm_conv'):
+            # flip all inputs
+            input = torch.flip(input, 1)
+            skip_input = torch.flip(skip_input, 1)
+            mask = torch.flip(mask, 1)
+            skip_mask = torch.flip(skip_mask, 1)
             output, lstm_state = self.lstm_conv(input, lstm_state)
 
         input = torch.reshape(input, (-1, input.shape[2], input.shape[3], input.shape[4]))
