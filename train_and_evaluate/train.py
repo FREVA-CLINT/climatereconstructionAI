@@ -72,7 +72,7 @@ for i in tqdm(range(start_iter, cfg.max_iter)):
     output = model(image, mask)
 
     # reverse output along lstm sequences to match gt
-    output = torch.flip(output, 1)
+    output = torch.flip(output, (1,))
 
     # calculate loss function and apply backpropagation
     loss_dict = criterion(mask[:, :, cfg.gt_channels, :, :],
