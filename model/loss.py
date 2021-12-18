@@ -39,40 +39,41 @@ class InpaintingLoss(nn.Module):
         output_comp = mask * gt + (1 - mask) * output
 
         # calculate loss for all lstm sequence steps
-        for lstm_step in range(output.shape[1]):
-            # calculate loss for all channels
-            for channel in range(output.shape[2]):
-                # only select first channel
-                mask_ch = torch.unsqueeze(mask[:, lstm_step, channel, :, :], dim=1)
-                gt_ch = torch.unsqueeze(gt[:, lstm_step, channel, :, :], dim=1)
-                output_ch = torch.unsqueeze(output[:, lstm_step, channel, :, :], dim=1)
-                output_comp_ch = torch.unsqueeze(output_comp[:, lstm_step, channel, :, :], dim=1)
+        #for lstm_step in range(output.shape[1]):
+        lstm_step = 0
+        # calculate loss for all channels
+        for channel in range(output.shape[2]):
+            # only select first channel
+            mask_ch = torch.unsqueeze(mask[:, lstm_step, channel, :, :], dim=1)
+            gt_ch = torch.unsqueeze(gt[:, lstm_step, channel, :, :], dim=1)
+            output_ch = torch.unsqueeze(output[:, lstm_step, channel, :, :], dim=1)
+            output_comp_ch = torch.unsqueeze(output_comp[:, lstm_step, channel, :, :], dim=1)
 
-                # define different loss functions from output and output_comp
-                loss_dict['hole'] += self.l1((1 - mask_ch) * output_ch, (1 - mask_ch) * gt_ch)
-                loss_dict['valid'] += self.l1(mask_ch * output_ch, mask_ch * gt_ch)
+            # define different loss functions from output and output_comp
+            loss_dict['hole'] += self.l1((1 - mask_ch) * output_ch, (1 - mask_ch) * gt_ch)
+            loss_dict['valid'] += self.l1(mask_ch * output_ch, mask_ch * gt_ch)
 
-                # define different loss function from features from output and output_comp
-                if self.extractor:
-                    feat_output = self.extractor(torch.cat([output_ch] * 3, 1))
-                    feat_output_comp = self.extractor(torch.cat([output_comp_ch] * 3, 1))
-                    feat_gt = self.extractor(torch.cat([gt_ch] * 3, 1))
-                else:
-                    feat_output = torch.cat([output_ch] * 3, 1).permute(1, 0, 2, 3).unsqueeze(1)
-                    feat_output_comp = torch.cat([output_comp_ch] * 3, 1).permute(1, 0, 2, 3).unsqueeze(1)
-                    feat_gt = torch.cat([gt_ch] * 3, 1).permute(1, 0, 2, 3).unsqueeze(1)
+            # define different loss function from features from output and output_comp
+            if self.extractor:
+                feat_output = self.extractor(torch.cat([output_ch] * 3, 1))
+                feat_output_comp = self.extractor(torch.cat([output_comp_ch] * 3, 1))
+                feat_gt = self.extractor(torch.cat([gt_ch] * 3, 1))
+            else:
+                feat_output = torch.cat([output_ch] * 3, 1).permute(1, 0, 2, 3).unsqueeze(1)
+                feat_output_comp = torch.cat([output_comp_ch] * 3, 1).permute(1, 0, 2, 3).unsqueeze(1)
+                feat_gt = torch.cat([gt_ch] * 3, 1).permute(1, 0, 2, 3).unsqueeze(1)
 
-                loss_dict['prc'] += 0.0
-                loss_dict['style'] += 0.0
-                for i in range(3):
-                    loss_dict['prc'] += self.l1(feat_output[i], feat_gt[i])
-                    loss_dict['prc'] += self.l1(feat_output_comp[i], feat_gt[i])
-                    loss_dict['style'] += self.l1(gram_matrix(feat_output[i]),
-                                                  gram_matrix(feat_gt[i]))
-                    loss_dict['style'] += self.l1(gram_matrix(feat_output_comp[i]),
-                                                  gram_matrix(feat_gt[i]))
+            loss_dict['prc'] += 0.0
+            loss_dict['style'] += 0.0
+            for i in range(3):
+                loss_dict['prc'] += self.l1(feat_output[i], feat_gt[i])
+                loss_dict['prc'] += self.l1(feat_output_comp[i], feat_gt[i])
+                loss_dict['style'] += self.l1(gram_matrix(feat_output[i]),
+                                              gram_matrix(feat_gt[i]))
+                loss_dict['style'] += self.l1(gram_matrix(feat_output_comp[i]),
+                                              gram_matrix(feat_gt[i]))
 
-                loss_dict['tv'] += total_variation_loss(output_comp_ch)
+            loss_dict['tv'] += total_variation_loss(output_comp_ch)
 
         return loss_dict
 
