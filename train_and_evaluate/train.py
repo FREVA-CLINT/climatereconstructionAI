@@ -71,10 +71,13 @@ for i in tqdm(range(start_iter, cfg.max_iter)):
     image, mask, gt = [x.to(cfg.device) for x in next(iterator_train)]
     output = model(image, mask)
 
+    # reverse output along lstm sequences to match gt
+    output = torch.flip(output, 1)
+
     # calculate loss function and apply backpropagation
-    loss_dict = criterion(mask[:, cfg.lstm_steps, cfg.gt_channels, :, :],
-                          output[:, cfg.lstm_steps, :, :, :],
-                          gt[:, cfg.lstm_steps, cfg.gt_channels, :, :])
+    loss_dict = criterion(mask[:, :, cfg.gt_channels, :, :],
+                          output[:, :, :, :, :],
+                          gt[:, :, cfg.gt_channels, :, :])
     loss = 0.0
     for key, coef in cfg.LAMBDA_DICT_IMG_INPAINTING.items():
         value = coef * loss_dict[key]
