@@ -138,11 +138,6 @@ class DecoderBlock(nn.Module):
         batch_size = input.shape[0]
 
         if hasattr(self, 'lstm_conv'):
-            # flip all inputs
-            input = torch.flip(input, 1)
-            skip_input = torch.flip(skip_input, 1)
-            mask = torch.flip(mask, 1)
-            skip_mask = torch.flip(skip_mask, 1)
             output, lstm_state = self.lstm_conv(input, lstm_state)
 
         input = torch.reshape(input, (-1, input.shape[2], input.shape[3], input.shape[4]))
@@ -269,6 +264,11 @@ class PConvLSTM(nn.Module):
             hs.append(h)
             lstm_states.append(lstm_state)
             hs_mask.append(h_mask)
+
+        # reverse all hidden states
+        for i in range(self.net_depth):
+            hs[i] = torch.flip(hs[i], (1,))
+            hs_mask[i] = torch.flip(hs_mask[i], (1,))
 
         # get output from last encoding layer
         h, h_mask = hs[self.net_depth], hs_mask[self.net_depth]
