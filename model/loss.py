@@ -38,16 +38,13 @@ class InpaintingLoss(nn.Module):
         # create output_comp
         output_comp = mask * gt + (1 - mask) * output
 
-        # calculate loss for all lstm sequence steps
-        #for lstm_step in range(output.shape[1]):
-        lstm_step = 0
         # calculate loss for all channels
         for channel in range(output.shape[2]):
             # only select first channel
-            mask_ch = torch.unsqueeze(mask[:, lstm_step, channel, :, :], dim=1)
-            gt_ch = torch.unsqueeze(gt[:, lstm_step, channel, :, :], dim=1)
-            output_ch = torch.unsqueeze(output[:, lstm_step, channel, :, :], dim=1)
-            output_comp_ch = torch.unsqueeze(output_comp[:, lstm_step, channel, :, :], dim=1)
+            mask_ch = torch.unsqueeze(mask[:, channel, :, :], dim=1)
+            gt_ch = torch.unsqueeze(gt[:, channel, :, :], dim=1)
+            output_ch = torch.unsqueeze(output[:, channel, :, :], dim=1)
+            output_comp_ch = torch.unsqueeze(output_comp[:, channel, :, :], dim=1)
 
             # define different loss functions from output and output_comp
             loss_dict['hole'] += self.l1((1 - mask_ch) * output_ch, (1 - mask_ch) * gt_ch)
