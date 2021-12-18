@@ -72,9 +72,9 @@ for i in tqdm(range(start_iter, cfg.max_iter)):
     output = model(image, mask)
 
     # calculate loss function and apply backpropagation
-    loss_dict = criterion(mask[:, cfg.lstm_steps, cfg.gt_channels, :, :],
-                          output[:, 0, :, :, :],
-                          gt[:, cfg.lstm_steps, cfg.gt_channels, :, :])
+    loss_dict = criterion(mask[:, 0, cfg.gt_channels, :, :],
+                          output[:, cfg.lstm_steps, :, :, :],
+                          gt[:, 0, cfg.gt_channels, :, :])
     loss = 0.0
     for key, coef in cfg.LAMBDA_DICT_IMG_INPAINTING.items():
         value = coef * loss_dict[key]
