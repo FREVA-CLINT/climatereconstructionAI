@@ -38,16 +38,25 @@ iterator_train = iter(data.DataLoader(dataset_train, batch_size=cfg.batch_size,
 lstm = True
 if cfg.lstm_steps == 0:
     lstm = False
-model = PConvLSTM(radar_img_size=cfg.image_size,
-                  radar_enc_dec_layers=cfg.encoding_layers,
-                  radar_pool_layers=cfg.pooling_layers,
-                  radar_in_channels=1,
-                  radar_out_channels=cfg.out_channels,
-                  rea_img_size=cfg.image_size,
-                  rea_enc_layers=cfg.encoding_layers,
-                  rea_pool_layers=cfg.pooling_layers,
-                  rea_in_channels=1,
-                  lstm=lstm).to(cfg.device)
+
+if len(cfg.img_names) > 1:
+    model = PConvLSTM(radar_img_size=cfg.image_size,
+                      radar_enc_dec_layers=cfg.encoding_layers,
+                      radar_pool_layers=cfg.pooling_layers,
+                      radar_in_channels=1,
+                      radar_out_channels=cfg.out_channels,
+                      rea_img_size=cfg.image_size,
+                      rea_enc_layers=cfg.encoding_layers,
+                      rea_pool_layers=cfg.pooling_layers,
+                      rea_in_channels=1,
+                      lstm=lstm).to(cfg.device)
+else:
+    model = PConvLSTM(radar_img_size=cfg.image_size,
+                      radar_enc_dec_layers=cfg.encoding_layers,
+                      radar_pool_layers=cfg.pooling_layers,
+                      radar_in_channels=1,
+                      radar_out_channels=cfg.out_channels,
+                      lstm=lstm).to(cfg.device)
 
 # define learning rate
 if cfg.finetune:
@@ -73,7 +82,10 @@ for i in tqdm(range(start_iter, cfg.max_iter)):
     # train model
     model.train()
     image, mask, gt = [x.to(cfg.device) for x in next(iterator_train)]
-    output = model(torch.unsqueeze(image[:,:,0,:,:], 2), torch.unsqueeze(mask[:,:,0,:,:], 2), torch.unsqueeze(image[:,:,1,:,:], 2), torch.unsqueeze(mask[:,:,1,:,:], 2))
+    if len(cfg.img_names) > 1:
+        output = model(torch.unsqueeze(image[:,:,0,:,:], 2), torch.unsqueeze(mask[:,:,0,:,:], 2), torch.unsqueeze(image[:,:,1,:,:], 2), torch.unsqueeze(mask[:,:,1,:,:], 2))
+    else:
+        output = model(image, mask)
 
     # calculate loss function and apply backpropagation
     loss_dict = criterion(mask[:, 0, cfg.gt_channels, :, :],
