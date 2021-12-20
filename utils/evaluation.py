@@ -24,7 +24,7 @@ def create_snapshot_image(model, dataset, filename, lstm_steps):
     mask = torch.stack(mask).to(cfg.device)
     gt = torch.stack(gt).to(cfg.device)
     with torch.no_grad():
-        output = model(image.to(cfg.device), mask.to(cfg.device)).to(cfg.device)
+        output = model(torch.unsqueeze(image[:,:,0,:,:], 2).to(cfg.device), torch.unsqueeze(mask[:,:,0,:,:], 2).to(cfg.device), torch.unsqueeze(image[:,:,0,:,:], 2).to(cfg.device), torch.unsqueeze(mask[:,:,0,:,:], 2).to(cfg.device)).to(cfg.device)
 
     # select last element of lstm sequence as evaluation element
     image = image[:, 0, cfg.gt_channels, :, :].to(torch.device('cpu'))
