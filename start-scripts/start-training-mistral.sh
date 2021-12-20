@@ -41,6 +41,5 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --max-iter 200000 \
  --resume-iter 140000 \
  --finetune \
- --log-interval 100 \
  --eval-timesteps 2143,2144,2145,2146,2147 \
  --save-model-interval 10000
