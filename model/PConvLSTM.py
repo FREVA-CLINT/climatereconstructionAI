@@ -322,6 +322,8 @@ class PConvLSTM(nn.Module):
 
             attention = torch.unsqueeze(torch.cat([h_attention, h_rea_attention], dim=1), dim=1)
             mask_attention = torch.ones_like(attention)
+            print(attention.shape)
+            print(mask_attention.shape)
             hs[self.net_depth] = torch.cat([hs[self.net_depth], attention], dim=2)
             hs_mask[self.net_depth] = torch.cat([hs_mask[self.net_depth], mask_attention], dim=2)
 
