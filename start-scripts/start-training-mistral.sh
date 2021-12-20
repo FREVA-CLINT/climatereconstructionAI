@@ -35,6 +35,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/precipitation/radolan-rea2-fusion/ \
  --log-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/logs/precipitation/radolan-rea2-fusion/ \
  --lstm-steps 0 \
+ --prev-next-steps 0 \
  --out-channels 1 \
  --max-iter 200000 \
  --resume-iter 100000 \

@@ -329,6 +329,8 @@ class PConvLSTM(nn.Module):
         h, h_mask = hs[self.net_depth], hs_mask[self.net_depth]
         # forward pass decoding layers
         for i in range(self.net_depth):
+            print(h.shape)
+            print(h_mask.shape)
             lstm_state_h, lstm_state_c = None, None
 
             if self.lstm:
