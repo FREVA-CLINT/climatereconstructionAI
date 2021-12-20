@@ -168,89 +168,126 @@ class DecoderBlock(nn.Module):
 
 
 class PConvLSTM(nn.Module):
-    def __init__(self, image_size=512, num_enc_dec_layers=4, num_pool_layers=4, num_in_channels=1, num_out_channels=1, lstm=True):
+    def __init__(self, radar_img_size=512, radar_enc_dec_layers=4, radar_pool_layers=4, radar_in_channels=1, radar_out_channels=1,
+                 rea_img_size=None, rea_enc_layers=4, rea_pool_layers=4, rea_in_channels=1,
+                 lstm=True):
         super().__init__()
 
-        # adjust encoding layers if it doesn't blend with image size
-        if image_size % (2 ** (num_enc_dec_layers + num_pool_layers - 1)) != 0:
-            num_enc_dec_layers = num_enc_dec_layers + num_pool_layers
-            num_pool_layers = 0
-            for i in range(num_enc_dec_layers):
-                if image_size % (2 ** (num_enc_dec_layers - i - 1)) == 0:
-                    num_enc_dec_layers -= i
-                    break
-            print("WARNING: Number of encoding layers doesn't match with image size. Using {} encoding and" +
-                  " 0 pooling layers layers instead.".format(num_enc_dec_layers))
-
         self.freeze_enc_bn = False
-        self.num_enc_dec_layers = num_enc_dec_layers
-        self.num_pool_layers = num_pool_layers
-        self.num_in_channels = num_in_channels
-        self.num_out_channels = num_out_channels
-        self.net_depth = num_enc_dec_layers + num_pool_layers
+        self.radar_enc_dec_layers = radar_enc_dec_layers
+        self.radar_pool_layers = radar_pool_layers
+        self.rea_enc_layers = rea_enc_layers
+        self.rea_pool_layers = rea_pool_layers
+        self.net_depth = radar_enc_dec_layers + radar_pool_layers
         self.lstm = lstm
 
         # define encoding layers
         encoding_layers = []
         encoding_layers.append(
             EncoderBlock(
-                in_channels=self.num_in_channels,
-                out_channels=image_size // (2 ** (self.num_enc_dec_layers - 1)),
-                image_size=image_size,
+                in_channels=radar_in_channels,
+                out_channels=radar_img_size // (2 ** (self.radar_enc_dec_layers - 1)),
+                image_size=radar_img_size,
                 kernel=(7, 7), stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
-        for i in range(1, self.num_enc_dec_layers):
-            if i == self.num_enc_dec_layers - 1:
+        for i in range(1, self.radar_enc_dec_layers):
+            if i == self.radar_enc_dec_layers - 1:
                 encoding_layers.append(EncoderBlock(
-                    in_channels=image_size // (2 ** (self.num_enc_dec_layers - i)),
-                    out_channels=image_size // (2 ** (self.num_enc_dec_layers - i - 1)),
-                    image_size=image_size // (2 ** i),
+                    in_channels=radar_img_size // (2 ** (self.radar_enc_dec_layers - i)),
+                    out_channels=radar_img_size // (2 ** (self.radar_enc_dec_layers - i - 1)),
+                    image_size=radar_img_size // (2 ** i),
                     kernel=(3, 3), stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
             else:
                 encoding_layers.append(EncoderBlock(
-                    in_channels=image_size // (2 ** (self.num_enc_dec_layers - i)),
-                    out_channels=image_size // (2 ** (self.num_enc_dec_layers - i - 1)),
-                    image_size=image_size // (2 ** i),
+                    in_channels=radar_img_size // (2 ** (self.radar_enc_dec_layers - i)),
+                    out_channels=radar_img_size // (2 ** (self.radar_enc_dec_layers - i - 1)),
+                    image_size=radar_img_size // (2 ** i),
                     kernel=(5, 5), stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
         # define encoding pooling layers
-        for i in range(self.num_pool_layers):
+        for i in range(self.radar_pool_layers):
             encoding_layers.append(EncoderBlock(
-                in_channels=image_size,
-                out_channels=image_size,
-                image_size=image_size // (2 ** (self.num_enc_dec_layers + i)),
+                in_channels=radar_img_size,
+                out_channels=radar_img_size,
+                image_size=radar_img_size // (2 ** (self.radar_enc_dec_layers + i)),
                 kernel=(3, 3), stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
         self.encoder = nn.ModuleList(encoding_layers)
 
+        # define rea layers
+        if rea_img_size:
+            rea_layers = []
+            rea_layers.append(
+                EncoderBlock(
+                    in_channels=rea_in_channels,
+                    out_channels=rea_img_size // (2 ** (rea_enc_layers - 1)),
+                    image_size=rea_img_size,
+                    kernel=(7, 7), stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
+            for i in range(1, self.rea_enc_layers):
+                if i == self.radar_enc_dec_layers - 1:
+                    rea_layers.append(EncoderBlock(
+                        in_channels=rea_img_size // (2 ** (rea_enc_layers - i)),
+                        out_channels=rea_img_size // (2 ** (rea_enc_layers - i - 1)),
+                        image_size=rea_img_size // (2 ** i),
+                        kernel=(3, 3), stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
+                else:
+                    rea_layers.append(EncoderBlock(
+                        in_channels=rea_img_size // (2 ** (rea_enc_layers - i)),
+                        out_channels=rea_img_size // (2 ** (rea_enc_layers - i - 1)),
+                        image_size=rea_img_size // (2 ** i),
+                        kernel=(5, 5), stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
+
+            # define encoding pooling layers
+            for i in range(self.rea_pool_layers):
+                rea_layers.append(EncoderBlock(
+                    in_channels=rea_img_size,
+                    out_channels=rea_img_size,
+                    image_size=rea_img_size // (2 ** (rea_enc_layers + i)),
+                    kernel=(3, 3), stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
+            self.rea_encoder = nn.ModuleList(rea_layers)
+            self.attention_spatial = nn.Sequential(
+                nn.Upsample(scale_factor=2, mode='nearest'),
+                nn.Conv2d(in_channels=2 * rea_img_size, out_channels=1, kernel_size=(3, 3)),
+                nn.Sigmoid()
+            )
+            self.attention_channel_1 = nn.Sequential(
+                nn.Upsample(scale_factor=2, mode='nearest'),
+                nn.Conv2d(in_channels=rea_img_size, out_channels=1, kernel_size=(3, 3))
+            )
+            self.attention_channel_2 = nn.Sequential(
+                nn.Upsample(scale_factor=2, mode='nearest'),
+                nn.Conv2d(in_channels=rea_img_size, out_channels=1, kernel_size=(3, 3))
+            )
+            self.attention_activation = nn.Sigmoid()
+            attention_channels = 2
+        else:
+            attention_channels = 0
+
         # define decoding pooling layers
         decoding_layers = []
-        for i in range(self.num_pool_layers):
+        for i in range(self.radar_pool_layers):
             decoding_layers.append(DecoderBlock(
-                in_channels=image_size + image_size,
-                out_channels=image_size,
-                image_size=image_size // (2 ** (self.net_depth - i - 1)),
+                in_channels=radar_img_size + radar_img_size + attention_channels,
+                out_channels=radar_img_size,
+                image_size=radar_img_size // (2 ** (self.net_depth - i - 1)),
                 kernel=(3, 3), stride=(1, 1), activation=nn.LeakyReLU(), lstm=lstm))
 
         # define decoding layers
-        for i in range(1, self.num_enc_dec_layers):
+        for i in range(1, self.radar_enc_dec_layers):
             decoding_layers.append(
                 DecoderBlock(
-                    in_channels=image_size // (2 ** (i - 1)) + image_size // (2 ** i),
-                    out_channels=image_size // (2 ** i),
-                    image_size=image_size // (2 ** (self.net_depth - self.num_pool_layers - i)),
+                    in_channels=radar_img_size // (2 ** (i - 1)) + radar_img_size // (2 ** i),
+                    out_channels=radar_img_size // (2 ** i),
+                    image_size=radar_img_size // (2 ** (self.net_depth - self.radar_pool_layers - i)),
                     kernel=(3, 3), stride=(1, 1), activation=nn.LeakyReLU(), lstm=lstm))
 
         decoding_layers.append(
             DecoderBlock(
-                in_channels=image_size // (2 ** (self.num_enc_dec_layers - 1)) + self.num_in_channels,
-                out_channels=self.num_out_channels,
-                image_size=image_size,
+                in_channels=radar_img_size // (2 ** (self.radar_enc_dec_layers - 1)) + radar_in_channels,
+                out_channels=radar_out_channels,
+                image_size=radar_img_size,
                 kernel=(3, 3), stride=(1, 1), activation=None, lstm=lstm, bn=False, bias=True,
-                init_in_channels=self.num_in_channels, init_out_channels=self.num_out_channels))
+                init_in_channels=radar_in_channels, init_out_channels=radar_out_channels))
         self.decoder = nn.ModuleList(decoding_layers)
 
-    def forward(self, input, input_mask):
-        # get the number of time steps for LSTM
-        num_time_steps = input.shape[1]
-
+    def forward(self, input, input_mask, input_rea=None, input_rea_mask=None):
         # create lists for skip layers
         hs = [input]
         hs_mask = [input_mask]
@@ -269,6 +306,25 @@ class PConvLSTM(nn.Module):
         for i in range(self.net_depth):
             hs[i] = torch.flip(hs[i], (1,))
             hs_mask[i] = torch.flip(hs_mask[i], (1,))
+
+        # forward rea data
+        if hasattr(self, 'rea_layers'):
+            h_rea, h_rea_mask = input_rea, input_rea_mask
+            for i in range(self.rea_enc_layers + self.rea_pool_layers):
+                h_rea, h_rea_mask, lstm_state = self.rea_layers[i](h_rea,
+                                                                   h_rea_mask,
+                                                                   None)
+            h_rea_max = self.attention_channel_1(F.max_pool2d(h_rea))
+            h_rea_avg = self.attention_channel_2(F.avg_pool2d(h_rea))
+
+            h_rea_attention = self.attention_activation(h_rea_max + h_rea_avg)
+            h_attention = self.attention_spatial(torch.cat([F.max_pool2d(h), F.avg_pool2d(h)], dim=2))
+
+            attention = torch.cat([h_attention, h_rea_attention], dim=2)
+            mask_attention = torch.ones_like(attention)
+
+            hs[self.net_depth] = torch.cat([hs[self.net_depth], attention], dim=2)
+            h_mask[self.net_depth] = torch.cat([h_mask[self.net_depth], mask_attention], dim=2)
 
         # get output from last encoding layer
         h, h_mask = hs[self.net_depth], hs_mask[self.net_depth]
