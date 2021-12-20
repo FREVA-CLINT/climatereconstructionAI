@@ -263,17 +263,25 @@ class PConvLSTM(nn.Module):
         # define decoding pooling layers
         decoding_layers = []
         for i in range(self.radar_pool_layers):
+            if i == 0:
+                in_channels = radar_img_size + radar_img_size + attention_channels
+            else:
+                in_channels = radar_img_size + radar_img_size
             decoding_layers.append(DecoderBlock(
-                in_channels=radar_img_size + radar_img_size + attention_channels,
+                in_channels=in_channels,
                 out_channels=radar_img_size,
                 image_size=radar_img_size // (2 ** (self.net_depth - i - 1)),
                 kernel=(3, 3), stride=(1, 1), activation=nn.LeakyReLU(), lstm=lstm))
 
         # define decoding layers
         for i in range(1, self.radar_enc_dec_layers):
+            if i == 0 and self.radar_pool_layers == 0:
+                in_channels = radar_img_size // (2 ** (i - 1)) + radar_img_size // (2 ** i) + attention_channels
+            else:
+                in_channels = radar_img_size // (2 ** (i - 1)) + radar_img_size // (2 ** i)
             decoding_layers.append(
                 DecoderBlock(
-                    in_channels=radar_img_size // (2 ** (i - 1)) + radar_img_size // (2 ** i),
+                    in_channels=in_channels,
                     out_channels=radar_img_size // (2 ** i),
                     image_size=radar_img_size // (2 ** (self.net_depth - self.radar_pool_layers - i)),
                     kernel=(3, 3), stride=(1, 1), activation=nn.LeakyReLU(), lstm=lstm))
@@ -322,8 +330,6 @@ class PConvLSTM(nn.Module):
 
             attention = torch.unsqueeze(torch.cat([h_attention, h_rea_attention], dim=1), dim=1)
             mask_attention = torch.ones_like(attention)
-            print(attention.shape)
-            print(mask_attention.shape)
             hs[self.net_depth] = torch.cat([hs[self.net_depth], attention], dim=2)
             hs_mask[self.net_depth] = torch.cat([hs_mask[self.net_depth], mask_attention], dim=2)
 
@@ -331,8 +337,6 @@ class PConvLSTM(nn.Module):
         h, h_mask = hs[self.net_depth], hs_mask[self.net_depth]
         # forward pass decoding layers
         for i in range(self.net_depth):
-            print(h.shape)
-            print(h_mask.shape)
             lstm_state_h, lstm_state_c = None, None
 
             if self.lstm:
