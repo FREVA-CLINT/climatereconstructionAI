@@ -244,16 +244,16 @@ class PConvLSTM(nn.Module):
             self.rea_encoder = nn.ModuleList(rea_layers)
             self.attention_spatial = nn.Sequential(
                 nn.Upsample(scale_factor=2, mode='nearest'),
-                nn.Conv2d(in_channels=2 * rea_img_size, out_channels=1, kernel_size=(3, 3)),
+                nn.Conv2d(in_channels=2 * rea_img_size, out_channels=1, kernel_size=(3, 3), padding=1),
                 nn.Sigmoid()
             )
             self.attention_channel_1 = nn.Sequential(
                 nn.Upsample(scale_factor=2, mode='nearest'),
-                nn.Conv2d(in_channels=rea_img_size, out_channels=1, kernel_size=(3, 3))
+                nn.Conv2d(in_channels=rea_img_size, out_channels=1, kernel_size=(3, 3), padding=1)
             )
             self.attention_channel_2 = nn.Sequential(
                 nn.Upsample(scale_factor=2, mode='nearest'),
-                nn.Conv2d(in_channels=rea_img_size, out_channels=1, kernel_size=(3, 3))
+                nn.Conv2d(in_channels=rea_img_size, out_channels=1, kernel_size=(3, 3), padding=1)
             )
             self.attention_activation = nn.Sigmoid()
             attention_channels = 2
@@ -308,23 +308,22 @@ class PConvLSTM(nn.Module):
             hs_mask[i] = torch.flip(hs_mask[i], (1,))
 
         # forward rea data
-        if hasattr(self, 'rea_layers'):
+        if hasattr(self, 'rea_encoder'):
             h_rea, h_rea_mask = input_rea, input_rea_mask
             for i in range(self.rea_enc_layers + self.rea_pool_layers):
-                h_rea, h_rea_mask, lstm_state = self.rea_layers[i](h_rea,
-                                                                   h_rea_mask,
-                                                                   None)
-            h_rea_max = self.attention_channel_1(F.max_pool2d(h_rea))
-            h_rea_avg = self.attention_channel_2(F.avg_pool2d(h_rea))
+                h_rea, h_rea_mask, lstm_state = self.rea_encoder[i](h_rea,
+                                                                    h_rea_mask,
+                                                                    None)
+            h_rea_max = self.attention_channel_1(F.max_pool2d(h_rea[:,0,:,:,:], 2))
+            h_rea_avg = self.attention_channel_2(F.avg_pool2d(h_rea[:,0,:,:,:], 2))
 
             h_rea_attention = self.attention_activation(h_rea_max + h_rea_avg)
-            h_attention = self.attention_spatial(torch.cat([F.max_pool2d(h), F.avg_pool2d(h)], dim=2))
+            h_attention = self.attention_spatial(torch.cat([F.max_pool2d(h[:,0,:,:,:], 2), F.avg_pool2d(h[:,0,:,:,:], 2)], dim=1))
 
-            attention = torch.cat([h_attention, h_rea_attention], dim=2)
+            attention = torch.unsqueeze(torch.cat([h_attention, h_rea_attention], dim=1), dim=1)
             mask_attention = torch.ones_like(attention)
-
             hs[self.net_depth] = torch.cat([hs[self.net_depth], attention], dim=2)
-            h_mask[self.net_depth] = torch.cat([h_mask[self.net_depth], mask_attention], dim=2)
+            hs_mask[self.net_depth] = torch.cat([hs_mask[self.net_depth], mask_attention], dim=2)
 
         # get output from last encoding layer
         h, h_mask = hs[self.net_depth], hs_mask[self.net_depth]
@@ -334,7 +333,6 @@ class PConvLSTM(nn.Module):
 
             if self.lstm:
                 lstm_state_h, lstm_state_c = lstm_states[self.net_depth - 1 - i]
-
             h, h_mask, lstm_state = self.decoder[i](h, hs[self.net_depth - i - 1],
                                                     h_mask, hs_mask[self.net_depth - i - 1],
                                                     (lstm_state_h, lstm_state_c))
