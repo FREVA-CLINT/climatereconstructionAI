@@ -24,7 +24,11 @@ def create_snapshot_image(model, dataset, filename, lstm_steps):
     mask = torch.stack(mask).to(cfg.device)
     gt = torch.stack(gt).to(cfg.device)
     with torch.no_grad():
-        output = model(torch.unsqueeze(image[:,:,0,:,:], 2).to(cfg.device), torch.unsqueeze(mask[:,:,0,:,:], 2).to(cfg.device), torch.unsqueeze(image[:,:,0,:,:], 2).to(cfg.device), torch.unsqueeze(mask[:,:,0,:,:], 2).to(cfg.device)).to(cfg.device)
+        if len(cfg.img_names) > 1:
+            output = model(torch.unsqueeze(image[:, :, 0, :, :], 2), torch.unsqueeze(mask[:, :, 0, :, :], 2),
+                           torch.unsqueeze(image[:, :, 1, :, :], 2), torch.unsqueeze(mask[:, :, 1, :, :], 2))
+        else:
+            output = model(image, mask)
 
     # select last element of lstm sequence as evaluation element
     image = image[:, 0, cfg.gt_channels, :, :].to(torch.device('cpu'))
@@ -97,7 +101,11 @@ def infill(model, dataset, partitions):
         gt_part = torch.stack(gt_part)
         # get results from trained network
         with torch.no_grad():
-            output_part = model(image_part.to(cfg.device), mask_part.to(cfg.device))
+            if len(cfg.img_names) > 1:
+                output_part = model(torch.unsqueeze(image_part[:, :, 0, :, :], 2).to(cfg.device), torch.unsqueeze(mask_part[:, :, 0, :, :], 2).to(cfg.device),
+                               torch.unsqueeze(image_part[:, :, 1, :, :], 2).to(cfg.device), torch.unsqueeze(mask_part[:, :, 1, :, :], 2).to(cfg.device))
+            else:
+                output_part = model(image_part.to(cfg.device), mask_part.to(cfg.device))
 
         lstm_steps = output_part.shape[1] - 1
 
