@@ -20,12 +20,12 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-rea2/ \
  --mask-dir masks/ \
  --snapshot-dir snapshots/precipitation/radolan-autoenc-lstm1/ckpt/160000.pth \
- --evaluation-dirs evaluation/precipitation/radolan-autoencoder-lstm/ \
+ --evaluation-dirs evaluation/precipitation/radolan-simple-2007-2013/,evaluation/precipitation/radolan-lstm-2007-2013/,evaluation/precipitation/radolan-autoencoder-lstm/ \
  --lstm-steps 3 \
  --partitions 1177 \
- --eval-names Simple,Rea2-Kelvin,Re2-Celsius,Fusion-Rea2 \
+ --eval-names Simple,LSTM,Auto-LSTM \
  --out-channels 1 \
- --infill test \
-# --create-report \
+ --create-report \
+# --infill test \
 # --create-images 2017-07-12-14:00,2017-07-12-14:00 \
 # --create-video \
