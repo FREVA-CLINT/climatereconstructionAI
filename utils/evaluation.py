@@ -17,7 +17,7 @@ sys.path.append('./')
 import utils.metrics as metrics
 
 
-def create_snapshot_image(model, dataset, filename, lstm_steps):
+def create_snapshot_image(model, dataset, filename):
     image, mask, gt = zip(*[dataset[int(i)] for i in cfg.eval_timesteps])
 
     image = torch.stack(image).to(cfg.device)
@@ -27,10 +27,10 @@ def create_snapshot_image(model, dataset, filename, lstm_steps):
         output = model(image, mask)
 
     # select last element of lstm sequence as evaluation element
-    image = image[:, 0, 0, cfg.gt_channels, :, :].to(torch.device('cpu'))
-    gt = gt[:, 0, 0, cfg.gt_channels, :, :].to(torch.device('cpu'))
-    mask = mask[:, 0, 0, cfg.gt_channels, :, :].to(torch.device('cpu'))
-    output = output[:, lstm_steps, :, :, :].to(torch.device('cpu'))
+    image = image[:, 0, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
+    gt = gt[:, 0, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
+    mask = mask[:, 0, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
+    output = output[:, 0, :, :, :].to(torch.device('cpu'))
 
     output_comp = mask * image + (1 - mask) * output
 

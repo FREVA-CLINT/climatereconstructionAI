@@ -77,9 +77,9 @@ for i in tqdm(range(start_iter, cfg.max_iter)):
     output = model(image_batch, mask_batch)
 
     # calculate loss function and apply backpropagation
-    loss_dict = criterion(mask_batch[:, 0, 0, cfg.gt_channels, :, :],
-                          output[:, cfg.lstm_steps, :, :, :],
-                          gt_batch[:, 0, 0, cfg.gt_channels, :, :])
+    loss_dict = criterion(mask_batch[:, 0, cfg.lstm_steps, cfg.gt_channels, :, :],
+                          output[:, 0, :, :, :],
+                          gt_batch[:, 0, cfg.lstm_steps, cfg.gt_channels, :, :])
     loss = 0.0
     for key, coef in cfg.LAMBDA_DICT_IMG_INPAINTING.items():
         value = coef * loss_dict[key]
@@ -98,7 +98,6 @@ for i in tqdm(range(start_iter, cfg.max_iter)):
     # create snapshot image
     if cfg.log_interval and (i + 1) % cfg.log_interval == 0:
         model.eval()
-        create_snapshot_image(model, dataset_val, '{:s}/images/test_{:d}'.format(cfg.snapshot_dir, i + 1),
-                              cfg.lstm_steps)
+        create_snapshot_image(model, dataset_val, '{:s}/images/iter_{:d}'.format(cfg.snapshot_dir, i + 1))
 
 writer.close()
