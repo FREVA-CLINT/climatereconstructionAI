@@ -237,7 +237,7 @@ class PConvLSTM(nn.Module):
                     out_channels=rea_img_size[i],
                     image_size=rea_img_size[i] // (2 ** (rea_enc_layers[i] + j)),
                     kernel=(3, 3), stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
-            attention_extractor['encoding_layers'] = nn.ModuleList(rea_encoding_layers)
+            attention_extractor['encoding_layers'] = nn.ModuleList(rea_encoding_layers).to(cfg.device)
             attention_extractor['attention_1'] = nn.Sequential(
                 nn.Conv2d(in_channels=rea_img_size[i], out_channels=1, kernel_size=(3, 3), padding=1)
             )
