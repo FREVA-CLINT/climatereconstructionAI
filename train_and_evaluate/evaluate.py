@@ -20,18 +20,18 @@ if cfg.infill:
         if cfg.lstm_steps == 0:
             lstm = False
         if len(cfg.img_names) > 1:
-            model = PConvLSTM(radar_img_size=cfg.image_size,
+            model = PConvLSTM(radar_img_size=cfg.image_sizes,
                               radar_enc_dec_layers=cfg.encoding_layers,
                               radar_pool_layers=cfg.pooling_layers,
                               radar_in_channels=1,
                               radar_out_channels=cfg.out_channels,
-                              rea_img_size=cfg.image_size,
+                              rea_img_size=cfg.image_sizes,
                               rea_enc_layers=cfg.encoding_layers,
                               rea_pool_layers=cfg.pooling_layers,
                               rea_in_channels=1,
                               lstm=lstm).to(cfg.device)
         else:
-            model = PConvLSTM(radar_img_size=cfg.image_size,
+            model = PConvLSTM(radar_img_size=cfg.image_sizes,
                               radar_enc_dec_layers=cfg.encoding_layers,
                               radar_pool_layers=cfg.pooling_layers,
                               radar_in_channels=1,
