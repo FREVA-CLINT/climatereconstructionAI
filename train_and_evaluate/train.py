@@ -5,7 +5,7 @@ import sys
 sys.path.append('./')
 
 from tensorboardX import SummaryWriter
-from torch.utils import data
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 from model.PConvLSTM import PConvLSTM
 from utils.featurizer import VGG16FeatureExtractor
@@ -25,38 +25,30 @@ if not os.path.exists(cfg.log_dir):
     os.makedirs(cfg.log_dir)
 writer = SummaryWriter(log_dir=cfg.log_dir)
 
-# define data set + iterator
+# create data sets
 dataset_train = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, 'train', cfg.data_types,
                              cfg.lstm_steps, cfg.prev_next_steps)
 dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, 'val', cfg.data_types,
                            cfg.lstm_steps, cfg.prev_next_steps)
-iterator_train = iter(data.DataLoader(dataset_train, batch_size=cfg.batch_size,
-                                      sampler=InfiniteSampler(len(dataset_train)),
-                                      num_workers=cfg.n_threads))
+iterator_train = iter(DataLoader(dataset_train, batch_size=cfg.batch_size,
+                                 sampler=InfiniteSampler(len(dataset_train)),
+                                 num_workers=cfg.n_threads))
 
 # define network model
 lstm = True
 if cfg.lstm_steps == 0:
     lstm = False
 
-if len(cfg.img_names) > 1:
-    model = PConvLSTM(radar_img_size=cfg.image_size,
-                      radar_enc_dec_layers=cfg.encoding_layers,
-                      radar_pool_layers=cfg.pooling_layers,
-                      radar_in_channels=1,
-                      radar_out_channels=cfg.out_channels,
-                      rea_img_size=cfg.image_size,
-                      rea_enc_layers=cfg.encoding_layers,
-                      rea_pool_layers=cfg.pooling_layers,
-                      rea_in_channels=1,
-                      lstm=lstm).to(cfg.device)
-else:
-    model = PConvLSTM(radar_img_size=cfg.image_size,
-                      radar_enc_dec_layers=cfg.encoding_layers,
-                      radar_pool_layers=cfg.pooling_layers,
-                      radar_in_channels=1,
-                      radar_out_channels=cfg.out_channels,
-                      lstm=lstm).to(cfg.device)
+model = PConvLSTM(radar_img_size=cfg.image_sizes[0],
+                  radar_enc_dec_layers=cfg.encoding_layers[0],
+                  radar_pool_layers=cfg.pooling_layers[0],
+                  radar_in_channels=2*cfg.prev_next_steps + 1,
+                  radar_out_channels=cfg.out_channels,
+                  rea_img_size=cfg.image_sizes[1:],
+                  rea_enc_layers=cfg.encoding_layers[1:],
+                  rea_pool_layers=cfg.pooling_layers[1:],
+                  rea_in_channels=(len(cfg.image_sizes) - 1) * [2*cfg.prev_next_steps + 1],
+                  lstm=lstm).to(cfg.device)
 
 # define learning rate
 if cfg.finetune:
@@ -81,16 +73,13 @@ if cfg.resume_iter:
 for i in tqdm(range(start_iter, cfg.max_iter)):
     # train model
     model.train()
-    image, mask, gt = [x.to(cfg.device) for x in next(iterator_train)]
-    if len(cfg.img_names) > 1:
-        output = model(torch.unsqueeze(image[:,:,0,:,:], 2), torch.unsqueeze(mask[:,:,0,:,:], 2), torch.unsqueeze(image[:,:,1,:,:], 2), torch.unsqueeze(mask[:,:,1,:,:], 2))
-    else:
-        output = model(image, mask)
+    image_batch, mask_batch, gt_batch = [x.to(cfg.device) for x in next(iterator_train)]
+    output = model(image_batch, mask_batch)
 
     # calculate loss function and apply backpropagation
-    loss_dict = criterion(mask[:, 0, cfg.gt_channels, :, :],
+    loss_dict = criterion(mask_batch[:, 0, 0, cfg.gt_channels, :, :],
                           output[:, cfg.lstm_steps, :, :, :],
-                          gt[:, 0, cfg.gt_channels, :, :])
+                          gt_batch[:, 0, 0, cfg.gt_channels, :, :])
     loss = 0.0
     for key, coef in cfg.LAMBDA_DICT_IMG_INPAINTING.items():
         value = coef * loss_dict[key]

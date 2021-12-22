@@ -2,11 +2,12 @@ import random
 import numpy as np
 import torch
 import h5py
-import torch.utils.data as data
+from torch.utils.data import Dataset, Sampler
 
 
-class InfiniteSampler(data.sampler.Sampler):
-    def __init__(self, num_samples):
+class InfiniteSampler(Sampler):
+    def __init__(self, num_samples, data_source=None):
+        super().__init__(data_source)
         self.num_samples = num_samples
 
     def __iter__(self):
@@ -27,11 +28,10 @@ class InfiniteSampler(data.sampler.Sampler):
                 i = 0
 
 
-class NetCDFLoader(torch.utils.data.Dataset):
+class NetCDFLoader(Dataset):
     def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, lstm_steps, prev_next_steps):
         super(NetCDFLoader, self).__init__()
         assert lstm_steps == 0 or prev_next_steps == 0
-        assert len(img_names) == len(mask_names) == len(data_types)
 
         self.split = split
         self.data_types = data_types
@@ -48,108 +48,93 @@ class NetCDFLoader(torch.utils.data.Dataset):
             self.data_path = '{:s}/val_large/'.format(data_root)
         self.mask_path = mask_root
 
-        img_lengths = []
-        self.mask_lengths = []
-        # define lengths of image and mask
-        for i in range(len(self.data_types)):
-            img_file = h5py.File('{}{}'.format(self.data_path, self.img_names[i]), 'r')
-            img_data = img_file.get(self.data_types[i])
-            img_lengths.append(img_data.shape[0])
-            mask_file = h5py.File('{}{}'.format(self.mask_path, self.mask_names[i]), 'r')
-            mask_data = mask_file.get(self.data_types[i])
-            self.mask_lengths.append(mask_data.shape[0])
+        # define image and mask lenghts
+        self.img_lengths = {}
+        self.mask_lengths = {}
+        assert len(img_names) == len(mask_names) == len(data_types)
+        for i in range(len(img_names)):
+            self.init_dataset(img_names[i], mask_names[i], data_types[i])
 
-        # check if images all have same length
-        assert img_lengths[:-1] == img_lengths[1:]
-        self.img_length = img_lengths[0]
+    def init_dataset(self, img_name, mask_name, data_type):
+        # set img and mask length
+        img_file = h5py.File('{}{}'.format(self.data_path, img_name), 'r')
+        img_data = img_file.get(data_type)
+        mask_file = h5py.File('{}{}'.format(self.mask_path, mask_name), 'r')
+        mask_data = mask_file.get(data_type)
+        self.img_lengths[img_name] = img_data.shape[0]
+        self.mask_lengths[mask_name] = mask_data.shape[0]
 
         # if infill, check if img length matches mask length
-        if split == 'infill':
-            assert self.mask_lengths[:-1] == self.mask_lengths[1:]
-            assert self.img_length == self.mask_lengths[0]
+        if self.split == 'infill':
+            assert img_data.shape[0] == mask_data.shape[0]
 
-    def load_data(self, img_indices, mask_indices):
-        images = []
-        masks = []
-        # iterate each defined netcdf file
-        for i in range(len(self.data_types)):
-            # open netcdf file for img and mask
-            img_file = h5py.File('{}{}'.format(self.data_path, self.img_names[i]), 'r')
-            img_data = img_file.get(self.data_types[i])
-            try:
-                if img_data.ndim == 4:
-                    images.append(torch.from_numpy(img_data[img_indices[i], 0, :, :]))
-                else:
-                    images.append(torch.from_numpy(img_data[img_indices[i], :, :]))
-            except TypeError:
-                # get indices that occur more than once
-                unique, counts = np.unique(img_indices[i], return_counts=True)
-                copy_indices = [(index, counts[index] - 1) for index in range(len(counts)) if counts[index] > 1]
-                if img_data.ndim == 4:
-                    data = torch.from_numpy(img_data[unique, 0, :, :])
-                else:
-                    data = torch.from_numpy(img_data[unique, :, :])
-                if unique[copy_indices[0][0]] == 0:
-                    total_data = torch.cat([torch.stack(copy_indices[0][1] * [data[copy_indices[0][0]]]), data])
-                else:
-                    total_data = torch.cat([data, torch.stack(copy_indices[0][1] * [data[copy_indices[0][0]]])])
-                images.append(total_data)
-            mask_file = h5py.File('{}{}'.format(self.mask_path, self.mask_names[i]))
-            mask_data = mask_file.get(self.data_types[i])
-            try:
-                if mask_data.ndim == 4:
-                    masks.append(torch.from_numpy(mask_data[mask_indices[i], 0, :, :]))
-                else:
-                    masks.append(torch.from_numpy(mask_data[mask_indices[i], :, :]))
-            except TypeError:
-                # get indices that occur more than once
-                unique, counts = np.unique(mask_indices[i], return_counts=True)
-                copy_indices = [(index, counts[index] - 1) for index in range(len(counts)) if counts[index] > 1]
-                if mask_data.ndim == 4:
-                    data = torch.from_numpy(mask_data[unique, 0, :, :])
-                else:
-                    data = torch.from_numpy(mask_data[unique, :, :])
-                if unique[copy_indices[0][0]] == 0:
-                    total_data = torch.cat([torch.stack(copy_indices[0][1] * [data[copy_indices[0][0]]]), data])
-                else:
-                    total_data = torch.cat([data, torch.stack(copy_indices[0][1] * [data[copy_indices[0][0]]])])
-                masks.append(total_data)
+    def load_data(self, file, data_type, indices):
+        # open netcdf file
+        h5_data = file.get(data_type)
+        try:
+            if h5_data.ndim == 4:
+                total_data = torch.from_numpy(h5_data[indices, 0, :, :])
+            else:
+                total_data = torch.from_numpy(h5_data[indices, :, :])
+        except TypeError:
+            # get indices that occur more than once
+            unique, counts = np.unique(indices, return_counts=True)
+            copy_indices = [(index, counts[index] - 1) for index in range(len(counts)) if counts[index] > 1]
+            if h5_data.ndim == 4:
+                total_data = torch.from_numpy(h5_data[unique, 0, :, :])
+            else:
+                total_data = torch.from_numpy(h5_data[unique, :, :])
+            if unique[copy_indices[0][0]] == 0:
+                total_data = torch.cat([torch.stack(copy_indices[0][1] * [total_data[copy_indices[0][0]]]), total_data])
+            else:
+                total_data = torch.cat([total_data, torch.stack(copy_indices[0][1] * [total_data[copy_indices[0][0]]])])
+        return total_data
 
-        return images, masks
-
-    def __getitem__(self, index):
+    def get_single_item(self, index, img_name, mask_name, data_type):
         if self.lstm_steps == 0:
             prev_steps = next_steps = self.prev_next_steps
         else:
             prev_steps = self.lstm_steps
             next_steps = 0
 
-        # define range of lstm steps -> adjust, if out of boundaries
+        # define range of lstm or prev-next steps -> adjust, if out of boundaries
         img_indices = np.array(list(range(index - prev_steps, index + next_steps + 1)))
         img_indices[img_indices < 0] = 0
-        img_indices[img_indices > self.img_length - 1] = self.img_length - 1
-        img_indices = len(self.data_types) * [img_indices]
+        img_indices[img_indices > self.img_lengths[img_name] - 1] = self.img_lengths[img_name] - 1
         if self.split == 'infill':
             mask_indices = img_indices
         else:
             mask_indices = []
-            for i in range(len(self.data_types)):
-                indices = []
-                for j in range(prev_steps + next_steps + 1):
-                    indices.append(random.randint(0, self.mask_lengths[i] - 1))
-                mask_indices.append(sorted(indices))
+            for j in range(prev_steps + next_steps + 1):
+                mask_indices.append(random.randint(0, self.mask_lengths[mask_name] - 1))
+            mask_indices = sorted(mask_indices)
 
         # load data from ranges
-        images, masks = self.load_data(img_indices, mask_indices)
+        img_file = h5py.File('{}{}'.format(self.data_path, img_name), 'r')
+        mask_file = h5py.File('{}{}'.format(self.mask_path, mask_name), 'r')
+        images = self.load_data(img_file, data_type, img_indices)
+        masks = self.load_data(mask_file, data_type, mask_indices)
 
         # stack to correct dimensions
         if self.lstm_steps == 0:
-            images = torch.cat(images, dim=0).unsqueeze(0)
-            masks = torch.cat(masks, dim=0).unsqueeze(0)
+            images = torch.cat([images], dim=0).unsqueeze(0)
+            masks = torch.cat([masks], dim=0).unsqueeze(0)
         else:
-            images = torch.stack(images, dim=1)
-            masks = torch.stack(masks, dim=1)
-        return images * masks, masks, images
+            images = torch.stack([images], dim=1)
+            masks = torch.stack([masks], dim=1)
+        return images, masks
+
+    def __getitem__(self, index):
+        images = []
+        masks = []
+        for i in range(len(self.data_types)):
+            image, mask = self.get_single_item(index, self.img_names[i], self.mask_names[i], self.data_types[i])
+            images.append(image)
+            masks.append(mask)
+        images = torch.stack(images)
+        masks = torch.stack(masks)
+
+        return images*masks, masks, images
 
     def __len__(self):
-        return self.img_length
+        return self.img_lengths[self.img_names[0]]

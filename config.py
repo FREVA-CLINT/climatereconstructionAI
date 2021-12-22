@@ -39,7 +39,7 @@ lstm_steps = None
 prev_next_steps = None
 encoding_layers = None
 pooling_layers = None
-image_size = None
+image_sizes = None
 eval_names = None
 mask_zero = None
 eval_range = None
@@ -70,9 +70,9 @@ def set_train_args():
     arg_parser.add_argument('--save-model-interval', type=int, default=50000)
     arg_parser.add_argument('--lstm-steps', type=int, default=0)
     arg_parser.add_argument('--prev-next-steps', type=int, default=0)
-    arg_parser.add_argument('--encoding-layers', type=int, default=3)
-    arg_parser.add_argument('--pooling-layers', type=int, default=0)
-    arg_parser.add_argument('--image-size', type=int, default=72)
+    arg_parser.add_argument('--encoding-layers', type=str, default='3')
+    arg_parser.add_argument('--pooling-layers', type=str, default='0')
+    arg_parser.add_argument('--image-sizes', type=str, default='72')
     arg_parser.add_argument('--out-channels', type=int, default=1)
     arg_parser.add_argument('--eval-timesteps', type=str, default="0,1,2,3,4")
     args = arg_parser.parse_args()
@@ -98,7 +98,7 @@ def set_train_args():
     global prev_next_steps
     global encoding_layers
     global pooling_layers
-    global image_size
+    global image_sizes
     global eval_timesteps
     global out_channels
     global gt_channels
@@ -124,9 +124,9 @@ def set_train_args():
     save_model_interval = args.save_model_interval
     lstm_steps = args.lstm_steps
     prev_next_steps = args.prev_next_steps
-    encoding_layers = args.encoding_layers
-    pooling_layers = args.pooling_layers
-    image_size = args.image_size
+    encoding_layers = list(map(int, args.encoding_layers.split(',')))
+    pooling_layers = list(map(int, args.pooling_layers.split(',')))
+    image_sizes = list(map(int, args.image_sizes.split(',')))
     out_channels = args.out_channels
     gt_channels = []
     for i in range(out_channels):
@@ -174,7 +174,7 @@ def set_evaluation_args():
     global prev_next_steps
     global encoding_layers
     global pooling_layers
-    global image_size
+    global image_sizes
     global infill
     global create_images
     global create_video
@@ -199,7 +199,7 @@ def set_evaluation_args():
     prev_next_steps = args.prev_next_steps
     encoding_layers = args.encoding_layers
     pooling_layers = args.pooling_layers
-    image_size = args.image_size
+    image_sizes = args.image_size
     infill = args.infill
     create_images = args.create_images
     create_video = args.create_video
