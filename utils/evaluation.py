@@ -24,16 +24,12 @@ def create_snapshot_image(model, dataset, filename, lstm_steps):
     mask = torch.stack(mask).to(cfg.device)
     gt = torch.stack(gt).to(cfg.device)
     with torch.no_grad():
-        if len(cfg.img_names) > 1:
-            output = model(torch.unsqueeze(image[:, :, 0, :, :], 2), torch.unsqueeze(mask[:, :, 0, :, :], 2),
-                           torch.unsqueeze(image[:, :, 1, :, :], 2), torch.unsqueeze(mask[:, :, 1, :, :], 2))
-        else:
-            output = model(image, mask)
+        output = model(image, mask)
 
     # select last element of lstm sequence as evaluation element
-    image = image[:, 0, cfg.gt_channels, :, :].to(torch.device('cpu'))
-    gt = gt[:, 0, cfg.gt_channels, :, :].to(torch.device('cpu'))
-    mask = mask[:, 0, cfg.gt_channels, :, :].to(torch.device('cpu'))
+    image = image[:, 0, 0, cfg.gt_channels, :, :].to(torch.device('cpu'))
+    gt = gt[:, 0, 0, cfg.gt_channels, :, :].to(torch.device('cpu'))
+    mask = mask[:, 0, 0, cfg.gt_channels, :, :].to(torch.device('cpu'))
     output = output[:, lstm_steps, :, :, :].to(torch.device('cpu'))
 
     output_comp = mask * image + (1 - mask) * output
