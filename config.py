@@ -147,9 +147,9 @@ def set_evaluation_args():
     arg_parser.add_argument('--prev-next', type=int, default=0)
     arg_parser.add_argument('--lstm-steps', type=int, default=0)
     arg_parser.add_argument('--prev-next-steps', type=int, default=0)
-    arg_parser.add_argument('--encoding-layers', type=int, default=3)
-    arg_parser.add_argument('--pooling-layers', type=int, default=0)
-    arg_parser.add_argument('--image-size', type=int, default=72)
+    arg_parser.add_argument('--encoding-layers', type=str, default='3')
+    arg_parser.add_argument('--pooling-layers', type=str, default='0')
+    arg_parser.add_argument('--image-sizes', type=str, default='72')
     arg_parser.add_argument('--infill', type=str, default=None)
     arg_parser.add_argument('--create-images', type=str, default=None)
     arg_parser.add_argument('--create-video', action='store_true')
@@ -197,9 +197,9 @@ def set_evaluation_args():
     partitions = args.partitions
     lstm_steps = args.lstm_steps
     prev_next_steps = args.prev_next_steps
-    encoding_layers = args.encoding_layers
-    pooling_layers = args.pooling_layers
-    image_sizes = args.image_size
+    encoding_layers = list(map(int, args.encoding_layers.split(',')))
+    pooling_layers = list(map(int, args.pooling_layers.split(',')))
+    image_sizes = list(map(int, args.image_sizes.split(',')))
     infill = args.infill
     create_images = args.create_images
     create_video = args.create_video
