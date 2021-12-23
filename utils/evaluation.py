@@ -99,9 +99,9 @@ def infill(model, dataset, partitions):
         with torch.no_grad():
             output_part = model(image_part.to(cfg.device), mask_part.to(cfg.device))
 
-        image_part = image_part[:, 0, :, :, :].to(torch.device('cpu'))
-        mask_part = mask_part[:, 0, :, :, :].to(torch.device('cpu'))
-        gt_part = gt_part[:, 0, :, :, :].to(torch.device('cpu'))
+        image_part = image_part[:, 0, 0, :, :, :].to(torch.device('cpu'))
+        mask_part = mask_part[:, 0, 0, :, :, :].to(torch.device('cpu'))
+        gt_part = gt_part[:, 0, 0, :, :, :].to(torch.device('cpu'))
         output_part = output_part[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
 
         # only select first channel
