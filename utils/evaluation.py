@@ -97,20 +97,12 @@ def infill(model, dataset, partitions):
         gt_part = torch.stack(gt_part)
         # get results from trained network
         with torch.no_grad():
-            if len(cfg.img_names) > 1:
-                output_part = model(torch.unsqueeze(image_part[:, :, 0, :, :], 2).to(cfg.device),
-                                    torch.unsqueeze(mask_part[:, :, 0, :, :], 2).to(cfg.device),
-                                    torch.unsqueeze(image_part[:, :, 1, :, :], 2).to(cfg.device),
-                                    torch.unsqueeze(mask_part[:, :, 1, :, :], 2).to(cfg.device))
-            else:
-                output_part = model(image_part.to(cfg.device), mask_part.to(cfg.device))
-
-        lstm_steps = output_part.shape[1] - 1
+            output_part = model(image_part.to(cfg.device), mask_part.to(cfg.device))
 
         image_part = image_part[:, 0, :, :, :].to(torch.device('cpu'))
         mask_part = mask_part[:, 0, :, :, :].to(torch.device('cpu'))
         gt_part = gt_part[:, 0, :, :, :].to(torch.device('cpu'))
-        output_part = output_part[:, lstm_steps, :, :, :].to(torch.device('cpu'))
+        output_part = output_part[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
 
         # only select first channel
         image_part = torch.unsqueeze(image_part[:, 0, :, :], dim=1)
