@@ -222,7 +222,7 @@ class PConvLSTM(nn.Module):
                 EncoderBlock(
                     in_channels=rea_in_channels[i],
                     out_channels=rea_img_size[i] // (2 ** (rea_enc_layers[i] - 1)),
-                    image_size=rea_img_size,
+                    image_size=rea_img_size[i],
                     kernel=(7, 7), stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
             for j in range(1, rea_enc_layers[i]):
                 rea_encoding_layers.append(EncoderBlock(
@@ -239,9 +239,11 @@ class PConvLSTM(nn.Module):
                     kernel=(3, 3), stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
             attention_extractor['encoding_layers'] = nn.ModuleList(rea_encoding_layers).to(cfg.device)
             attention_extractor['attention_1'] = nn.Sequential(
+                nn.Upsample(scale_factor=2, mode='nearest'),
                 nn.Conv2d(in_channels=rea_img_size[i], out_channels=1, kernel_size=(3, 3), padding=1)
             ).to(cfg.device)
             attention_extractor['attention_2'] = nn.Sequential(
+                nn.Upsample(scale_factor=2, mode='nearest'),
                 nn.Conv2d(in_channels=rea_img_size[i], out_channels=1, kernel_size=(3, 3), padding=1)
             ).to(cfg.device)
             attention_extractor['activation'] = nn.Sigmoid().to(cfg.device)
