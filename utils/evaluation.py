@@ -30,7 +30,7 @@ def create_snapshot_image(model, dataset, filename):
     image = image[:, 0, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
     gt = gt[:, 0, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
     mask = mask[:, 0, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
-    output = output[:, 0, :, :, :].to(torch.device('cpu'))
+    output = output[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
 
     output_comp = mask * image + (1 - mask) * output
 
@@ -102,7 +102,7 @@ def infill(model, dataset, partitions):
         image_part = image_part[:, 0, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
         mask_part = mask_part[:, 0, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
         gt_part = gt_part[:, 0, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
-        output_part = output_part[:, 0, :, :, :].to(torch.device('cpu'))
+        output_part = output_part[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
 
         # only select first channel
         image_part = torch.unsqueeze(image_part[:, 0, :, :], dim=1)

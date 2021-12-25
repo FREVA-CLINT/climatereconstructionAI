@@ -94,8 +94,7 @@ class NetCDFLoader(Dataset):
         if self.lstm_steps == 0:
             prev_steps = next_steps = self.prev_next_steps
         else:
-            prev_steps = self.lstm_steps
-            next_steps = 0
+            prev_steps = next_steps = self.lstm_steps
 
         # define range of lstm or prev-next steps -> adjust, if out of boundaries
         img_indices = np.array(list(range(index - prev_steps, index + next_steps + 1)))

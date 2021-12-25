@@ -112,8 +112,8 @@ class EncoderBlock(nn.Module):
             output = self.partial_conv.activation(output)
 
         output = torch.reshape(output,
-                               (batch_size, cfg.lstm_steps + 1, output.shape[1], output.shape[2], output.shape[3]))
-        mask = torch.reshape(mask, (batch_size, cfg.lstm_steps + 1, mask.shape[1], mask.shape[2], mask.shape[3]))
+                               (batch_size, 2 * cfg.lstm_steps + 1, output.shape[1], output.shape[2], output.shape[3]))
+        mask = torch.reshape(mask, (batch_size, 2 * cfg.lstm_steps + 1, mask.shape[1], mask.shape[2], mask.shape[3]))
 
         if hasattr(self, 'lstm_conv'):
             output, lstm_state = self.lstm_conv(output, lstm_state)
@@ -161,8 +161,8 @@ class DecoderBlock(nn.Module):
             output = self.partial_conv.activation(output)
 
         output = torch.reshape(output,
-                               (batch_size, cfg.lstm_steps + 1, output.shape[1], output.shape[2], output.shape[3]))
-        mask = torch.reshape(mask, (batch_size, cfg.lstm_steps + 1, mask.shape[1], mask.shape[2], mask.shape[3]))
+                               (batch_size, 2 * cfg.lstm_steps + 1, output.shape[1], output.shape[2], output.shape[3]))
+        mask = torch.reshape(mask, (batch_size, 2 * cfg.lstm_steps + 1, mask.shape[1], mask.shape[2], mask.shape[3]))
 
         return output, mask, lstm_state
 
