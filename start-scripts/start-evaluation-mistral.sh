@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=64
 #SBATCH --time=12:00:00
 #SBATCH --mem=256G
-#SBATCH --nodelist=mg206
+#SBATCH --nodelist=mg207
 
 module load cuda/10.0.130
 module load singularity/3.6.1-gcc-9.1.0
@@ -15,17 +15,16 @@ module load cdo
 
 singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img_mistral.sif \
  python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/train_and_evaluate/evaluate.py \
- --device cuda --image-sizes 512 --pooling-layers 3 --encoding-layers 4 --data-types pr \
- --img-names radolan.h5 --mask-names single_radar_fail.h5 \
- --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-rea2/ \
+ --device cuda --image-sizes 512,512 --pooling-layers 3,3 --encoding-layers 4,4 --data-types pr,tas \
+ --img-names radolan.h5,rea2-tas-celsius.h5 --mask-names single_radar_fail.h5,mask_ones_tas.h5 \
+ --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-fuision2/ \
  --mask-dir masks/ \
- --snapshot-dir snapshots/precipitation/radolan-autoenc2/ckpt/200000.pth \
- --evaluation-dirs evaluation/precipitation/radolan-autoenc2/ \
- --lstm-steps 3 \
+ --snapshot-dir snapshots/precipitation/radolan-fuision2/ckpt/200000.pth \
+ --evaluation-dirs evaluation/precipitation/radolan-fuision2/
+ --lstm-steps 0 \
  --partitions 1177 \
- --eval-names Auto \
+ --eval-names Simple,Kelvin,Celsius,Fusion,Fusion++ \
  --out-channels 1 \
- --create-report \
-# --infill test \
+ --infill test \
 # --create-images 2017-07-12-14:00,2017-07-12-14:00 \
 # --create-video \
