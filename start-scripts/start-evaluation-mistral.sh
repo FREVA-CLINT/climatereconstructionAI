@@ -23,9 +23,9 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --evaluation-dirs evaluation/precipitation/radolan-autoenc2/ \
  --lstm-steps 3 \
  --partitions 1177 \
- --eval-names Simple,Kelvin,Celsius,Fusion,Fusion++ \
+ --eval-names Auto \
  --out-channels 1 \
- --infill test \
-# --create-report \
+ --create-report \
+# --infill test \
 # --create-images 2017-07-12-14:00,2017-07-12-14:00 \
 # --create-video \
