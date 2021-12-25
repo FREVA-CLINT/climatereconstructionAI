@@ -17,7 +17,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/train_and_evaluate/evaluate.py \
  --device cuda --image-sizes 512,512 --pooling-layers 3,3 --encoding-layers 4,4 --data-types pr,tas \
  --img-names radolan.h5,rea2-tas-celsius.h5 --mask-names single_radar_fail.h5,mask_ones_tas.h5 \
- --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-fuision2/ \
+ --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-rea2/ \
  --mask-dir masks/ \
  --snapshot-dir snapshots/precipitation/radolan-fuision2/ckpt/200000.pth \
  --evaluation-dirs evaluation/precipitation/radolan-fuision2/ \
