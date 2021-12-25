@@ -13,18 +13,18 @@ module source start-scripts/setup-modules.txt
 
 singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img_levante.sif \
  python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/train_and_evaluate/evaluate.py \
- --device cuda --image-size 512 --pooling-layers 3 --encoding-layers 4 --data-types pr,tas \
- --img-names radolan.h5,rea2-tas-celsius.h5 --mask-names single_radar_fail.h5,mask_ones_tas.h5 \
+ --device cuda --image-sizes 512 --pooling-layers 3 --encoding-layers 4 --data-types pr \
+ --img-names radolan.h5 --mask-names single_radar_fail.h5 \
  --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-rea2/ \
  --mask-dir masks/ \
- --snapshot-dir snapshots/precipitation/radolan-prev-next-rea/ckpt/200000.pth \
- --evaluation-dirs evaluation/precipitation/radolan-prev-next-rea/ \
+ --snapshot-dir snapshots/precipitation/radolan-autoenc2/ckpt/200000.pth \
+ --evaluation-dirs evaluation/precipitation/radolan-autoenc2/ \
  --lstm-steps 0 \
  --prev-next-steps 1 \
  --partitions 1177 \
- --eval-names Celsius \
+ --eval-names Autoenc2 \
  --infill test \
  --out-channels 1 \
-# --create-report \
+ --create-report \
 # --create-images 2017-07-12-14:00,2017-07-12-14:00 \
 # --create-video \
