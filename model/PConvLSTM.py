@@ -225,11 +225,18 @@ class PConvLSTM(nn.Module):
                     image_size=rea_img_size[i],
                     kernel=(7, 7), stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
             for j in range(1, rea_enc_layers[i]):
-                rea_encoding_layers.append(EncoderBlock(
-                    in_channels=rea_img_size[i] // (2 ** (rea_enc_layers[i] - j)),
-                    out_channels=rea_img_size[i] // (2 ** (rea_enc_layers[i] - j - 1)),
-                    image_size=rea_img_size[i] // (2 ** j),
-                    kernel=(3, 3), stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
+                if i == self.radar_enc_dec_layers - 1:
+                    rea_encoding_layers.append(EncoderBlock(
+                        in_channels=rea_img_size[i] // (2 ** (rea_enc_layers[i] - j)),
+                        out_channels=rea_img_size[i] // (2 ** (rea_enc_layers[i] - j - 1)),
+                        image_size=rea_img_size[i] // (2 ** j),
+                        kernel=(3, 3), stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
+                else:
+                    rea_encoding_layers.append(EncoderBlock(
+                        in_channels=rea_img_size[i] // (2 ** (rea_enc_layers[i] - j)),
+                        out_channels=rea_img_size[i] // (2 ** (rea_enc_layers[i] - j - 1)),
+                        image_size=rea_img_size[i] // (2 ** j),
+                        kernel=(5, 5), stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
             # define encoding pooling layers
             for j in range(rea_pool_layers[i]):
                 rea_encoding_layers.append(EncoderBlock(
@@ -239,12 +246,10 @@ class PConvLSTM(nn.Module):
                     kernel=(3, 3), stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
             attention_extractor['encoding_layers'] = nn.ModuleList(rea_encoding_layers).to(cfg.device)
             attention_extractor['attention_1'] = nn.Sequential(
-                nn.Upsample(scale_factor=2, mode='nearest'),
-                nn.Conv2d(in_channels=rea_img_size[i], out_channels=1, kernel_size=(3, 3), padding=1)
+                nn.Conv2d(in_channels=rea_img_size[i], out_channels=1, kernel_size=(3, 3), padding=(1, 1))
             ).to(cfg.device)
             attention_extractor['attention_2'] = nn.Sequential(
-                nn.Upsample(scale_factor=2, mode='nearest'),
-                nn.Conv2d(in_channels=rea_img_size[i], out_channels=1, kernel_size=(3, 3), padding=1)
+                nn.Conv2d(in_channels=rea_img_size[i], out_channels=1, kernel_size=(3, 3), padding=(1, 1))
             ).to(cfg.device)
             attention_extractor['activation'] = nn.Sigmoid().to(cfg.device)
             self.attention_extractors.append(attention_extractor)
@@ -252,7 +257,7 @@ class PConvLSTM(nn.Module):
         if self.attention_extractors:
             self.attention_spatial = nn.Sequential(
                 nn.Upsample(scale_factor=2, mode='nearest'),
-                nn.Conv2d(in_channels=2 * radar_img_size, out_channels=1, kernel_size=(3, 3), padding=1),
+                nn.Conv2d(in_channels=2 * radar_img_size, out_channels=1, kernel_size=(3, 3), padding=(1, 1)),
                 nn.Sigmoid()
             )
             attention_channels = len(self.attention_extractors) + 1
