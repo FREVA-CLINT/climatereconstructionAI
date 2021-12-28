@@ -15,7 +15,7 @@ module load cdo
 
 singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img_mistral.sif \
  python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/train_and_evaluate/evaluate.py \
- --device cuda --image-sizes 512,512 --pooling-layers 3,2 --encoding-layers 4,4 --data-types pr,tas \
+ --device cuda --image-sizes 512,512 --pooling-layers 3,3 --encoding-layers 4,4 --data-types pr,tas \
  --img-names radolan.h5,rea2-tas-celsius.h5 --mask-names single_radar_fail.h5,mask_ones_tas.h5 \
  --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-rea2/ \
  --mask-dir masks/ \
@@ -26,7 +26,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --partitions 1177 \
  --eval-names Fusion4 \
  --out-channels 1 \
- --create-report \
-# --infill test \
+ --infill test \
+# --create-report \
 # --create-images 2017-07-12-14:00,2017-07-12-14:00 \
 # --create-video \
