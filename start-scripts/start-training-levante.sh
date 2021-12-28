@@ -20,7 +20,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/precipitation/radolan-fusion5/ \
  --log-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/logs/precipitation/radolan-fusion5/ \
  --out-channels 1 \
- --lstm-steps 2 \
+ --lstm-steps 0 \
  --prev-next-steps 0 \
  --max-iter 100000 \
  --log-interval 100 \
@@ -34,7 +34,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --img-names radolan.h5,rea2-tas-celsius.h5 --mask-names single_radar_fail.h5,mask_ones_tas.h5 \
  --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/precipitation/radolan-fusion5/ \
  --log-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/logs/precipitation/radolan-fusion5/ \
- --lstm-steps 2 \
+ --lstm-steps 0 \
  --prev-next-steps 0 \
  --out-channels 1 \
  --max-iter 200000 \
