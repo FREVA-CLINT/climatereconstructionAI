@@ -285,14 +285,14 @@ class PConvLSTM(nn.Module):
                 nn.ReLU(),
                 nn.Conv2d(in_channels=rea_img_size[i] // cfg.channel_reduction_rate, out_channels=rea_img_size[i],
                           kernel_size=(1, 1)),
-            )
+            ).to(cfg.device)
             attention_extractor['mlp_mask'] = nn.Sequential(
                 nn.Conv2d(in_channels=rea_img_size[i], out_channels=rea_img_size[i] // cfg.channel_reduction_rate,
                           kernel_size=(1, 1)),
                 nn.ReLU(),
                 nn.Conv2d(in_channels=rea_img_size[i] // cfg.channel_reduction_rate, out_channels=rea_img_size[i],
                           kernel_size=(1, 1)),
-            )
+            ).to(cfg.device)
             self.attention_extractors.append(attention_extractor)
         # add fusion layer if extractors exist
         if self.attention_extractors:
