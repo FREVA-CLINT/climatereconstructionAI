@@ -47,6 +47,7 @@ ts_range = None
 eval_timesteps = None
 out_channels = None
 gt_channels = None
+channel_reduction_rate = None
 
 
 def set_train_args():
@@ -75,6 +76,7 @@ def set_train_args():
     arg_parser.add_argument('--image-sizes', type=str, default='72')
     arg_parser.add_argument('--out-channels', type=int, default=1)
     arg_parser.add_argument('--eval-timesteps', type=str, default="0,1,2,3,4")
+    arg_parser.add_argument('--channel-reduction-rate', type=int, default=1)
     args = arg_parser.parse_args()
 
     global data_types
@@ -102,6 +104,7 @@ def set_train_args():
     global eval_timesteps
     global out_channels
     global gt_channels
+    global channel_reduction_rate
 
     data_types = args.data_types.split(',')
     img_names = args.img_names.split(',')
@@ -127,6 +130,7 @@ def set_train_args():
     encoding_layers = list(map(int, args.encoding_layers.split(',')))
     pooling_layers = list(map(int, args.pooling_layers.split(',')))
     image_sizes = list(map(int, args.image_sizes.split(',')))
+    channel_reduction_rate = args.channel_reduction_rate
     out_channels = args.out_channels
     gt_channels = []
     for i in range(out_channels):

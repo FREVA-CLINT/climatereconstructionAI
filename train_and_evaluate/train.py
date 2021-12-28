@@ -56,7 +56,7 @@ if cfg.finetune:
     model.freeze_enc_bn = True
 else:
     lr = cfg.lr
-
+torch.autograd.set_detect_anomaly(True)
 # define optimizer and loss functions
 optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
 criterion = InpaintingLoss(VGG16FeatureExtractor()).to(cfg.device)
