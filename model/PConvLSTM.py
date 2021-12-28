@@ -4,6 +4,39 @@ import torch.nn.functional as F
 import config as cfg
 
 
+class MaxChannelPool(nn.MaxPool1d):
+    def forward(self, input):
+        n, c, w, h = input.size()
+        input = input.view(n, c, w * h).permute(0, 2, 1)
+        pooled = F.max_pool1d(
+            input,
+            self.kernel_size,
+            self.stride,
+            self.padding,
+            self.dilation,
+            self.ceil_mode,
+            self.return_indices,
+        )
+        _, _, c = pooled.size()
+        pooled = pooled.permute(0, 2, 1)
+        return pooled.view(n, c, w, h)
+
+
+class AvgChannelPool(nn.AvgPool1d):
+    def forward(self, input):
+        n, c, w, h = input.size()
+        input = input.view(n, c, w * h).permute(0, 2, 1)
+        pooled = F.max_pool1d(
+            input,
+            self.kernel_size,
+            self.stride,
+            self.padding
+        )
+        _, _, c = pooled.size()
+        pooled = pooled.permute(0, 2, 1)
+        return pooled.view(n, c, w, h)
+
+
 class ConvLSTMBlock(nn.Module):
     def __init__(self, in_channels, out_channels, image_size, kernel, stride, padding, dilation, groups):
         super().__init__()
@@ -138,7 +171,7 @@ class DecoderBlock(nn.Module):
         batch_size = input.shape[0]
 
         if hasattr(self, 'lstm_conv'):
-            output, lstm_state = self.lstm_conv(input, lstm_state)
+            input, lstm_state = self.lstm_conv(input, lstm_state)
 
         input = torch.reshape(input, (-1, input.shape[2], input.shape[3], input.shape[4]))
         mask = torch.reshape(mask, (-1, mask.shape[2], mask.shape[3], mask.shape[4]))
@@ -168,7 +201,8 @@ class DecoderBlock(nn.Module):
 
 
 class PConvLSTM(nn.Module):
-    def __init__(self, radar_img_size=512, radar_enc_dec_layers=4, radar_pool_layers=4, radar_in_channels=1, radar_out_channels=1,
+    def __init__(self, radar_img_size=512, radar_enc_dec_layers=4, radar_pool_layers=4, radar_in_channels=1,
+                 radar_out_channels=1,
                  rea_img_size=[], rea_enc_layers=[], rea_pool_layers=[], rea_in_channels=[],
                  lstm=True):
         super().__init__()
@@ -245,49 +279,48 @@ class PConvLSTM(nn.Module):
                     image_size=rea_img_size[i] // (2 ** (rea_enc_layers[i] + j)),
                     kernel=(3, 3), stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
             attention_extractor['encoding_layers'] = nn.ModuleList(rea_encoding_layers).to(cfg.device)
-            attention_extractor['attention_1'] = nn.Sequential(
-                nn.Upsample(scale_factor=2, mode='nearest'),
-                nn.Conv2d(in_channels=rea_img_size[i], out_channels=1, kernel_size=(3, 3), padding=(1, 1))
-            ).to(cfg.device)
-            attention_extractor['attention_2'] = nn.Sequential(
-                nn.Upsample(scale_factor=2, mode='nearest'),
-                nn.Conv2d(in_channels=rea_img_size[i], out_channels=1, kernel_size=(3, 3), padding=(1, 1))
-            ).to(cfg.device)
-            attention_extractor['activation'] = nn.Sigmoid().to(cfg.device)
+            attention_extractor['mlp_image'] = nn.Sequential(
+                nn.Conv2d(in_channels=rea_img_size[i], out_channels=rea_img_size[i] // cfg.channel_reduction_rate,
+                          kernel_size=(1, 1)),
+                nn.ReLU(),
+                nn.Conv2d(in_channels=rea_img_size[i] // cfg.channel_reduction_rate, out_channels=rea_img_size[i],
+                          kernel_size=(1, 1)),
+            )
+            attention_extractor['mlp_mask'] = nn.Sequential(
+                nn.Conv2d(in_channels=rea_img_size[i], out_channels=rea_img_size[i] // cfg.channel_reduction_rate,
+                          kernel_size=(1, 1)),
+                nn.ReLU(),
+                nn.Conv2d(in_channels=rea_img_size[i] // cfg.channel_reduction_rate, out_channels=rea_img_size[i],
+                          kernel_size=(1, 1)),
+            )
             self.attention_extractors.append(attention_extractor)
         # add fusion layer if extractors exist
         if self.attention_extractors:
-            self.attention_spatial = nn.Sequential(
-                nn.Upsample(scale_factor=2, mode='nearest'),
-                nn.Conv2d(in_channels=2 * radar_img_size, out_channels=1, kernel_size=(3, 3), padding=(1, 1)),
+            self.max_pool = MaxChannelPool(kernel_size=radar_img_size)
+            self.avg_pool = AvgChannelPool(kernel_size=radar_img_size)
+            self.spatial_attention_img = nn.Sequential(
+                nn.Conv2d(in_channels=2, out_channels=1, kernel_size=(3, 3), padding=(1, 1)),
                 nn.Sigmoid()
             )
-            attention_channels = len(self.attention_extractors) + 1
-        else:
-            attention_channels = 0
+            self.spatial_attention_mask = nn.Sequential(
+                nn.Conv2d(in_channels=2, out_channels=1, kernel_size=(3, 3), padding=(1, 1)),
+                nn.Sigmoid()
+            )
 
         # define decoding pooling layers
         decoding_layers = []
         for i in range(self.radar_pool_layers):
-            if i == 0:
-                in_channels = radar_img_size + radar_img_size + attention_channels
-            else:
-                in_channels = radar_img_size + radar_img_size
             decoding_layers.append(DecoderBlock(
-                in_channels=in_channels,
+                in_channels=radar_img_size + radar_img_size,
                 out_channels=radar_img_size,
                 image_size=radar_img_size // (2 ** (self.net_depth - i - 1)),
                 kernel=(3, 3), stride=(1, 1), activation=nn.LeakyReLU(), lstm=lstm))
 
         # define decoding layers
         for i in range(1, self.radar_enc_dec_layers):
-            if i == 0 and self.radar_pool_layers == 0:
-                in_channels = radar_img_size // (2 ** (i - 1)) + radar_img_size // (2 ** i) + attention_channels
-            else:
-                in_channels = radar_img_size // (2 ** (i - 1)) + radar_img_size // (2 ** i)
             decoding_layers.append(
                 DecoderBlock(
-                    in_channels=in_channels,
+                    in_channels=radar_img_size // (2 ** (i - 1)) + radar_img_size // (2 ** i),
                     out_channels=radar_img_size // (2 ** i),
                     image_size=radar_img_size // (2 ** (self.net_depth - self.radar_pool_layers - i)),
                     kernel=(3, 3), stride=(1, 1), activation=nn.LeakyReLU(), lstm=lstm))
@@ -325,27 +358,23 @@ class PConvLSTM(nn.Module):
 
         # forward fusion data
         if self.attention_extractors:
-            attentions = []
-            mask_attentions = []
             for i in range(len(self.attention_extractors)):
-                attention, mask_attention = self.forward_attention(self.attention_extractors[i], input[:, i + 1, :, :, :, :], input_mask[:, i + 1, :, :, :, :])
-                attentions.append(attention)
-                mask_attentions.append(mask_attention)
+                h_channel_attention, h_mask_channel_attention = self.forward_channel_attention(
+                    self.attention_extractors[i], input[:, i + 1, :, :, :, :], input_mask[:, i + 1, :, :, :, :])
+                h += h_channel_attention
+                h_mask += h_mask_channel_attention
 
-            h_attention = self.attention_spatial(
-                torch.cat([F.max_pool2d(h[:, 0, :, :, :], 2), F.avg_pool2d(h[:, 0, :, :, :], 2)], dim=1))
-            h_mask_attention = self.attention_spatial(
-                torch.cat([F.max_pool2d(h_mask[:, 0, :, :, :], 2), F.avg_pool2d(h_mask[:, 0, :, :, :], 2)],
-                          dim=1))
+            h_spatial_attention = self.spatial_attention_img(
+                torch.cat([torch.max(h[:, 0, :, :, :], keepdim=True, dim=1)[0],
+                           torch.mean(h[:, 0, :, :, :], keepdim=True, dim=1)], dim=1)
+            )
+            h_mask_spatial_attention = self.spatial_attention_mask(
+                torch.cat([torch.max(h_mask[:, 0, :, :, :], keepdim=True, dim=1)[0],
+                           torch.mean(h_mask[:, 0, :, :, :], keepdim=True, dim=1)], dim=1)
+            )
 
-            attentions.append(h_attention)
-            mask_attentions.append(h_mask_attention)
-
-            attention = torch.unsqueeze(torch.cat(attentions, dim=1), dim=1)
-            mask_attention = torch.unsqueeze(torch.cat(mask_attentions, dim=1), dim=1)
-
-            h = torch.cat([h, attention], dim=2)
-            h_mask = torch.cat([h_mask, mask_attention], dim=2)
+            h += torch.unsqueeze(h_spatial_attention, dim=1)
+            h_mask += torch.unsqueeze(h_mask_spatial_attention, dim=1)
 
         # forward pass decoding layers
         for i in range(self.net_depth):
@@ -360,22 +389,27 @@ class PConvLSTM(nn.Module):
         # return last element of output from last decoding layer
         return h
 
-    def forward_attention(self, extractor, fusion_input, fusion_input_mask):
+    def forward_channel_attention(self, extractor, fusion_input, fusion_input_mask):
         fusion, fusion_mask = fusion_input, fusion_input_mask
         for i in range(len(extractor['encoding_layers'])):
             fusion, fusion_mask, lstm_state = extractor['encoding_layers'][i](fusion,
                                                                               fusion_mask,
                                                                               None)
-        fusion_max = extractor['attention_1'](F.max_pool2d(fusion[:, 0, :, :, :], 2))
-        fusion_avg = extractor['attention_2'](F.avg_pool2d(fusion[:, 0, :, :, :], 2))
+        fusion_max = F.max_pool2d(fusion[:, 0, :, :, :], fusion.shape[3])
+        fusion_avg = F.avg_pool2d(fusion[:, 0, :, :, :], fusion.shape[3])
 
-        fusion_mask_max = extractor['attention_1'](F.max_pool2d(fusion[:, 0, :, :, :], 2))
-        fusion_mask_avg = extractor['attention_2'](F.avg_pool2d(fusion[:, 0, :, :, :], 2))
+        fusion_mask_max = F.max_pool2d(fusion_mask[:, 0, :, :, :], fusion_mask.shape[3])
+        fusion_mask_avg = F.avg_pool2d(fusion_mask[:, 0, :, :, :], fusion_mask.shape[3])
 
-        fusion_attention = extractor['activation'](fusion_max + fusion_avg)
-        fusion_mask_attention = extractor['activation'](fusion_mask_max + fusion_mask_avg)
+        fusion_attention = torch.sigmoid(
+            extractor['mlp_image'](fusion_max) + extractor['mlp_image'](fusion_avg)
+        )
+        fusion_mask_attention = torch.sigmoid(
+            extractor['mlp_mask'](fusion_mask_max) + extractor['mlp_mask'](fusion_mask_avg)
+        )
 
-        return fusion_attention, fusion_mask_attention
+        return fusion * torch.unsqueeze(fusion_attention, dim=1), \
+               fusion_mask * torch.unsqueeze(fusion_mask_attention, dim=1)
 
     def train(self, mode=True):
         super().train(mode)
