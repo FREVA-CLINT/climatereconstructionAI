@@ -391,8 +391,10 @@ class PConvLSTM(nn.Module):
                 h_mask_total_attentions.append(h_mask_total_attention)
             h_total_attentions = torch.cat(h_total_attentions, dim=2)
             h_mask_total_attentions = torch.cat(h_mask_total_attentions, dim=2)
-
+            print(h_total_attentions.shape)
+            print(h.shape)
             h = torch.cat([h, h_total_attentions], dim=2)
+            print(h.shape)
             h_mask = torch.cat([h_mask, h_mask_total_attentions], dim=2)
 
         # forward pass decoding layers
