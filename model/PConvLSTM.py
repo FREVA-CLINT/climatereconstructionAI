@@ -306,12 +306,15 @@ class PConvLSTM(nn.Module):
                 nn.Conv2d(in_channels=2, out_channels=1, kernel_size=(3, 3), padding=(1, 1)),
                 nn.Sigmoid()
             )
+            rea_channels = len(rea_img_size) * radar_img_size
+        else:
+            rea_channels = 0
 
         # define decoding pooling layers
         decoding_layers = []
         for i in range(self.radar_pool_layers):
             decoding_layers.append(DecoderBlock(
-                in_channels=radar_img_size + radar_img_size,
+                in_channels=radar_img_size + radar_img_size + rea_channels,
                 out_channels=radar_img_size,
                 image_size=radar_img_size // (2 ** (self.net_depth - i - 1)),
                 kernel=(3, 3), stride=(1, 1), activation=nn.LeakyReLU(), lstm=lstm))
@@ -358,23 +361,39 @@ class PConvLSTM(nn.Module):
 
         # forward fusion data
         if self.attention_extractors:
+
+            # calculate channel attention
+            h_channel_attentions = []
+            h_mask_channel_attentions = []
             for i in range(len(self.attention_extractors)):
                 h_channel_attention, h_mask_channel_attention = self.forward_channel_attention(
                     self.attention_extractors[i], input[:, i + 1, :, :, :, :], input_mask[:, i + 1, :, :, :, :])
-                h += h_channel_attention
-                h_mask += h_mask_channel_attention
+                h_channel_attentions.append(h_channel_attention * h)
+                h_mask_channel_attentions.append(h_mask_channel_attention * h_mask)
 
-            h_spatial_attention = self.spatial_attention_img(
+            # calculate spatial attention
+            h_spatial_attention = torch.unsqueeze(self.spatial_attention_img(
                 torch.cat([torch.max(h[:, 0, :, :, :], keepdim=True, dim=1)[0],
                            torch.mean(h[:, 0, :, :, :], keepdim=True, dim=1)], dim=1)
-            )
-            h_mask_spatial_attention = self.spatial_attention_mask(
+            ), dim=1)
+            h_mask_spatial_attention = torch.unsqueeze(self.spatial_attention_mask(
                 torch.cat([torch.max(h_mask[:, 0, :, :, :], keepdim=True, dim=1)[0],
                            torch.mean(h_mask[:, 0, :, :, :], keepdim=True, dim=1)], dim=1)
-            )
+            ), dim=1)
 
-            h += torch.unsqueeze(h_spatial_attention, dim=1)
-            h_mask += torch.unsqueeze(h_mask_spatial_attention, dim=1)
+            h_total_attentions = []
+            h_mask_total_attentions = []
+            for i in range(len(self.attention_extractors)):
+                h_total_attention = h_channel_attentions[i] * h_spatial_attention
+                h_total_attentions.append(h_total_attention)
+
+                h_mask_total_attention = h_mask_channel_attentions[i] * h_mask_spatial_attention
+                h_mask_total_attentions.append(h_mask_total_attention)
+            h_total_attentions = torch.cat(h_total_attentions, dim=2)
+            h_mask_total_attentions = torch.cat(h_mask_total_attentions, dim=2)
+
+            h = torch.cat([h, h_total_attentions], dim=2)
+            h_mask = torch.cat([h_mask, h_mask_total_attentions], dim=2)
 
         # forward pass decoding layers
         for i in range(self.net_depth):
