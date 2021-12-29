@@ -163,6 +163,7 @@ def set_evaluation_args():
     arg_parser.add_argument('--ts-range', type=str, default=None)
     arg_parser.add_argument('--out-channels', type=int, default=1)
     arg_parser.add_argument('--mask-zero', type=float, default=None)
+    arg_parser.add_argument('--channel-reduction-rate', type=int, default=1)
     args = arg_parser.parse_args()
 
     global data_types
@@ -188,6 +189,7 @@ def set_evaluation_args():
     global eval_range
     global ts_range
     global out_channels
+    global channel_reduction_rate
 
     data_types = args.data_types.split(',')
     img_names = args.img_names.split(',')
@@ -215,6 +217,7 @@ def set_evaluation_args():
         ts_range = args.ts_range.split(',')
     mask_zero = args.mask_zero
     out_channels = args.out_channels
+    channel_reduction_rate = args.channel_reduction_rate
     gt_channels = []
     for i in range(out_channels):
         gt_channels.append((i + 1) * prev_next_steps + i * (prev_next_steps + 1))
