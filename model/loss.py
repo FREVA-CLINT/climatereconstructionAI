@@ -78,8 +78,16 @@ class InpaintingLoss(nn.Module):
 class CrossEntropyLoss(nn.Module):
     def __init__(self):
         super().__init__()
+        self.l1 = nn.L1Loss()
 
-    def forward(self, outputs, targets):
-        loss = -torch.mean(targets * torch.log(outputs) +
-                           (1 - targets) * torch.log(1 - outputs))
+
+    def forward(self, masks, outputs, targets):
+        output_comp = masks * targets + (1 - masks) * outputs
+
+        loss = cfg.LAMBDA_DICT_IMG_INPAINTING['prc'] * (self.l1(outputs, targets) + self.l1(output_comp, targets))
+
+        loss += cfg.LAMBDA_DICT_IMG_INPAINTING['tv'] * total_variation_loss(output_comp)
+
+        loss += cfg.LAMBDA_DICT_IMG_INPAINTING['hole'] * self.l1((1 - masks) * outputs, (1 - masks) * targets)
+        loss += cfg.LAMBDA_DICT_IMG_INPAINTING['valid'] * self.l1(masks * outputs, masks * targets)
         return loss

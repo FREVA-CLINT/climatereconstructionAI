@@ -14,12 +14,12 @@ module load singularity/3.6.1-gcc-9.1.0
 
 singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img_mistral.sif \
  python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/train_and_evaluate/train.py \
- --device cuda --batch-size 4 --image-sizes 512,512 --pooling-layers 3,3 --encoding-layers 4,4 --data-types pr,tas \
+ --device cuda --batch-size 4 --image-sizes 512 --pooling-layers 3 --encoding-layers 4 --data-types pr \
  --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-rea2/ \
  --mask-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/masks/ \
- --img-names radolan.h5,rea2-tas-celsius.h5 --mask-names single_radar_fail.h5,mask_ones_tas.h5 \
- --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/precipitation/radolan-fuision2/ \
- --log-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/logs/precipitation/radolan-fuision2/ \
+ --img-names radolan.h5 --mask-names single_radar_fail.h5 \
+ --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/precipitation/radolan-simple-loss/ \
+ --log-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/logs/precipitation/radolan-simple-loss/ \
  --out-channels 1 \
  --lstm-steps 0 \
  --prev-next-steps 0 \
@@ -28,12 +28,12 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --save-model-interval 10000
 singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img_mistral.sif \
  python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/train_and_evaluate/train.py \
- --device cuda --batch-size 4 --image-sizes 512,512 --pooling-layers 3,3 --encoding-layers 4,4 --data-types pr,tas \
+ --device cuda --batch-size 4 --image-sizes 512 --pooling-layers 3 --encoding-layers 4 --data-types pr \
  --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-rea2/ \
  --mask-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/masks/ \
- --img-names radolan.h5,rea2-tas-celsius.h5 --mask-names single_radar_fail.h5,mask_ones_tas.h5 \
- --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/precipitation/radolan-fuision2/ \
- --log-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/logs/precipitation/radolan-fuision2/ \
+ --img-names radolan.h5 --mask-names single_radar_fail.h5 \
+ --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/precipitation/radolan-simple-loss/ \
+ --log-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/logs/precipitation/radolan-simple-loss/ \
  --lstm-steps 0 \
  --prev-next-steps 0 \
  --out-channels 1 \
