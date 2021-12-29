@@ -17,14 +17,14 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --img-names radolan.h5,rea2-tas-celsius.h5 --mask-names single_radar_fail.h5,mask_ones_tas.h5 \
  --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-rea2/ \
  --mask-dir masks/ \
- --snapshot-dir snapshots/precipitation/radolan-fusion4/ckpt/200000.pth \
- --evaluation-dirs evaluation/precipitation/radolan-fusion4/ \
+ --snapshot-dir snapshots/precipitation/radolan-fusion5/ckpt/200000.pth \
+ --evaluation-dirs evaluation/precipitation/radolan-fusion5/ \
  --lstm-steps 0 \
  --prev-next-steps 0 \
  --partitions 1177 \
  --eval-names Fusion4 \
  --out-channels 1 \
+ --infill test \
  --create-report \
-# --infill test \
 # --create-images 2017-07-12-14:00,2017-07-12-14:00 \
 # --create-video \
