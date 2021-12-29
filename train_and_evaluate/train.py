@@ -12,7 +12,7 @@ from utils.featurizer import VGG16FeatureExtractor
 from utils.io import load_ckpt, save_ckpt
 from utils.netcdfloader import NetCDFLoader, InfiniteSampler
 from utils.evaluation import create_snapshot_image
-from model.loss import InpaintingLoss, CrossEntropyLoss
+from model.loss import InpaintingLoss
 import config as cfg
 
 cfg.set_train_args()
@@ -59,7 +59,7 @@ else:
 
 # define optimizer and loss functions
 optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
-criterion = CrossEntropyLoss()#InpaintingLoss().to(cfg.device)
+criterion = InpaintingLoss(VGG16FeatureExtractor()).to(cfg.device)
 
 # define start point
 start_iter = 0
@@ -80,12 +80,12 @@ for i in tqdm(range(start_iter, cfg.max_iter)):
     loss_dict = criterion(mask_batch[:, 0, cfg.lstm_steps, cfg.gt_channels, :, :],
                           output[:, cfg.lstm_steps, :, :, :],
                           gt_batch[:, 0, cfg.lstm_steps, cfg.gt_channels, :, :])
-    loss = loss_dict#0.0
-    #for key, coef in cfg.LAMBDA_DICT_IMG_INPAINTING.items():
-    #    value = coef * loss_dict[key]
-    #    loss += value
-    #    if cfg.log_interval and (i + 1) % cfg.log_interval == 0:
-    #        writer.add_scalar('loss_{:s}'.format(key), value.item(), i + 1)
+    loss = 0.0
+    for key, coef in cfg.LAMBDA_DICT_IMG_INPAINTING.items():
+        value = coef * loss_dict[key]
+        loss += value
+        if cfg.log_interval and (i + 1) % cfg.log_interval == 0:
+            writer.add_scalar('loss_{:s}'.format(key), value.item(), i + 1)
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
