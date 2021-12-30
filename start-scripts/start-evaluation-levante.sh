@@ -22,7 +22,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --lstm-steps 0 \
  --prev-next-steps 0 \
  --partitions 1177 \
- --eval-names Fusion4 \
+ --eval-names Fusion5 \
  --out-channels 1 \
  --infill test \
  --create-report \
