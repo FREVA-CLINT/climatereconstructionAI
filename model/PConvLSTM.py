@@ -398,7 +398,7 @@ class PConvLSTM(nn.Module):
                 h_mask_total_attention = h_mask_channel_attentions[i] * h_mask_spatial_attention
                 h_mask_total_attentions.append(h_mask_total_attention)
             h_total_attentions = torch.cat(h_total_attentions, dim=2)
-            h_mask_total_attentions = torch.cat(h_mask_total_attentions, dim=2)
+            h_mask_total_attentions = torch.ones_like(h_total_attentions)#torch.cat(h_mask_total_attentions, dim=2)
             h = torch.cat([h, h_total_attentions], dim=2)
             h_mask = torch.cat([h_mask, h_mask_total_attentions], dim=2)
 
