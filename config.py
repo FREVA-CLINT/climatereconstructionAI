@@ -41,7 +41,7 @@ encoding_layers = None
 pooling_layers = None
 image_sizes = None
 eval_names = None
-mask_zero = None
+eval_threshold = None
 eval_range = None
 ts_range = None
 eval_timesteps = None
@@ -162,7 +162,7 @@ def set_evaluation_args():
     arg_parser.add_argument('--eval-range', type=str, default=None)
     arg_parser.add_argument('--ts-range', type=str, default=None)
     arg_parser.add_argument('--out-channels', type=int, default=1)
-    arg_parser.add_argument('--mask-zero', type=float, default=None)
+    arg_parser.add_argument('--eval-threshold', type=float, default=None)
     arg_parser.add_argument('--channel-reduction-rate', type=int, default=1)
     args = arg_parser.parse_args()
 
@@ -185,7 +185,7 @@ def set_evaluation_args():
     global create_video
     global create_report
     global eval_names
-    global mask_zero
+    global eval_threshold
     global eval_range
     global ts_range
     global out_channels
@@ -215,7 +215,7 @@ def set_evaluation_args():
         eval_range = args.eval_range.split(',')
     if args.ts_range:
         ts_range = args.ts_range.split(',')
-    mask_zero = args.mask_zero
+    eval_threshold = args.eval_threshold
     out_channels = args.out_channels
     channel_reduction_rate = args.channel_reduction_rate
     gt_channels = []

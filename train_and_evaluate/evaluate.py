@@ -50,8 +50,8 @@ if cfg.create_report:
         gt = gt[:, 0, :, :]
     if mask.ndim == 4:
         mask = mask[:, 0, :, :]
-    if cfg.mask_zero:
-        mask[gt < cfg.mask_zero] = 1
+    if cfg.eval_threshold:
+        mask[gt < cfg.eval_threshold] = 1
     gt = ma.masked_array(gt, mask)[:, :, :]
     outputs = {}
     for i in range(len(cfg.evaluation_dirs)):

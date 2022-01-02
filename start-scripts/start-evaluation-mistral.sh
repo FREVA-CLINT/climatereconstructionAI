@@ -27,6 +27,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --eval-names Fusion4 \
  --out-channels 1 \
  --create-report \
+ --eval-threshold 0.1
 # --infill test \
 # --create-images 2017-07-12-14:00,2017-07-12-14:00 \
 # --create-video \
