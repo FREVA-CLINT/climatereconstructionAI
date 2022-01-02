@@ -1,6 +1,8 @@
+import sys
 import numpy as np
 from numpy import ma
-
+sys.path.append('./')
+import config as cfg
 
 def rmse(gt, output):
     return np.sqrt(np.mean((np.mean(gt, axis=(1, 2)) - np.mean(output, axis=(1, 2))) ** 2))
@@ -32,7 +34,7 @@ def fldcor_timeseries(gt, output):
     for i in range(gt.shape[0]):
         gt_flat = gt[i].flatten().compressed()
         output_flat = output[i].flatten().compressed()
-        if not gt_flat.all() or not output_flat.all() or np.max(gt_flat) == np.min(gt_flat) or np.max(output_flat) == np.min(output_flat):
+        if cfg.eval_threshold or np.max(gt_flat) == np.min(gt_flat) or np.max(output_flat) == np.min(output_flat):
             mask[i] = 1
         else:
             time_series[i] = np.corrcoef(gt_flat, output_flat)[0][1]
