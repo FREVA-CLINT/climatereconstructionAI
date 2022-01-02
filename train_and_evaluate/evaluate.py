@@ -2,7 +2,7 @@ import sys
 
 sys.path.append('./')
 
-from model.PConvLSTM import PConvLSTM
+from model.net import PConvLSTM
 from utils.evaluation import *
 from utils.netcdfloader import NetCDFLoader
 from utils.io import load_ckpt

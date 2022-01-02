@@ -7,7 +7,7 @@ sys.path.append('./')
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from model.PConvLSTM import PConvLSTM
+from model.net import PConvLSTM
 from utils.featurizer import VGG16FeatureExtractor
 from utils.io import load_ckpt, save_ckpt
 from utils.netcdfloader import NetCDFLoader, InfiniteSampler
@@ -44,7 +44,7 @@ model = PConvLSTM(radar_img_size=cfg.image_sizes[0],
                   radar_pool_layers=cfg.pooling_layers[0],
                   radar_in_channels=2*cfg.prev_next_steps + 1,
                   radar_out_channels=cfg.out_channels,
-                  rea_img_size=cfg.image_sizes[1:],
+                  rea_img_sizes=cfg.image_sizes[1:],
                   rea_enc_layers=cfg.encoding_layers[1:],
                   rea_pool_layers=cfg.pooling_layers[1:],
                   rea_in_channels=(len(cfg.image_sizes) - 1) * [2*cfg.prev_next_steps + 1],
