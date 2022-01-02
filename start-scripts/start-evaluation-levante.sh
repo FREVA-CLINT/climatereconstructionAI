@@ -17,7 +17,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --img-names radolan.h5 --mask-names single_radar_fail.h5 \
  --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-rea2/ \
  --mask-dir masks/ \
- --snapshot-dir snapshots/precipitation/radolan-prev-next-lstm/ckpt/160000.pth \
+ --snapshot-dir snapshots/precipitation/radolan-prev-next-lstm/ckpt/200000.pth \
  --evaluation-dirs evaluation/precipitation/radolan-prev-next-lstm/ \
  --lstm-steps 2 \
  --prev-next-steps 0 \
