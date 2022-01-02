@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 sys.path.append('./')
 import config as cfg
-from model.pconv_lstm_module import PConvBlock
+from model.pconv_lstm_module import PConvBlock, ConvLSTMBlock
 
 
 class EncoderBlock(nn.Module):
