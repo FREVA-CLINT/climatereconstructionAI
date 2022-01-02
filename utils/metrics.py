@@ -32,7 +32,7 @@ def fldcor_timeseries(gt, output):
     for i in range(gt.shape[0]):
         gt_flat = gt[i].flatten().compressed()
         output_flat = output[i].flatten().compressed()
-        if gt_flat == np.array([]) or output_flat == np.array([]) or np.max(gt_flat) == np.min(gt_flat) or np.max(output_flat) == np.min(output_flat):
+        if gt_flat.mask.all() or output_flat.mask.all() or np.max(gt_flat) == np.min(gt_flat) or np.max(output_flat) == np.min(output_flat):
             mask[i] = 1
         else:
             time_series[i] = np.corrcoef(gt_flat, output_flat)[0][1]
