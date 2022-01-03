@@ -20,14 +20,13 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-rea2/ \
  --mask-dir masks/ \
  --snapshot-dir snapshots/precipitation/radolan-attention/ckpt/190000.pth \
- --evaluation-dirs evaluation/precipitation/radolan-attention4/ \
+ --evaluation-dirs evaluation/precipitation/radolan-attention/,evaluation/precipitation/radolan-attention3/,evaluation/precipitation/radolan-attention4/ \
  --lstm-steps 0 \
  --prev-next-steps 0 \
  --partitions 1177 \
- --eval-names Attention \
+ --eval-names Attention200,Attention200,Attention190 \
  --out-channels 1 \
- --infill test \
-# --create-report \
+ --create-report \
 # --infill test \
 # --create-images 2017-07-12-14:00,2017-07-12-14:00 \
 # --create-video \
