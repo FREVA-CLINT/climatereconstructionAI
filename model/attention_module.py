@@ -27,7 +27,7 @@ class ConvolutionalAttentionBlock(nn.Module):
                     image_size=img_sizes[i],
                     kernel=(7, 7), stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
             for j in range(1, enc_layers[i]):
-                if i == enc_layers[i] - 1:
+                if j == enc_layers[i] - 1:
                     encoding_layers.append(EncoderBlock(
                         in_channels=img_sizes[i] // (2 ** (enc_layers[i] - j)),
                         out_channels=img_sizes[i] // (2 ** (enc_layers[i] - j - 1)),
