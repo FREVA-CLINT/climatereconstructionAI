@@ -63,10 +63,10 @@ class InpaintingLoss(nn.Module):
             for i in range(len(feat_gt)):
                 loss_dict['prc'] += self.l1(feat_output[i], feat_gt[i])
                 loss_dict['prc'] += self.l1(feat_output_comp[i], feat_gt[i])
-                #loss_dict['style'] += self.l1(gram_matrix(feat_output[i]),
-                #                              gram_matrix(feat_gt[i]))
-                #loss_dict['style'] += self.l1(gram_matrix(feat_output_comp[i]),
-                #                              gram_matrix(feat_gt[i]))
+                loss_dict['style'] += self.l1(gram_matrix(feat_output[i]),
+                                              gram_matrix(feat_gt[i]))
+                loss_dict['style'] += self.l1(gram_matrix(feat_output_comp[i]),
+                                              gram_matrix(feat_gt[i]))
 
             loss_dict['tv'] += total_variation_loss(output_comp_ch)
 
