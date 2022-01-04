@@ -3,7 +3,7 @@ import argparse
 import torch
 
 LAMBDA_DICT_IMG_INPAINTING = {
-    'hole': 10.0, 'tv': 0.1 #, 'valid': 1.0, 'prc': 1.0#, 'style': 40.0
+    'hole': 1.0#, 'tv': 0.1 #, 'valid': 1.0, 'prc': 1.0#, 'style': 40.0
 }
 LAMBDA_DICT_PR_INPAINTING = {
     'SSL-OUT': 1.0,  # 'SSL-OUT-COMP': 1.0, 'valid': 1.0, 'hole': 6.0, 'tv': 0.1, 'prc': 0.05, 'style': 120.0
@@ -48,6 +48,7 @@ eval_timesteps = None
 out_channels = None
 gt_channels = None
 channel_reduction_rate = None
+save_snapshot_image = None
 
 
 def set_train_args():
@@ -68,6 +69,7 @@ def set_train_args():
     arg_parser.add_argument('--lr-finetune', type=float, default=5e-5)
     arg_parser.add_argument('--max-iter', type=int, default=1000000)
     arg_parser.add_argument('--log-interval', type=int, default=None)
+    arg_parser.add_argument('--save-snapshot-image', type=bool, default=True)
     arg_parser.add_argument('--save-model-interval', type=int, default=50000)
     arg_parser.add_argument('--lstm-steps', type=int, default=0)
     arg_parser.add_argument('--prev-next-steps', type=int, default=0)
@@ -105,6 +107,7 @@ def set_train_args():
     global out_channels
     global gt_channels
     global channel_reduction_rate
+    global save_snapshot_image
 
     data_types = args.data_types.split(',')
     img_names = args.img_names.split(',')
@@ -132,6 +135,7 @@ def set_train_args():
     image_sizes = list(map(int, args.image_sizes.split(',')))
     channel_reduction_rate = args.channel_reduction_rate
     out_channels = args.out_channels
+    save_snapshot_image = args.save_snapshot_image
     gt_channels = []
     for i in range(out_channels):
         gt_channels.append((i + 1) * prev_next_steps + i * (prev_next_steps + 1))
