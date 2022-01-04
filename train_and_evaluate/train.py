@@ -12,7 +12,7 @@ from utils.featurizer import VGG16FeatureExtractor
 from utils.io import load_ckpt, save_ckpt
 from utils.netcdfloader import NetCDFLoader, InfiniteSampler
 from utils.evaluation import create_snapshot_image
-from model.loss import InpaintingLoss
+from model.loss import InpaintingLoss, CrossEntropyLoss
 import config as cfg
 
 cfg.set_train_args()
@@ -59,7 +59,7 @@ else:
 
 # define optimizer and loss functions
 optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
-criterion = InpaintingLoss(VGG16FeatureExtractor()).to(cfg.device)
+criterion = InpaintingLoss().to(cfg.device)
 
 # define start point
 start_iter = 0
