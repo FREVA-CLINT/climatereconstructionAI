@@ -96,7 +96,7 @@ for i in tqdm(range(start_iter, cfg.max_iter)):
                   [('model', model)], [('optimizer', optimizer)], i + 1)
 
     # create snapshot image
-    if cfg.log_interval and (i + 1) % cfg.log_interval == 0:
+    if cfg.save_snapshot_image and (i + 1) % cfg.log_interval == 0:
         model.eval()
         create_snapshot_image(model, dataset_val, '{:s}/images/iter_{:d}'.format(cfg.snapshot_dir, i + 1))
 
