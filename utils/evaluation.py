@@ -146,7 +146,6 @@ def convert_all_to_netcdf():
 def create_evaluation_images(name, data_set, create_video=False):
     if not os.path.exists('images/{}'.format(name)):
         os.makedirs('{:s}'.format('images/{}'.format(name)))
-    print(data_set.shape)
     for i in range(data_set.shape[0]):
         plt.imshow(np.squeeze(data_set[i, :, :]), vmin=0, vmax=5)
         plt.axis('off')
