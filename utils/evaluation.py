@@ -18,13 +18,18 @@ import utils.metrics as metrics
 
 
 def create_snapshot_image(model, dataset, filename):
-    image, mask, gt = zip(*[dataset[int(i)] for i in cfg.eval_timesteps])
+    image, mask, gt, rea_images, rea_masks, rea_gts = zip(*[dataset[int(i)] for i in cfg.eval_timesteps])
 
     image = torch.stack(image).to(cfg.device)
     mask = torch.stack(mask).to(cfg.device)
     gt = torch.stack(gt).to(cfg.device)
+    if rea_images:
+        rea_images = torch.stack(rea_images).to(cfg.device)
+        rea_masks = torch.stack(rea_masks).to(cfg.device)
+        rea_gts = torch.stack(rea_gts).to(cfg.device)
+
     with torch.no_grad():
-        output = model(image, mask)
+        output = model(image, mask, rea_images, rea_masks)
 
     # select last element of lstm sequence as evaluation element
     image = image[:, 0, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
