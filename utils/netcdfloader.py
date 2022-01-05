@@ -139,7 +139,9 @@ class NetCDFLoader(Dataset):
         if images and masks:
             images = torch.stack(images)
             masks = torch.stack(masks)
-        return mask*image, mask, image, masks*images, masks, images
+            return mask*image, mask, image, masks*images, masks, images
+        else:
+            return mask*image, mask, image, torch.tensor([]), torch.tensor([]), torch.tensor([])
 
     def __len__(self):
         return self.img_lengths[self.img_names[0]]
