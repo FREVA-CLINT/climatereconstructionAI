@@ -27,7 +27,7 @@ class PConvLSTM(nn.Module):
         if rea_img_sizes:
             self.attention_block = ConvolutionalAttentionBlock(rea_img_sizes, rea_enc_layers,
                                                                rea_pool_layers, rea_in_channels, lstm)
-        attention_channels = len(rea_img_sizes) * radar_img_size
+        attention_channels = sum(rea_img_sizes)
 
         # define encoding layers
         encoding_layers = []
