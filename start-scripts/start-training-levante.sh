@@ -26,7 +26,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --log-interval 100 \
  --eval-timesteps 2143,2144,2145,2146,2147 \
  --save-model-interval 5000 \
- --create-snapshot-image \
+ --save-snapshot-image \
  --loss-criterion 1
 singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img_levante.sif \
  python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/train_and_evaluate/train.py \
@@ -45,6 +45,6 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --log-interval 100 \
  --eval-timesteps 2143,2144,2145,2146,2147 \
  --save-model-interval 5000 \
- --create-snapshot-image \
+ --save-snapshot-image \
  --loss-criterion 1
 
