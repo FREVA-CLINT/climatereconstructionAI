@@ -3,6 +3,11 @@ import numpy as np
 import torch
 import h5py
 from torch.utils.data import Dataset, Sampler
+import sys
+
+sys.path.append('./')
+
+import config as cfg
 
 
 class InfiniteSampler(Sampler):
@@ -126,14 +131,16 @@ class NetCDFLoader(Dataset):
     def __getitem__(self, index):
         images = []
         masks = []
+        masked_images = []
         for i in range(len(self.data_types)):
             image, mask = self.get_single_item(index, self.img_names[i], self.mask_names[i], self.data_types[i])
+            image = image.to(cfg.device)
+            mask = mask.to(cfg.device)
             images.append(image)
             masks.append(mask)
-        images = torch.stack(images)
-        masks = torch.stack(masks)
+            masked_images.append(image*mask)
 
-        return images*masks, masks, images
+        return masked_images, masks, images
 
     def __len__(self):
         return self.img_lengths[self.img_names[0]]
