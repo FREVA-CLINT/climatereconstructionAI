@@ -68,12 +68,19 @@ if cfg.create_report:
     create_evaluation_report(gt, outputs)
 
 if cfg.create_images:
-    start_date = cfg.create_images.split(',')[0]
-    end_date = cfg.create_images.split(',')[1]
+    r = (int(cfg.create_images[0]), int(cfg.create_images[1]))
+    gt = h5py.File('{}{}'.format(cfg.evaluation_dirs[0], 'gt'), 'r').get(cfg.data_types[0])[r[0]:r[1], :, :]
+    data_sets = {'gt': gt}
+
+    for i in range(len(cfg.evaluation_dirs)):
+        output = h5py.File('{}{}'.format(cfg.evaluation_dirs[i], 'output_comp'), 'r').get(cfg.data_types[0])[r[0]:r[1], :, :]
+        if output.ndim == 4:
+            output = output[:, 0, :, :]
+        output[output < 0.0] = 0.0
+        data_sets[cfg.eval_names[i]] = output
+
     create_video = False
     if cfg.create_video:
         create_video = True
-    create_evaluation_images('image.nc', create_video, start_date, end_date)
-    create_evaluation_images('gt.nc', create_video, start_date, end_date)
-    create_evaluation_images('output.nc', create_video, start_date, end_date)
-    create_evaluation_images('output_comp.nc', create_video, start_date, end_date)
+    for key,value in data_sets.items():
+        create_evaluation_images(key, value, create_video)

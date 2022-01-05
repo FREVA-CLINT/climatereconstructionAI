@@ -143,34 +143,21 @@ def convert_all_to_netcdf():
     convert_h5_to_netcdf(False, 'output_comp')
 
 
-def create_evaluation_images(self, file, create_video=False, start_date=None, end_date=None):
-    if not os.path.exists(self.eval_save_dir + 'images'):
-        os.makedirs('{:s}'.format(self.eval_save_dir + 'images'))
+def create_evaluation_images(self, name, data_set, create_video=False):
+    if not os.path.exists('images/{}'.format(name)):
+        os.makedirs('{:s}'.format('images/{}'.format(name)))
 
-    data = Dataset(self.eval_save_dir + file)
-    time = data.variables['time']
-    time = netCDF4.num2date(time[:], time.units)
-
-    if start_date and end_date:
-        start = parser.parse(start_date)
-        end = parser.parse(end_date)
-        pr = [data.variables[self.variable][i, :, :] for i in range(time.__len__()) if
-              time[i] >= start and time[i] <= end]
-        time = [time[i] for i in range(time.__len__()) if time[i] >= start and time[i] <= end]
-    else:
-        pr = data.variables[self.variable][:, :, :]
-
-    for i in range(time.__len__()):
-        plt.imshow(np.squeeze(pr[i]), vmin=0, vmax=5)
+    for i in range(data_set.__len__()):
+        plt.imshow(np.squeeze(data_set[i]), vmin=0, vmax=5)
         plt.axis('off')
-        plt.title('Precipitation from ' + str(time[i]))
-        plt.savefig(self.eval_save_dir + 'images/' + file + '_' + str(i) + '.jpg')
+        plt.title(name)
+        plt.savefig(self.eval_save_dir + 'images/' + name + '/' + str(i) + '.jpg')
         plt.clf()
 
     if create_video:
-        with imageio.get_writer(self.eval_save_dir + 'images/' + file + '_movie.gif', mode='I') as writer:
-            for i in range(time.__len__()):
-                image = imageio.imread(self.eval_save_dir + 'images/' + file + '_' + str(i) + '.jpg')
+        with imageio.get_writer(self.eval_save_dir + 'images/' + name + '/movie.gif', mode='I') as writer:
+            for i in range(data_set.__len__()):
+                image = imageio.imread(self.eval_save_dir + 'images/' + name + '/' + str(i) + '.jpg')
                 writer.append_data(image)
 
 
