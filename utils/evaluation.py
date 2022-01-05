@@ -32,9 +32,9 @@ def create_snapshot_image(model, dataset, filename):
         output = model(image, mask, rea_images, rea_masks)
 
     # select last element of lstm sequence as evaluation element
-    image = image[:, 0, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
-    gt = gt[:, 0, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
-    mask = mask[:, 0, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
+    image = image[:, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
+    gt = gt[:, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
+    mask = mask[:, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
     output = output[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
 
     output_comp = mask * image + (1 - mask) * output
