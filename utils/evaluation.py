@@ -151,13 +151,13 @@ def create_evaluation_images(name, data_set, create_video=False):
         plt.imshow(np.squeeze(data_set[i]), vmin=0, vmax=5)
         plt.axis('off')
         plt.title(name)
-        plt.savefig(self.eval_save_dir + 'images/' + name + '/' + str(i) + '.jpg')
+        plt.savefig('images/' + name + '/' + str(i) + '.jpg')
         plt.clf()
 
     if create_video:
-        with imageio.get_writer(self.eval_save_dir + 'images/' + name + '/movie.gif', mode='I') as writer:
+        with imageio.get_writer('images/' + name + '/movie.gif', mode='I') as writer:
             for i in range(data_set.__len__()):
-                image = imageio.imread(self.eval_save_dir + 'images/' + name + '/' + str(i) + '.jpg')
+                image = imageio.imread('images/' + name + '/' + str(i) + '.jpg')
                 writer.append_data(image)
 
 
