@@ -3,10 +3,10 @@ import argparse
 import torch
 
 LAMBDA_DICT_IMG_INPAINTING = {
-    'hole': 1.0#, 'tv': 0.1 #, 'valid': 1.0, 'prc': 1.0#, 'style': 40.0
+    'hole': 6.0, 'tv': 0.1, 'valid': 1.0, 'prc': 0.05, 'style': 120.0
 }
-LAMBDA_DICT_PR_INPAINTING = {
-    'SSL-OUT': 1.0,  # 'SSL-OUT-COMP': 1.0, 'valid': 1.0, 'hole': 6.0, 'tv': 0.1, 'prc': 0.05, 'style': 120.0
+LAMBDA_DICT_HOLE = {
+    'hole': 1.0
 }
 
 PDF_BINS = [0, 0.01, 0.02, 0.1, 1, 2, 10, 100]
@@ -49,6 +49,7 @@ out_channels = None
 gt_channels = None
 channel_reduction_rate = None
 save_snapshot_image = None
+loss_criterion = None
 
 
 def set_train_args():
@@ -77,6 +78,7 @@ def set_train_args():
     arg_parser.add_argument('--pooling-layers', type=str, default='0')
     arg_parser.add_argument('--image-sizes', type=str, default='72')
     arg_parser.add_argument('--out-channels', type=int, default=1)
+    arg_parser.add_argument('--loss-criterion', type=int, default=0)
     arg_parser.add_argument('--eval-timesteps', type=str, default="0,1,2,3,4")
     arg_parser.add_argument('--channel-reduction-rate', type=int, default=1)
     args = arg_parser.parse_args()
@@ -108,6 +110,7 @@ def set_train_args():
     global gt_channels
     global channel_reduction_rate
     global save_snapshot_image
+    global loss_criterion
 
     data_types = args.data_types.split(',')
     img_names = args.img_names.split(',')
@@ -137,6 +140,7 @@ def set_train_args():
     out_channels = args.out_channels
     save_snapshot_image = args.save_snapshot_image
     gt_channels = []
+    loss_criterion = args.loss_criterion
     for i in range(out_channels):
         gt_channels.append((i + 1) * prev_next_steps + i * (prev_next_steps + 1))
 

@@ -12,4 +12,5 @@ python train_and_evaluate/train.py \
  --out-channels 1 \
  --max-iter 1000000 \
  --save-model-interval 10000 \
- --log-interval 1000
+ --log-interval 1000 \
+ --loss-criterion 1
