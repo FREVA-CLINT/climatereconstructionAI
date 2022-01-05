@@ -147,8 +147,8 @@ def create_evaluation_images(name, data_set, create_video=False):
     if not os.path.exists('images/{}'.format(name)):
         os.makedirs('{:s}'.format('images/{}'.format(name)))
 
-    for i in range(data_set.__len__()):
-        plt.imshow(np.squeeze(data_set[i]), vmin=0, vmax=5)
+    for i in range(data_set.shape[0]):
+        plt.imshow(np.squeeze(data_set[i, :, :]), vmin=0, vmax=5)
         plt.axis('off')
         plt.title(name)
         plt.savefig('images/' + name + '/' + str(i) + '.jpg')
@@ -156,7 +156,7 @@ def create_evaluation_images(name, data_set, create_video=False):
 
     if create_video:
         with imageio.get_writer('images/' + name + '/movie.gif', mode='I') as writer:
-            for i in range(data_set.__len__()):
+            for i in range(data_set.shape[0]):
                 image = imageio.imread('images/' + name + '/' + str(i) + '.jpg')
                 writer.append_data(image)
 
