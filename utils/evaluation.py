@@ -143,7 +143,7 @@ def convert_all_to_netcdf():
     convert_h5_to_netcdf(False, 'output_comp')
 
 
-def create_evaluation_images(self, name, data_set, create_video=False):
+def create_evaluation_images(name, data_set, create_video=False):
     if not os.path.exists('images/{}'.format(name)):
         os.makedirs('{:s}'.format('images/{}'.format(name)))
 
