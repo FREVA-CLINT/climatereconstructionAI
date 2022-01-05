@@ -79,7 +79,7 @@ class ConvolutionalAttentionBlock(nn.Module):
         h_mask_channel_attentions = []
         for i in range(len(self.channel_attention_blocks)):
             h_channel_attention, h_mask_channel_attention = self.forward_channel_attention(
-                self.channel_attention_blocks[i], rea_input[:, i, :, :, :, :], rea_mask[:, i, :, :, :, :])
+                self.channel_attention_blocks[i], rea_input[i], rea_mask[i])
             h_channel_attentions.append(h_channel_attention * h)
             h_mask_channel_attentions.append(h_mask_channel_attention * h_mask)
 
