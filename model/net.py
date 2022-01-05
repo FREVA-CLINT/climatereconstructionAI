@@ -94,10 +94,10 @@ class PConvLSTM(nn.Module):
                 init_in_channels=radar_in_channels, init_out_channels=radar_out_channels))
         self.decoder = nn.ModuleList(decoding_layers)
 
-    def forward(self, input, input_mask):
+    def forward(self, input, input_mask, rea_input, rea_input_mask):
         # create lists for skip layers
-        h = input[0]
-        h_mask = input_mask[0]
+        h = input
+        h_mask = input_mask
         hs = [h]
         hs_mask = [h_mask]
         lstm_states = []
@@ -118,7 +118,7 @@ class PConvLSTM(nn.Module):
 
         # forward attention block
         if hasattr(self, 'attention_block'):
-            h, h_mask = self.attention_block(input[1:], input_mask[1:], h, h_mask)
+            h, h_mask = self.attention_block(rea_input, rea_input_mask, h, h_mask)
 
         # forward pass decoding layers
         for i in range(self.net_depth):

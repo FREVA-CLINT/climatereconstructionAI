@@ -129,18 +129,17 @@ class NetCDFLoader(Dataset):
         return images, masks
 
     def __getitem__(self, index):
+        image, mask = self.get_single_item(index, self.img_names[0], self.mask_names[0], self.data_types[0])
         images = []
         masks = []
-        masked_images = []
-        for i in range(len(self.data_types)):
-            image, mask = self.get_single_item(index, self.img_names[i], self.mask_names[i], self.data_types[i])
-            image = image.to(cfg.device)
-            mask = mask.to(cfg.device)
-            images.append(image)
-            masks.append(mask)
-            masked_images.append(image*mask)
-
-        return masked_images, masks, images
+        for i in range(1, len(self.data_types)):
+            img, m = self.get_single_item(index, self.img_names[i], self.mask_names[i], self.data_types[i])
+            images.append(img)
+            masks.append(m)
+        if images and masks:
+            images = torch.stack(images)
+            masks = torch.stack(masks)
+        return mask*image, mask, image, masks*images, masks, images
 
     def __len__(self):
         return self.img_lengths[self.img_names[0]]

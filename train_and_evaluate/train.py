@@ -79,13 +79,13 @@ if cfg.resume_iter:
 for i in tqdm(range(start_iter, cfg.max_iter)):
     # train model
     model.train()
-    image_batch, mask_batch, gt_batch = [x for x in next(iterator_train)]
-    output = model(image_batch, mask_batch)
+    image, mask, gt, rea_images, rea_masks, rea_gts = [x.to(cfg.device) for x in next(iterator_train)]
+    output = model(image, mask, rea_images, rea_masks)
 
     # calculate loss function and apply backpropagation
-    loss_dict = criterion(mask_batch[0][:, cfg.lstm_steps, cfg.gt_channels, :, :],
+    loss_dict = criterion(mask[:, cfg.lstm_steps, cfg.gt_channels, :, :],
                           output[:, cfg.lstm_steps, :, :, :],
-                          gt_batch[0][:, cfg.lstm_steps, cfg.gt_channels, :, :])
+                          gt[:, cfg.lstm_steps, cfg.gt_channels, :, :])
     loss = 0.0
     for key, factor in lambda_dict.items():
         value = factor * loss_dict[key]
