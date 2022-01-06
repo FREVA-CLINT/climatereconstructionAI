@@ -62,7 +62,7 @@ class ConvolutionalAttentionBlock(nn.Module):
                 nn.Sequential(
                     nn.Conv2d(in_channels=2, out_channels=1, kernel_size=(7, 7), padding=(3, 3)),
                     nn.Sigmoid()
-                )
+                ).to(cfg.device)
             )
 
     def forward(self, rea_input, rea_mask, h, h_mask):
