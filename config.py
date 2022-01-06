@@ -215,7 +215,8 @@ def set_evaluation_args():
     pooling_layers = list(map(int, args.pooling_layers.split(',')))
     image_sizes = list(map(int, args.image_sizes.split(',')))
     infill = args.infill
-    create_images = args.create_images.split(',')
+    if args.create_images:
+        create_images = args.create_images.split(',')
     create_video = args.create_video
     create_report = args.create_report
     eval_names = args.eval_names.split(',')
