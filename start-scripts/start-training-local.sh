@@ -13,4 +13,4 @@ python train_and_evaluate/train.py \
  --max-iter 1000000 \
  --save-model-interval 10000 \
  --log-interval 1000 \
- --loss-criterion 1
+ --save-snapshot-image
