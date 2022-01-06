@@ -15,9 +15,12 @@ class ConvolutionalAttentionBlock(nn.Module):
 
         assert len(img_sizes) == len(enc_layers) == len(pool_layers) == len(in_channels)
 
+        self.num_attentions = len(img_sizes)
+
         # define channel attention blocks
         self.channel_attention_blocks = []
-        for i in range(len(img_sizes)):
+        self.spatial_attention_blocks = []
+        for i in range(self.num_attentions):
             channel_attention_block = {}
             encoding_layers = []
             encoding_layers.append(
@@ -47,14 +50,7 @@ class ConvolutionalAttentionBlock(nn.Module):
                     image_size=img_sizes[i] // (2 ** (enc_layers[i] + j)),
                     kernel=(3, 3), stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
             channel_attention_block['encoding_layers'] = nn.ModuleList(encoding_layers).to(cfg.device)
-            channel_attention_block['mlp_img'] = nn.Sequential(
-                nn.Conv2d(in_channels=img_sizes[i], out_channels=img_sizes[i] // cfg.channel_reduction_rate,
-                          kernel_size=(1, 1)),
-                nn.ReLU(),
-                nn.Conv2d(in_channels=img_sizes[i] // cfg.channel_reduction_rate, out_channels=img_sizes[i],
-                          kernel_size=(1, 1)),
-            ).to(cfg.device)
-            channel_attention_block['mlp_mask'] = nn.Sequential(
+            channel_attention_block['mlp'] = nn.Sequential(
                 nn.Conv2d(in_channels=img_sizes[i], out_channels=img_sizes[i] // cfg.channel_reduction_rate,
                           kernel_size=(1, 1)),
                 nn.ReLU(),
@@ -62,50 +58,32 @@ class ConvolutionalAttentionBlock(nn.Module):
                           kernel_size=(1, 1)),
             ).to(cfg.device)
             self.channel_attention_blocks.append(channel_attention_block)
-
-        # define spatial attention blocks
-        self.spatial_attention_block_img = nn.Sequential(
-            nn.Conv2d(in_channels=2, out_channels=1, kernel_size=(3, 3), padding=(1, 1)),
-            nn.Sigmoid()
-        )
-        self.spatial_attention_block_mask = nn.Sequential(
-            nn.Conv2d(in_channels=2, out_channels=1, kernel_size=(3, 3), padding=(1, 1)),
-            nn.Sigmoid()
-        )
+            self.spatial_attention_blocks.append(
+                nn.Sequential(
+                    nn.Conv2d(in_channels=2, out_channels=1, kernel_size=(7, 7), padding=(3, 3)),
+                    nn.Sigmoid()
+                )
+            )
 
     def forward(self, rea_input, rea_mask, h, h_mask):
         # calculate channel attention
-        h_channel_attentions = []
-        h_mask_channel_attentions = []
-        for i in range(len(self.channel_attention_blocks)):
-            h_channel_attention, h_mask_channel_attention = self.forward_channel_attention(
+        attentions = []
+        for i in range(self.num_attentions):
+            # channel attention
+            channel_attention = self.forward_channel_attention(
                 self.channel_attention_blocks[i], rea_input[:, i, :, :, :], rea_mask[:, i, :, :, :])
-            h_channel_attentions.append(h_channel_attention)
-            h_mask_channel_attentions.append(h_mask_channel_attention)
+            # spatial attention
+            spatial_attention = torch.unsqueeze(self.spatial_attention_blocks[i](
+                torch.cat([torch.max(h[:, 0, :, :, :], keepdim=True, dim=1)[0],
+                           torch.mean(h[:, 0, :, :, :], keepdim=True, dim=1)], dim=1)
+            ), dim=1)
+            attention = channel_attention * spatial_attention
+            attentions.append(attention)
 
-        # calculate spatial attention
-        h_spatial_attention = torch.unsqueeze(self.spatial_attention_block_img(
-            torch.cat([torch.max(h[:, 0, :, :, :], keepdim=True, dim=1)[0],
-                       torch.mean(h[:, 0, :, :, :], keepdim=True, dim=1)], dim=1)
-        ), dim=1)
-        h_mask_spatial_attention = torch.unsqueeze(self.spatial_attention_block_mask(
-            torch.cat([torch.max(h_mask[:, 0, :, :, :], keepdim=True, dim=1)[0],
-                       torch.mean(h_mask[:, 0, :, :, :], keepdim=True, dim=1)], dim=1)
-        ), dim=1)
-
-        h_total_attentions = []
-        h_mask_total_attentions = []
-        for i in range(len(h_channel_attentions)):
-            h_total_attention = h_channel_attentions[i] * h_spatial_attention
-            h_total_attentions.append(h_total_attention)
-
-            h_mask_total_attention = h_mask_channel_attentions[i] * h_mask_spatial_attention
-            h_mask_total_attentions.append(h_mask_total_attention)
-
-        h_total_attentions = torch.cat(h_total_attentions, dim=2)
-        h_mask_total_attentions = torch.ones_like(h_total_attentions)#torch.cat(h_mask_total_attentions, dim=2)
-        h = torch.cat([h, h_total_attentions], dim=2)
-        h_mask = torch.cat([h_mask, h_mask_total_attentions], dim=2)
+        attentions = torch.cat(attentions, dim=2)
+        mask_attentions = torch.ones_like(attentions)
+        h = torch.cat([h, attentions], dim=2)
+        h_mask = torch.cat([h_mask, mask_attentions], dim=2)
 
         return h, h_mask
 
@@ -118,15 +96,7 @@ class ConvolutionalAttentionBlock(nn.Module):
         fusion_max = F.max_pool2d(attention[:, 0, :, :, :], attention.shape[3])
         fusion_avg = F.avg_pool2d(attention[:, 0, :, :, :], attention.shape[3])
 
-        fusion_mask_max = F.max_pool2d(attention_mask[:, 0, :, :, :], attention_mask.shape[3])
-        fusion_mask_avg = F.avg_pool2d(attention_mask[:, 0, :, :, :], attention_mask.shape[3])
-
         fusion_attention = torch.sigmoid(
-            attention_block['mlp_img'](fusion_max) + attention_block['mlp_img'](fusion_avg)
+            attention_block['mlp'](fusion_max) + attention_block['mlp'](fusion_avg)
         )
-        fusion_mask_attention = torch.sigmoid(
-            attention_block['mlp_mask'](fusion_mask_max) + attention_block['mlp_mask'](fusion_mask_avg)
-        )
-
-        return attention * torch.unsqueeze(fusion_attention, dim=1),\
-               attention_mask * torch.unsqueeze(fusion_mask_attention, dim=1)
+        return attention * torch.unsqueeze(fusion_attention, dim=1)
