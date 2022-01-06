@@ -94,19 +94,23 @@ def infill(model, dataset, partitions):
         print("WARNING: The size of the dataset should be dividable by the number of partitions. The last "
               + str(dataset.__len__() % partitions) + " time steps will not be infilled.")
     for split in range(partitions):
-        image_part, mask_part, gt_part = zip(
+        image_part, mask_part, gt_part, rea_images_part, rea_masks_part, rea_gts_part = zip(
             *[dataset[i + split * (dataset.__len__() // partitions)] for i in
               range(dataset.__len__() // partitions)])
         image_part = torch.stack(image_part)
         mask_part = torch.stack(mask_part)
         gt_part = torch.stack(gt_part)
+        rea_images_part = torch.stack(rea_images_part)
+        rea_masks_part = torch.stack(rea_masks_part)
+        rea_gts_part = torch.stack(rea_gts_part)
         # get results from trained network
         with torch.no_grad():
-            output_part = model(image_part.to(cfg.device), mask_part.to(cfg.device))
+            output_part = model(image_part.to(cfg.device), mask_part.to(cfg.device),
+                                rea_images_part.to(cfg.device), rea_masks_part.to(cfg.device))
 
-        image_part = image_part[:, 0, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
-        mask_part = mask_part[:, 0, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
-        gt_part = gt_part[:, 0, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
+        image_part = image_part[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
+        mask_part = mask_part[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
+        gt_part = gt_part[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
         output_part = output_part[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
 
         # only select first channel
