@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=64
 #SBATCH --time=12:00:00
 #SBATCH --mem=256G
-#SBATCH --nodelist=mg206
+#SBATCH --nodelist=mg201
 
 module load cuda/10.0.130
 module load singularity/3.6.1-gcc-9.1.0
@@ -19,13 +19,13 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --img-names radolan.h5,rea2-tas.h5,rea2-uas.h5,rea2-vas.h5 --mask-names single_radar_fail.h5,mask_ones_tas.h5,mask_ones_uas.h5,mask_ones_vas.h5 \
  --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-rea2/ \
  --mask-dir masks/ \
- --snapshot-dir snapshots/precipitation/radolan-rea-attention/ckpt/200000.pth \
- --evaluation-dirs evaluation/precipitation/radolan-rea-attention-hole \
+ --snapshot-dir snapshots/precipitation/radolan-rea-attention/ckpt/150000.pth \
+ --evaluation-dirs evaluation/precipitation/radolan-rea-attention/ \
  --prev-next-steps 0 \
  --partitions 1177 \
- --eval-names Rea-Hole \
+ --eval-names Rea \
  --out-channels 1 \
  --create-report \
- --create-images 2143,2149 \
-# --infill test \
+ --infill test \
+# --create-images 2143,2149 \
 # --create-video \
