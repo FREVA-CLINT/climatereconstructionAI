@@ -25,7 +25,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --partitions 1177 \
  --eval-names Rea-Hole \
  --out-channels 1 \
- --infill test \
-# --create-report \
-# --create-images 2143,2149 \
+ --create-report \
+ --create-images 2143,2149 \
+# --infill test \
 # --create-video \
