@@ -54,18 +54,16 @@ class InpaintingLoss(nn.Module):
                 feat_output = self.extractor(torch.cat([output_ch] * 3, 1))
                 feat_output_comp = self.extractor(torch.cat([output_comp_ch] * 3, 1))
                 feat_gt = self.extractor(torch.cat([gt_ch] * 3, 1))
+                for i in range(len(feat_gt)):
+                    loss_dict['prc'] += self.l1(feat_output[i], feat_gt[i])
+                    loss_dict['prc'] += self.l1(feat_output_comp[i], feat_gt[i])
+                    loss_dict['style'] += self.l1(gram_matrix(feat_output[i]),
+                                                  gram_matrix(feat_gt[i]))
+                    loss_dict['style'] += self.l1(gram_matrix(feat_output_comp[i]),
+                                                  gram_matrix(feat_gt[i]))
             else:
-                feat_output = torch.cat([output_ch], 1).permute(1, 0, 2, 3).unsqueeze(1)
-                feat_output_comp = torch.cat([output_comp_ch], 1).permute(1, 0, 2, 3).unsqueeze(1)
-                feat_gt = torch.cat([gt_ch], 1).permute(1, 0, 2, 3).unsqueeze(1)
-
-            for i in range(len(feat_gt)):
-                loss_dict['prc'] += self.l1(feat_output[i], feat_gt[i])
-                loss_dict['prc'] += self.l1(feat_output_comp[i], feat_gt[i])
-                loss_dict['style'] += self.l1(gram_matrix(feat_output[i]),
-                                              gram_matrix(feat_gt[i]))
-                loss_dict['style'] += self.l1(gram_matrix(feat_output_comp[i]),
-                                              gram_matrix(feat_gt[i]))
+                loss_dict['prc'] += self.l1(output_ch, gt_ch)
+                loss_dict['prc'] += self.l1(output_comp_ch, gt_ch)
 
             loss_dict['tv'] += total_variation_loss(output_comp_ch)
 
