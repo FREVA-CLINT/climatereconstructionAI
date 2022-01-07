@@ -15,17 +15,17 @@ module load cdo
 
 singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img_mistral.sif \
  python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/train_and_evaluate/evaluate.py \
- --device cuda --image-sizes 512,256,256,256 --pooling-layers 3,2,2,2 --encoding-layers 4,4,4,4 --data-types pr,tas,uas,vas \
- --img-names radolan.h5,rea2-tas.h5,rea2-uas.h5,rea2-vas.h5 --mask-names single_radar_fail.h5,mask_ones_tas.h5,mask_ones_uas.h5,mask_ones_vas.h5 \
+ --device cuda --image-sizes 128 --pooling-layers 3 --encoding-layers 4 --data-types pr \
+ --img-names radolan.h5 --mask-names single_radar_fail.h5 \
  --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-rea2/ \
  --mask-dir masks/ \
- --snapshot-dir snapshots/precipitation/radolan-rea-attention1/ckpt/200000.pth \
- --evaluation-dirs evaluation/precipitation/radolan-rea-attention-hole/,evaluation/precipitation/radolan-rea-attention1-hole1/,evaluation/precipitation/radolan-rea-attention1/ \
+ --snapshot-dir snapshots/precipitation/128x128/2007-2013/simple/200000.pth \
+ --evaluation-dirs evaluation/precipitation/128x128/2007-2011/simple/ \
  --prev-next-steps 0 \
  --partitions 1177 \
  --eval-names Hole400k,HoleNew,New \
  --out-channels 1 \
- --create-report \
-# --infill test \
+ --infill test \
+# --create-report \
 # --create-images 2143,2149 \
 # --create-video \
