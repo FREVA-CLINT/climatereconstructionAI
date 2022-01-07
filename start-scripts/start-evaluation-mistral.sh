@@ -20,12 +20,12 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-rea2/ \
  --mask-dir masks/ \
  --snapshot-dir snapshots/precipitation/radolan-rea-attention1/ckpt/200000.pth \
- --evaluation-dirs evaluation/precipitation/radolan-rea-attention1/ \
+ --evaluation-dirs evaluation/precipitation/radolan-rea-attention-hole/,evaluation/precipitation/radolan-rea-attention1-hole1/,evaluation/precipitation/radolan-rea-attention1/ \
  --prev-next-steps 0 \
  --partitions 1177 \
- --eval-names Rea \
+ --eval-names Hole400k,HoleNew,New \
  --out-channels 1 \
- --infill test \
-# --create-report \
+ --create-report \
+# --infill test \
 # --create-images 2143,2149 \
 # --create-video \
