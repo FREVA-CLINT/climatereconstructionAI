@@ -21,7 +21,8 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --mask-dir masks/ \
  --snapshot-dir snapshots/precipitation/128x128/2007-2013/lstm-prev-next/ckpt/500000.pth \
  --evaluation-dirs evaluation/precipitation/128x128/2007-2011/lstm-prev-next/ \
- --prev-next-steps 2 \
+ --prev-next-steps 0 \
+ --lstm-steps 2 \
  --partitions 1177 \
  --eval-names Hole400k,HoleNew,New \
  --out-channels 1 \
