@@ -19,7 +19,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --img-names radolan.h5 --mask-names single_radar_fail.h5 \
  --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-rea2/ \
  --mask-dir masks/ \
- --snapshot-dir snapshots/precipitation/128x128/2007-2013/simple/200000.pth \
+ --snapshot-dir snapshots/precipitation/128x128/2007-2013/simple/ckpt/500000.pth \
  --evaluation-dirs evaluation/precipitation/128x128/2007-2011/simple/ \
  --prev-next-steps 0 \
  --partitions 1177 \
