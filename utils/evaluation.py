@@ -280,7 +280,10 @@ def create_evaluation_report(gt, outputs):
 
     pdf.image(cfg.evaluation_dirs[0] + 'ts.png', x=None, y=None, w=208, h=156, type='', link='')
     pdf.image(cfg.evaluation_dirs[0] + 'pdf.png', x=None, y=None, w=208, h=156, type='', link='')
-    pdf.output(cfg.evaluation_dirs[0] + 'Report.pdf', 'F')
+    report_name = ''
+    for name in cfg.eval_names:
+        report_name += name
+    pdf.output('reports/{}.pdf'.format(report_name), 'F')
 
 
 def evaluate_selected_samples(self, dates=None):
