@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=128
 #SBATCH --time=100:00:00
 #SBATCH --mem=128GB
-#SBATCH --nodelist=vader3
+#SBATCH --nodelist=vader2
 
 module source start-scripts/setup-modules.txt
 
@@ -33,14 +33,15 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-rea2-128x128/ \
  --mask-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/masks/ \
  --img-names radolan.h5 --mask-names single_radar_fail_128x128.h5 \
- --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/precipitation/128x128/2007-2013/lstm-prev-next/ \
- --log-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/logs/precipitation/128x128/2007-2013/lstm-prev-next/ \
+ --snapshot-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/snapshots/precipitation/128x128/2007-2013/lstm-prev-next-hole/ \
+ --log-dir /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/logs/precipitation/128x128/2007-2013/lstm-prev-next-hole/ \
  --lstm-steps 2 \
  --prev-next-steps 0 \
  --out-channels 1 \
  --max-iter 500000 \
- --resume-iter 250000 \
+ --resume-iter 410000 \
  --finetune \
  --eval-timesteps 2143,2144,2145,2146,2147 \
  --save-model-interval 5000 \
- --log-interval 100
+ --log-interval 100 \
+ --save-snapshot-image
