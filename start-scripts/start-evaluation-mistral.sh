@@ -16,8 +16,8 @@ module load cdo
 singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img_mistral.sif \
  python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/train_and_evaluate/evaluate.py \
  --device cuda --image-sizes 128 --pooling-layers 3 --encoding-layers 4 --data-types pr \
- --img-names radolan.h5 --mask-names single_radar_fail.h5 \
- --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-rea2/ \
+ --img-names radolan.h5 --mask-names single_radar_fail_128x128.h5 \
+ --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-rea2-128x128/ \
  --mask-dir masks/ \
  --snapshot-dir snapshots/precipitation/128x128/2007-2013/simple/ckpt/500000.pth \
  --evaluation-dirs evaluation/precipitation/128x128/2007-2011/simple/ \
