@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=64
 #SBATCH --time=12:00:00
 #SBATCH --mem=256G
-#SBATCH --nodelist=mg207
+#SBATCH --nodelist=mg206
 
 module load cuda/10.0.130
 module load singularity/3.6.1-gcc-9.1.0
@@ -19,7 +19,7 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --img-names radolan.h5 --mask-names single_radar_fail_128x128.h5 \
  --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-rea2-128x128/ \
  --mask-dir masks/ \
- --snapshot-dir snapshots/precipitation/128x128/2007-2013/lstm-prev-next/ckpt/500000.pth \
+ --snapshot-dir snapshots/precipitation/128x128/2007-2013/simple-hole/ckpt/500000.pth \
  --evaluation-dirs evaluation/precipitation/128x128/2007-2011/simple-hole/ \
  --prev-next-steps 0 \
  --lstm-steps 0 \
