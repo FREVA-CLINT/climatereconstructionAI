@@ -25,7 +25,8 @@ python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/trai
  --max-iter 250000 \
  --eval-timesteps 2143,2144,2145,2146,2147 \
  --save-model-interval 5000 \
- --log-interval 100
+ --log-interval 100 \
+ --attention
 singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatereconstructionAI/torch_img_levante.sif \
  python /work/bb1152/k204233/climatereconstructionAI/climatereconstructionAI/train_and_evaluate/train.py \
  --device cuda --batch-size 4 --image-sizes 128,64,64,64 --pooling-layers 3,2,2,2 --encoding-layers 4,4,4,4 --data-types pr,tas,uas,vas \
@@ -43,3 +44,4 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --eval-timesteps 2143,2144,2145,2146,2147 \
  --save-model-interval 5000 \
  --log-interval 100 \
+ --attention
