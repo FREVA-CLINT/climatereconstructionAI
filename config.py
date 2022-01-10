@@ -50,6 +50,7 @@ gt_channels = None
 channel_reduction_rate = None
 save_snapshot_image = None
 loss_criterion = None
+attention = None
 
 
 def set_train_args():
@@ -81,6 +82,7 @@ def set_train_args():
     arg_parser.add_argument('--loss-criterion', type=int, default=0)
     arg_parser.add_argument('--eval-timesteps', type=str, default="0,1,2,3,4")
     arg_parser.add_argument('--channel-reduction-rate', type=int, default=1)
+    arg_parser.add_argument('--attention', action='store_true')
     args = arg_parser.parse_args()
 
     global data_types
@@ -111,6 +113,7 @@ def set_train_args():
     global channel_reduction_rate
     global save_snapshot_image
     global loss_criterion
+    global attention
 
     data_types = args.data_types.split(',')
     img_names = args.img_names.split(',')
@@ -141,6 +144,7 @@ def set_train_args():
     save_snapshot_image = args.save_snapshot_image
     gt_channels = []
     loss_criterion = args.loss_criterion
+    attention = args.attention
     for i in range(out_channels):
         gt_channels.append((i + 1) * prev_next_steps + i * (prev_next_steps + 1))
 

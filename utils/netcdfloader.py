@@ -137,8 +137,8 @@ class NetCDFLoader(Dataset):
             images.append(img)
             masks.append(m)
         if images and masks:
-            images = torch.stack(images)
-            masks = torch.stack(masks)
+            images = torch.cat(images, dim=1)
+            masks = torch.cat(masks, dim=1)
             return mask*image, mask, image, masks*images, masks, images
         else:
             return mask*image, mask, image, torch.tensor([]), torch.tensor([]), torch.tensor([])
