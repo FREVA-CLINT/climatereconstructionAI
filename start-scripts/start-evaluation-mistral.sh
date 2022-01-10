@@ -20,13 +20,13 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-rea2-128x128/ \
  --mask-dir masks/ \
  --snapshot-dir snapshots/precipitation/128x128/2007-2013/lstm-prev-next/ckpt/500000.pth \
- --evaluation-dirs evaluation/precipitation/128x128/2007-2011/simple/,evaluation/precipitation/128x128/2007-2011/lstm-prev-next/,evaluation/precipitation/128x128/2007-2011/lstm-prev-next-hole/ \
+ --evaluation-dirs evaluation/precipitation/128x128/2007-2011/simple-hole/ \
  --prev-next-steps 0 \
- --lstm-steps 2 \
+ --lstm-steps 0 \
  --partitions 1177 \
  --eval-names Simple,LSTM,LSTM-hole \
  --out-channels 1 \
  --create-images 2140,2160 \
- --create-report \
- --create-video \
-# --infill test \
+ --infill test \
+# --create-report \
+# --create-video \
