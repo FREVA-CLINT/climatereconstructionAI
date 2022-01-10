@@ -46,10 +46,8 @@ class PConvLSTM(nn.Module):
                         kernel=(5, 5), stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
                     if i == self.attention_depth - 1:
                         attention_dec_channels[self.net_depth - 1] = rea_img_size + rea_img_size // 2
-                    elif i == 0:
-                        attention_dec_channels[self.net_depth - self.attention_depth - 1] = 0
-                    else:
-                        attention_dec_channels[self.net_depth - (self.attention_depth - i) - 1] = rea_img_size // (2 ** (self.rea_enc_layers - i - 1))
+                    elif i != 0:
+                        attention_dec_channels[self.net_depth - (self.attention_depth - i) + (self.net_depth - self.attention_depth)] = rea_img_size // (2 ** (self.rea_enc_layers - i - 1))
 
                 # define encoding pooling layers
                 for i in range(self.rea_pool_layers):
@@ -60,13 +58,10 @@ class PConvLSTM(nn.Module):
                         kernel=(3, 3), stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
                     if i == self.attention_depth - self.rea_enc_layers - 1:
                         attention_dec_channels[self.net_depth - 1] = rea_img_size + rea_img_size
-                    elif i == 0 and self.rea_enc_layers == 0:
-                        attention_dec_channels[self.net_depth - self.attention_depth - 1] = 0
-                    else:
-                        attention_dec_channels[self.net_depth - (self.attention_depth - i) - 1] = rea_img_size // (
+                    elif i != 0 or self.rea_enc_layers != 0:
+                        attention_dec_channels[self.net_depth - (self.attention_depth - (i + (self.net_depth - self.attention_depth)))] = rea_img_size // (
                                     2 ** (self.rea_enc_layers - i - 1))
                 self.attention_module = nn.ModuleList(attention_module_layers)
-                print(attention_dec_channels)
 
         # define encoding layers
         encoding_layers = []
@@ -145,7 +140,6 @@ class PConvLSTM(nn.Module):
                 if not cfg.attention:
                     hs[i] = torch.cat([hs[i], h_rea], dim=2)
                     hs_mask[i] = torch.cat([hs_mask[i], h_rea_mask], dim=2)
-
             h, h_mask, lstm_state = self.encoder[i](hs[i],
                                                     hs_mask[i],
                                                     None)
