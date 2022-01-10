@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
 python train_and_evaluate/train.py \
- --device cpu --batch-size 1 --image-sizes 72,36,36 --pooling-layers 0,2,2 --encoding-layers 3,0,0 --data-types tas,tas,tas \
- --img-names 20cr-train.h5,20cr-small.h5,20cr-small.h5 --mask-names single_temp_mask.h5,single_temp_mask_small.h5,single_temp_mask_small.h5 \
- --data-root-dir ../data/20cr/ \
+ --device cpu --batch-size 2 --image-sizes 128,64,64 --pooling-layers 3,2,2 --encoding-layers 4,4,4 --data-types pr,tas,uas \
+ --img-names radolan.h5,rea2-tas.h5,rea2-uas.h5 --mask-names single_radar_fail_128x128.h5,mask_ones_tas_64x64.h5,mask_ones_uas_64x64.h5 \
+ --data-root-dir ../data/radolan-rea2-128x128/ \
  --mask-dir masks/ \
  --snapshot-dir snapshots/temperature/20cr-lstm-test1/ \
  --log-dir logs/temperature/20cr-lstm-2/ \
@@ -14,4 +14,3 @@ python train_and_evaluate/train.py \
  --save-model-interval 10000 \
  --log-interval 1000 \
  --save-snapshot-image \
- --attention
