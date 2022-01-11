@@ -25,10 +25,10 @@ if cfg.infill:
                           radar_pool_layers=cfg.pooling_layers[0],
                           radar_in_channels=2 * cfg.prev_next_steps + 1,
                           radar_out_channels=cfg.out_channels,
-                          rea_img_sizes=cfg.image_sizes[1:],
-                          rea_enc_layers=cfg.encoding_layers[1:],
-                          rea_pool_layers=cfg.pooling_layers[1:],
-                          rea_in_channels=(len(cfg.image_sizes) - 1) * [2 * cfg.prev_next_steps + 1],
+                          rea_img_size=cfg.image_sizes[1],
+                          rea_enc_layers=cfg.encoding_layers[1],
+                          rea_pool_layers=cfg.pooling_layers[1],
+                          rea_in_channels=(len(cfg.image_sizes) - 1) * (2 * cfg.prev_next_steps + 1),
                           lstm=lstm).to(cfg.device)
 
         load_ckpt(snapshot, [('model', model)], cfg.device)
