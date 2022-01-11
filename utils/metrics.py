@@ -47,3 +47,23 @@ def fldor_timsum(gt, output):
 
 def timmean_fldor(gt, output):
     return np.mean(fldcor_timeseries(gt, output))
+
+
+def timcor_map(gt, output):
+    map = np.zeros((1, gt.shape[1], gt.shape[2]))
+    for i in range(gt.shape[1]):
+        for j in range(gt.shape[2]):
+            map[0, i, j] = np.corrcoef(gt[:,i,j], output[:,i,j])[0][1]
+    return map
+
+
+def sum_map(image):
+    return np.expand_dims(np.sum(image, axis=0), 0)
+
+
+def rmse_map(gt, output):
+    return np.expand_dims(np.mean(np.sqrt((gt - output) ** 2), axis=0), 0)
+
+
+def rmse_timeseries(gt, output):
+    return np.mean(np.sqrt((gt - output) ** 2), axis=(1, 2))
