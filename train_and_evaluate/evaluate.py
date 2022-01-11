@@ -85,4 +85,4 @@ if cfg.create_images:
     if cfg.create_video:
         create_video = True
     for key,value in data_sets.items():
-        create_evaluation_images(key, value, create_video)
+        create_evaluation_images(key, value, create_video, save_dir='images/{}'.format(key))

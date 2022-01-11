@@ -72,11 +72,15 @@ def get_data(file, var):
     return variable, time
 
 
-def plot_data(time_series_dict, subplot):
+def plot_data(time_series_dict, subplot, plot=False):
     for name, time_series in time_series_dict.items():
         subplot.plot([i for i in range(0, time_series.shape[0])], time_series, label=name)
-    subplot.set_xlabel("Timesteps")
-    subplot.set_ylabel("Precipitation")
+    if plot:
+        subplot.xlabel("Timesteps")
+        subplot.ylabel("Precipitation")
+    else:
+        subplot.set_xlabel("Timesteps")
+        subplot.set_ylabel("Precipitation")
     subplot.legend(prop={'size': 6})
 
 
@@ -152,20 +156,23 @@ def convert_all_to_netcdf():
     convert_h5_to_netcdf(False, 'output_comp')
 
 
-def create_evaluation_images(name, data_set, create_video=False):
-    if not os.path.exists('images/{}'.format(name)):
-        os.makedirs('{:s}'.format('images/{}'.format(name)))
+def create_evaluation_images(name, data_set, create_video=False, save_dir='images/', vmin=0, vmax=5, axis='off', legend=False):
+    if not os.path.exists(save_dir):
+        os.makedirs('{:s}'.format(save_dir))
     for i in range(data_set.shape[0]):
-        plt.imshow(np.squeeze(data_set[i, :, :]), vmin=0, vmax=5)
-        plt.axis('off')
+        plt.imshow(np.squeeze(data_set[i, :, :]), vmin=vmin, vmax=vmax)
+        plt.axis(axis)
+        if legend:
+            pass
+            #plt.legend()
         plt.title(name)
-        plt.savefig('images/' + name + '/' + str(i) + '.jpg')
+        plt.savefig('{}/{}{}.jpg'.format(save_dir, name, str(i)))
         plt.clf()
 
     if create_video:
-        with imageio.get_writer('images/' + name + '/movie.gif', mode='I') as writer:
+        with imageio.get_writer('{}/movie.gif'.format(save_dir), mode='I') as writer:
             for i in range(data_set.shape[0]):
-                image = imageio.imread('images/' + name + '/' + str(i) + '.jpg')
+                image = imageio.imread('{}/{}{}.jpg'.format(save_dir, name, str(i)))
                 writer.append_data(image)
 
 
@@ -180,6 +187,7 @@ def create_evaluation_report(gt, outputs):
     min_timeseries = {}
     mean_timeseries = {}
     fldcor_timeseries = {}
+    rmse_timeseries = {}
 
     # define arrays for dataframe
     data_sets = ['GT']
@@ -188,6 +196,9 @@ def create_evaluation_report(gt, outputs):
     total_prs = [int(metrics.total_sum(gt))]
     mean_fld_cors = ['1.0']
     fld_cor_total_sum = ['1.0']
+
+    create_evaluation_images('SumMap{}'.format('GT'), metrics.sum_map(gt), save_dir=cfg.evaluation_dirs[0],
+                             vmin=0, vmax=1, axis='on', legend=True)
 
     # define output metrics
     for output_name, output in outputs.items():
@@ -202,7 +213,12 @@ def create_evaluation_report(gt, outputs):
         max_timeseries[output_name] = metrics.max_timeseries(output[ts_range[0]:ts_range[1]])
         min_timeseries[output_name] = metrics.min_timeseries(output[ts_range[0]:ts_range[1]])
         mean_timeseries[output_name] = metrics.mean_timeseries(output[ts_range[0]:ts_range[1]])
-        fldcor_timeseries[output_name] = metrics.fldcor_timeseries(gt, output[ts_range[0]:ts_range[1]])
+        fldcor_timeseries[output_name] = metrics.fldcor_timeseries(gt[ts_range[0]:ts_range[1]], output[ts_range[0]:ts_range[1]])
+        rmse_timeseries[output_name] = metrics.rmse_timeseries(gt[ts_range[0]:ts_range[1]], output[ts_range[0]:ts_range[1]])
+
+        create_evaluation_images('TimCorMap{}'.format(output_name), metrics.timcor_map(gt, output), save_dir=cfg.evaluation_dirs[0], vmin=0, vmax=1, axis='on', legend=True)
+        create_evaluation_images('RMSEMap{}'.format(output_name), metrics.rmse_map(gt, output), save_dir=cfg.evaluation_dirs[0], vmin=0, vmax=1, axis='on', legend=True)
+        create_evaluation_images('SumMap{}'.format(output_name), metrics.sum_map(output), save_dir=cfg.evaluation_dirs[0], vmin=0, vmax=1000, axis='on', legend=True)
 
     # set GT time series
     max_timeseries['Ground Truth'] = metrics.max_timeseries(gt[ts_range[0]:ts_range[1]])
@@ -230,6 +246,11 @@ def create_evaluation_report(gt, outputs):
     plot_data(fldcor_timeseries, ax3)
     fig.tight_layout()
     plt.savefig(cfg.evaluation_dirs[0] + 'ts.png', dpi=300)
+    plt.clf()
+
+    plt.title('RMSE over Time')
+    plot_data(rmse_timeseries, plt, plot=True)
+    plt.savefig(cfg.evaluation_dirs[0] + 'rmse.png', dpi=300)
     plt.clf()
 
     # Create PDF plot
@@ -280,9 +301,17 @@ def create_evaluation_report(gt, outputs):
 
     pdf.image(cfg.evaluation_dirs[0] + 'ts.png', x=None, y=None, w=208, h=156, type='', link='')
     pdf.image(cfg.evaluation_dirs[0] + 'pdf.png', x=None, y=None, w=208, h=156, type='', link='')
+    pdf.image(cfg.evaluation_dirs[0] + 'rmse.png', x=None, y=None, w=208, h=156, type='', link='')
+
     report_name = ''
     for name in cfg.eval_names:
         report_name += name
+        pdf.image('{}TimCorMap{}0.jpg'.format(cfg.evaluation_dirs[0], name), x=None, y=None, w=208, h=156, type='', link='')
+    for name in cfg.eval_names:
+        pdf.image('{}RMSEMap{}0.jpg'.format(cfg.evaluation_dirs[0], name), x=None, y=None, w=208, h=156, type='', link='')
+    pdf.image('{}SumMap{}0.jpg'.format(cfg.evaluation_dirs[0], "GT"), x=None, y=None, w=208, h=156, type='', link='')
+    for name in cfg.eval_names:
+        pdf.image('{}SumMap{}0.jpg'.format(cfg.evaluation_dirs[0], name), x=None, y=None, w=208, h=156, type='', link='')
     pdf.output('reports/{}.pdf'.format(report_name), 'F')
 
 
