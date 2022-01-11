@@ -17,8 +17,8 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --img-names radolan.h5,rea2-tas.h5,rea2-uas.h5,rea2-vas.h5 --mask-names single_radar_fail_128x128.h5,mask_ones_tas_64x64.h5,mask_ones_uas_64x64.h5,mask_ones_vas_64x64.h5 \
  --data-root-dir /work/bb1152/k204233/climatereconstructionAI/data/radolan-rea2-128x128/ \
  --mask-dir masks/ \
- --snapshot-dir snapshots/precipitation/128x128/2007-2011/rea-attention-hole/ckpt/500000.pth \
- --evaluation-dirs evaluation/precipitation/128x128/2007-2011/rea-attention-hole/ \
+ --snapshot-dir snapshots/precipitation/128x128/2007-2011/rea-attention-2.0/ckpt/500000.pth \
+ --evaluation-dirs evaluation/precipitation/128x128/2007-2011/rea-attention-2.0/ \
  --prev-next-steps 0 \
  --lstm-steps 0 \
  --partitions 1177 \
@@ -26,5 +26,6 @@ singularity run --bind /work/bb1152/k204233/ --nv /work/bb1152/k204233/climatere
  --out-channels 1 \
  --create-images 2140,2160 \
  --infill test \
+ --attention
 # --create-report \
 # --create-video \
