@@ -176,6 +176,7 @@ def set_evaluation_args():
     arg_parser.add_argument('--out-channels', type=int, default=1)
     arg_parser.add_argument('--eval-threshold', type=float, default=None)
     arg_parser.add_argument('--channel-reduction-rate', type=int, default=1)
+    arg_parser.add_argument('--attention', action='store_true')
     args = arg_parser.parse_args()
 
     global data_types
@@ -202,6 +203,7 @@ def set_evaluation_args():
     global ts_range
     global out_channels
     global channel_reduction_rate
+    global attention
 
     data_types = args.data_types.split(',')
     img_names = args.img_names.split(',')
@@ -231,6 +233,7 @@ def set_evaluation_args():
     eval_threshold = args.eval_threshold
     out_channels = args.out_channels
     channel_reduction_rate = args.channel_reduction_rate
+    attention = args.attention
     gt_channels = []
     for i in range(out_channels):
         gt_channels.append((i + 1) * prev_next_steps + i * (prev_next_steps + 1))
