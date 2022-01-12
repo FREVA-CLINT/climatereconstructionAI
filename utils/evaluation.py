@@ -249,8 +249,8 @@ def create_evaluation_report(gt, outputs):
 
     total_maps = [timcor_maps, rmse_maps, sum_maps]
     total_names = [timcor_names, rmse_names, sum_names]
-    vmins = [-1,0,0]
-    vmaxs = [1,1,1000]
+    vmins = [0,0,0]
+    vmaxs = [1,0.1,1000]
     for i in range(len(total_maps)):
         create_evaluation_maps(total_maps[i], total_names[i], vmins[i], vmaxs[i])
 
