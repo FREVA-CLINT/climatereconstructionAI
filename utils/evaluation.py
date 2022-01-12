@@ -156,15 +156,12 @@ def convert_all_to_netcdf():
     convert_h5_to_netcdf(False, 'output_comp')
 
 
-def create_evaluation_images(name, data_set, create_video=False, save_dir='images/', vmin=0, vmax=5, axis='off', legend=False):
+def create_evaluation_images(name, data_set, create_video=False, save_dir='images/', vmin=0, vmax=5, axis='off'):
     if not os.path.exists(save_dir):
         os.makedirs('{:s}'.format(save_dir))
     for i in range(data_set.shape[0]):
         plt.imshow(np.squeeze(data_set[i, :, :]), vmin=vmin, vmax=vmax)
         plt.axis(axis)
-        if legend:
-            pass
-            #plt.legend()
         plt.title(name)
         plt.savefig('{}/{}{}.jpg'.format(save_dir, name, str(i)))
         plt.clf()
@@ -176,12 +173,33 @@ def create_evaluation_images(name, data_set, create_video=False, save_dir='image
                 writer.append_data(image)
 
 
-def create_evaluation_report(gt, outputs):
-    if cfg.ts_range is None:
-        ts_range = (0, gt.shape[0])
+def create_evaluation_maps(map_list, map_names, vmin, vmax):
+    # plot and save data
+    if len(map_list) > 1:
+        fig, axes = plt.subplots(nrows=((len(map_list) // 2) + (len(map_list) % 2)), ncols=2,  figsize=(2 * 4, 3 * ((len(map_list) // 2) + (len(map_list) % 2))))
+        fig.patch.set_facecolor('white')
+        for i in range((len(map_list) // 2) + (len(map_list) % 2)):
+            for j in range(2):
+                try:
+                    img = axes[i,j].imshow(np.squeeze(map_list[2*i + j]), vmin=vmin, vmax=vmax, cmap='jet', aspect='auto')
+                    axes[i,j].set_title(map_names[2*i + j])
+                    plt.colorbar(img, ax=axes[i,j])
+                except IndexError:
+                    if (len(map_list) // 2) + (len(map_list) % 2) == 1:
+                        img = axes[j].imshow(np.squeeze(map_list[j]), vmin=vmin, vmax=vmax, cmap='jet',
+                                                aspect='auto')
+                        axes[j].set_title(map_names[j])
+                        plt.colorbar(img, ax=axes[j])
     else:
-        ts_range = (int(cfg.ts_range[0]), int(cfg.ts_range[1]))
+        img = plt.imshow(np.squeeze(map_list[0]), vmin=vmin, vmax=vmax, cmap='jet', aspect='auto')
+        plt.title(map_names[0])
+        plt.colorbar(img)
+    plt.savefig('{}/{}.jpg'.format(cfg.evaluation_dirs[0], map_names[0]), bbox_inches='tight', pad_inches=0)
+    plt.clf()
+    plt.close('all')
 
+
+def create_evaluation_report(gt, outputs):
     # define dicts for time series
     max_timeseries = {}
     min_timeseries = {}
@@ -197,9 +215,6 @@ def create_evaluation_report(gt, outputs):
     mean_fld_cors = ['1.0']
     fld_cor_total_sum = ['1.0']
 
-    create_evaluation_images('SumMap{}'.format('GT'), metrics.sum_map(gt), save_dir=cfg.evaluation_dirs[0],
-                             vmin=0, vmax=1, axis='on', legend=True)
-
     # define output metrics
     for output_name, output in outputs.items():
         # append values
@@ -210,20 +225,39 @@ def create_evaluation_report(gt, outputs):
         mean_fld_cors.append('%.5f' % metrics.timmean_fldor(gt, output))
         fld_cor_total_sum.append('%.5f' % metrics.fldor_timsum(gt, output))
         # calculate time series
-        max_timeseries[output_name] = metrics.max_timeseries(output[ts_range[0]:ts_range[1]])
-        min_timeseries[output_name] = metrics.min_timeseries(output[ts_range[0]:ts_range[1]])
-        mean_timeseries[output_name] = metrics.mean_timeseries(output[ts_range[0]:ts_range[1]])
-        fldcor_timeseries[output_name] = metrics.fldcor_timeseries(gt[ts_range[0]:ts_range[1]], output[ts_range[0]:ts_range[1]])
-        rmse_timeseries[output_name] = metrics.rmse_timeseries(gt[ts_range[0]:ts_range[1]], output[ts_range[0]:ts_range[1]])
+        max_timeseries[output_name] = metrics.max_timeseries(output)
+        min_timeseries[output_name] = metrics.min_timeseries(output)
+        mean_timeseries[output_name] = metrics.mean_timeseries(output)
+        fldcor_timeseries[output_name] = metrics.fldcor_timeseries(gt, output)
+        rmse_timeseries[output_name] = metrics.rmse_timeseries(gt, output)
 
-        create_evaluation_images('TimCorMap{}'.format(output_name), metrics.timcor_map(gt, output), save_dir=cfg.evaluation_dirs[0], vmin=0, vmax=1, axis='on', legend=True)
-        create_evaluation_images('RMSEMap{}'.format(output_name), metrics.rmse_map(gt, output), save_dir=cfg.evaluation_dirs[0], vmin=0, vmax=1, axis='on', legend=True)
-        create_evaluation_images('SumMap{}'.format(output_name), metrics.sum_map(output), save_dir=cfg.evaluation_dirs[0], vmin=0, vmax=1000, axis='on', legend=True)
+    timcor_maps = []
+    rmse_maps = []
+    sum_maps = [metrics.sum_map(gt)]
+    timcor_names = []
+    rmse_names = []
+    sum_names = ['Sum GT']
+
+
+    for output_name, output in outputs.items():
+        timcor_maps.append(metrics.timcor_map(gt, output))
+        rmse_maps.append(metrics.rmse_map(gt, output))
+        sum_maps.append(metrics.sum_map(output))
+        timcor_names.append('TimCor {}'.format(output_name))
+        rmse_names.append('RMSe {}'.format(output_name))
+        sum_names.append('Sum {}'.format(output_name))
+
+    total_maps = [timcor_maps, rmse_maps, sum_maps]
+    total_names = [timcor_names, rmse_names, sum_names]
+    vmins = [-1,0,0]
+    vmaxs = [1,10,1000]
+    for i in range(len(total_maps)):
+        create_evaluation_maps(total_maps[i], total_names[i], vmins[i], vmaxs[i])
 
     # set GT time series
-    max_timeseries['Ground Truth'] = metrics.max_timeseries(gt[ts_range[0]:ts_range[1]])
-    min_timeseries['Ground Truth'] = metrics.min_timeseries(gt[ts_range[0]:ts_range[1]])
-    mean_timeseries['Ground Truth'] = metrics.mean_timeseries(gt[ts_range[0]:ts_range[1]])
+    max_timeseries['Ground Truth'] = metrics.max_timeseries(gt)
+    min_timeseries['Ground Truth'] = metrics.min_timeseries(gt)
+    mean_timeseries['Ground Truth'] = metrics.mean_timeseries(gt)
 
     # create dataframe for metrics
     df = pd.DataFrame()
@@ -235,7 +269,7 @@ def create_evaluation_report(gt, outputs):
     df['Field Correlation of total Field Sum'] = fld_cor_total_sum
 
     # create time series plots
-    fig, ((ax0, ax1), (ax2, ax3)) = plt.subplots(nrows=2, ncols=2)
+    fig, ((ax0, ax1), (ax2, ax3), (ax4, ax5)) = plt.subplots(nrows=3, ncols=2, figsize=(2 * 4, 9))
     ax0.set_title('Max values')
     plot_data(max_timeseries, ax0)
     ax1.set_title('Min values')
@@ -244,13 +278,10 @@ def create_evaluation_report(gt, outputs):
     plot_data(mean_timeseries, ax2)
     ax3.set_title('Field Cor vs GT')
     plot_data(fldcor_timeseries, ax3)
+    ax4.set_title('RMSEs')
+    plot_data(rmse_timeseries, ax4)
     fig.tight_layout()
     plt.savefig(cfg.evaluation_dirs[0] + 'ts.png', dpi=300)
-    plt.clf()
-
-    plt.title('RMSE over Time')
-    plot_data(rmse_timeseries, plt, plot=True)
-    plt.savefig(cfg.evaluation_dirs[0] + 'rmse.png', dpi=300)
     plt.clf()
 
     # Create PDF plot
@@ -275,11 +306,12 @@ def create_evaluation_report(gt, outputs):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_xy(0, 0)
-    pdf.set_font('arial', 'B', 12)
-    pdf.cell(60)
-    pdf.cell(75, 10, "Statistical evaluation of Ground Truth and Output Comp", 0, 2, 'C')
-    pdf.cell(90, 10, " ", 0, 2, 'C')
+    pdf.set_font('arial', 'B', 16)
+    pdf.cell(60, 40)
+    pdf.cell(75, 30, "Statistical evaluation metrics", 0, 2, 'C')
+    pdf.cell(90, 5, " ", 0, 2, 'C')
     pdf.cell(-40)
+    pdf.set_font('arial', 'B', 12)
     pdf.cell(25, 10, 'Data Set', 1, 0, 'C')
     pdf.cell(25, 10, 'RMSE', 1, 0, 'C')
     pdf.cell(25, 10, 'Time Cor', 1, 0, 'C')
@@ -297,21 +329,65 @@ def create_evaluation_report(gt, outputs):
         pdf.cell(30, 10, '%s' % (str(df['Field Correlation of total Field Sum'].iloc[i])), 1, 2, 'C')
         pdf.cell(-130)
     pdf.cell(-20)
-    pdf.cell(130, 20, " ", 0, 2, 'C')
+    pdf.cell(130, 10, " ", 0, 2, 'C')
 
-    pdf.image(cfg.evaluation_dirs[0] + 'ts.png', x=None, y=None, w=208, h=156, type='', link='')
-    pdf.image(cfg.evaluation_dirs[0] + 'pdf.png', x=None, y=None, w=208, h=156, type='', link='')
-    pdf.image(cfg.evaluation_dirs[0] + 'rmse.png', x=None, y=None, w=208, h=156, type='', link='')
+    pdf.add_page()
+
+    pdf.set_font('arial', 'B', 16)
+    pdf.cell(50)
+    pdf.cell(75, 10, "Time Series with smoothin factor {}".format(cfg.smoothing_factor), 0, 2, 'C')
+    pdf.cell(90, 5, " ", 0, 2, 'C')
+    pdf.cell(-60)
+    pdf.image(cfg.evaluation_dirs[0] + 'ts.png', x=None, y=None, w=208, h=240, type='', link='')
+
+    pdf.add_page()
+
+    pdf.set_font('arial', 'B', 16)
+    pdf.cell(50)
+    pdf.cell(75, 30, "Probabilistic Density Function", 0, 2, 'C')
+    pdf.cell(90, 5, " ", 0, 2, 'C')
+    pdf.cell(-60)
+    pdf.image(cfg.evaluation_dirs[0] + 'pdf.png', x=None, y=None, w=208, h=218, type='', link='')
+
+    pdf.add_page()
+
+    width = 100
+    if len(total_maps[0]) > 1:
+        width = 200
+    pdf.set_font('arial', 'B', 16)
+    pdf.cell(50)
+    pdf.cell(75, 30, "RMSE Maps", 0, 2, 'C')
+    pdf.cell(90, 5, " ", 0, 2, 'C')
+    pdf.cell(-55)
+    pdf.image('{}/RMSe {}.jpg'.format(cfg.evaluation_dirs[0], cfg.eval_names[0]), x=None, y=None,  w=width, h=((len(total_maps[0]) // 2) + (len(total_maps[0]) % 2)) * 75, type='', link='')
+
+    pdf.add_page()
+
+    width = 100
+    if len(total_maps[1]) > 1:
+        width = 200
+    pdf.set_font('arial', 'B', 16)
+    pdf.cell(50)
+    pdf.cell(75, 30, "TimCor Maps", 0, 2, 'C')
+    pdf.cell(90, 5, " ", 0, 2, 'C')
+    pdf.cell(-55)
+    pdf.image('{}/TimCor {}.jpg'.format(cfg.evaluation_dirs[0], cfg.eval_names[0]), x=None, y=None, w=width, h=((len(total_maps[1]) // 2) + (len(total_maps[1]) % 2)) * 75, type='', link='')
+
+    pdf.add_page()
+
+    width = 100
+    if len(total_maps[2]) > 1:
+        width = 200
+    pdf.set_font('arial', 'B', 16)
+    pdf.cell(50)
+    pdf.cell(75, 30, "Sum Maps", 0, 2, 'C')
+    pdf.cell(90, 5, " ", 0, 2, 'C')
+    pdf.cell(-55)
+    pdf.image('{}/Sum {}.jpg'.format(cfg.evaluation_dirs[0], 'GT'), x=None, y=None, w=width, h=((len(total_maps[2]) // 2) + (len(total_maps[2]) % 2)) * 75, type='', link='')
 
     report_name = ''
     for name in cfg.eval_names:
         report_name += name
-        pdf.image('{}TimCorMap{}0.jpg'.format(cfg.evaluation_dirs[0], name), x=None, y=None, w=208, h=156, type='', link='')
-    for name in cfg.eval_names:
-        pdf.image('{}RMSEMap{}0.jpg'.format(cfg.evaluation_dirs[0], name), x=None, y=None, w=208, h=156, type='', link='')
-    pdf.image('{}SumMap{}0.jpg'.format(cfg.evaluation_dirs[0], "GT"), x=None, y=None, w=208, h=156, type='', link='')
-    for name in cfg.eval_names:
-        pdf.image('{}SumMap{}0.jpg'.format(cfg.evaluation_dirs[0], name), x=None, y=None, w=208, h=156, type='', link='')
     pdf.output('reports/{}.pdf'.format(report_name), 'F')
 
 

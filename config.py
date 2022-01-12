@@ -51,6 +51,7 @@ channel_reduction_rate = None
 save_snapshot_image = None
 loss_criterion = None
 attention = None
+smoothing_factor = None
 
 
 def set_train_args():
@@ -175,6 +176,7 @@ def set_evaluation_args():
     arg_parser.add_argument('--ts-range', type=str, default=None)
     arg_parser.add_argument('--out-channels', type=int, default=1)
     arg_parser.add_argument('--eval-threshold', type=float, default=None)
+    arg_parser.add_argument('--smoothing-factor', type=int, default=1)
     arg_parser.add_argument('--channel-reduction-rate', type=int, default=1)
     arg_parser.add_argument('--attention', action='store_true')
     args = arg_parser.parse_args()
@@ -204,6 +206,7 @@ def set_evaluation_args():
     global out_channels
     global channel_reduction_rate
     global attention
+    global smoothing_factor
 
     data_types = args.data_types.split(',')
     img_names = args.img_names.split(',')
@@ -234,6 +237,7 @@ def set_evaluation_args():
     out_channels = args.out_channels
     channel_reduction_rate = args.channel_reduction_rate
     attention = args.attention
+    smoothing_factor = args.smoothing_factor
     gt_channels = []
     for i in range(out_channels):
         gt_channels.append((i + 1) * prev_next_steps + i * (prev_next_steps + 1))
