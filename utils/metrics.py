@@ -4,6 +4,24 @@ from numpy import ma
 sys.path.append('./')
 import config as cfg
 
+
+def smooth(x, window_len, window='flat'):
+    if x.ndim != 1:
+        raise ValueError("smooth only accepts 1 dimension arrays.")
+    if x.size < window_len:
+        raise ValueError("Input vector needs to be bigger than window size.")
+    if window_len < 3:
+        return x
+    if not window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
+        raise ValueError("Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'")
+    s = np.r_[2 * x[0] - x[window_len - 1::-1], x, 2 * x[-1] - x[-1:-window_len:-1]]
+    if window == 'flat':  # moving average
+        w = np.ones(window_len, 'd')
+    else:
+        w = eval('np.' + window + '(window_len)')
+    y = np.convolve(w / w.sum(), s, mode='same')
+    return y[window_len:-window_len + 1]
+
 def rmse(gt, output):
     return np.sqrt(np.mean((np.mean(gt, axis=(1, 2)) - np.mean(output, axis=(1, 2))) ** 2))
 
@@ -13,15 +31,15 @@ def timcor(gt, output):
 
 
 def max_timeseries(input):
-    return np.max(input, axis=(1, 2))
+    return smooth(np.max(input, axis=(1, 2)), cfg.smoothing_factor)
 
 
 def min_timeseries(input):
-    return np.min(input, axis=(1, 2))
+    return smooth(np.min(input, axis=(1, 2)), cfg.smoothing_factor)
 
 
 def mean_timeseries(input):
-    return np.mean(input, axis=(1, 2))
+    return smooth(np.mean(input, axis=(1, 2)), cfg.smoothing_factor)
 
 
 def total_sum(input):
@@ -54,7 +72,7 @@ def timcor_map(gt, output):
     for i in range(gt.shape[1]):
         for j in range(gt.shape[2]):
             map[0, i, j] = np.corrcoef(gt[:,i,j], output[:,i,j])[0][1]
-    return map
+    return ma.masked_array(map, ma.getmask(gt[0,:,:]))
 
 
 def sum_map(image):
@@ -66,4 +84,4 @@ def rmse_map(gt, output):
 
 
 def rmse_timeseries(gt, output):
-    return np.mean(np.sqrt((gt - output) ** 2), axis=(1, 2))
+    return smooth(np.mean(np.sqrt((gt - output) ** 2), axis=(1, 2)), cfg.smoothing_factor)
