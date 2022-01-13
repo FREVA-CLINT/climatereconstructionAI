@@ -11,7 +11,7 @@ import config as cfg
 class PConvLSTM(nn.Module):
     def __init__(self, radar_img_size=512, radar_enc_dec_layers=4, radar_pool_layers=4, radar_in_channels=1,
                  radar_out_channels=1,
-                 rea_img_size=256, rea_enc_layers=256, rea_pool_layers=256, rea_in_channels=0,
+                 rea_img_size=None, rea_enc_layers=None, rea_pool_layers=None, rea_in_channels=None,
                  lstm=True):
         super().__init__()
 
