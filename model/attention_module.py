@@ -14,11 +14,10 @@ class AttentionEncoderBlock(nn.Module):
         self.partial_conv_enc = EncoderBlock(in_channels=in_channels, out_channels=out_channels, image_size=image_size,
                                              kernel=kernel, stride=stride, activation=activation, lstm=lstm)
         self.channel_attention_block = nn.Sequential(
-            nn.Conv2d(in_channels=out_channels, out_channels=out_channels // cfg.channel_reduction_rate,
-                      kernel_size=(1, 1)),
+            nn.Flatten(),
+            nn.Linear(in_features=out_channels, out_features=out_channels // cfg.channel_reduction_rate),
             nn.ReLU(),
-            nn.Conv2d(in_channels=out_channels // cfg.channel_reduction_rate, out_channels=out_channels,
-                      kernel_size=(1, 1)),
+            nn.Linear(in_features=out_channels // cfg.channel_reduction_rate, out_features=out_channels),
         )
         self.spatial_attention_block = nn.Sequential(
             nn.Conv2d(in_channels=2, out_channels=1, kernel_size=(7, 7), padding=(3, 3)),
@@ -43,8 +42,7 @@ class AttentionEncoderBlock(nn.Module):
     def forward_channel_attention(self, input, input_mask):
         attention_max = F.max_pool2d(input[:, 0, :, :, :], input.shape[3])
         attention_avg = F.avg_pool2d(input[:, 0, :, :, :], input.shape[3])
-
         total_attention = torch.sigmoid(
             self.channel_attention_block(attention_max) + self.channel_attention_block(attention_avg)
         )
-        return input * torch.unsqueeze(total_attention, dim=1)
+        return input * torch.unsqueeze(torch.unsqueeze(torch.unsqueeze(total_attention, dim=2), dim=2), dim=1)
