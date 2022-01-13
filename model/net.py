@@ -19,14 +19,14 @@ class PConvLSTM(nn.Module):
         self.radar_enc_dec_layers = radar_enc_dec_layers
         self.radar_pool_layers = radar_pool_layers
         self.net_depth = radar_enc_dec_layers + radar_pool_layers
-        self.rea_enc_layers = rea_enc_layers
-        self.rea_pool_layers = rea_pool_layers
-        self.attention_depth = rea_enc_layers + rea_pool_layers
         self.lstm = lstm
 
         attention_enc_channels = [0] * self.net_depth
         attention_dec_channels = [0] * self.net_depth
         if rea_img_size:
+            self.rea_enc_layers = rea_enc_layers
+            self.rea_pool_layers = rea_pool_layers
+            self.attention_depth = rea_enc_layers + rea_pool_layers
             if not cfg.attention:
                 for i in range(self.net_depth):
                     if radar_img_size // (2 ** i) == rea_img_size:
