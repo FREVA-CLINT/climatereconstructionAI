@@ -9,6 +9,15 @@ from model.conv_lstm_module import ConvLSTMBlock
 from model.partial_conv_module import PConvBlock
 
 
+def lstm_to_batch(input):
+    return torch.reshape(input, (-1, input.shape[2], input.shape[3], input.shape[4]))
+
+
+def batch_to_lstm(input):
+    return torch.reshape(input,
+                         (cfg.batch_size, 2 * cfg.lstm_steps + 1, input.shape[1], input.shape[2], input.shape[3]))
+
+
 class EncoderBlock(nn.Module):
     def __init__(self, in_channels, out_channels, image_size, kernel, stride, activation, dilation=(1, 1), groups=1,
                  lstm=False):
@@ -22,15 +31,13 @@ class EncoderBlock(nn.Module):
                                            groups)
 
     def forward(self, input, mask, lstm_state=None):
-        batch_size = input.shape[0]
+        input = lstm_to_batch(input)
+        mask = lstm_to_batch(mask)
 
-        input = torch.reshape(input, (-1, input.shape[2], input.shape[3], input.shape[4]))
-        mask = torch.reshape(mask, (-1, mask.shape[2], mask.shape[3], mask.shape[4]))
         output, mask = self.partial_conv(input, mask)
 
-        output = torch.reshape(output,
-                               (batch_size, 2 * cfg.lstm_steps + 1, output.shape[1], output.shape[2], output.shape[3]))
-        mask = torch.reshape(mask, (batch_size, 2 * cfg.lstm_steps + 1, mask.shape[1], mask.shape[2], mask.shape[3]))
+        output = batch_to_lstm(output)
+        mask = batch_to_lstm(mask)
 
         if hasattr(self, 'lstm_conv'):
             output, lstm_state = self.lstm_conv(output, lstm_state)
@@ -57,23 +64,22 @@ class DecoderBlock(nn.Module):
         if hasattr(self, 'lstm_conv'):
             input, lstm_state = self.lstm_conv(input, lstm_state)
 
-        input = torch.reshape(input, (-1, input.shape[2], input.shape[3], input.shape[4]))
-        mask = torch.reshape(mask, (-1, mask.shape[2], mask.shape[3], mask.shape[4]))
+        input = lstm_to_batch(input)
+        mask = lstm_to_batch(mask)
 
         # interpolate input and mask
         h = F.interpolate(input, scale_factor=2, mode='nearest')
         h_mask = F.interpolate(mask, scale_factor=2, mode='nearest')
 
         # skip layers: pass results from encoding layers to decoding layers
-        skip_input = torch.reshape(skip_input, (-1, skip_input.shape[2], skip_input.shape[3], skip_input.shape[4]))
-        skip_mask = torch.reshape(skip_mask, (-1, skip_mask.shape[2], skip_mask.shape[3], skip_mask.shape[4]))
+        skip_input = lstm_to_batch(skip_input)
+        skip_mask = lstm_to_batch(skip_mask)
         h = torch.cat([h, skip_input], dim=1)
         h_mask = torch.cat([h_mask, skip_mask], dim=1)
 
         output, mask = self.partial_conv(h, h_mask)
 
-        output = torch.reshape(output,
-                               (batch_size, 2 * cfg.lstm_steps + 1, output.shape[1], output.shape[2], output.shape[3]))
-        mask = torch.reshape(mask, (batch_size, 2 * cfg.lstm_steps + 1, mask.shape[1], mask.shape[2], mask.shape[3]))
+        output = batch_to_lstm(output)
+        mask = batch_to_lstm(mask)
 
         return output, mask, lstm_state
