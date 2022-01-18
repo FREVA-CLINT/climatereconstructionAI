@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import sys
 
 sys.path.append('./')
-from model.encoder_decoder import EncoderBlock
+from model.encoder_decoder import EncoderBlock, lstm_to_batch, batch_to_lstm
 import config as cfg
 
 
@@ -27,22 +27,34 @@ class AttentionEncoderBlock(nn.Module):
     def forward(self, h_rea, h_rea_mask, rea_lstm_state, h, h_mask):
         h_rea, h_rea_mask, rea_lstm_state = self.partial_conv_enc(h_rea, h_rea_mask, rea_lstm_state)
 
+        # convert lstm steps to batch dimension
+        h_rea = lstm_to_batch(h_rea)
+        h_rea_mask = lstm_to_batch(h_rea_mask)
+        h = lstm_to_batch(h)
+        h_mask = lstm_to_batch(h_mask)
+
         # channel attention
         channel_attention = self.forward_channel_attention(h_rea, h_rea_mask)
         # spatial attention
-        spatial_attention = torch.unsqueeze(self.spatial_attention_block(
-            torch.cat([torch.max(h[:, 0, :, :, :], keepdim=True, dim=1)[0],
-                       torch.mean(h[:, 0, :, :, :], keepdim=True, dim=1)], dim=1)
-        ), dim=1)
+        spatial_attention = self.spatial_attention_block(
+            torch.cat([torch.max(h, keepdim=True, dim=1)[0],
+                       torch.mean(h, keepdim=True, dim=1)], dim=1)
+        )
         attention = channel_attention * spatial_attention
         attention_mask = torch.ones_like(attention)
+
+        # convert batches to lstm dimension
+        h_rea = batch_to_lstm(h_rea)
+        h_rea_mask = batch_to_lstm(h_rea_mask)
+        attention = batch_to_lstm(attention)
+        attention_mask = batch_to_lstm(attention_mask)
 
         return h_rea, h_rea_mask, rea_lstm_state, attention, attention_mask
 
     def forward_channel_attention(self, input, input_mask):
-        attention_max = F.max_pool2d(input[:, 0, :, :, :], input.shape[3])
-        attention_avg = F.avg_pool2d(input[:, 0, :, :, :], input.shape[3])
+        attention_max = F.max_pool2d(input, input.shape[2])
+        attention_avg = F.avg_pool2d(input, input.shape[2])
         total_attention = torch.sigmoid(
             self.channel_attention_block(attention_max) + self.channel_attention_block(attention_avg)
         )
-        return input * torch.unsqueeze(torch.unsqueeze(torch.unsqueeze(total_attention, dim=2), dim=2), dim=1)
+        return input * torch.unsqueeze(torch.unsqueeze(total_attention, dim=2), dim=2)

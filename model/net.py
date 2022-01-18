@@ -11,7 +11,7 @@ import config as cfg
 class PConvLSTM(nn.Module):
     def __init__(self, radar_img_size=512, radar_enc_dec_layers=4, radar_pool_layers=4, radar_in_channels=1,
                  radar_out_channels=1,
-                 rea_img_size=None, rea_enc_layers=None, rea_pool_layers=None, rea_in_channels=None,
+                 rea_img_size=None, rea_enc_layers=None, rea_pool_layers=None, rea_in_channels=0,
                  lstm=True):
         super().__init__()
 
@@ -100,7 +100,9 @@ class PConvLSTM(nn.Module):
                 in_channels=radar_img_size + radar_img_size + attention_dec_channels[self.net_depth - i - 1],
                 out_channels=radar_img_size,
                 image_size=radar_img_size // (2 ** (self.net_depth - i - 1)),
-                kernel=(3, 3), stride=(1, 1), activation=nn.LeakyReLU(), lstm=lstm))
+                kernel=(3, 3), stride=(1, 1), activation=nn.LeakyReLU(), lstm=lstm,
+                init_in_channels=attention_dec_channels[self.net_depth - i - 1] + 1,
+                init_out_channels=attention_dec_channels[self.net_depth - i - 1] + 1))
 
         # define decoding layers
         for i in range(1, self.radar_enc_dec_layers):
@@ -110,7 +112,8 @@ class PConvLSTM(nn.Module):
                                 + attention_dec_channels[self.net_depth - self.radar_pool_layers - i],
                     out_channels=radar_img_size // (2 ** i),
                     image_size=radar_img_size // (2 ** (self.net_depth - self.radar_pool_layers - i)),
-                    kernel=(3, 3), stride=(1, 1), activation=nn.LeakyReLU(), lstm=lstm))
+                    kernel=(3, 3), stride=(1, 1), activation=nn.LeakyReLU(), lstm=lstm,
+                    init_in_channels=attention_dec_channels[self.net_depth - self.radar_pool_layers - i] + 1))
         decoding_layers.append(
             DecoderBlock(
                 in_channels=radar_img_size // (2 ** (self.radar_enc_dec_layers - 1)) + radar_in_channels
@@ -164,7 +167,6 @@ class PConvLSTM(nn.Module):
             for i in range(self.attention_depth):
                 hs[i + (self.net_depth - self.attention_depth) + 1] = torch.cat([hs[i + (self.net_depth - self.attention_depth) + 1], attentions[i]], dim=2)
                 hs_mask[i + (self.net_depth - self.attention_depth) + 1] = torch.cat([hs_mask[i + (self.net_depth - self.attention_depth) + 1], attentions_mask[i]], dim=2)
-
 
         # reverse all hidden states
         for i in range(self.net_depth):
