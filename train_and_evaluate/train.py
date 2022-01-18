@@ -12,7 +12,8 @@ from utils.featurizer import VGG16FeatureExtractor
 from utils.io import load_ckpt, save_ckpt
 from utils.netcdfloader import NetCDFLoader, InfiniteSampler
 from utils.evaluation import create_snapshot_image
-from model.loss import InpaintingLoss, HoleLoss
+from loss.inpainting_loss import InpaintingLoss
+from loss.hole_loss import HoleLoss
 import config as cfg
 
 cfg.set_train_args()
