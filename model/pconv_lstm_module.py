@@ -86,4 +86,9 @@ class PConvBlock(nn.Module):
         new_mask = torch.ones_like(output)
         new_mask = new_mask.masked_fill_(no_update_holes, 0.0)
 
+        if hasattr(self, 'bn'):
+            output = self.bn(output)
+        if hasattr(self, 'activation'):
+            output = self.activation(output)
+
         return output, new_mask
