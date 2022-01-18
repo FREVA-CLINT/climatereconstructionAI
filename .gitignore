@@ -14,6 +14,8 @@ logs/*
 snapshots/*
 masks/*
 evaluation/*
+reports/*
+images/*
 
 
 # Byte-compiled / optimized / DLL files
