@@ -27,6 +27,8 @@ class AttentionEncoderBlock(nn.Module):
     def forward(self, h_rea, h_rea_mask, rea_lstm_state, h, h_mask):
         h_rea, h_rea_mask, rea_lstm_state = self.partial_conv_enc(h_rea, h_rea_mask, rea_lstm_state)
 
+        batch_size = h_rea.shape[0]
+
         # convert lstm steps to batch dimension
         h_rea = lstm_to_batch(h_rea)
         h_rea_mask = lstm_to_batch(h_rea_mask)
@@ -44,10 +46,10 @@ class AttentionEncoderBlock(nn.Module):
         attention_mask = torch.ones_like(attention)
 
         # convert batches to lstm dimension
-        h_rea = batch_to_lstm(h_rea)
-        h_rea_mask = batch_to_lstm(h_rea_mask)
-        attention = batch_to_lstm(attention)
-        attention_mask = batch_to_lstm(attention_mask)
+        h_rea = batch_to_lstm(h_rea, batch_size)
+        h_rea_mask = batch_to_lstm(h_rea_mask, batch_size)
+        attention = batch_to_lstm(attention, batch_size)
+        attention_mask = batch_to_lstm(attention_mask, batch_size)
 
         return h_rea, h_rea_mask, rea_lstm_state, attention, attention_mask
 
