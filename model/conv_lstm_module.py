@@ -4,6 +4,7 @@ import sys
 
 sys.path.append('./')
 import config as cfg
+from utils.weights import weights_init
 
 
 class ConvLSTMBlock(nn.Module):
@@ -15,6 +16,9 @@ class ConvLSTMBlock(nn.Module):
 
         self.lstm_conv = nn.Conv2d(in_channels + out_channels, 4 * out_channels, kernel, stride, padding, dilation,
                                    groups, True)
+
+        if cfg.weights:
+            self.lstm_conv.apply(weights_init(cfg.weights))
 
         self.Wci = nn.Parameter(torch.zeros(1, out_channels, image_size, image_size)).to(cfg.device)
         self.Wcf = nn.Parameter(torch.zeros(1, out_channels, image_size, image_size)).to(cfg.device)
