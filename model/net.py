@@ -97,31 +97,27 @@ class PConvLSTM(nn.Module):
         decoding_layers = []
         for i in range(self.radar_pool_layers):
             decoding_layers.append(DecoderBlock(
-                in_channels=radar_img_size + radar_img_size + attention_dec_channels[self.net_depth - i - 1],
+                in_channels=radar_img_size,
+                in_skip_channels=radar_img_size + attention_dec_channels[self.net_depth - i - 1],
                 out_channels=radar_img_size,
                 image_size=radar_img_size // (2 ** (self.net_depth - i - 1)),
-                kernel=(3, 3), stride=(1, 1), activation=nn.LeakyReLU(), lstm=lstm,
-                init_in_channels=attention_dec_channels[self.net_depth - i - 1] + 1,
-                init_out_channels=attention_dec_channels[self.net_depth - i - 1] + 1))
-
+                kernel=(3, 3), stride=(1, 1), activation=nn.LeakyReLU(), lstm=lstm))
         # define decoding layers
         for i in range(1, self.radar_enc_dec_layers):
             decoding_layers.append(
                 DecoderBlock(
-                    in_channels=radar_img_size // (2 ** (i - 1)) + radar_img_size // (2 ** i)
-                                + attention_dec_channels[self.net_depth - self.radar_pool_layers - i],
+                    in_channels=radar_img_size // (2 ** (i - 1)),
+                    in_skip_channels=radar_img_size // (2 ** i) + attention_dec_channels[self.net_depth - i],
                     out_channels=radar_img_size // (2 ** i),
                     image_size=radar_img_size // (2 ** (self.net_depth - self.radar_pool_layers - i)),
-                    kernel=(3, 3), stride=(1, 1), activation=nn.LeakyReLU(), lstm=lstm,
-                    init_in_channels=attention_dec_channels[self.net_depth - self.radar_pool_layers - i] + 1))
+                    kernel=(3, 3), stride=(1, 1), activation=nn.LeakyReLU(), lstm=lstm))
         decoding_layers.append(
             DecoderBlock(
-                in_channels=radar_img_size // (2 ** (self.radar_enc_dec_layers - 1)) + radar_in_channels
-                            + attention_dec_channels[0],
+                in_channels=radar_img_size // (2 ** (self.radar_enc_dec_layers - 1)),
+                in_skip_channels=radar_in_channels + attention_dec_channels[0],
                 out_channels=radar_out_channels,
                 image_size=radar_img_size,
-                kernel=(3, 3), stride=(1, 1), activation=None, lstm=lstm, bn=False, bias=True,
-                init_in_channels=radar_in_channels, init_out_channels=radar_out_channels))
+                kernel=(3, 3), stride=(1, 1), activation=None, lstm=lstm, bn=False, bias=True))
         self.decoder = nn.ModuleList(decoding_layers)
 
     def forward(self, input, input_mask, rea_input, rea_input_mask):
@@ -136,6 +132,7 @@ class PConvLSTM(nn.Module):
         h_rea_mask = rea_input_mask
         attentions = []
         attentions_mask = []
+        attentions_lstm_states = []
 
         # forward pass encoding layers
         for i in range(self.net_depth):
@@ -162,11 +159,19 @@ class PConvLSTM(nn.Module):
                                                      h_mask)
                 attentions.append(attention)
                 attentions_mask.append(attention_mask)
+                attentions_lstm_states.append(rea_lstm_state)
         # concat attentions
         if attentions:
             for i in range(self.attention_depth):
                 hs[i + (self.net_depth - self.attention_depth) + 1] = torch.cat([hs[i + (self.net_depth - self.attention_depth) + 1], attentions[i]], dim=2)
                 hs_mask[i + (self.net_depth - self.attention_depth) + 1] = torch.cat([hs_mask[i + (self.net_depth - self.attention_depth) + 1], attentions_mask[i]], dim=2)
+
+                if self.lstm:
+                    lstm_state_h, lstm_state_c = lstm_states[i + (self.net_depth - self.attention_depth)]
+                    attention_lstm_state_h, attention_lstm_state_c = attentions_lstm_states[i]
+                    lstm_state_h = torch.cat([lstm_state_h, attention_lstm_state_h], dim=1)
+                    lstm_state_c = torch.cat([lstm_state_c, attention_lstm_state_c], dim=1)
+                    lstm_states[i + (self.net_depth - self.attention_depth)] = (lstm_state_h, lstm_state_c)
 
         # reverse all hidden states
         for i in range(self.net_depth):

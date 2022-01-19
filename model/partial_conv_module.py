@@ -1,5 +1,10 @@
 import torch
 import torch.nn as nn
+import sys
+
+sys.path.append('./')
+from utils.weights import weights_init
+import config as cfg
 
 
 class PConvBlock(nn.Module):
@@ -9,6 +14,8 @@ class PConvBlock(nn.Module):
         self.input_conv = nn.Conv2d(in_channels, out_channels, kernel, stride, padding, dilation, groups, bias)
         self.mask_conv = nn.Conv2d(in_channels, out_channels, kernel, stride, padding, dilation, groups, False)
 
+        if cfg.weights:
+            self.input_conv.apply(weights_init(cfg.weights))
         torch.nn.init.constant_(self.mask_conv.weight, 1.0)
 
         if activation:

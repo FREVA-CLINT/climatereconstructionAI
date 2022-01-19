@@ -13,9 +13,9 @@ def lstm_to_batch(input):
     return torch.reshape(input, (-1, input.shape[2], input.shape[3], input.shape[4]))
 
 
-def batch_to_lstm(input):
+def batch_to_lstm(input, batch_size):
     return torch.reshape(input,
-                         (cfg.batch_size, 2 * cfg.lstm_steps + 1, input.shape[1], input.shape[2], input.shape[3]))
+                         (batch_size, 2 * cfg.lstm_steps + 1, input.shape[1], input.shape[2], input.shape[3]))
 
 
 class EncoderBlock(nn.Module):
@@ -31,14 +31,18 @@ class EncoderBlock(nn.Module):
                                            groups)
 
     def forward(self, input, mask, lstm_state=None):
+        batch_size = input.shape[0]
+
         input = lstm_to_batch(input)
         mask = lstm_to_batch(mask)
 
+        # apply partial convolution
         output, mask = self.partial_conv(input, mask)
 
-        output = batch_to_lstm(output)
-        mask = batch_to_lstm(mask)
+        output = batch_to_lstm(output, batch_size)
+        mask = batch_to_lstm(mask, batch_size)
 
+        # apply LSTM convolution
         if hasattr(self, 'lstm_conv'):
             output, lstm_state = self.lstm_conv(output, lstm_state)
 
@@ -46,40 +50,42 @@ class EncoderBlock(nn.Module):
 
 
 class DecoderBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, image_size, kernel, stride, activation, dilation=(1, 1), groups=1,
-                 lstm=False, bias=False, bn=True, init_in_channels=1, init_out_channels=1):
+    def __init__(self, in_channels, in_skip_channels, out_channels, image_size, kernel, stride, activation, dilation=(1, 1), groups=1,
+                 lstm=False, bias=False, bn=True):
         super().__init__()
         padding = kernel[0] // 2, kernel[1] // 2
-        self.partial_conv = PConvBlock(in_channels, out_channels, kernel, stride, padding, dilation, groups, bias,
+        self.partial_conv = PConvBlock(in_channels + in_skip_channels,
+                                       out_channels, kernel, stride, padding, dilation, groups, bias,
                                        activation, bn)
-
         if lstm:
-            self.lstm_conv = ConvLSTMBlock(in_channels - (out_channels + init_in_channels - init_out_channels),
-                                           in_channels - (out_channels + init_in_channels - init_out_channels),
+            self.lstm_conv = ConvLSTMBlock(in_channels,
+                                           in_channels,
                                            image_size // 2, kernel, (1, 1), padding, (1, 1), groups)
 
     def forward(self, input, skip_input, mask, skip_mask, lstm_state=None):
-        batch_size = input.shape[0]
-
+        # apply LSTM convolution
         if hasattr(self, 'lstm_conv'):
             input, lstm_state = self.lstm_conv(input, lstm_state)
 
+        batch_size = input.shape[0]
+
         input = lstm_to_batch(input)
         mask = lstm_to_batch(mask)
+        skip_input = lstm_to_batch(skip_input)
+        skip_mask = lstm_to_batch(skip_mask)
 
         # interpolate input and mask
         h = F.interpolate(input, scale_factor=2, mode='nearest')
         h_mask = F.interpolate(mask, scale_factor=2, mode='nearest')
 
         # skip layers: pass results from encoding layers to decoding layers
-        skip_input = lstm_to_batch(skip_input)
-        skip_mask = lstm_to_batch(skip_mask)
         h = torch.cat([h, skip_input], dim=1)
         h_mask = torch.cat([h_mask, skip_mask], dim=1)
 
+        # apply partial convolution
         output, mask = self.partial_conv(h, h_mask)
 
-        output = batch_to_lstm(output)
-        mask = batch_to_lstm(mask)
+        output = batch_to_lstm(output, batch_size)
+        mask = batch_to_lstm(mask, batch_size)
 
         return output, mask, lstm_state
