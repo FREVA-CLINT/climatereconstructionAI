@@ -77,9 +77,10 @@ class DecoderBlock(nn.Module):
         h = F.interpolate(input, scale_factor=2, mode='nearest')
         h_mask = F.interpolate(mask, scale_factor=2, mode='nearest')
 
-        # skip layers: pass results from encoding layers to decoding layers
-        h = torch.cat([h, skip_input], dim=1)
-        h_mask = torch.cat([h_mask, skip_mask], dim=1)
+        if cfg.skip_layers:
+            # skip layers: pass results from encoding layers to decoding layers
+            h = torch.cat([h, skip_input], dim=1)
+            h_mask = torch.cat([h_mask, skip_mask], dim=1)
 
         # apply partial convolution
         output, mask = self.partial_conv(h, h_mask)

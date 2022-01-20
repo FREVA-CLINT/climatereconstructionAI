@@ -24,7 +24,8 @@ class PConvLSTM(nn.Module):
         enc_conv_configs = init_enc_conv_configs(radar_img_size, radar_enc_dec_layers,
                                                  radar_pool_layers, radar_in_channels)
         dec_conv_configs = init_dec_conv_configs(radar_img_size, radar_enc_dec_layers,
-                                                 radar_pool_layers, radar_in_channels, radar_out_channels, 1)
+                                                 radar_pool_layers, radar_in_channels,
+                                                 radar_out_channels)
 
         if cfg.attention:
             self.attention_depth = rea_enc_layers + rea_pool_layers
@@ -45,7 +46,7 @@ class PConvLSTM(nn.Module):
                     dec_conv_configs[i]['out_channels'] += \
                         attention_enc_conv_configs[self.attention_depth - i - 1]['in_channels']
                 dec_conv_configs[i]['skip_channels'] += \
-                    attention_enc_conv_configs[self.attention_depth - i - 1]['in_channels']
+                    cfg.skip_layers * attention_enc_conv_configs[self.attention_depth - i - 1]['in_channels']
                 dec_conv_configs[i]['in_channels'] += attention_enc_conv_configs[self.attention_depth - i - 1][
                     'out_channels']
 
