@@ -14,4 +14,5 @@ python train_and_evaluate/train.py \
  --save-model-interval 10000 \
  --log-interval 1000 \
  --save-snapshot-image \
- --attention
+ --attention \
+ --disable-skip-layers
