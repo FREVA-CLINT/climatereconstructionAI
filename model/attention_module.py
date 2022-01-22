@@ -15,11 +15,11 @@ class AttentionEncoderBlock(nn.Module):
                                              activation=activation, lstm=lstm)
         self.channel_attention_block = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(in_features=conv_config['out_channels'],
-                      out_features=conv_config['out_channels'] // cfg.channel_reduction_rate),
+            nn.Linear(in_features=conv_config['in_channels'],
+                      out_features=conv_config['in_channels'] // cfg.channel_reduction_rate),
             nn.ReLU(),
-            nn.Linear(in_features=conv_config['out_channels'] // cfg.channel_reduction_rate,
-                      out_features=conv_config['out_channels']),
+            nn.Linear(in_features=conv_config['in_channels'] // cfg.channel_reduction_rate,
+                      out_features=conv_config['in_channels']),
         )
         self.spatial_attention_block = nn.Sequential(
             nn.Conv2d(in_channels=2, out_channels=1, kernel_size=(7, 7), padding=(3, 3)),
@@ -27,7 +27,6 @@ class AttentionEncoderBlock(nn.Module):
         )
 
     def forward(self, h_rea, h_rea_mask, rea_lstm_state, h, h_mask):
-        h_rea, h_rea_mask, rea_lstm_state = self.partial_conv_enc(h_rea, h_rea_mask, rea_lstm_state)
         batch_size = h_rea.shape[0]
 
         # convert lstm steps to batch dimension
@@ -51,6 +50,9 @@ class AttentionEncoderBlock(nn.Module):
         h_rea_mask = batch_to_lstm(h_rea_mask, batch_size)
         attention = batch_to_lstm(attention, batch_size)
         attention_mask = batch_to_lstm(attention_mask, batch_size)
+
+        h_rea, h_rea_mask, rea_lstm_state = self.partial_conv_enc(h_rea, h_rea_mask, rea_lstm_state)
+
         return h_rea, h_rea_mask, rea_lstm_state, attention, attention_mask
 
     def forward_channel_attention(self, input, input_mask):
