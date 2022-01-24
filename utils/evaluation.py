@@ -162,7 +162,7 @@ def create_evaluation_images(name, data_set, create_video=False, save_dir='image
     for i in range(data_set.shape[0]):
         plt.imshow(np.squeeze(data_set[i, :, :]), vmin=vmin, vmax=vmax)
         plt.axis(axis)
-        plt.savefig('{}/{}{}.jpg'.format(save_dir, name, str(i)))
+        plt.savefig('{}/{}{}.jpg'.format(save_dir, name, str(i)), bbox_inches='tight', pad_inches=0)
         plt.clf()
 
     if create_video:
