@@ -88,8 +88,7 @@ if cfg.create_images:
         image = image[:, 0, :, :]
     image = ma.masked_array(image, 1-mask)[:, :, :]
 
-    data_sets = {'GT': gt}
-    data_sets = {'Input': image}
+    data_sets = {'GT': gt, 'Input': image}
 
     for i in range(len(cfg.evaluation_dirs)):
         output = h5py.File('{}{}'.format(cfg.evaluation_dirs[i], 'output_comp'), 'r').get(cfg.data_types[0])[r[0]:r[1], :, :]
