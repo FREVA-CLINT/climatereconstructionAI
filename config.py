@@ -190,7 +190,7 @@ def set_evaluation_args():
     arg_parser.add_argument('--eval-threshold', type=float, default=None)
     arg_parser.add_argument('--smoothing-factor', type=int, default=1)
     arg_parser.add_argument('--channel-reduction-rate', type=int, default=1)
-    arg_parser.add_argument('--fps', type=float, default=0.1)
+    arg_parser.add_argument('--fps', type=float, default=5)
     arg_parser.add_argument('--attention', action='store_true')
     arg_parser.add_argument('--disable-skip-layers', action='store_true')
     args = arg_parser.parse_args()
