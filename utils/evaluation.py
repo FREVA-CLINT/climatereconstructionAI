@@ -118,9 +118,9 @@ def infill(model, dataset, partitions):
         output_part = output_part[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
 
         # only select first channel
-        image_part = torch.unsqueeze(image_part[:, 0, :, :], dim=1)
-        gt_part = torch.unsqueeze(gt_part[:, 0, :, :], dim=1)
-        mask_part = torch.unsqueeze(mask_part[:, 0, :, :], dim=1)
+        image_part = torch.unsqueeze(image_part[:, cfg.prev_next_steps, :, :], dim=1)
+        gt_part = torch.unsqueeze(gt_part[:, cfg.prev_next_steps, :, :], dim=1)
+        mask_part = torch.unsqueeze(mask_part[:, cfg.prev_next_steps, :, :], dim=1)
 
         image.append(image_part)
         mask.append(mask_part)
