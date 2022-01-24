@@ -42,12 +42,12 @@ class PConvLSTM(nn.Module):
                     kernel=kernel, stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
 
                 # adjust skip channels for decoder
-                #if i != self.attention_depth - 1:
-                #    dec_conv_configs[i]['out_channels'] += \
-                #        attention_enc_conv_configs[self.attention_depth - i - 1]['in_channels']
+                if i != self.attention_depth - 1:
+                    dec_conv_configs[i]['out_channels'] += \
+                        attention_enc_conv_configs[self.attention_depth - i - 1]['in_channels']
                 dec_conv_configs[i]['skip_channels'] += attention_enc_conv_configs[self.attention_depth - i - 1]['in_channels']
-                #dec_conv_configs[i]['in_channels'] += attention_enc_conv_configs[self.attention_depth - i - 1][
-                #    'out_channels']
+                dec_conv_configs[i]['in_channels'] += attention_enc_conv_configs[self.attention_depth - i - 1][
+                    'out_channels']
 
             # adjust in channels for first decoding layer
 
@@ -108,6 +108,11 @@ class PConvLSTM(nn.Module):
                 if not cfg.attention:
                     hs[i] = torch.cat([hs[i], h_rea], dim=2)
                     hs_mask[i] = torch.cat([hs_mask[i], h_rea_mask], dim=2)
+
+            h, h_mask, lstm_state = self.encoder[i](hs[i],
+                                                    hs_mask[i],
+                                                    None)
+
             # execute attention module if configured
             if cfg.attention and i >= (self.net_depth - self.attention_depth):
                 rea_index = i - (self.net_depth - self.attention_depth)
@@ -120,9 +125,7 @@ class PConvLSTM(nn.Module):
                 attentions.append(attention)
                 attentions_mask.append(attention_mask)
                 attentions_lstm_states.append(rea_lstm_state)
-            h, h_mask, lstm_state = self.encoder[i](hs[i],
-                                                    hs_mask[i],
-                                                    None)
+
             # save hidden states for skip connections
             hs.append(h)
             lstm_states.append(lstm_state)
@@ -130,11 +133,11 @@ class PConvLSTM(nn.Module):
 
         # concat attentions
         if attentions:
-            #hs[self.net_depth - self.attention_depth] = torch.cat([hs[self.net_depth - self.attention_depth], rea_input], dim=2)
-            #hs_mask[self.net_depth - self.attention_depth] = torch.cat([hs_mask[self.net_depth - self.attention_depth], rea_input_mask], dim=2)
+            hs[self.net_depth - self.attention_depth] = torch.cat([hs[self.net_depth - self.attention_depth], rea_input], dim=2)
+            hs_mask[self.net_depth - self.attention_depth] = torch.cat([hs_mask[self.net_depth - self.attention_depth], rea_input_mask], dim=2)
             for i in range(self.attention_depth):
-                hs[i + (self.net_depth - self.attention_depth)] = torch.cat([hs[i + (self.net_depth - self.attention_depth)], attentions[i]], dim=2)
-                hs_mask[i + (self.net_depth - self.attention_depth)] = torch.cat([hs_mask[i + (self.net_depth - self.attention_depth)], attentions_mask[i]], dim=2)
+                hs[i + (self.net_depth - self.attention_depth) + 1] = torch.cat([hs[i + (self.net_depth - self.attention_depth) + 1], attentions[i]], dim=2)
+                hs_mask[i + (self.net_depth - self.attention_depth) + 1] = torch.cat([hs_mask[i + (self.net_depth - self.attention_depth) + 1], attentions_mask[i]], dim=2)
 
                 #if self.lstm:
                 #    lstm_state_h, lstm_state_c = lstm_states[i + (self.net_depth - self.attention_depth)]
