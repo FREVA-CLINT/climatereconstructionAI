@@ -53,6 +53,7 @@ loss_criterion = None
 attention = None
 smoothing_factor = None
 weights = None
+skip_layers = None
 
 
 def set_train_args():
@@ -86,6 +87,7 @@ def set_train_args():
     arg_parser.add_argument('--weights', type=str, default=None)
     arg_parser.add_argument('--channel-reduction-rate', type=int, default=1)
     arg_parser.add_argument('--attention', action='store_true')
+    arg_parser.add_argument('--disable-skip-layers', action='store_true')
     args = arg_parser.parse_args()
 
     global data_types
@@ -117,6 +119,8 @@ def set_train_args():
     global save_snapshot_image
     global loss_criterion
     global attention
+    global skip_layers
+    global weights
 
     data_types = args.data_types.split(',')
     img_names = args.img_names.split(',')
@@ -149,6 +153,10 @@ def set_train_args():
     loss_criterion = args.loss_criterion
     attention = args.attention
     weights = args.weights
+    if args.disable_skip_layers:
+        skip_layers = 0
+    else:
+        skip_layers = 1
     for i in range(out_channels):
         gt_channels.append((i + 1) * prev_next_steps + i * (prev_next_steps + 1))
 
@@ -182,6 +190,7 @@ def set_evaluation_args():
     arg_parser.add_argument('--smoothing-factor', type=int, default=1)
     arg_parser.add_argument('--channel-reduction-rate', type=int, default=1)
     arg_parser.add_argument('--attention', action='store_true')
+    arg_parser.add_argument('--disable-skip-layers', action='store_true')
     args = arg_parser.parse_args()
 
     global data_types
@@ -210,6 +219,7 @@ def set_evaluation_args():
     global channel_reduction_rate
     global attention
     global smoothing_factor
+    global skip_layers
 
     data_types = args.data_types.split(',')
     img_names = args.img_names.split(',')
@@ -242,6 +252,10 @@ def set_evaluation_args():
     attention = args.attention
     smoothing_factor = args.smoothing_factor
     gt_channels = []
+    if args.disable_skip_layers:
+        skip_layers = 0
+    else:
+        skip_layers = 1
     for i in range(out_channels):
         gt_channels.append((i + 1) * prev_next_steps + i * (prev_next_steps + 1))
 
