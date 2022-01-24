@@ -22,8 +22,13 @@ def smooth(x, window_len, window='flat'):
     y = np.convolve(w / w.sum(), s, mode='same')
     return y[window_len:-window_len + 1]
 
-def rmse(gt, output):
+
+def rmse_over_mean(gt, output):
     return np.sqrt(np.mean((np.mean(gt, axis=(1, 2)) - np.mean(output, axis=(1, 2))) ** 2))
+
+
+def rmse(gt, output):
+    return np.sqrt(np.mean((gt - output) ** 2))
 
 
 def timcor(gt, output):
@@ -85,3 +90,7 @@ def rmse_map(gt, output):
 
 def rmse_timeseries(gt, output):
     return smooth(np.mean(np.sqrt((gt - output) ** 2), axis=(1, 2)), cfg.smoothing_factor)
+
+
+def rmse_over_mean_timeseries(gt, output):
+    return smooth(np.sqrt((np.mean(gt,  axis=(1, 2)) - np.mean(output,  axis=(1, 2))) ** 2), cfg.smoothing_factor)

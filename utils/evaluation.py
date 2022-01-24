@@ -205,10 +205,12 @@ def create_evaluation_report(gt, outputs):
     mean_timeseries = {}
     fldcor_timeseries = {}
     rmse_timeseries = {}
+    rmse_over_mean_timeseries = {}
 
     # define arrays for dataframe
     data_sets = ['GT']
     rmses = ['0.0']
+    rmses_over_mean = ['0.0']
     time_cors = ['1.0']
     total_prs = [int(metrics.total_sum(gt))]
     mean_fld_cors = ['1.0']
@@ -219,6 +221,7 @@ def create_evaluation_report(gt, outputs):
         # append values
         data_sets.append(output_name)
         rmses.append('%.5f' % metrics.rmse(gt, output))
+        rmses_over_mean.append('%.5f' % metrics.rmse_over_mean(gt, output))
         time_cors.append('%.5f' % metrics.timcor(gt, output))
         total_prs.append(int(metrics.total_sum(output)))
         mean_fld_cors.append('%.5f' % metrics.timmean_fldor(gt, output))
@@ -229,6 +232,7 @@ def create_evaluation_report(gt, outputs):
         mean_timeseries[output_name] = metrics.mean_timeseries(output)
         fldcor_timeseries[output_name] = metrics.fldcor_timeseries(gt, output)
         rmse_timeseries[output_name] = metrics.rmse_timeseries(gt, output)
+        rmse_over_mean_timeseries[output_name] = metrics.rmse_over_mean_timeseries(gt, output)
 
     timcor_maps = []
     rmse_maps = []
@@ -262,6 +266,7 @@ def create_evaluation_report(gt, outputs):
     df = pd.DataFrame()
     df['Data Set'] = data_sets
     df['RMSE'] = rmses
+    df['RMSE over mean'] = rmses_over_mean
     df['Time Correlation'] = time_cors
     df['Total Precipitation'] = total_prs
     df['Mean Field Correlation'] = mean_fld_cors
@@ -279,6 +284,8 @@ def create_evaluation_report(gt, outputs):
     plot_data(fldcor_timeseries, ax3)
     ax4.set_title('RMSEs')
     plot_data(rmse_timeseries, ax4)
+    ax5.set_title('RMSEs over mean')
+    plot_data(rmse_over_mean_timeseries, ax5)
     fig.tight_layout()
     plt.savefig(cfg.evaluation_dirs[0] + 'ts.png', dpi=300)
     plt.clf()
@@ -309,24 +316,26 @@ def create_evaluation_report(gt, outputs):
     pdf.cell(60, 40)
     pdf.cell(75, 30, "Statistical evaluation metrics", 0, 2, 'C')
     pdf.cell(90, 5, " ", 0, 2, 'C')
-    pdf.cell(-40)
+    pdf.cell(-53)
     pdf.set_font('arial', 'B', 12)
     pdf.cell(25, 10, 'Data Set', 1, 0, 'C')
     pdf.cell(25, 10, 'RMSE', 1, 0, 'C')
+    pdf.cell(35, 10, 'RMSE ov. mean', 1, 0, 'C')
     pdf.cell(25, 10, 'Time Cor', 1, 0, 'C')
     pdf.cell(25, 10, 'Total PR', 1, 0, 'C')
     pdf.cell(30, 10, 'Mean Fld Cor', 1, 0, 'C')
     pdf.cell(30, 10, 'Fld Cor Sum', 1, 2, 'C')
-    pdf.cell(-130)
+    pdf.cell(-165)
     pdf.set_font('arial', '', 12)
     for i in range(0, len(df)):
         pdf.cell(25, 10, '%s' % (df['Data Set'].iloc[i]), 1, 0, 'C')
         pdf.cell(25, 10, '%s' % (str(df['RMSE'].iloc[i])), 1, 0, 'C')
+        pdf.cell(35, 10, '%s' % (str(df['RMSE over mean'].iloc[i])), 1, 0, 'C')
         pdf.cell(25, 10, '%s' % (str(df['Time Correlation'].iloc[i])), 1, 0, 'C')
         pdf.cell(25, 10, '%s' % (str(df['Total Precipitation'].iloc[i])), 1, 0, 'C')
         pdf.cell(30, 10, '%s' % (str(df['Mean Field Correlation'].iloc[i])), 1, 0, 'C')
         pdf.cell(30, 10, '%s' % (str(df['Field Correlation of total Field Sum'].iloc[i])), 1, 2, 'C')
-        pdf.cell(-130)
+        pdf.cell(-165)
     pdf.cell(-20)
     pdf.cell(130, 10, " ", 0, 2, 'C')
 
