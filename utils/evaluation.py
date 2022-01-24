@@ -162,7 +162,6 @@ def create_evaluation_images(name, data_set, create_video=False, save_dir='image
     for i in range(data_set.shape[0]):
         plt.imshow(np.squeeze(data_set[i, :, :]), vmin=vmin, vmax=vmax)
         plt.axis(axis)
-        plt.title(name)
         plt.savefig('{}/{}{}.jpg'.format(save_dir, name, str(i)))
         plt.clf()
 

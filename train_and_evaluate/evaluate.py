@@ -78,11 +78,16 @@ if cfg.create_report:
 if cfg.create_images:
     r = (int(cfg.create_images[0]), int(cfg.create_images[1]))
     gt = h5py.File('{}{}'.format(cfg.evaluation_dirs[0], 'gt'), 'r').get(cfg.data_types[0])[r[0]:r[1], :, :]
+    mask = h5py.File('{}{}'.format(cfg.evaluation_dirs[0], 'mask'), 'r').get(cfg.data_types[0])[r[0]:r[1], :, :]
     image = h5py.File('{}{}'.format(cfg.evaluation_dirs[0], 'image'), 'r').get(cfg.data_types[0])[r[0]:r[1], :, :]
     if gt.ndim == 4:
         gt = gt[:, 0, :, :]
+    if mask.ndim == 4:
+        mask = mask[:, 0, :, :]
     if image.ndim == 4:
         image = image[:, 0, :, :]
+    image = ma.masked_array(image, 1-mask)[:, :, :]
+
     data_sets = {'GT': gt}
     data_sets = {'Input': image}
 
