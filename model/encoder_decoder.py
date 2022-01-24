@@ -19,16 +19,16 @@ def batch_to_lstm(input, batch_size):
 
 
 class EncoderBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, image_size, kernel, stride, activation, dilation=(1, 1), groups=1,
+    def __init__(self, conv_config, kernel, stride, activation, dilation=(1, 1), groups=1,
                  lstm=False):
         super().__init__()
         padding = kernel[0] // 2, kernel[1] // 2
-        self.partial_conv = PConvBlock(in_channels, out_channels, kernel, stride, padding, dilation, groups, False,
-                                       activation, True)
+        self.partial_conv = PConvBlock(conv_config['in_channels'], conv_config['out_channels'], kernel,
+                                       stride, padding, dilation, groups, False, activation, True)
 
         if lstm:
-            self.lstm_conv = ConvLSTMBlock(out_channels, out_channels, image_size // 2, kernel, (1, 1), padding, (1, 1),
-                                           groups)
+            self.lstm_conv = ConvLSTMBlock(conv_config['out_channels'], conv_config['out_channels'],
+                                           conv_config['img_size'] // 2, kernel, (1, 1), padding, (1, 1), groups)
 
     def forward(self, input, mask, lstm_state=None):
         batch_size = input.shape[0]
@@ -50,17 +50,16 @@ class EncoderBlock(nn.Module):
 
 
 class DecoderBlock(nn.Module):
-    def __init__(self, in_channels, in_skip_channels, out_channels, image_size, kernel, stride, activation, dilation=(1, 1), groups=1,
+    def __init__(self, conv_config, kernel, stride, activation, dilation=(1, 1), groups=1,
                  lstm=False, bias=False, bn=True):
         super().__init__()
         padding = kernel[0] // 2, kernel[1] // 2
-        self.partial_conv = PConvBlock(in_channels + in_skip_channels,
-                                       out_channels, kernel, stride, padding, dilation, groups, bias,
+        self.partial_conv = PConvBlock(conv_config['in_channels'] + conv_config['skip_channels'],
+                                       conv_config['out_channels'], kernel, stride, padding, dilation, groups, bias,
                                        activation, bn)
         if lstm:
-            self.lstm_conv = ConvLSTMBlock(in_channels,
-                                           in_channels,
-                                           image_size // 2, kernel, (1, 1), padding, (1, 1), groups)
+            self.lstm_conv = ConvLSTMBlock(conv_config['in_channels'], conv_config['in_channels'],
+                                           conv_config['img_size'] // 2, kernel, (1, 1), padding, (1, 1), groups)
 
     def forward(self, input, skip_input, mask, skip_mask, lstm_state=None):
         # apply LSTM convolution
@@ -78,9 +77,10 @@ class DecoderBlock(nn.Module):
         h = F.interpolate(input, scale_factor=2, mode='nearest')
         h_mask = F.interpolate(mask, scale_factor=2, mode='nearest')
 
-        # skip layers: pass results from encoding layers to decoding layers
-        h = torch.cat([h, skip_input], dim=1)
-        h_mask = torch.cat([h_mask, skip_mask], dim=1)
+        if cfg.skip_layers:
+            # skip layers: pass results from encoding layers to decoding layers
+            h = torch.cat([h, skip_input], dim=1)
+            h_mask = torch.cat([h_mask, skip_mask], dim=1)
 
         # apply partial convolution
         output, mask = self.partial_conv(h, h_mask)
