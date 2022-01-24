@@ -54,6 +54,7 @@ attention = None
 smoothing_factor = None
 weights = None
 skip_layers = None
+fps = None
 
 
 def set_train_args():
@@ -189,6 +190,7 @@ def set_evaluation_args():
     arg_parser.add_argument('--eval-threshold', type=float, default=None)
     arg_parser.add_argument('--smoothing-factor', type=int, default=1)
     arg_parser.add_argument('--channel-reduction-rate', type=int, default=1)
+    arg_parser.add_argument('--fps', type=float, default=0.1)
     arg_parser.add_argument('--attention', action='store_true')
     arg_parser.add_argument('--disable-skip-layers', action='store_true')
     args = arg_parser.parse_args()
@@ -220,6 +222,7 @@ def set_evaluation_args():
     global attention
     global smoothing_factor
     global skip_layers
+    global fps
 
     data_types = args.data_types.split(',')
     img_names = args.img_names.split(',')
@@ -252,6 +255,7 @@ def set_evaluation_args():
     attention = args.attention
     smoothing_factor = args.smoothing_factor
     gt_channels = []
+    fps = args.fps
     if args.disable_skip_layers:
         skip_layers = 0
     else:

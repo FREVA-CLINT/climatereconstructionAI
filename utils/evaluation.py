@@ -166,7 +166,7 @@ def create_evaluation_images(name, data_set, create_video=False, save_dir='image
         plt.clf()
 
     if create_video:
-        with imageio.get_writer('{}/movie.gif'.format(save_dir), mode='I') as writer:
+        with imageio.get_writer('{}/movie.gif'.format(save_dir), mode='I', fps=cfg.fps) as writer:
             for i in range(data_set.shape[0]):
                 image = imageio.imread('{}/{}{}.jpg'.format(save_dir, name, str(i)))
                 writer.append_data(image)
