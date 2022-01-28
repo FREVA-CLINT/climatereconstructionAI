@@ -32,7 +32,6 @@ class AttentionEncoderBlock(nn.Module):
 
         # convert lstm steps to batch dimension
         h_rea = lstm_to_batch(h_rea)
-        h_rea_mask = lstm_to_batch(h_rea_mask)
         h = lstm_to_batch(h)
 
         # channel attention
@@ -45,11 +44,9 @@ class AttentionEncoderBlock(nn.Module):
         attention = channel_attention * spatial_attention
 
         # convert batches to lstm dimension
-        h_rea = batch_to_lstm(h_rea, batch_size)
-        h_rea_mask = batch_to_lstm(h_rea_mask, batch_size)
         attention = batch_to_lstm(attention, batch_size)
 
-        return h_rea, h_rea_mask, rea_lstm_state, attention
+        return attention, h_rea_mask, rea_lstm_state
 
     def forward_channel_attention(self, input):
         attention_max = F.max_pool2d(input, input.shape[2])

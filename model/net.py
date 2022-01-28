@@ -120,12 +120,12 @@ class PConvLSTM(nn.Module):
             # execute attention module if configured
             if cfg.attention and i >= (self.net_depth - self.attention_depth):
                 rea_index = i - (self.net_depth - self.attention_depth)
-                h_rea, h_rea_mask, rea_lstm_state, attention = \
+                h_rea, h_rea_mask, rea_lstm_state = \
                     self.attention_module[rea_index](h_rea,
                                                      h_rea_mask,
                                                      None,
                                                      h)
-                attentions.append(attention)
+                attentions.append(h_rea)
                 attentions_mask.append(h_rea_mask)
                 attentions_lstm_states.append(rea_lstm_state)
 
