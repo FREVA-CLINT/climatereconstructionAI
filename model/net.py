@@ -45,7 +45,7 @@ class PConvLSTM(nn.Module):
                 #if i != self.attention_depth - 1:
                 #    dec_conv_configs[i]['out_channels'] += \
                 #        attention_enc_conv_configs[self.attention_depth - i - 1]['in_channels']
-                dec_conv_configs[i]['skip_channels'] += attention_enc_conv_configs[self.attention_depth - i - 1]['in_channels']
+                dec_conv_configs[i]['skip_channels'] += cfg.skip_layers*attention_enc_conv_configs[self.attention_depth - i - 1]['in_channels']
                 #dec_conv_configs[i]['in_channels'] += attention_enc_conv_configs[self.attention_depth - i - 1][
                 #    'out_channels']
 
@@ -56,7 +56,7 @@ class PConvLSTM(nn.Module):
         elif rea_img_size:
             self.channel_fusion_depth = rea_enc_layers + rea_pool_layers
             enc_conv_configs[self.net_depth - self.channel_fusion_depth]['in_channels'] += rea_in_channels
-            dec_conv_configs[self.channel_fusion_depth - 1]['skip_channels'] += rea_in_channels
+            dec_conv_configs[self.channel_fusion_depth - 1]['skip_channels'] += cfg.skip_layers*rea_in_channels
 
         # define encoding layers
         encoding_layers = []
