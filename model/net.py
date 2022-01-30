@@ -45,6 +45,8 @@ class PConvLSTM(nn.Module):
                 if i != self.attention_depth - 1:
                     dec_conv_configs[i]['out_channels'] += \
                         attention_enc_conv_configs[self.attention_depth - i - 1]['in_channels']
+                    enc_conv_configs[i + 2]['in_channels'] += attention_enc_conv_configs[i][
+                        'out_channels']
                 dec_conv_configs[i]['skip_channels'] += cfg.skip_layers*attention_enc_conv_configs[self.attention_depth - i - 1]['in_channels']
                 dec_conv_configs[i]['in_channels'] += attention_enc_conv_configs[self.attention_depth - i - 1][
                     'out_channels']
@@ -112,10 +114,6 @@ class PConvLSTM(nn.Module):
             h, h_mask, lstm_state = self.encoder[i](hs[i],
                                                     hs_mask[i],
                                                     None)
-            # save hidden states for skip connections
-            hs.append(h)
-            lstm_states.append(lstm_state)
-            hs_mask.append(h_mask)
 
             # execute attention module if configured
             if cfg.attention and i >= (self.net_depth - self.attention_depth):
@@ -129,8 +127,23 @@ class PConvLSTM(nn.Module):
                 attentions_mask.append(h_rea_mask)
                 attentions_lstm_states.append(rea_lstm_state)
 
+                h = torch.cat([h, attention], dim=2)
+                h_mask = torch.cat([h_mask, h_rea_mask], dim=2)
+
+                if self.lstm:
+                    lstm_state_h, lstm_state_c = lstm_state
+                    attention_lstm_state_h, attention_lstm_state_c = rea_lstm_state
+                    lstm_state_h = torch.cat([lstm_state_h, attention_lstm_state_h], dim=1)
+                    lstm_state_c = torch.cat([lstm_state_c, attention_lstm_state_c], dim=1)
+                    lstm_state = (lstm_state_h, lstm_state_c)
+
+            # save hidden states for skip connections
+            hs.append(h)
+            lstm_states.append(lstm_state)
+            hs_mask.append(h_mask)
+
         # concat attentions
-        if attentions:
+        if False:
             hs[self.net_depth - self.attention_depth] = torch.cat([hs[self.net_depth - self.attention_depth], rea_input], dim=2)
             hs_mask[self.net_depth - self.attention_depth] = torch.cat([hs_mask[self.net_depth - self.attention_depth], rea_input_mask], dim=2)
             for i in range(self.attention_depth):
