@@ -47,7 +47,7 @@ class PConvLSTM(nn.Module):
                         attention_enc_conv_configs[self.attention_depth - i - 1]['in_channels']
                     enc_conv_configs[i + 2]['in_channels'] += attention_enc_conv_configs[i][
                         'out_channels']
-                dec_conv_configs[i]['skip_channels'] += cfg.skip_layers*attention_enc_conv_configs[self.attention_depth - i - 1]['in_channels']
+                    dec_conv_configs[i]['skip_channels'] += cfg.skip_layers*attention_enc_conv_configs[self.attention_depth - i - 1]['in_channels']
                 dec_conv_configs[i]['in_channels'] += attention_enc_conv_configs[self.attention_depth - i - 1][
                     'out_channels']
 
