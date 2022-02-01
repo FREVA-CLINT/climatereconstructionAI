@@ -15,4 +15,3 @@ python train_and_evaluate/train.py \
  --log-interval 1000 \
  --save-snapshot-image \
  --attention \
- --disable-skip-layers
