@@ -16,9 +16,9 @@ from .loss.inpainting_loss import InpaintingLoss
 from .loss.hole_loss import HoleLoss
 
 
-def train():
+def train(arg_file=None):
 
-    cfg.set_train_args()
+    cfg.set_train_args(arg_file)
 
     if not os.path.exists(cfg.snapshot_dir):
         os.makedirs('{:s}/images'.format(cfg.snapshot_dir))
