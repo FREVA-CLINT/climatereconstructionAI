@@ -65,7 +65,7 @@ class PConvLSTM(nn.Module):
             elif i < radar_enc_dec_layers - 1:
                 kernel = (5, 5)
             else:
-                kernel = (5, 5)
+                kernel = (3, 3)
             encoding_layers.append(EncoderBlock(
                 conv_config=enc_conv_configs[i],
                 kernel=kernel, stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
