@@ -6,9 +6,9 @@ from .utils.evaluation import *
 from .utils.netcdfloader import NetCDFLoader
 from .utils.io import load_ckpt
 
-def evaluate():
+def evaluate(arg_file=None):
 
-    cfg.set_evaluation_args()
+    cfg.set_evaluate_args(arg_file)
     gt = None
     outputs = None
 
