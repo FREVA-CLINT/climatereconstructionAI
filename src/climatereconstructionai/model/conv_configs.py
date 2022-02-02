@@ -1,7 +1,6 @@
 import sys
 
-sys.path.append('./')
-import config as cfg
+from .. import config as cfg
 
 # define configurations for convolutions
 

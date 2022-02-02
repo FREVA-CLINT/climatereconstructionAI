@@ -3,9 +3,8 @@ from torch import nn
 import torch.nn.functional as F
 import sys
 
-sys.path.append('./')
-from model.encoder_decoder import EncoderBlock, lstm_to_batch, batch_to_lstm
-import config as cfg
+from .. import config as cfg
+from .encoder_decoder import EncoderBlock, lstm_to_batch, batch_to_lstm
 
 
 class AttentionEncoderBlock(nn.Module):

@@ -1,8 +1,8 @@
 import sys
 import numpy as np
 from numpy import ma
-sys.path.append('./')
-import config as cfg
+
+from .. import config as cfg
 
 
 def smooth(x, window_len, window='flat'):

@@ -2,9 +2,8 @@ import torch
 import torch.nn as nn
 import sys
 
-sys.path.append('./')
-from utils.weights import weights_init
-import config as cfg
+from .. import config as cfg
+from ..utils.weights import weights_init
 
 
 class PConvBlock(nn.Module):

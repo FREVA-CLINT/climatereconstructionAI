@@ -2,11 +2,10 @@ import torch
 import torch.nn as nn
 import sys
 
-sys.path.append('./')
-from model.attention_module import AttentionEncoderBlock
-from model.encoder_decoder import EncoderBlock, DecoderBlock
-from model.conv_configs import init_enc_conv_configs, init_dec_conv_configs
-import config as cfg
+from .. import config as cfg
+from .attention_module import AttentionEncoderBlock
+from .encoder_decoder import EncoderBlock, DecoderBlock
+from .conv_configs import init_enc_conv_configs, init_dec_conv_configs
 
 
 class PConvLSTM(nn.Module):

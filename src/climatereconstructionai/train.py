@@ -2,19 +2,19 @@ import os
 import torch
 import sys
 
-sys.path.append('./')
-
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from model.net import PConvLSTM
-from utils.featurizer import VGG16FeatureExtractor
-from utils.io import load_ckpt, save_ckpt
-from utils.netcdfloader import NetCDFLoader, InfiniteSampler
-from utils.evaluation import create_snapshot_image
-from loss.inpainting_loss import InpaintingLoss
-from loss.hole_loss import HoleLoss
-import config as cfg
+
+from . import config as cfg
+from .model.net import PConvLSTM
+from .utils.featurizer import VGG16FeatureExtractor
+from .utils.io import load_ckpt, save_ckpt
+from .utils.netcdfloader import NetCDFLoader, InfiniteSampler
+from .utils.evaluation import create_snapshot_image
+from .loss.inpainting_loss import InpaintingLoss
+from .loss.hole_loss import HoleLoss
+
 
 def train():
 
@@ -118,3 +118,6 @@ def train():
             create_snapshot_image(model, dataset_val, '{:s}/images/iter_{:d}'.format(cfg.snapshot_dir, i + 1))
 
     writer.close()
+
+if __name__ == "__main__":
+    train()

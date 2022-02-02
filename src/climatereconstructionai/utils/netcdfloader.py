@@ -5,9 +5,7 @@ import h5py
 from torch.utils.data import Dataset, Sampler
 import sys
 
-sys.path.append('./')
-
-import config as cfg
+from .. import config as cfg
 
 
 class InfiniteSampler(Sampler):
