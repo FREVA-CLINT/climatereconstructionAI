@@ -3,10 +3,9 @@ import torch.nn as nn
 import sys
 import torch.nn.functional as F
 
-sys.path.append('./')
-import config as cfg
-from model.conv_lstm_module import ConvLSTMBlock
-from model.partial_conv_module import PConvBlock
+from .. import config as cfg
+from .conv_lstm_module import ConvLSTMBlock
+from .partial_conv_module import PConvBlock
 
 
 def lstm_to_batch(input):

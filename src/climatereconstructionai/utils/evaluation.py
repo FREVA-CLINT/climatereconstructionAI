@@ -10,11 +10,9 @@ from netCDF4 import Dataset
 from fpdf import FPDF
 from cdo import *
 from numpy import ma
-import config as cfg
 
-sys.path.append('./')
-
-import utils.metrics as metrics
+from .. import config as cfg
+from . import metrics as metrics
 
 
 def create_snapshot_image(model, dataset, filename):

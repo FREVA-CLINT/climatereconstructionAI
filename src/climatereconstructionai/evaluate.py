@@ -1,12 +1,10 @@
 import sys
 
-sys.path.append('./')
-
-from model.net import PConvLSTM
-from utils.evaluation import *
-from utils.netcdfloader import NetCDFLoader
-from utils.io import load_ckpt
-import config as cfg
+from . import config as cfg
+from .model.net import PConvLSTM
+from .utils.evaluation import *
+from .utils.netcdfloader import NetCDFLoader
+from .utils.io import load_ckpt
 
 def evaluate():
 
@@ -104,3 +102,6 @@ def evaluate():
             create_video = True
         for key,value in data_sets.items():
             create_evaluation_images(key, value, create_video, save_dir='images/{}'.format(key))
+
+if __name__ == "__main__":
+    evaluate()

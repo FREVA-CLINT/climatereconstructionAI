@@ -2,8 +2,7 @@ import torch
 import torch.nn as nn
 import sys
 
-sys.path.append('./')
-from loss.utils import gram_matrix, total_variation_loss
+from .utils import gram_matrix, total_variation_loss
 
 
 class InpaintingLoss(nn.Module):

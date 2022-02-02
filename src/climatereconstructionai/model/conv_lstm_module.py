@@ -2,9 +2,8 @@ import torch
 import torch.nn as nn
 import sys
 
-sys.path.append('./')
-import config as cfg
-from utils.weights import weights_init
+from .. import config as cfg
+from ..utils.weights import weights_init
 
 
 class ConvLSTMBlock(nn.Module):
