@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 from dateutil import parser
 from netCDF4 import Dataset
 from fpdf import FPDF
-from cdo import *
 from numpy import ma
 
 from .. import config as cfg
