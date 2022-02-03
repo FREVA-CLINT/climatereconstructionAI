@@ -1,6 +1,6 @@
 # directories
-demo/outputs
-demo/masks
+demo/outputs/*
+demo/inputs/masks/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -1,14 +1,13 @@
 import h5py
 import torch
-import netCDF4
 import numpy as np
 import pandas as pd
 import imageio
 import matplotlib.pyplot as plt
 from dateutil import parser
-from netCDF4 import Dataset
 from fpdf import FPDF
 from numpy import ma
+import os.path
 
 from .. import config as cfg
 from . import metrics as metrics
@@ -60,13 +59,6 @@ def create_snapshot_image(model, dataset, filename):
         plt.savefig(filename + '_' + str(c) + '.jpg', bbox_inches='tight', pad_inches=0)
     plt.clf()
     plt.close('all')
-
-
-def get_data(file, var):
-    data = Dataset(file)
-    time = data.variables['time']
-    variable = data.variables[var]
-    return variable, time
 
 
 def plot_data(time_series_dict, subplot, plot=False):

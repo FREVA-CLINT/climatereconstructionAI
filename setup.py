@@ -47,12 +47,5 @@ setup(
     #     'sample': ['package_data.dat'],
     # },
     data_files=[('models', ['data/20cr_20220114.pth'])],
-    entry_points={  # Optional
-        'console_scripts': [
-            'crai-train=climatereconstructionAI:train',
-        ],
-        [
-            'crai-eval=climatereconstructionAI:eval',
-        ],
-    },
+    scripts=['bin/crai-evaluate'],
 )
