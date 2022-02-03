@@ -2,6 +2,7 @@ import random
 import numpy as np
 import torch
 import h5py
+import xarray as xr
 from torch.utils.data import Dataset, Sampler
 import sys
 
@@ -30,7 +31,6 @@ class InfiniteSampler(Sampler):
                 order = np.random.permutation(self.num_samples)
                 i = 0
 
-
 class NetCDFLoader(Dataset):
     def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, lstm_steps, prev_next_steps):
         super(NetCDFLoader, self).__init__()
@@ -39,7 +39,7 @@ class NetCDFLoader(Dataset):
         self.split = split
         self.data_types = data_types
         self.img_names = img_names
-        self.mask_names = mask_names
+
         self.lstm_steps = lstm_steps
         self.prev_next_steps = prev_next_steps
 
@@ -51,12 +51,28 @@ class NetCDFLoader(Dataset):
             self.data_path = '{:s}/val_large/'.format(data_root)
         self.mask_path = mask_root
 
+        if mask_names is None:
+            # Convert img to masks
+            self.mask_names = []
+            for i in range(len(img_names)):
+                self.convert_to_mask(img_names[i], data_types[i])
+
+        else:
+            self.mask_names = mask_names
+
         # define image and mask lenghts
         self.img_lengths = {}
         self.mask_lengths = {}
-        assert len(img_names) == len(mask_names) == len(data_types)
+        assert len(img_names) == len(self.mask_names) == len(data_types)
         for i in range(len(img_names)):
-            self.init_dataset(img_names[i], mask_names[i], data_types[i])
+            self.init_dataset(img_names[i], self.mask_names[i], data_types[i])
+
+    def convert_to_mask(self, img_name, data_type):
+        ds_src = xr.open_dataset('{}{}'.format(self.data_path, img_name))
+        data = 1-(np.isnan(ds_src[data_type].values))
+        ds_dest = ds_src.copy(data={data_type: data})
+        self.mask_names.append("msk_"+img_name)
+        ds_dest.to_netcdf('{}{}'.format(self.mask_path, self.mask_names[-1]))
 
     def init_dataset(self, img_name, mask_name, data_type):
         # set img and mask length
