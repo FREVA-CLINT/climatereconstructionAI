@@ -6,11 +6,46 @@ authors = ["Climate Informatics and Technology group at DKRZ (Deutsches Klimarec
 license = "BSD 3-Clause"
 readme = "README.md"
 
+homepage = "https://github.com/FREVA-CLINT/climatereconstructionAI/tree/clint"
+repository = "https://github.com/FREVA-CLINT/climatereconstructionAI/tree/clint"
+documentation = "https://github.com/FREVA-CLINT/climatereconstructionAI/tree/clint"
+classifiers = [
+    'Development Status :: 3 - Alpha',
+    'Intended Audience :: Science/Research',
+    'Topic :: Scientific/Engineering :: Artificial Intelligence',
+    'Topic :: Scientific/Engineering :: Atmospheric Science',
+    'License :: OSI Approved :: BSD License',
+    "Operating System :: OS Independent",
+    'Programming Language :: Python :: 3',
+    'Programming Language :: Python :: 3.6',
+    'Programming Language :: Python :: 3.7',
+    'Programming Language :: Python :: 3.8',
+    'Programming Language :: Python :: 3.9',
+    "Programming Language :: Python :: 3.10",
+    'Programming Language :: Python :: 3 :: Only',
+]
+
 [tool.poetry.dependencies]
-python = "3.7+"
+python = "3.7"
+imageio = "2.9.0"
+pandas = "1.2.5"
+fpdf = "1.7.2"
+torch = "1.8.0"
+h5py = "3.2.1"
+tqdm = "4.59.0"
+torchvision = "0.2.1"
+numpy = "1.20.1"
+matplotlib = "3.4.3"
+python_dateutil = "2.8.2"
+tensorboardX = "2.4.1"
+xarray = "0.20.2"
 
 [tool.poetry.dev-dependencies]
 
 [build-system]
-requires = ["poetry-core>=1.0.0","imageio==2.9.0","pandas==1.2.5","fpdf==1.7.2","torch==1.8.0","h5py==3.2.1","tqdm==4.59.0","torchvision==0.2.1","numpy==1.20.1","matplotlib==3.4.3","netCDF4==1.5.8","python_dateutil==2.8.2","tensorboardX==2.4.1","xarray==0.20.2"]
+requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+crai-evaluate = "climatereconstructionai.evaluate:evaluate"
+crai-train = "climatereconstructionai.train:train"
