@@ -109,6 +109,7 @@ def set_evaluate_args(arg_file=None):
     arg_parser.add_argument('--fps', type=float, default=5)
     arg_parser.add_argument('--attention', action='store_true')
     arg_parser.add_argument('--disable-skip-layers', action='store_true')
+    arg_parser.add_argument('--convert-to-netcdf', action='store_true')
     arg_parser.add_argument('--load-from-file', type=str, action=LoadFromFile)
     global_args(arg_parser,arg_file)
     globals()["weights"] = None
