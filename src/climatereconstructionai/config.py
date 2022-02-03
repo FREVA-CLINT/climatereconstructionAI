@@ -56,7 +56,7 @@ def set_common_args():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument('--data-types', type=str_list, default='tas')
     arg_parser.add_argument('--img-names', type=str_list, default='train.h5')
-    arg_parser.add_argument('--mask-names', type=str_list, default='mask.h5')
+    arg_parser.add_argument('--mask-names', type=str_list, default=None)
     arg_parser.add_argument('--evaluation-dirs', type=str_list, default='evaluation/')
     arg_parser.add_argument('--snapshot-dirs', type=str_list, default='snapshots/')
     arg_parser.add_argument('--data-root-dir', type=str, default='../data/')
