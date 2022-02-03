@@ -133,25 +133,34 @@ def infill(model, dataset, partitions):
     # create output_comp
     output_comp = mask * image + (1 - mask) * output
 
-    cvar = [image, mask, output, output_comp, gt]
-    cname = ['image', 'mask', 'output', 'output_comp', 'gt']
-    dname = ['time', 'lat', 'lon']
-    for x in range(0, 5):
-        h5 = h5py.File('{}/{}_{}'.format(cfg.evaluation_dirs[0],cfg.eval_names[0],cname[x]), 'w')
-        h5.create_dataset(cfg.data_types[0], data=cvar[x].to(torch.device('cpu')))
-        for dim in range(0, 3):
-            h5[cfg.data_types[0]].dims[dim].label = dname[dim]
-        h5.close()
+    cvar = {'image': image, 'mask': mask, 'output': output, 'output_comp': output_comp, 'gt': gt}
+    write_output_h5(cvar, dataset.data_path, to_netcdf=cfg.convert_to_netcdf)
 
     return ma.masked_array(gt, mask)[:, 0, :, :], ma.masked_array(output_comp, mask)[:, 0, :, :]
 
+def write_output_h5(cvar, data_path, to_netcdf=False):
 
-def convert_all_to_netcdf():
-    # convert to netCDF files
-    convert_h5_to_netcdf(True, 'image')
-    convert_h5_to_netcdf(False, 'gt')
-    convert_h5_to_netcdf(False, 'output')
-    convert_h5_to_netcdf(False, 'output_comp')
+    data_type = cfg.data_types[0]
+
+    if to_netcdf:
+        import xarray as xr
+        ds_src = xr.open_dataset('{}{}'.format(data_path, cfg.img_names[0]))
+
+    for cname in cvar:
+        output_name = '{}/{}_{}'.format(cfg.evaluation_dirs[0],cfg.eval_names[0],cname)
+        data = cvar[cname].to(torch.device('cpu')).squeeze()
+
+        if to_netcdf:
+            ds_dest = ds_src.copy(data={data_type: data})
+            ds_dest.to_netcdf(output_name+".nc")
+
+        else:
+            dname = ['time', 'lat', 'lon']
+            h5 = h5py.File(output_name+".h5", 'w')
+            h5.create_dataset(data_type,data=data)
+            for dim in range(3):
+                h5[data_type].dims[dim].label = dname[dim]
+            h5.close()
 
 
 def create_evaluation_images(name, data_set, create_video=False, save_dir='images/', vmin=0, vmax=5, axis='off'):
@@ -395,43 +404,3 @@ def create_evaluation_report(gt, outputs):
     for name in cfg.eval_names:
         report_name += name
     pdf.output('{}/{}.pdf'.format(cfg.evaluation_dirs[0],report_name), 'F')
-
-
-def evaluate_selected_samples(self, dates=None):
-    cdo = Cdo()
-    if dates is None:
-        dates = ['2017-01-12T23', '2017-04-17T15', '2017-05-02T12', '2017-05-13T12', '2017-06-04T03',
-                 '2017-06-29T16', '2017-07-12T14', '2017-09-02T13']
-    i = 0
-    for date in dates:
-        cdo.select('date=' + date, input=self.eval_save_dir + 'image.nc',
-                   output=self.eval_save_dir + 'imagetmp' + str(i) + '.nc')
-        cdo.select('date=' + date, input=self.eval_save_dir + 'output_comp.nc',
-                   output=self.eval_save_dir + 'output_comptmp' + str(i) + '.nc')
-        cdo.select('date=' + date, input=self.eval_save_dir + 'gt.nc',
-                   output=self.eval_save_dir + 'gttmp' + str(i) + '.nc')
-    cdo.mergetime(input=self.eval_save_dir + 'imagetmp*', output=self.eval_save_dir + 'image_selected.nc')
-    cdo.mergetime(input=self.eval_save_dir + 'output_comptmp*',
-                  output=self.eval_save_dir + 'output_comp_selected.nc')
-    cdo.mergetime(input=self.eval_save_dir + 'gttmp*', output=self.eval_save_dir + 'gt_selected.nc')
-    os.system('rm ' + self.eval_save_dir + '*tmp*')
-
-    self.create_evaluation_images(file='image_selected.nc')
-    self.create_evaluation_images(file='gt_selected.nc')
-    self.create_evaluation_images(file='output_comp_selected.nc')
-
-
-def convert_h5_to_netcdf(self, create_structure_template, file):
-    if create_structure_template:
-        os.system('ncdump ' + self.test_dir + '*.h5 > ' + self.eval_save_dir + 'tmp_dump.txt')
-        os.system(
-            'sed "/.*' + self.variable + ' =.*/{s///;q;}" ' + self.eval_save_dir + 'tmp_dump.txt > ' + self.eval_save_dir + 'structure.txt')
-        os.system('rm ' + self.eval_save_dir + 'tmp_dump.txt')
-    cdo = Cdo()
-    os.system('cat ' + self.eval_save_dir + 'structure.txt >> ' + self.eval_save_dir + file + '.txt')
-    os.system(
-        'ncdump -v ' + self.variable + ' ' + self.eval_save_dir + file + ' | sed -e "1,/data:/d" >> ' + self.eval_save_dir + file + '.txt')
-    os.system('ncgen -o ' + self.eval_save_dir + 'output-tmp ' + self.eval_save_dir + file + '.txt')
-    cdo.setgrid(self.test_dir + '*.h5', input=self.eval_save_dir + 'output-tmp',
-                output=self.eval_save_dir + file + '.nc')
-    os.system('rm ' + self.eval_save_dir + file + '.txt ' + self.eval_save_dir + 'output-tmp')
