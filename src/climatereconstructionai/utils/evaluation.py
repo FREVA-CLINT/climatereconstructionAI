@@ -137,7 +137,7 @@ def infill(model, dataset, partitions):
     cname = ['image', 'mask', 'output', 'output_comp', 'gt']
     dname = ['time', 'lat', 'lon']
     for x in range(0, 5):
-        h5 = h5py.File('%s' % (cfg.evaluation_dirs[0] + cname[x]), 'w')
+        h5 = h5py.File('{}/{}_{}'.format(cfg.evaluation_dirs[0],cfg.eval_names[0],cname[x]), 'w')
         h5.create_dataset(cfg.data_types[0], data=cvar[x].to(torch.device('cpu')))
         for dim in range(0, 3):
             h5[cfg.data_types[0]].dims[dim].label = dname[dim]
@@ -237,16 +237,16 @@ def create_evaluation_report(gt, outputs):
     sum_maps = [metrics.sum_map(gt)]
     timcor_names = []
     rmse_names = []
-    sum_names = ['Sum GT']
+    sum_names = ['Sum_GT']
 
 
     for output_name, output in outputs.items():
         timcor_maps.append(metrics.timcor_map(gt, output))
         rmse_maps.append(metrics.rmse_map(gt, output))
         sum_maps.append(metrics.sum_map(output))
-        timcor_names.append('TimCor {}'.format(output_name))
-        rmse_names.append('RMSe {}'.format(output_name))
-        sum_names.append('Sum {}'.format(output_name))
+        timcor_names.append('TimCor_{}'.format(output_name))
+        rmse_names.append('RMSe_{}'.format(output_name))
+        sum_names.append('Sum_{}'.format(output_name))
 
     total_maps = [timcor_maps, rmse_maps, sum_maps]
     total_names = [timcor_names, rmse_names, sum_names]
@@ -285,7 +285,7 @@ def create_evaluation_report(gt, outputs):
     ax5.set_title('RMSEs over mean')
     plot_data(rmse_over_mean_timeseries, ax5)
     fig.tight_layout()
-    plt.savefig(cfg.evaluation_dirs[0] + 'ts.png', dpi=300)
+    plt.savefig(cfg.evaluation_dirs[0] + '/ts.png', dpi=300)
     plt.clf()
 
     # Create PDF plot
@@ -303,7 +303,7 @@ def create_evaluation_report(gt, outputs):
     plt.legend()
     plt.xscale("log")
 
-    plt.savefig(cfg.evaluation_dirs[0] + 'pdf.png', dpi=300)
+    plt.savefig(cfg.evaluation_dirs[0] + '/pdf.png', dpi=300)
     plt.clf()
 
     # create PDF
@@ -344,7 +344,7 @@ def create_evaluation_report(gt, outputs):
     pdf.cell(75, 10, "Time Series with smoothin factor {}".format(cfg.smoothing_factor), 0, 2, 'C')
     pdf.cell(90, 5, " ", 0, 2, 'C')
     pdf.cell(-60)
-    pdf.image(cfg.evaluation_dirs[0] + 'ts.png', x=None, y=None, w=208, h=240, type='', link='')
+    pdf.image(cfg.evaluation_dirs[0] + '/ts.png', x=None, y=None, w=208, h=240, type='', link='')
 
     pdf.add_page()
 
@@ -353,7 +353,7 @@ def create_evaluation_report(gt, outputs):
     pdf.cell(75, 30, "Probabilistic Density Function", 0, 2, 'C')
     pdf.cell(90, 5, " ", 0, 2, 'C')
     pdf.cell(-60)
-    pdf.image(cfg.evaluation_dirs[0] + 'pdf.png', x=None, y=None, w=208, h=218, type='', link='')
+    pdf.image(cfg.evaluation_dirs[0] + '/pdf.png', x=None, y=None, w=208, h=218, type='', link='')
 
     pdf.add_page()
 
@@ -365,7 +365,7 @@ def create_evaluation_report(gt, outputs):
     pdf.cell(75, 30, "RMSE Maps", 0, 2, 'C')
     pdf.cell(90, 5, " ", 0, 2, 'C')
     pdf.cell(-55)
-    pdf.image('{}/RMSe {}.jpg'.format(cfg.evaluation_dirs[0], cfg.eval_names[0]), x=None, y=None,  w=width, h=((len(total_maps[0]) // 2) + (len(total_maps[0]) % 2)) * 75, type='', link='')
+    pdf.image('{}/RMSe_{}.jpg'.format(cfg.evaluation_dirs[0], cfg.eval_names[0]), x=None, y=None,  w=width, h=((len(total_maps[0]) // 2) + (len(total_maps[0]) % 2)) * 75, type='', link='')
 
     pdf.add_page()
 
@@ -377,7 +377,7 @@ def create_evaluation_report(gt, outputs):
     pdf.cell(75, 30, "TimCor Maps", 0, 2, 'C')
     pdf.cell(90, 5, " ", 0, 2, 'C')
     pdf.cell(-55)
-    pdf.image('{}/TimCor {}.jpg'.format(cfg.evaluation_dirs[0], cfg.eval_names[0]), x=None, y=None, w=width, h=((len(total_maps[1]) // 2) + (len(total_maps[1]) % 2)) * 75, type='', link='')
+    pdf.image('{}/TimCor_{}.jpg'.format(cfg.evaluation_dirs[0], cfg.eval_names[0]), x=None, y=None, w=width, h=((len(total_maps[1]) // 2) + (len(total_maps[1]) % 2)) * 75, type='', link='')
 
     pdf.add_page()
 
@@ -389,12 +389,12 @@ def create_evaluation_report(gt, outputs):
     pdf.cell(75, 30, "Sum Maps", 0, 2, 'C')
     pdf.cell(90, 5, " ", 0, 2, 'C')
     pdf.cell(-55)
-    pdf.image('{}/Sum {}.jpg'.format(cfg.evaluation_dirs[0], 'GT'), x=None, y=None, w=width, h=((len(total_maps[2]) // 2) + (len(total_maps[2]) % 2)) * 75, type='', link='')
+    pdf.image('{}/Sum_{}.jpg'.format(cfg.evaluation_dirs[0], 'GT'), x=None, y=None, w=width, h=((len(total_maps[2]) // 2) + (len(total_maps[2]) % 2)) * 75, type='', link='')
 
     report_name = ''
     for name in cfg.eval_names:
         report_name += name
-    pdf.output('reports/{}.pdf'.format(report_name), 'F')
+    pdf.output('{}/{}.pdf'.format(cfg.evaluation_dirs[0],report_name), 'F')
 
 
 def evaluate_selected_samples(self, dates=None):
