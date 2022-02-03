@@ -1,0 +1,14 @@
+--data-root-dir inputs/
+--mask-dir inputs/masks/
+--snapshot-dir ../data/20cr_20220114.pth
+--evaluation-dirs outputs
+--img-names tas_hadcrut_185001-201812.h5
+--data-types tas
+--device cpu --image-sizes 72
+--out-channels 1
+--lstm-steps 0
+--prev-next-steps 0
+--eval-names output
+--infill infill
+--convert-to-netcdf
+--eval-names demo-1

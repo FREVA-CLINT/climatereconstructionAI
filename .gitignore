@@ -1,22 +1,6 @@
-# evaluation files
-*.txt
-*.pth
-*.jpg
-*.h5
-*.nc
-*.gif
-slurm-*
-.idea
-
-
 # directories
-logs/*
-snapshots/*
-masks/*
-evaluation/*
-reports/*
-images/*
-
+demo/outputs
+demo/masks
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
