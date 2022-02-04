@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 import imageio
 import matplotlib.pyplot as plt
-from dateutil import parser
 from fpdf import FPDF
 from numpy import ma
 import os.path

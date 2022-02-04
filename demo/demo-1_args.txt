@@ -2,7 +2,7 @@
 --mask-dir inputs/masks/
 --snapshot-dir ../data/20cr_20220114.pth
 --evaluation-dirs outputs
---img-names tas_hadcrut_185001-201812.h5
+--img-names tas_hadcrut_185001-201812.nc
 --data-types tas
 --device cpu --image-sizes 72
 --out-channels 1

@@ -1,25 +1,33 @@
 # climatereconstructionAI
 
-Software to train climate reconstruction technology (image inpainting with partial convolutions) with numerical model output and to re-fill missing values in observational datasets (like HadCRUT4) using the trained models.
+Software to train climate reconstruction technology (image inpainting with partial convolutions) with numerical model output and to re-fill missing values in observational datasets (e.g., HadCRUT4) using trained models.
 
 ## Requirements
-- Python 3.7+
-- imageio==2.9.0
-- pandas==1.2.5
-- fpdf==1.7.2
-- torch==1.8.0
-- h5py==3.2.1
-- tqdm==4.59.0
-- torchvision==0.2.1
-- numpy==1.20.1
-- matplotlib==3.4.3
-- python_dateutil==2.8.2
-- tensorboardX==2.4.1
-- xarray==0.20.2
+- python>=3.7
+- imageio>=2.9.0
+- pandas>=1.2.5
+- fpdf>=1.7.2
+- torch>=1.8.0
+- h5py>=3.2.1
+- tqdm>=4.59.0
+- torchvision>=0.2.1
+- numpy>=1.20.1
+- matplotlib>=3.4.3
+- tensorboardX>=2.4.0
+- xarray>=0.20.2
+
+An Anaconda environment with all the required dependencies can be created using `environment.yml`:
+```bash
+conda env create -f environment.yml
+```
+To activate the environment, use:
+```bash
+conda activate crai
+```
 
 ## Installation
 
-In the parent directory:
+`climatereconstructionAI` can be installed using `pip` in the current directory:
 ```bash
 pip install .
 ```
@@ -250,7 +258,7 @@ optional arguments:
 ## Example
 
 An example can be found in the directory `demo`.
-The instructions to perform the example is given in the README.md file.
+The instructions to run the example are given in the README.md file.
 
 ## License
 
