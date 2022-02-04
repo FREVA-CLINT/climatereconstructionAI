@@ -2,7 +2,7 @@
 name = "climatereconstructionAI"
 version = "0.1.0"
 description = "Software to train climate reconstruction technology (image inpainting with partial convolutions) with numerical model output and to re-fill missing values in observational datasets (like HadCRUT4) using the trained models."
-authors = ["Climate Informatics and Technology group at DKRZ (Deutsches Klimarechenzentrum"]
+authors = ["Climate Informatics and Technology group at DKRZ (Deutsches Klimarechenzentrum)"]
 license = "BSD 3-Clause"
 readme = "README.md"
 
