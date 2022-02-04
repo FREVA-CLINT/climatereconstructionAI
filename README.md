@@ -15,6 +15,7 @@ Software to train climate reconstruction technology (image inpainting with parti
 - matplotlib>=3.4.3
 - tensorboardX>=2.4.0
 - xarray>=0.20.2
+- netcdf4>=1.5.8
 
 An Anaconda environment with all the required dependencies can be created using `environment.yml`:
 ```bash
