@@ -56,6 +56,7 @@ def set_common_args():
     arg_parser.add_argument('--data-root-dir', type=str, default='../data/', help="Root directory containing the climate datasets")
     arg_parser.add_argument('--snapshot-dirs', type=str_list, default='snapshots/', help="Directory where the training checkpoints will be stored")
     arg_parser.add_argument('--mask-dir', type=str, default='masks/', help="Directory containing the mask datasets")
+    arg_parser.add_argument('--log-dir', type=str, default='logs/', help="Directory where the log files will be stored")
     arg_parser.add_argument('--img-names', type=str_list, default='train.h5', help="Comma separated list of netCDF files (climate dataset)")
     arg_parser.add_argument('--mask-names', type=str_list, default=None, help="Comma separated list of netCDF files (mask dataset). If None, it extracts the masks from the climate dataset")
     arg_parser.add_argument('--data-types', type=str_list, default='tas', help="Comma separated list of variable types, in the same order as img-names and mask-names")
@@ -74,7 +75,6 @@ def set_common_args():
 
 def set_train_args(arg_file=None):
     arg_parser = set_common_args()
-    arg_parser.add_argument('--log-dir', type=str, default='logs/', help="Directory where the log files will be stored")
     arg_parser.add_argument('--resume-iter', type=int, help="Iteration step from which the training will be resumed")
     arg_parser.add_argument('--batch-size', type=int, default=18, help="Batch size")
     arg_parser.add_argument('--n-threads', type=int, default=64, help="Number of threads")
@@ -98,6 +98,7 @@ def set_evaluate_args(arg_file=None):
     arg_parser.add_argument('--infill', type=str, default=None, choices=["infill","test"], help="Infill the climate dataset ('test' if mask order is irrelevant, 'infill' if mask order is relevant)")
     arg_parser.add_argument('--create-images', type=str, default=None, help="Creates .jpg images for time window specified using the format 'YYY-MM-DD-HH:MM,YYYY-MM-DD-HH:MM'")
     arg_parser.add_argument('--create-video', action='store_true', help="Creates .gif videos using the created images")
+    arg_parser.add_argument('--create-graph', action='store_true', help="Create a Tensorboard graph of the NN")
     arg_parser.add_argument('--fps', type=float, default=5, help="Frame per seconds for the created videos")
     arg_parser.add_argument('--create-report', action='store_true', help="Create a report with plots and evaluation metrics")
     arg_parser.add_argument('--eval-range', type=str_list, default=None, help="Range of indexes for the time axis used to create the plots in the report")
