@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from fpdf import FPDF
 from numpy import ma
 import os.path
+from tensorboardX import SummaryWriter
 
 from .. import config as cfg
 from . import metrics as metrics
@@ -95,6 +96,12 @@ def infill(model, dataset, partitions):
         rea_images_part = torch.stack(rea_images_part)
         rea_masks_part = torch.stack(rea_masks_part)
         rea_gts_part = torch.stack(rea_gts_part)
+
+        if split == 0 and cfg.create_graph:
+            writer = SummaryWriter(log_dir=cfg.log_dir)
+            writer.add_graph(model, (image_part,mask_part,rea_images_part,rea_masks_part))
+            writer.close()
+
         # get results from trained network
         with torch.no_grad():
             output_part = model(image_part.to(cfg.device), mask_part.to(cfg.device),

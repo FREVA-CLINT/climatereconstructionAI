@@ -1,5 +1,5 @@
 import sys
-
+import os
 from . import config as cfg
 from .model.net import PConvLSTM
 from .utils.evaluation import *
@@ -11,6 +11,9 @@ def evaluate(arg_file=None):
     cfg.set_evaluate_args(arg_file)
     gt = None
     outputs = None
+
+    if not os.path.exists(cfg.log_dir):
+        os.makedirs(cfg.log_dir)
 
     if cfg.infill:
         for snapshot in cfg.snapshot_dirs:
