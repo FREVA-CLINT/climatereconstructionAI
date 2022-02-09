@@ -16,38 +16,37 @@ def evaluate(arg_file=None):
         os.makedirs(cfg.log_dir)
 
     if cfg.infill:
-        for snapshot in cfg.snapshot_dirs:
-            dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, cfg.infill,
-                                       cfg.data_types, cfg.lstm_steps, cfg.prev_next_steps)
-            lstm = True
-            if cfg.lstm_steps == 0:
-                lstm = False
+        dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, cfg.infill,
+                                   cfg.data_types, cfg.lstm_steps, cfg.prev_next_steps)
+        lstm = True
+        if cfg.lstm_steps == 0:
+            lstm = False
 
-            if len(cfg.image_sizes) > 1:
-                model = PConvLSTM(radar_img_size=cfg.image_sizes[0],
-                                  radar_enc_dec_layers=cfg.encoding_layers[0],
-                                  radar_pool_layers=cfg.pooling_layers[0],
-                                  radar_in_channels=2 * cfg.prev_next_steps + 1,
-                                  radar_out_channels=cfg.out_channels,
-                                  rea_img_size=cfg.image_sizes[1],
-                                  rea_enc_layers=cfg.encoding_layers[1],
-                                  rea_pool_layers=cfg.pooling_layers[1],
-                                  rea_in_channels=(len(cfg.image_sizes) - 1) * (2 * cfg.prev_next_steps + 1),
-                                  lstm=lstm).to(cfg.device)
-            else:
-                model = PConvLSTM(radar_img_size=cfg.image_sizes[0],
-                                  radar_enc_dec_layers=cfg.encoding_layers[0],
-                                  radar_pool_layers=cfg.pooling_layers[0],
-                                  radar_in_channels=2 * cfg.prev_next_steps + 1,
-                                  radar_out_channels=cfg.out_channels,
-                                  lstm=lstm).to(cfg.device)
+        if len(cfg.image_sizes) > 1:
+            model = PConvLSTM(radar_img_size=cfg.image_sizes[0],
+                              radar_enc_dec_layers=cfg.encoding_layers[0],
+                              radar_pool_layers=cfg.pooling_layers[0],
+                              radar_in_channels=2 * cfg.prev_next_steps + 1,
+                              radar_out_channels=cfg.out_channels,
+                              rea_img_size=cfg.image_sizes[1],
+                              rea_enc_layers=cfg.encoding_layers[1],
+                              rea_pool_layers=cfg.pooling_layers[1],
+                              rea_in_channels=(len(cfg.image_sizes) - 1) * (2 * cfg.prev_next_steps + 1),
+                              lstm=lstm).to(cfg.device)
+        else:
+            model = PConvLSTM(radar_img_size=cfg.image_sizes[0],
+                              radar_enc_dec_layers=cfg.encoding_layers[0],
+                              radar_pool_layers=cfg.pooling_layers[0],
+                              radar_in_channels=2 * cfg.prev_next_steps + 1,
+                              radar_out_channels=cfg.out_channels,
+                              lstm=lstm).to(cfg.device)
 
-            load_ckpt(snapshot, [('model', model)], cfg.device)
+        load_ckpt(cfg.snapshot_dir, [('model', model)], cfg.device)
 
-            model.eval()
+        model.eval()
 
-            gt, output = infill(model, dataset_val, cfg.partitions)
-            outputs = {cfg.eval_names[0]: output}
+        gt, output = infill(model, dataset_val, cfg.partitions)
+        outputs = {cfg.eval_names[0]: output}
 
     if cfg.create_report:
         if cfg.eval_range:

@@ -54,7 +54,7 @@ def global_args(parser,arg_file):
 def set_common_args():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument('--data-root-dir', type=str, default='../data/', help="Root directory containing the climate datasets")
-    arg_parser.add_argument('--snapshot-dirs', type=str_list, default='snapshots/', help="Directory where the training checkpoints will be stored")
+    arg_parser.add_argument('--snapshot-dir', type=str, default='snapshots/', help="Directory where the training checkpoints are stored")
     arg_parser.add_argument('--mask-dir', type=str, default='masks/', help="Directory containing the mask datasets")
     arg_parser.add_argument('--log-dir', type=str, default='logs/', help="Directory where the log files will be stored")
     arg_parser.add_argument('--img-names', type=str_list, default='train.h5', help="Comma separated list of netCDF files (climate dataset)")
@@ -70,6 +70,7 @@ def set_common_args():
     arg_parser.add_argument('--attention', action='store_true', help="Enable the attention module")
     arg_parser.add_argument('--channel-reduction-rate', type=int, default=1, help="Channel reduction rate for the attention module")
     arg_parser.add_argument('--disable-skip-layers', action='store_true', help="Disable the skip layers")
+    arg_parser.add_argument('--disable-first-last-bn', action='store_true', help="Disable the batch normalization on the first and last layer")
     arg_parser.add_argument('--out-channels', type=int, default=1, help="Number of channels for the output image")
     return arg_parser
 
