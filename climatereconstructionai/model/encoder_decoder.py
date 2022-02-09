@@ -23,7 +23,7 @@ class EncoderBlock(nn.Module):
         super().__init__()
         padding = kernel[0] // 2, kernel[1] // 2
         self.partial_conv = PConvBlock(conv_config['in_channels'], conv_config['out_channels'], kernel,
-                                       stride, padding, dilation, groups, False, activation, True)
+                                       stride, padding, dilation, groups, False, activation, conv_config['bn'])
 
         if lstm:
             self.lstm_conv = ConvLSTMBlock(conv_config['out_channels'], conv_config['out_channels'],
@@ -50,12 +50,12 @@ class EncoderBlock(nn.Module):
 
 class DecoderBlock(nn.Module):
     def __init__(self, conv_config, kernel, stride, activation, dilation=(1, 1), groups=1,
-                 lstm=False, bias=False, bn=True):
+                 lstm=False, bias=False):
         super().__init__()
         padding = kernel[0] // 2, kernel[1] // 2
         self.partial_conv = PConvBlock(conv_config['in_channels'] + conv_config['skip_channels'],
                                        conv_config['out_channels'], kernel, stride, padding, dilation, groups, bias,
-                                       activation, bn)
+                                       activation, conv_config['bn'])
         if lstm:
             self.lstm_conv = ConvLSTMBlock(conv_config['in_channels'], conv_config['in_channels'],
                                            conv_config['img_size'] // 2, kernel, (1, 1), padding, (1, 1), groups)
