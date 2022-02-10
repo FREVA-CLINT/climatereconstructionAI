@@ -165,5 +165,6 @@ class PConvLSTM(nn.Module):
         super().train(mode)
         if self.freeze_enc_bn:
             for i in range(self.net_depth):
-                if isinstance(self.encoder[i].partial_conv.bn, nn.BatchNorm2d):
-                    self.encoder[i].eval()
+                if hasattr(self.encoder[i].partial_conv,"bn"):
+                    if isinstance(self.encoder[i].partial_conv.bn, nn.BatchNorm2d):
+                        self.encoder[i].eval()
