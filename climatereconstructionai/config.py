@@ -54,7 +54,6 @@ def global_args(parser,arg_file):
 def set_common_args():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument('--data-root-dir', type=str, default='../data/', help="Root directory containing the climate datasets")
-    arg_parser.add_argument('--snapshot-dir', type=str, default='snapshots/', help="Directory where the training checkpoints are stored")
     arg_parser.add_argument('--mask-dir', type=str, default='masks/', help="Directory containing the mask datasets")
     arg_parser.add_argument('--log-dir', type=str, default='logs/', help="Directory where the log files will be stored")
     arg_parser.add_argument('--img-names', type=str_list, default='train.h5', help="Comma separated list of netCDF files (climate dataset)")
@@ -76,6 +75,7 @@ def set_common_args():
 
 def set_train_args(arg_file=None):
     arg_parser = set_common_args()
+    arg_parser.add_argument('--snapshot-dir', type=str, default='snapshots/', help="Parent directory of the training checkpoints and the snapshot images")
     arg_parser.add_argument('--resume-iter', type=int, help="Iteration step from which the training will be resumed")
     arg_parser.add_argument('--batch-size', type=int, default=18, help="Batch size")
     arg_parser.add_argument('--n-threads', type=int, default=64, help="Number of threads")
@@ -94,8 +94,10 @@ def set_train_args(arg_file=None):
 
 def set_evaluate_args(arg_file=None):
     arg_parser = set_common_args()
+    arg_parser.add_argument('--model-dir', type=str, default='snapshots/ckpt/', help="Directory of the trained models")
+    arg_parser.add_argument('--model-names', type=str_list, default='1000000.pth', help="Model names")
     arg_parser.add_argument('--evaluation-dirs', type=str_list, default='evaluation/', help="Directory where the output files will be stored")
-    arg_parser.add_argument('--eval-names', type=str_list, default='Output', help="Prefix used for the ourput filenames")
+    arg_parser.add_argument('--eval-names', type=str_list, default='output', help="Prefix used for the output filenames")
     arg_parser.add_argument('--infill', type=str, default=None, choices=["infill","test"], help="Infill the climate dataset ('test' if mask order is irrelevant, 'infill' if mask order is relevant)")
     arg_parser.add_argument('--create-images', type=str, default=None, help="Creates .jpg images for time window specified using the format 'YYY-MM-DD-HH:MM,YYYY-MM-DD-HH:MM'")
     arg_parser.add_argument('--create-video', action='store_true', help="Creates .gif videos using the created images")

@@ -73,7 +73,7 @@ def plot_data(time_series_dict, subplot, plot=False):
     subplot.legend(prop={'size': 6})
 
 
-def infill(model, dataset, partitions):
+def infill(model, dataset, partitions, eval_path):
     if not os.path.exists(cfg.evaluation_dirs[0]):
         os.makedirs('{:s}'.format(cfg.evaluation_dirs[0]))
     image = []
@@ -131,11 +131,11 @@ def infill(model, dataset, partitions):
     output_comp = mask * image + (1 - mask) * output
 
     cvar = {'image': image, 'mask': mask, 'output': output, 'output_comp': output_comp, 'gt': gt}
-    write_output_h5(cvar, dataset.data_path, to_netcdf=cfg.convert_to_netcdf)
+    write_output_h5(cvar, dataset.data_path, eval_path, to_netcdf=cfg.convert_to_netcdf)
 
     return ma.masked_array(gt, mask)[:, 0, :, :], ma.masked_array(output_comp, mask)[:, 0, :, :]
 
-def write_output_h5(cvar, data_path, to_netcdf=False):
+def write_output_h5(cvar, data_path, eval_path, to_netcdf=False):
 
     data_type = cfg.data_types[0]
 
@@ -144,7 +144,7 @@ def write_output_h5(cvar, data_path, to_netcdf=False):
         ds_src = xr.open_dataset('{}{}'.format(data_path, cfg.img_names[0]))
 
     for cname in cvar:
-        output_name = '{}/{}_{}'.format(cfg.evaluation_dirs[0],cfg.eval_names[0],cname)
+        output_name = '{}_{}'.format(eval_path,cname)
         data = cvar[cname].to(torch.device('cpu')).squeeze()
 
         if to_netcdf:

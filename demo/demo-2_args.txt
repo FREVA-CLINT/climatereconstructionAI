@@ -1,6 +1,7 @@
 --data-root-dir inputs/
 --mask-dir inputs/masks/
---snapshot-dir ../data/20cr_20220114.pth
+--model-dir ../data/
+--model-names 20cr_20220114.pth
 --evaluation-dirs outputs
 --img-names tas_hadcrut_187709_189308.nc
 --data-types tas
