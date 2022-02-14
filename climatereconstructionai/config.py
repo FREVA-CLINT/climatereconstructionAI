@@ -66,6 +66,7 @@ def set_common_args():
     arg_parser.add_argument('--encoding-layers', type=int_list, default='3', help="Number of encoding layers in the CNN")
     arg_parser.add_argument('--pooling-layers', type=int_list, default='0', help="Number of pooling layers in the CNN")
     arg_parser.add_argument('--image-sizes', type=int_list, default='72', help="Spatial size of the datasets (latxlon must be of shape NxN)")
+    arg_parser.add_argument('--weights', type=str, default=None, help="Initialization weight")
     arg_parser.add_argument('--attention', action='store_true', help="Enable the attention module")
     arg_parser.add_argument('--channel-reduction-rate', type=int, default=1, help="Channel reduction rate for the attention module")
     arg_parser.add_argument('--disable-skip-layers', action='store_true', help="Disable the skip layers")
@@ -88,7 +89,6 @@ def set_train_args(arg_file=None):
     arg_parser.add_argument('--save-model-interval', type=int, default=50000, help="Iteration step interval at which the model should be saved")
     arg_parser.add_argument('--loss-criterion', type=int, default=0, help="Index defining the loss function (0=original from Liu et al., 1=MAE of the hole region)")
     arg_parser.add_argument('--eval-timesteps', type=str, default="0,1,2,3,4", help="Iteration steps for which an evaluation is performed")
-    arg_parser.add_argument('--weights', type=str, default=None, help="Initialization weight")
     arg_parser.add_argument('--load-from-file', type=str, action=LoadFromFile, help="Load all the arguments from a text file")
     global_args(arg_parser,arg_file)
 
@@ -108,7 +108,7 @@ def set_evaluate_args(arg_file=None):
     arg_parser.add_argument('--eval-threshold', type=float, default=None, help="Create the masks from the climate dataset using a threshold value")
     arg_parser.add_argument('--smoothing-factor', type=int, default=1, help="Size of the convolution window used to smooth the evaluation metrics")
     arg_parser.add_argument('--convert-to-netcdf', action='store_true', help="Convert the output hdf5 files to netCDF")
+    arg_parser.add_argument('--original-network', action='store_true', help="Use the original network architecture (from Kadow et al.)")
     arg_parser.add_argument('--partitions', type=int, default=1, help="Split the climate dataset into several partitions along the time coordinate")
     arg_parser.add_argument('--load-from-file', type=str, action=LoadFromFile, help="Load all the arguments from a text file")
     global_args(arg_parser,arg_file)
-    globals()["weights"] = None

@@ -5,7 +5,7 @@ import sys
 from .. import config as cfg
 from .attention_module import AttentionEncoderBlock
 from .encoder_decoder import EncoderBlock, DecoderBlock
-from .conv_configs import init_enc_conv_configs, init_dec_conv_configs
+from .conv_configs import *
 
 
 class PConvLSTM(nn.Module):
@@ -20,11 +20,17 @@ class PConvLSTM(nn.Module):
         self.lstm = lstm
 
         # initialize channel inputs and outputs and image size for encoder and decoder
-        enc_conv_configs = init_enc_conv_configs(radar_img_size, radar_enc_dec_layers,
-                                                 radar_pool_layers, radar_in_channels)
-        dec_conv_configs = init_dec_conv_configs(radar_img_size, radar_enc_dec_layers,
-                                                 radar_pool_layers, radar_in_channels,
-                                                 radar_out_channels)
+        if cfg.original_network:
+            enc_conv_configs = init_enc_conv_configs_orig(radar_img_size, radar_enc_dec_layers,
+                                                    radar_out_channels)
+            dec_conv_configs = init_dec_conv_configs_orig(radar_img_size, radar_enc_dec_layers,
+                                                    radar_out_channels)
+        else:
+            enc_conv_configs = init_enc_conv_configs(radar_img_size, radar_enc_dec_layers,
+                                                     radar_pool_layers, radar_in_channels)
+            dec_conv_configs = init_dec_conv_configs(radar_img_size, radar_enc_dec_layers,
+                                                     radar_pool_layers, radar_in_channels,
+                                                     radar_out_channels)
 
         if cfg.attention:
             self.attention_depth = rea_enc_layers + rea_pool_layers
