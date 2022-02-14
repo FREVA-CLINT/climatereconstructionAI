@@ -133,7 +133,7 @@ def infill(model, dataset, partitions, eval_path):
     cvar = {'image': image, 'mask': mask, 'output': output, 'output_comp': output_comp, 'gt': gt}
     write_output_h5(cvar, dataset.data_path, eval_path, to_netcdf=cfg.convert_to_netcdf)
 
-    return ma.masked_array(gt, mask)[:, 0, :, :], ma.masked_array(output_comp, mask)[:, 0, :, :]
+    return ma.masked_array(gt, mask)[:, 0, :, :], ma.masked_array(output_comp[:, 0, :, :], mask[:, 0, :, :])
 
 def write_output_h5(cvar, data_path, eval_path, to_netcdf=False):
 
@@ -145,7 +145,8 @@ def write_output_h5(cvar, data_path, eval_path, to_netcdf=False):
 
     for cname in cvar:
         output_name = '{}_{}'.format(eval_path,cname)
-        data = cvar[cname].to(torch.device('cpu')).squeeze()
+        data = cvar[cname].to(torch.device('cpu'))
+        data = data[:,0,:,:]
 
         if to_netcdf:
             ds_dest = ds_src.copy(data={data_type: data})
