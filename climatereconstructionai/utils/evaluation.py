@@ -1,4 +1,3 @@
-import h5py
 import torch
 import numpy as np
 import pandas as pd
@@ -131,34 +130,19 @@ def infill(model, dataset, partitions, eval_path):
     output_comp = mask * image + (1 - mask) * output
 
     cvar = {'image': image, 'mask': mask, 'output': output, 'output_comp': output_comp, 'gt': gt}
-    write_output_h5(cvar, dataset.data_path, eval_path, to_netcdf=cfg.convert_to_netcdf)
+    write_outputs(cvar, dataset.img_data[0], eval_path)
 
     return ma.masked_array(gt, mask)[:, 0, :, :], ma.masked_array(output_comp[:, 0, :, :], mask[:, 0, :, :])
 
-def write_output_h5(cvar, data_path, eval_path, to_netcdf=False):
-
-    data_type = cfg.data_types[0]
-
-    if to_netcdf:
-        import xarray as xr
-        ds_src = xr.open_dataset('{}{}'.format(data_path, cfg.img_names[0]))
+def write_outputs(cvar, img_data, eval_path):
 
     for cname in cvar:
         output_name = '{}_{}'.format(eval_path,cname)
-        data = cvar[cname].to(torch.device('cpu'))
+        data = cvar[cname].to(torch.device('cpu')).detach().numpy()
         data = data[:,0,:,:]
 
-        if to_netcdf:
-            ds_dest = ds_src.copy(data={data_type: data})
-            ds_dest.to_netcdf(output_name+".nc")
-
-        else:
-            dname = ['time', 'lat', 'lon']
-            h5 = h5py.File(output_name+".h5", 'w')
-            h5.create_dataset(data_type,data=data)
-            for dim in range(3):
-                h5[data_type].dims[dim].label = dname[dim]
-            h5.close()
+        ds = img_data.copy(data={cfg.data_types[0]: data})
+        ds.to_netcdf(output_name+".nc")
 
 
 def create_evaluation_images(name, data_set, create_video=False, save_dir='images/', vmin=0, vmax=5, axis='off'):
