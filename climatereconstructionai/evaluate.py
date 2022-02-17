@@ -1,3 +1,4 @@
+import h5py
 import sys
 import os
 from . import config as cfg
@@ -7,6 +8,9 @@ from .utils.netcdfloader import NetCDFLoader
 from .utils.io import load_ckpt
 
 def evaluate(arg_file=None):
+
+    import time
+    start_time = time.time()
 
     cfg.set_evaluate_args(arg_file)
 
@@ -21,6 +25,7 @@ def evaluate(arg_file=None):
         outputs = None
 
         if cfg.infill:
+
             dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, cfg.infill,
                                        cfg.data_types, cfg.lstm_steps, cfg.prev_next_steps)
             lstm = True
@@ -109,6 +114,8 @@ def evaluate(arg_file=None):
                 create_video = True
             for key,value in data_sets.items():
                 create_evaluation_images(key, value, create_video, save_dir='images/{}'.format(key))
+
+        print("--- %s seconds ---" % (time.time() - start_time))
 
 if __name__ == "__main__":
     evaluate()
