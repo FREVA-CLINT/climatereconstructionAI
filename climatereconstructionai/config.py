@@ -102,5 +102,6 @@ def set_evaluate_args(arg_file=None):
     arg_parser.add_argument('--create-graph', action='store_true', help="Create a Tensorboard graph of the NN")
     arg_parser.add_argument('--original-network', action='store_true', help="Use the original network architecture (from Kadow et al.)")
     arg_parser.add_argument('--partitions', type=int, default=1, help="Split the climate dataset into several partitions along the time coordinate")
+    arg_parser.add_argument('--maxmem', type=int, default=None, help="Maximum available memory in MB (overwrite partitions parameter)")
     arg_parser.add_argument('--load-from-file', type=str, action=LoadFromFile, help="Load all the arguments from a text file")
     global_args(arg_parser,arg_file)
