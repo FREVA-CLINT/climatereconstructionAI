@@ -1,5 +1,4 @@
-import math
-
+import numpy as np
 from torch import nn
 
 
@@ -11,11 +10,11 @@ def weights_init(init_type='gaussian'):
             if init_type == 'gaussian':
                 nn.init.normal_(m.weight, 0.0, 0.02)
             elif init_type == 'xavier':
-                nn.init.xavier_normal_(m.weight, gain=math.sqrt(2))
+                nn.init.xavier_normal_(m.weight, gain=np.sqrt(2))
             elif init_type == 'kaiming':
                 nn.init.kaiming_normal_(m.weight, a=0, mode='fan_in')
             elif init_type == 'orthogonal':
-                nn.init.orthogonal_(m.weight, gain=math.sqrt(2))
+                nn.init.orthogonal_(m.weight, gain=np.sqrt(2))
             elif init_type == 'default':
                 pass
             else:
