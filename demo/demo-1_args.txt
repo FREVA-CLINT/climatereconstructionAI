@@ -10,5 +10,5 @@
 --lstm-steps 0
 --prev-next-steps 0
 --infill infill
---convert-to-netcdf
 --eval-names demo-1
+--dataset-name hadcrut4
