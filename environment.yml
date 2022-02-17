@@ -4,11 +4,7 @@ channels:
   - pytorch
   - defaults
 dependencies:
-  - imageio>=2.9.0
-  - pandas>=1.2.5
-  - fpdf>=1.7.2
   - pytorch>=1.8.0
-  - h5py>=3.2.1
   - tqdm>=4.59.0
   - torchvision>=0.2.1
   - numpy>=1.20.1
