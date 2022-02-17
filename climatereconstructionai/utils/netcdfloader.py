@@ -4,6 +4,7 @@ import torch
 import xarray as xr
 from torch.utils.data import Dataset, Sampler
 import sys
+import logging
 
 from .. import config as cfg
 
@@ -30,6 +31,39 @@ class InfiniteSampler(Sampler):
                 order = np.random.permutation(self.num_samples)
                 i = 0
 
+def nc_checker(filename,dataset_name,data_type):
+
+    basename = filename.split("/")[-1]
+
+    try:
+        ds = xr.open_dataset(filename)
+    except:
+        logging.error('Impossible to read the input file {}.\nPlease, check that the input file is a netCDF file and is not corrupted.'.format(basename))
+        sys.exit()
+
+    if not dataset_name is None:
+        min_tsteps = 2
+        if dataset_name == "hadcrut4":
+            ok_dims = ['time', 'lon', 'lat']
+
+        ds_dims = list(ds.dims)
+        nd = len(ok_dims)
+
+        if nd != len(ds_dims):
+            logging.error('Inconsistent number of coordinates in file {}.\nThe number of coordinates should be: {}'.format(basename,nd))
+            sys.exit()
+
+        for i in range(nd):
+            if ok_dims[i] != ds_dims[i]:
+                logging.error('Inconsistent coordinates in file {}.\nThe list of coordinates should be: {}'.format(basename,*ok_dims))
+                sys.exit()
+
+        if not data_type in list(ds.keys()):
+            logging.error('Variable name \'{}\' not found in file {}.'.format(data_type,basename))
+            sys.exit()
+
+    return ds
+
 def get_data(path,data_names,data_types):
 
     if data_names is None:
@@ -40,7 +74,7 @@ def get_data(path,data_names,data_types):
 
         data, shape = [], []
         for i in range(ndata):
-            data.append(xr.open_dataset('{}{}'.format(path, data_names[i])))
+            data.append(nc_checker('{}{}'.format(path, data_names[i]),cfg.dataset_name,data_types[i]))
             shape.append(data[-1][data_types[i]].shape)
 
         assert len(set(shape)) == 1
