@@ -1,3 +1,4 @@
+import sys
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
@@ -53,8 +54,23 @@ def create_snapshot_image(model, dataset, filename):
     plt.clf()
     plt.close('all')
 
+def get_partitions(parameters,length):
 
-def infill(model, dataset, partitions, eval_path):
+    if cfg.maxmem is None:
+        partitions = cfg.partitions
+    else:
+        model_size = 0
+        for parameter in parameters:
+            model_size += sys.getsizeof(parameter.storage())
+        model_size = model_size*length/1e6
+        partitions = int(np.ceil(model_size*5/cfg.maxmem))
+
+    if partitions > length:
+        partitions = length
+
+    return partitions
+
+def infill(model, dataset, eval_path):
     if not os.path.exists(cfg.evaluation_dirs[0]):
         os.makedirs('{:s}'.format(cfg.evaluation_dirs[0]))
     image = []
@@ -62,45 +78,44 @@ def infill(model, dataset, partitions, eval_path):
     gt = []
     output = []
 
-    if partitions > dataset.__len__():
-        partitions = dataset.__len__()
-    if dataset.__len__() % partitions != 0:
-        print("WARNING: The size of the dataset should be dividable by the number of partitions. The last "
-              + str(dataset.__len__() % partitions) + " time steps will not be infilled.")
+    partitions = get_partitions(model.parameters(),dataset.img_length)
+
+    if partitions != 1:
+        print("The data will be split in {} partitions...".format(partitions))
+
+    n_elements = dataset.__len__() // partitions
     for split in range(partitions):
-        image_part, mask_part, gt_part, rea_images_part, rea_masks_part, rea_gts_part = zip(
-            *[dataset[i + split * (dataset.__len__() // partitions)] for i in
-              range(dataset.__len__() // partitions)])
-        image_part = torch.stack(image_part)
-        mask_part = torch.stack(mask_part)
-        gt_part = torch.stack(gt_part)
-        rea_images_part = torch.stack(rea_images_part)
-        rea_masks_part = torch.stack(rea_masks_part)
-        rea_gts_part = torch.stack(rea_gts_part)
+        data_part = []
+        i_start = split*n_elements
+        if split == partitions-1:
+            i_end = dataset.__len__()
+        else:
+            i_end = i_start+n_elements
+        for i in range(6):
+            data_part.append(torch.stack([dataset[j][i] for j in range(i_start,i_end)]))
+
+        # Tensors in data_part: image_part, mask_part, gt_part, rea_images_part, rea_masks_part, rea_gts_part
 
         if split == 0 and cfg.create_graph:
             writer = SummaryWriter(log_dir=cfg.log_dir)
-            writer.add_graph(model, (image_part,mask_part,rea_images_part,rea_masks_part))
+            writer.add_graph(model, (data_part[0],data_part[1],data_part[3],data_part[4]))
             writer.close()
 
         # get results from trained network
         with torch.no_grad():
-            output_part = model(image_part.to(cfg.device), mask_part.to(cfg.device),
-                                rea_images_part.to(cfg.device), rea_masks_part.to(cfg.device))
+            output_part = model(data_part[0].to(cfg.device), data_part[1].to(cfg.device),
+                                data_part[3].to(cfg.device), data_part[4].to(cfg.device))
 
-        image_part = image_part[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
-        mask_part = mask_part[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
-        gt_part = gt_part[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
+        # image_part, mask_part, gt_part
+        for i in range(3):
+            data_part[i] = data_part[i][:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
+            # only select first channel
+            data_part[i] = torch.unsqueeze(data_part[i][:, cfg.prev_next_steps, :, :], dim=1)
         output_part = output_part[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
 
-        # only select first channel
-        image_part = torch.unsqueeze(image_part[:, cfg.prev_next_steps, :, :], dim=1)
-        gt_part = torch.unsqueeze(gt_part[:, cfg.prev_next_steps, :, :], dim=1)
-        mask_part = torch.unsqueeze(mask_part[:, cfg.prev_next_steps, :, :], dim=1)
-
-        image.append(image_part)
-        mask.append(mask_part)
-        gt.append(gt_part)
+        image.append(data_part[0])
+        mask.append(data_part[1])
+        gt.append(data_part[2])
         output.append(output_part)
 
     image = torch.cat(image)
