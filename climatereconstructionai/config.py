@@ -96,6 +96,7 @@ def set_evaluate_args(arg_file=None):
     arg_parser = set_common_args()
     arg_parser.add_argument('--model-dir', type=str, default='snapshots/ckpt/', help="Directory of the trained models")
     arg_parser.add_argument('--model-names', type=str_list, default='1000000.pth', help="Model names")
+    arg_parser.add_argument('--dataset-name', type=str, default=None, help="Name of the dataset for format checking")
     arg_parser.add_argument('--evaluation-dirs', type=str_list, default='evaluation/', help="Directory where the output files will be stored")
     arg_parser.add_argument('--eval-names', type=str_list, default='output', help="Prefix used for the output filenames")
     arg_parser.add_argument('--infill', type=str, default="infill", choices=["infill","test"], help="Infill the climate dataset ('test' if mask order is irrelevant, 'infill' if mask order is relevant)")
