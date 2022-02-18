@@ -7,7 +7,19 @@ LAMBDA_DICT_HOLE = {
     'hole': 1.0
 }
 
-PDF_BINS = [0, 0.01, 0.02, 0.1, 1, 2, 10, 100]
+def get_format(dataset_name):
+
+    dataset_format = {}
+    dataset_format["hadcrut4"] = {\
+    "dimensions": ["time", "lat", "lon"],\
+    "axes": ["time", "lat", "lon"]\
+    }
+    dataset_format["hadcrut5"] = {\
+    "dimensions": ["time", "latitude", "longitude"],\
+    "axes": ["time", "latitude", "longitude"]\
+    }
+
+    return dataset_format[dataset_name]
 
 
 class LoadFromFile (argparse.Action):
@@ -38,6 +50,8 @@ def global_args(parser,arg_file):
 
     torch.backends.cudnn.benchmark = True
     globals()[device] = torch.device(device)
+
+    globals()["dataset_format"] = get_format(args.dataset_name)
 
     global skip_layers
     global gt_channels
@@ -72,6 +86,7 @@ def set_common_args():
     arg_parser.add_argument('--disable-skip-layers', action='store_true', help="Disable the skip layers")
     arg_parser.add_argument('--disable-first-last-bn', action='store_true', help="Disable the batch normalization on the first and last layer")
     arg_parser.add_argument('--out-channels', type=int, default=1, help="Number of channels for the output image")
+    arg_parser.add_argument('--dataset-name', type=str, default=None, help="Name of the dataset for format checking")
     return arg_parser
 
 def set_train_args(arg_file=None):
@@ -96,7 +111,6 @@ def set_evaluate_args(arg_file=None):
     arg_parser = set_common_args()
     arg_parser.add_argument('--model-dir', type=str, default='snapshots/ckpt/', help="Directory of the trained models")
     arg_parser.add_argument('--model-names', type=str_list, default='1000000.pth', help="Model names")
-    arg_parser.add_argument('--dataset-name', type=str, default=None, help="Name of the dataset for format checking")
     arg_parser.add_argument('--evaluation-dirs', type=str_list, default='evaluation/', help="Directory where the output files will be stored")
     arg_parser.add_argument('--eval-names', type=str_list, default='output', help="Prefix used for the output filenames")
     arg_parser.add_argument('--infill', type=str, default="infill", choices=["infill","test"], help="Infill the climate dataset ('test' if mask order is irrelevant, 'infill' if mask order is relevant)")
