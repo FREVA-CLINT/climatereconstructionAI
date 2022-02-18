@@ -133,10 +133,14 @@ def infill(model, dataset, eval_path):
 
 def write_outputs(cvar, img_data, eval_path):
 
+    data_type = cfg.data_types[0]
+
     for cname in cvar:
         output_name = '{}_{}'.format(eval_path,cname)
         data = cvar[cname].to(torch.device('cpu')).detach().numpy()
         data = data[:,0,:,:]
 
-        ds = img_data.copy(data={cfg.data_types[0]: data})
+        ds = img_data.copy(data={data_type: data})
+        # We transpose back
+        ds[data_type] = ds[data_type].transpose(*cfg.dataset_format["dimensions"])
         ds.to_netcdf(output_name+".nc")

@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import xarray as xr
 from torch.utils.data import Dataset, Sampler
+import os
 import sys
 import logging
 
@@ -31,35 +32,44 @@ class InfiniteSampler(Sampler):
                 order = np.random.permutation(self.num_samples)
                 i = 0
 
-def nc_checker(filename,dataset_name,data_type):
+def nc_checker(filename,data_type):
 
     basename = filename.split("/")[-1]
 
+    if not os.path.isfile(filename):
+        print('File {} not found.'.format(filename))
+
     try:
-        ds = xr.open_dataset(filename)
+        # We use load_dataset instead of open_dataset because of lazy transpose
+        ds = xr.load_dataset(filename)
     except:
         logging.error('Impossible to read the input file {}.\nPlease, check that the input file is a netCDF file and is not corrupted.'.format(basename))
         sys.exit()
 
-    if not dataset_name is None:
+    if not data_type in list(ds.keys()):
+        logging.error('Variable name \'{}\' not found in file {}.'.format(data_type,basename))
+        sys.exit()
+
+    if not cfg.dataset_format is None:
+
         min_tsteps = 2
-        if dataset_name == "hadcrut4":
-            ok_dims = ['time', 'lon', 'lat']
 
-        ds_dims = list(ds.dims)
-        nd = len(ok_dims)
+        ds_dims = list(ds[data_type].dims)
+        ndims = len(cfg.dataset_format["dimensions"])
 
-        if nd != len(ds_dims):
-            logging.error('Inconsistent number of coordinates in file {}.\nThe number of coordinates should be: {}'.format(basename,nd))
+        if ndims != len(ds_dims):
+            logging.error('Inconsistent number of dimensions in file {}.\nThe number of dimensions should be: {}'.format(basename,ndims))
             sys.exit()
 
-        for i in range(nd):
-            if ok_dims[i] != ds_dims[i]:
-                logging.error('Inconsistent coordinates in file {}.\nThe list of coordinates should be: {}'.format(basename,*ok_dims))
+        for i in range(ndims):
+            if cfg.dataset_format["dimensions"][i] != ds_dims[i]:
+                logging.error('Inconsistent dimensions in file {}.\nThe list of dimensions should be: {}'.format(basename,cfg.dataset_format["dimensions"]))
                 sys.exit()
 
-        if not data_type in list(ds.keys()):
-            logging.error('Variable name \'{}\' not found in file {}.'.format(data_type,basename))
+        ds[data_type] = ds[data_type].transpose(*cfg.dataset_format["axes"])
+
+        if len(ds[data_type]) < min_tsteps:
+            logging.error('Not enough time steps in file {}.\nThe minimum number of time steps is: {}'.format(basename,min_tsteps))
             sys.exit()
 
     return ds
@@ -74,7 +84,7 @@ def get_data(path,data_names,data_types):
 
         data, shape = [], []
         for i in range(ndata):
-            data.append(nc_checker('{}{}'.format(path, data_names[i]),cfg.dataset_name,data_types[i]))
+            data.append(nc_checker('{}{}'.format(path, data_names[i]),data_types[i]))
             shape.append(data[-1][data_types[i]].shape)
 
         assert len(set(shape)) == 1
