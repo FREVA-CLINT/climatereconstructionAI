@@ -7,7 +7,19 @@ LAMBDA_DICT_HOLE = {
     'hole': 1.0
 }
 
-PDF_BINS = [0, 0.01, 0.02, 0.1, 1, 2, 10, 100]
+def get_format(dataset_name):
+
+    dataset_format = {}
+    dataset_format["hadcrut4"] = {\
+    "dimensions": ["time", "lat", "lon"],\
+    "axes": ["time", "lat", "lon"]\
+    }
+    dataset_format["hadcrut5"] = {\
+    "dimensions": ["time", "latitude", "longitude"],\
+    "axes": ["time", "latitude", "longitude"]\
+    }
+
+    return dataset_format[dataset_name]
 
 
 class LoadFromFile (argparse.Action):
@@ -38,6 +50,8 @@ def global_args(parser,arg_file):
 
     torch.backends.cudnn.benchmark = True
     globals()[device] = torch.device(device)
+
+    globals()["dataset_format"] = get_format(args.dataset_name)
 
     global skip_layers
     global gt_channels
