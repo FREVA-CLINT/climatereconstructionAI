@@ -4,14 +4,16 @@ Software to train climate reconstruction technology (image inpainting with parti
 
 ## Dependencies
 - python>=3.7
-- torch>=1.8.0
+- pytorch>=1.8.0
 - tqdm>=4.59.0
 - torchvision>=0.2.1
 - numpy>=1.20.1
 - matplotlib>=3.4.3
 - tensorboardX>=2.4.0
+- tensorboard>=2.8.0
 - xarray>=0.20.2
 - netcdf4>=1.5.8
+- setuptools==59.5.0
 
 An Anaconda environment with all the required dependencies can be created using `environment.yml`:
 ```bash
