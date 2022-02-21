@@ -18,6 +18,7 @@ def get_format(dataset_name):
     "dimensions": ["time", "latitude", "longitude"],\
     "axes": ["time", "latitude", "longitude"]\
     }
+    dataset_format[None] = None
 
     return dataset_format[dataset_name]
 
