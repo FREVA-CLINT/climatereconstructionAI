@@ -50,7 +50,7 @@ def nc_checker(filename,data_type):
         logging.error('Variable name \'{}\' not found in file {}.'.format(data_type,basename))
         sys.exit()
 
-    if not cfg.dataset_format is None:
+    if not cfg.dataset_name is None:
 
         min_tsteps = 2
 

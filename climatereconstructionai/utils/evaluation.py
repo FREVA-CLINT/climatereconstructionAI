@@ -141,6 +141,7 @@ def write_outputs(cvar, img_data, eval_path):
         data = data[:,0,:,:]
 
         ds = img_data.copy(data={data_type: data})
+        if not cfg.dataset_name is None:
         # We transpose back
-        ds[data_type] = ds[data_type].transpose(*cfg.dataset_format["dimensions"])
+            ds[data_type] = ds[data_type].transpose(*cfg.dataset_format["dimensions"])
         ds.to_netcdf(output_name+".nc")
