@@ -137,10 +137,10 @@ def write_outputs(cvar, img_data, eval_path):
 
     for cname in cvar:
         output_name = '{}_{}'.format(eval_path,cname)
-        data = cvar[cname].to(torch.device('cpu')).detach().numpy()
-        data = data[:,0,:,:]
 
-        ds = img_data.copy(data={data_type: data})
+        ds = img_data.copy()
+        ds[data_type].values = cvar[cname].to(torch.device('cpu')).detach().numpy()[:,0,:,:]
+
         if not cfg.dataset_name is None:
         # We transpose back
             ds[data_type] = ds[data_type].transpose(*cfg.dataset_format["dimensions"])

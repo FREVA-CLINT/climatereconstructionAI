@@ -32,7 +32,7 @@ class InfiniteSampler(Sampler):
                 order = np.random.permutation(self.num_samples)
                 i = 0
 
-def nc_checker(filename,data_type):
+def nc_checker(filename,data_type,image_size):
 
     basename = filename.split("/")[-1]
 
@@ -68,9 +68,23 @@ def nc_checker(filename,data_type):
 
         ds[data_type] = ds[data_type].transpose(*cfg.dataset_format["axes"])
 
-        if len(ds[data_type]) < min_tsteps:
+        shape = ds[data_type].shape
+
+        if shape[0] < min_tsteps:
             logging.error('Not enough time steps in file {}.\nThe minimum number of time steps is: {}'.format(basename,min_tsteps))
             sys.exit()
+
+        for i in range(1,3):
+            if shape[i] != image_size:
+                coordinate = cfg.dataset_format["axes"][i]
+                logging.warning('The length of {} does not correspond to the image size for file {}.\nData has been interpolated using nearest interpolation.'.format(coordinate,basename))
+
+                new_grid = np.linspace(ds[data_type][coordinate][0],ds[data_type][coordinate][-1],image_size)
+                ds = ds.interp(latitude=new_grid,method="nearest")
+
+        if ds[data_type].dtype != "float32":
+            logging.warning('Incorrect data type for file {}.\nData type has been converted to float32.'.format(basename))
+            ds[data_type] = ds[data_type].astype(dtype=np.float32)
 
     return ds
 
@@ -84,7 +98,7 @@ def get_data(path,data_names,data_types):
 
         data, shape = [], []
         for i in range(ndata):
-            data.append(nc_checker('{}{}'.format(path, data_names[i]),data_types[i]))
+            data.append(nc_checker('{}{}'.format(path,data_names[i]),data_types[i],cfg.image_sizes[i]))
             shape.append(data[-1][data_types[i]].shape)
 
         assert len(set(shape)) == 1
