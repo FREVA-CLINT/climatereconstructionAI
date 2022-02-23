@@ -84,23 +84,17 @@ def nc_checker(filename,data_type,image_size):
                 logging.error('The {} grid in file {} is not uniform.'.format(coordinate,basename))
                 sys.exit()
 
-            cmin = ds[data_type][coordinate].values[0]
-            cmax = ds[data_type][coordinate].values[-1]
             extent = cfg.dataset_format["grid"][i][1]-cfg.dataset_format["grid"][i][0]
-            if abs( cmax - cmin + step - extent ) > 1e-2:
+            if abs( ds[data_type][coordinate].values[-1] - ds[data_type][coordinate].values[0] + step - extent ) > 1e-2:
                 logging.error('Incorrect {} extent in file {}.\nThe extent should be: {}'.format(coordinate,basename,extent))
                 sys.exit()
 
-            if shape[i] != image_size:
+            if shape[i+1] != image_size:
                 logging.warning('The length of {} does not correspond to the image size for file {}.'.format(coordinate,basename))
                 regrid = True
 
-            if cmin != cfg.dataset_format["grid"][i][0] or cmax != cfg.dataset_format["grid"][i][1]:
-                logging.warning('Shifted {} coordinates in file {}.'.format(coordinate,basename))
-                regrid = True
-
         if regrid:
-            logging.warning('The spatial coordinates have been interpolated using nearest_s2d in file {}.'.format(coordinate,basename))
+            logging.warning('The spatial coordinates have been interpolated using nearest_s2d in file {}.'.format(basename))
             grid = xr.Dataset({cfg.dataset_format["axes"][1]: ([cfg.dataset_format["axes"][1]], xe.util._grid_1d(*cfg.dataset_format["grid"][0])[0]),
                               cfg.dataset_format["axes"][2]: ([cfg.dataset_format["axes"][2]], xe.util._grid_1d(*cfg.dataset_format["grid"][1])[0])})
             ds = xe.Regridder(ds, grid, "nearest_s2d")(ds,keep_attrs=True)
