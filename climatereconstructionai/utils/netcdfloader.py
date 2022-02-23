@@ -2,6 +2,7 @@ import random
 import numpy as np
 import torch
 import xarray as xr
+import xesmf as xe
 from torch.utils.data import Dataset, Sampler
 import os
 import sys
@@ -74,13 +75,35 @@ def nc_checker(filename,data_type,image_size):
             logging.error('Not enough time steps in file {}.\nThe minimum number of time steps is: {}'.format(basename,min_tsteps))
             sys.exit()
 
-        for i in range(1,3):
-            if shape[i] != image_size:
-                coordinate = cfg.dataset_format["axes"][i]
-                logging.warning('The length of {} does not correspond to the image size for file {}.\nData has been interpolated using nearest interpolation.'.format(coordinate,basename))
+        regrid = False
+        for i in range(2):
+            coordinate = cfg.dataset_format["axes"][i+1]
 
-                new_grid = np.linspace(ds[data_type][coordinate][0],ds[data_type][coordinate][-1],image_size)
-                ds = ds.interp(latitude=new_grid,method="nearest")
+            step = np.unique(np.gradient(ds[data_type][coordinate].values))
+            if len(step) != 1:
+                logging.error('The {} grid in file {} is not uniform.'.format(coordinate,basename))
+                sys.exit()
+
+            cmin = ds[data_type][coordinate].values[0]
+            cmax = ds[data_type][coordinate].values[-1]
+            extent = cfg.dataset_format["grid"][i][1]-cfg.dataset_format["grid"][i][0]
+            if abs( cmax - cmin + step - extent ) > 1e-2:
+                logging.error('Incorrect {} extent in file {}.\nThe extent should be: {}'.format(coordinate,basename,extent))
+                sys.exit()
+
+            if shape[i] != image_size:
+                logging.warning('The length of {} does not correspond to the image size for file {}.'.format(coordinate,basename))
+                regrid = True
+
+            if cmin != cfg.dataset_format["grid"][i][0] or cmax != cfg.dataset_format["grid"][i][1]:
+                logging.warning('Shifted {} coordinates in file {}.'.format(coordinate,basename))
+                regrid = True
+
+        if regrid:
+            logging.warning('The spatial coordinates have been interpolated using nearest_s2d in file {}.'.format(coordinate,basename))
+            grid = xr.Dataset({cfg.dataset_format["axes"][1]: ([cfg.dataset_format["axes"][1]], xe.util._grid_1d(*cfg.dataset_format["grid"][0])[0]),
+                              cfg.dataset_format["axes"][2]: ([cfg.dataset_format["axes"][2]], xe.util._grid_1d(*cfg.dataset_format["grid"][1])[0])})
+            ds = xe.Regridder(ds, grid, "nearest_s2d")(ds,keep_attrs=True)
 
         if ds[data_type].dtype != "float32":
             logging.warning('Incorrect data type for file {}.\nData type has been converted to float32.'.format(basename))
