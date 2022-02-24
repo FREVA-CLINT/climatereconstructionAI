@@ -12,3 +12,4 @@
 --infill infill
 --eval-names demo-1
 --dataset-name hadcrut4
+--plot-result 0

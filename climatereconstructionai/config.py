@@ -10,13 +10,13 @@ LAMBDA_DICT_HOLE = {
 def get_format(dataset_name):
 
     dataset_format = {}
-    dataset_format["hadcrut_mod"] = {\
+    dataset_format["hadcrut4"] = {\
     "dimensions": ["time", "lat", "lon"],\
     "axes": ["time", "lat", "lon"],\
     "grid": [[-90,90,2.5],[0,360,5]],\
     "cmap": "RdBu_r",\
     }
-    dataset_format["hadcrut"] = {\
+    dataset_format["hadcrut5"] = {\
     "dimensions": ["time", "latitude", "longitude"],\
     "axes": ["time", "latitude", "longitude"],\
     "grid": [[-90,90,2.5],[0,360,5]],\
