@@ -10,15 +10,17 @@ LAMBDA_DICT_HOLE = {
 def get_format(dataset_name):
 
     dataset_format = {}
-    dataset_format["hadcrut4"] = {\
+    dataset_format["hadcrut_mod"] = {\
     "dimensions": ["time", "lat", "lon"],\
     "axes": ["time", "lat", "lon"],\
-    "grid": [[-90,90,2.5],[0,360,5]]\
+    "grid": [[-90,90,2.5],[0,360,5]],\
+    "cmap": "RdBu_r",\
     }
-    dataset_format["hadcrut5"] = {\
+    dataset_format["hadcrut"] = {\
     "dimensions": ["time", "latitude", "longitude"],\
     "axes": ["time", "latitude", "longitude"],\
     "grid": [[-90,90,2.5],[0,360,5]],\
+    "cmap": "RdBu_r",\
     }
     dataset_format[None] = None
 
@@ -118,6 +120,7 @@ def set_evaluate_args(arg_file=None):
     arg_parser.add_argument('--eval-names', type=str_list, default='output', help="Prefix used for the output filenames")
     arg_parser.add_argument('--infill', type=str, default="infill", choices=["infill","test"], help="Infill the climate dataset ('test' if mask order is irrelevant, 'infill' if mask order is relevant)")
     arg_parser.add_argument('--create-graph', action='store_true', help="Create a Tensorboard graph of the NN")
+    arg_parser.add_argument('--plot-results', type=int_list, default=None, help="Create plot images of the results for the comma separated list of time indices")
     arg_parser.add_argument('--original-network', action='store_true', help="Use the original network architecture (from Kadow et al.)")
     arg_parser.add_argument('--partitions', type=int, default=1, help="Split the climate dataset into several partitions along the time coordinate")
     arg_parser.add_argument('--maxmem', type=int, default=None, help="Maximum available memory in MB (overwrite partitions parameter)")
