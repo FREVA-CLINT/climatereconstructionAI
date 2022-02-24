@@ -399,6 +399,56 @@ def create_evaluation_report(gt, outputs):
     pdf.output('reports/{}.pdf'.format(report_name), 'F')
 
 
+def plot_ts(title, time_series_dict, time):
+    hfont = {'fontname': 'Nimbus Roman'}
+    print(time[0].month)
+    for name, time_series in time_series_dict.items():
+        if name=='Ground Truth':
+            param='g:'
+        else:
+            param='-'
+        plt.plot([i.month for i in time], time_series, param, label=name)
+        plt.xlabel("Timesteps", **hfont)
+        plt.ylabel("Precipitation", **hfont)
+    plt.legend(prop={'size': 6, 'family': 'Nimbus Roman'})
+    plt.savefig('evaluation/' + title + '.pdf')
+    plt.clf()
+
+
+def create_evaluation_graphs(gt, outputs):
+    data = Dataset('{}/{}/{}'.format(cfg.data_root_dir, 'test_large', cfg.img_names[0]))
+    time = data.variables['time']
+    time = netCDF4.num2date(time[:], time.units)
+
+    # define dicts for time series
+    max_timeseries = {}
+    min_timeseries = {}
+    mean_timeseries = {}
+    rmse_timeseries = {}
+    rmse_over_mean_timeseries = {}
+
+    # define output metrics
+    for output_name, output in outputs.items():
+        # calculate time series
+        max_timeseries[output_name] = metrics.max_timeseries(output)
+        min_timeseries[output_name] = metrics.min_timeseries(output)
+        mean_timeseries[output_name] = metrics.mean_timeseries(output)
+        rmse_timeseries[output_name] = metrics.rmse_timeseries(gt, output)
+        rmse_over_mean_timeseries[output_name] = metrics.rmse_over_mean_timeseries(gt, output)
+
+    # set GT time series
+    max_timeseries['Ground Truth'] = metrics.max_timeseries(gt)
+    min_timeseries['Ground Truth'] = metrics.min_timeseries(gt)
+    mean_timeseries['Ground Truth'] = metrics.mean_timeseries(gt)
+
+    # create time series plots
+    plot_ts('Maximum', max_timeseries, time)
+    plot_ts('Minimum', min_timeseries, time)
+    plot_ts('Mean', mean_timeseries, time)
+    plot_ts('RMSE', rmse_timeseries, time)
+    plot_ts('ME', rmse_over_mean_timeseries, time)
+
+
 def evaluate_selected_samples(self, dates=None):
     cdo = Cdo()
     if dates is None:
