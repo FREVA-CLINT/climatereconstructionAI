@@ -150,4 +150,4 @@ def create_outputs(cvar, img_data, eval_path):
     dims = ds[data_type].dims
     lon, lat = ds[data_type][dims[2]].values, ds[data_type][dims[1]].values
     output_names = [output_name, '{}_{}'.format(eval_path,"masked_gt")]
-    plot_data(lon,lat,[cvar["output_comp"],cvar["gt"]/cvar["mask"]],output_names,data_type,cfg.plot_results,cfg.dataset_format["cmap"])
+    plot_data(lon,lat,[cvar["output_comp"],cvar["gt"]/cvar["mask"]],output_names,data_type,cfg.plot_results,*cfg.dataset_format["scale"])
