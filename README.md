@@ -16,6 +16,7 @@ Software to train climate reconstruction technology (image inpainting with parti
 - setuptools==59.5.0
 - xesmf>=0.6.2
 - cartopy>=0.20.2
+- numba>=0.55.1
 
 An Anaconda environment with all the required dependencies can be created using `environment.yml`:
 ```bash

@@ -39,6 +39,7 @@ netcdf4 = ">=1.5.8"
 setuptools = "==59.5.0"
 xesmf = ">=0.6.2"
 cartopy = ">=0.20.2"
+numba = ">=0.55.1"
 
 [tool.poetry.dev-dependencies]
 
