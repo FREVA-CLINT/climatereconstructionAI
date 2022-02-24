@@ -14,15 +14,20 @@ def get_format(dataset_name):
     "dimensions": ["time", "lat", "lon"],\
     "axes": ["time", "lat", "lon"],\
     "grid": [[-90,90,2.5],[0,360,5]],\
-    "cmap": "RdBu_r",\
+    "scale": ["symmetric","RdBu_r"],\
     }
     dataset_format["hadcrut5"] = {\
     "dimensions": ["time", "latitude", "longitude"],\
     "axes": ["time", "latitude", "longitude"],\
     "grid": [[-90,90,2.5],[0,360,5]],\
-    "cmap": "RdBu_r",\
+    "scale": ["symmetric","RdBu_r"],\
     }
-    dataset_format[None] = None
+    dataset_format[None] = {\
+    "dimensions": None,\
+    "axes": None,\
+    "grid": None,\
+    "scale": [None, None],\
+    }
 
     return dataset_format[dataset_name]
 
