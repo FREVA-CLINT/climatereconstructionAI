@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os.path
 from tensorboardX import SummaryWriter
+from .plotdata import plot_data
 
 from .. import config as cfg
 
@@ -126,12 +127,12 @@ def infill(model, dataset, eval_path):
     # create output_comp
     output_comp = mask * image + (1 - mask) * output
 
-    cvar = {'image': image, 'mask': mask, 'output': output, 'output_comp': output_comp, 'gt': gt}
-    write_outputs(cvar, dataset.img_data[0], eval_path)
+    cvar = {'gt': gt, 'output_comp': output_comp, 'mask': mask, 'image': image, 'output': output}
+    create_outputs(cvar, dataset.img_data[0], eval_path)
 
     return np.ma.masked_array(gt, mask)[:, 0, :, :], np.ma.masked_array(output_comp[:, 0, :, :], mask[:, 0, :, :])
 
-def write_outputs(cvar, img_data, eval_path):
+def create_outputs(cvar, img_data, eval_path):
 
     data_type = cfg.data_types[0]
 
@@ -145,3 +146,9 @@ def write_outputs(cvar, img_data, eval_path):
         # We transpose back
             ds[data_type] = ds[data_type].transpose(*cfg.dataset_format["dimensions"])
         ds.to_netcdf(output_name+".nc")
+
+    dims = ds[data_type].dims
+    lon, lat = ds[data_type][dims[2]].values, ds[data_type][dims[1]].values
+    plot_data(lon,lat,cvar["output_comp"],data_type,cfg.plot_results,output_name,cfg.dataset_format["cmap"])
+    output_name = '{}_{}'.format(eval_path,"masked_gt")
+    plot_data(lon,lat,cvar["gt"]/cvar["mask"],data_type,cfg.plot_results,output_name,cfg.dataset_format["cmap"])
