@@ -415,7 +415,7 @@ def plot_ts(title, time_series_dict, time, unit):
     ax.set_xticks([i for i in range(len(time)) if time[i].month != time[i-1].month or i == 0])
     ax.set_xticklabels([calendar.month_abbr[time[i].month] for i in range(len(time)) if time[i].month != time[i-1].month or i == 0])
     plt.xticks(rotation=55)
-    plt.legend(prop={'size': 6})
+    plt.legend()
     plt.savefig('evaluation/' + title + '.pdf', bbox_inches="tight")
     plt.clf()
 
