@@ -399,7 +399,7 @@ def create_evaluation_report(gt, outputs):
     pdf.output('reports/{}.pdf'.format(report_name), 'F')
 
 
-def plot_ts(title, time_series_dict, time, unit):
+def plot_ts(title, file_name, time_series_dict, time, unit):
     plt.rcParams.update({'font.family': 'Times New Roman'})
     index = 0
     for name, time_series in time_series_dict.items():
@@ -416,7 +416,7 @@ def plot_ts(title, time_series_dict, time, unit):
     ax.set_xticklabels([calendar.month_abbr[time[i].month] for i in range(len(time)) if time[i].month != time[i-1].month or i == 0])
     plt.xticks(rotation=55)
     plt.legend()
-    plt.savefig('evaluation/' + title + '.pdf', bbox_inches="tight")
+    plt.savefig('evaluation/' + file_name + '.pdf', bbox_inches="tight")
     plt.clf()
 
 
@@ -447,11 +447,11 @@ def create_evaluation_graphs(gt, outputs):
     mean_timeseries['Ground Truth'] = metrics.mean_timeseries(gt)
 
     # create time series plots
-    plot_ts('Maximum', max_timeseries, time, 'mm/h')
-    plot_ts('Minimum', min_timeseries, time, 'mm/h')
-    plot_ts('Mean', mean_timeseries, time, 'mm/h')
-    plot_ts('RMSE', rmse_timeseries, time, 'mm/h')
-    plot_ts('ME', rmse_over_mean_timeseries, time, 'mm/h')
+    plot_ts('Maximum', 'MaxTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), max_timeseries, time, 'mm/h')
+    plot_ts('Minimum', 'MinTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), min_timeseries, time, 'mm/h')
+    plot_ts('Mean', 'MeanTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]),  mean_timeseries, time, 'mm/h')
+    plot_ts('RMSE', 'RMSETS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), rmse_timeseries, time, 'mm/h')
+    plot_ts('ME', 'METS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), rmse_over_mean_timeseries, time, 'mm/h')
 
 
 def evaluate_selected_samples(self, dates=None):
