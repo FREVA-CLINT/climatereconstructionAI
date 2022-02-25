@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import imageio
 import matplotlib.pyplot as plt
-from dateutil import parser
+import calendar
 from netCDF4 import Dataset
 from fpdf import FPDF
 from cdo import *
@@ -399,19 +399,24 @@ def create_evaluation_report(gt, outputs):
     pdf.output('reports/{}.pdf'.format(report_name), 'F')
 
 
-def plot_ts(title, time_series_dict, time):
-    hfont = {'fontname': 'Nimbus Roman'}
-    print(time[0].month)
+def plot_ts(title, time_series_dict, time, unit):
+    plt.rcParams.update({'font.family': 'Nimbus Roman'})
+    index = 0
     for name, time_series in time_series_dict.items():
         if name=='Ground Truth':
-            param='g:'
+            param='k:'
         else:
-            param='-'
-        plt.plot([i.month for i in time], time_series, param, label=name)
-        plt.xlabel("Timesteps", **hfont)
-        plt.ylabel("Precipitation", **hfont)
-    plt.legend(prop={'size': 6, 'family': 'Nimbus Roman'})
-    plt.savefig('evaluation/' + title + '.pdf')
+            param='{}-'.format(cfg.graph_colors[index])
+            index+=1
+        plt.plot([i for i in range(len(time))], time_series, param, label=name)
+        plt.xlabel("Year {}".format(time[0].year))
+        plt.ylabel(title + " in " + unit)
+    ax = plt.gca()
+    ax.set_xticks([i for i in range(len(time)) if time[i].month != time[i-1].month or i == 0])
+    ax.set_xticklabels([calendar.month_abbr[time[i].month] for i in range(len(time)) if time[i].month != time[i-1].month or i == 0])
+    plt.xticks(rotation=55)
+    plt.legend(prop={'size': 6})
+    plt.savefig('evaluation/' + title + '.pdf', bbox_inches="tight")
     plt.clf()
 
 
@@ -442,11 +447,11 @@ def create_evaluation_graphs(gt, outputs):
     mean_timeseries['Ground Truth'] = metrics.mean_timeseries(gt)
 
     # create time series plots
-    plot_ts('Maximum', max_timeseries, time)
-    plot_ts('Minimum', min_timeseries, time)
-    plot_ts('Mean', mean_timeseries, time)
-    plot_ts('RMSE', rmse_timeseries, time)
-    plot_ts('ME', rmse_over_mean_timeseries, time)
+    plot_ts('Maximum', max_timeseries, time, 'mm/h')
+    plot_ts('Minimum', min_timeseries, time, 'mm/h')
+    plot_ts('Mean', mean_timeseries, time, 'mm/h')
+    plot_ts('RMSE', rmse_timeseries, time, 'mm/h')
+    plot_ts('ME', rmse_over_mean_timeseries, time, 'mm/h')
 
 
 def evaluate_selected_samples(self, dates=None):

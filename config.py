@@ -56,6 +56,7 @@ weights = None
 skip_layers = None
 fps = None
 create_graphs = None
+graph_colors = None
 
 
 def set_train_args():
@@ -185,6 +186,7 @@ def set_evaluation_args():
     arg_parser.add_argument('--create-video', action='store_true')
     arg_parser.add_argument('--create-report', action='store_true')
     arg_parser.add_argument('--eval-names', type=str, default='Output')
+    arg_parser.add_argument('--graph-colors', type=str, default='b')
     arg_parser.add_argument('--eval-range', type=str, default=None)
     arg_parser.add_argument('--ts-range', type=str, default=None)
     arg_parser.add_argument('--out-channels', type=int, default=1)
@@ -226,6 +228,7 @@ def set_evaluation_args():
     global skip_layers
     global fps
     global create_graphs
+    global graph_colors
 
     data_types = args.data_types.split(',')
     img_names = args.img_names.split(',')
@@ -260,6 +263,7 @@ def set_evaluation_args():
     gt_channels = []
     fps = args.fps
     create_graphs = args.create_graphs
+    graph_colors = args.graph_colors.split(',')
     if args.disable_skip_layers:
         skip_layers = 0
     else:
