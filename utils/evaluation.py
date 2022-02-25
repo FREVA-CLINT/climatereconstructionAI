@@ -400,7 +400,7 @@ def create_evaluation_report(gt, outputs):
 
 
 def plot_ts(title, time_series_dict, time, unit):
-    plt.rcParams.update({'font.family': 'Nimbus Roman'})
+    plt.rcParams.update({'font.family': 'Times New Roman'})
     index = 0
     for name, time_series in time_series_dict.items():
         if name=='Ground Truth':
