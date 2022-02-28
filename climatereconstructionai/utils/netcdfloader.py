@@ -128,7 +128,7 @@ class NetCDFLoader(Dataset):
         assert lstm_steps == 0 or prev_next_steps == 0
 
         self.data_types = data_types
-        self.split = "infill"
+        self.split = split
         self.lstm_steps = lstm_steps
         self.prev_next_steps = prev_next_steps
 
