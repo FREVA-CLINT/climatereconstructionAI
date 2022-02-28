@@ -146,16 +146,16 @@ class NetCDFLoader(Dataset):
             assert self.img_length == self.mask_length
 
 
-    def load_data(self, ind_data, indices):
+    def load_data(self, ind_data, img_indices, mask_indices):
 
         data_type = self.data_types[ind_data]
-        image = self.img_data[ind_data][data_type].values[indices]
+        image = self.img_data[ind_data][data_type].values[img_indices]
         if self.mask_data is None:
             # Get masks from images
             mask = torch.from_numpy((1-(np.isnan(image))).astype(image.dtype))
             image = np.nan_to_num(image)
         else:
-            mask = torch.from_numpy(self.mask_data[ind_data][data_type].values[indices])
+            mask = torch.from_numpy(self.mask_data[ind_data][data_type].values[mask_indices])
 
         # # open netcdf file
         # try:
@@ -193,7 +193,7 @@ class NetCDFLoader(Dataset):
             mask_indices = sorted(mask_indices)
 
         # load data from ranges
-        images, masks = self.load_data(ind_data, img_indices)
+        images, masks = self.load_data(ind_data, img_indices, mask_indices)
 
         # stack to correct dimensions
         if self.lstm_steps == 0:
