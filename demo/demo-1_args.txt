@@ -11,5 +11,5 @@
 --prev-next-steps 0
 --infill infill
 --eval-names demo-1
---dataset-name hadcrut4
+--dataset-name hadcrut_mod
 --plot-result 0
