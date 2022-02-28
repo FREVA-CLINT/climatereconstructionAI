@@ -95,6 +95,7 @@ def set_common_args():
     arg_parser.add_argument('--channel-reduction-rate', type=int, default=1, help="Channel reduction rate for the attention module")
     arg_parser.add_argument('--disable-skip-layers', action='store_true', help="Disable the skip layers")
     arg_parser.add_argument('--disable-first-last-bn', action='store_true', help="Disable the batch normalization on the first and last layer")
+    arg_parser.add_argument('--original-network', action='store_true', help="Use the original network architecture (from Kadow et al.)")
     arg_parser.add_argument('--out-channels', type=int, default=1, help="Number of channels for the output image")
     arg_parser.add_argument('--dataset-name', type=str, default=None, help="Name of the dataset for format checking")
     return arg_parser
@@ -126,7 +127,6 @@ def set_evaluate_args(arg_file=None):
     arg_parser.add_argument('--infill', type=str, default="infill", choices=["infill","test"], help="Infill the climate dataset ('test' if mask order is irrelevant, 'infill' if mask order is relevant)")
     arg_parser.add_argument('--create-graph', action='store_true', help="Create a Tensorboard graph of the NN")
     arg_parser.add_argument('--plot-results', type=int_list, default=None, help="Create plot images of the results for the comma separated list of time indices")
-    arg_parser.add_argument('--original-network', action='store_true', help="Use the original network architecture (from Kadow et al.)")
     arg_parser.add_argument('--partitions', type=int, default=1, help="Split the climate dataset into several partitions along the time coordinate")
     arg_parser.add_argument('--maxmem', type=int, default=None, help="Maximum available memory in MB (overwrite partitions parameter)")
     arg_parser.add_argument('--load-from-file', type=str, action=LoadFromFile, help="Load all the arguments from a text file")
