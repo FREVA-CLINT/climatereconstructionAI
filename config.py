@@ -56,6 +56,7 @@ weights = None
 skip_layers = None
 fps = None
 create_graphs = None
+create_maps = None
 graph_colors = None
 
 
@@ -196,6 +197,7 @@ def set_evaluation_args():
     arg_parser.add_argument('--fps', type=float, default=5)
     arg_parser.add_argument('--attention', action='store_true')
     arg_parser.add_argument('--create-graphs', action='store_true')
+    arg_parser.add_argument('--create-maps', action='store_true')
     arg_parser.add_argument('--disable-skip-layers', action='store_true')
     args = arg_parser.parse_args()
 
@@ -229,6 +231,7 @@ def set_evaluation_args():
     global fps
     global create_graphs
     global graph_colors
+    global create_maps
 
     data_types = args.data_types.split(',')
     img_names = args.img_names.split(',')
@@ -263,6 +266,7 @@ def set_evaluation_args():
     gt_channels = []
     fps = args.fps
     create_graphs = args.create_graphs
+    create_maps = args.create_maps
     graph_colors = args.graph_colors.split(',')
     if args.disable_skip_layers:
         skip_layers = 0

@@ -6,6 +6,8 @@ import pandas as pd
 import imageio
 import matplotlib.pyplot as plt
 import calendar
+
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from netCDF4 import Dataset
 from fpdf import FPDF
 from cdo import *
@@ -172,7 +174,7 @@ def create_evaluation_images(name, data_set, create_video=False, save_dir='image
                 writer.append_data(image)
 
 
-def create_evaluation_maps(map_list, map_names, vmin, vmax):
+def plot_evaluation_maps(map_list, map_names, vmin, vmax):
     # plot and save data
     if len(map_list) > 1:
         fig, axes = plt.subplots(nrows=((len(map_list) // 2) + (len(map_list) % 2)), ncols=2,  figsize=(2 * 4, 3 * ((len(map_list) // 2) + (len(map_list) % 2))))
@@ -255,7 +257,7 @@ def create_evaluation_report(gt, outputs):
     vmins = [0,0,0]
     vmaxs = [1,0.1,1000]
     for i in range(len(total_maps)):
-        create_evaluation_maps(total_maps[i], total_names[i], vmins[i], vmaxs[i])
+        plot_evaluation_maps(total_maps[i], total_names[i], vmins[i], vmaxs[i])
 
     # set GT time series
     max_timeseries['Ground Truth'] = metrics.max_timeseries(gt)
@@ -416,7 +418,7 @@ def plot_ts(title, file_name, time_series_dict, time, unit):
     ax.set_xticklabels([calendar.month_abbr[time[i].month] for i in range(len(time)) if time[i].month != time[i-1].month or i == 0])
     plt.xticks(rotation=55)
     plt.legend()
-    plt.savefig('evaluation/' + file_name + '.pdf', bbox_inches="tight")
+    plt.savefig('evaluation/graphs/' + file_name + '.pdf', bbox_inches="tight")
     plt.clf()
 
 
@@ -452,6 +454,41 @@ def create_evaluation_graphs(gt, outputs):
     plot_ts('Mean', 'MeanTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]),  mean_timeseries, time, 'mm/h')
     plot_ts('RMSE', 'RMSETS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), rmse_timeseries, time, 'mm/h')
     plot_ts('ME', 'METS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), rmse_over_mean_timeseries, time, 'mm/h')
+
+
+def create_evaluation_maps(gt, outputs):
+    timcor_maps = []
+    rmse_maps = []
+    sum_maps = [metrics.sum_map(gt)]
+    timcor_names = []
+    rmse_names = []
+    sum_names = ['Sum GT']
+
+    for output_name, output in outputs.items():
+        timcor_maps.append(metrics.timcor_map(gt, output))
+        rmse_maps.append(metrics.rmse_map(gt, output))
+        sum_maps.append(metrics.sum_map(output))
+        timcor_names.append('TimCor {}'.format(output_name))
+        rmse_names.append('RMSe {}'.format(output_name))
+        sum_names.append('Sum {}'.format(output_name))
+
+    map_lists = [timcor_maps, rmse_maps, sum_maps]
+    map_names = [timcor_names, rmse_names, sum_names]
+    for i in range(len(map_lists)):
+        for j in range(len(map_lists[i])):
+            # plot and save data
+            img = plt.imshow(np.squeeze(map_lists[i][j]), vmin=0, vmax=np.max(map_lists[i][j]), cmap='jet', aspect='auto')
+            plt.title(map_names[i][j])
+            plt.xlabel("km")
+            plt.ylabel("km")
+            ax = plt.gca()
+            divider = make_axes_locatable(ax)
+            cax = divider.append_axes('right', size='10%', pad=0.6)
+            cb = plt.colorbar(img, cax=cax, orientation='vertical')
+            cax.set_xlabel('{} in mm/h'.format(map_names[i][j]))
+            plt.savefig('{}/{}.pdf'.format('evaluation/maps', map_names[i][j]), bbox_inches='tight')
+            plt.clf()
+            plt.close('all')
 
 
 def evaluate_selected_samples(self, dates=None):

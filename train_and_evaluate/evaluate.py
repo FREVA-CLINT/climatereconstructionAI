@@ -132,3 +132,32 @@ if cfg.create_graphs:
         output = ma.masked_array(output, mask)[:, :, :]
         outputs[cfg.eval_names[i]] = output
     create_evaluation_graphs(gt, outputs)
+
+if cfg.create_maps:
+    if cfg.eval_range:
+        r = (int(cfg.eval_range[0]), int(cfg.eval_range[1]))
+        gt = h5py.File('{}{}'.format(cfg.evaluation_dirs[0], 'gt'), 'r').get(cfg.data_types[0])[r[0]:r[1], :, :]
+        mask = h5py.File('{}{}'.format(cfg.evaluation_dirs[0], 'mask'), 'r').get(cfg.data_types[0])[r[0]:r[1], :, :]
+    else:
+        gt = h5py.File('{}{}'.format(cfg.evaluation_dirs[0], 'gt'), 'r').get(cfg.data_types[0])[:, :, :]
+        mask = h5py.File('{}{}'.format(cfg.evaluation_dirs[0], 'mask'), 'r').get(cfg.data_types[0])[:, :, :]
+    if gt.ndim == 4:
+        gt = gt[:, 0, :, :]
+    if mask.ndim == 4:
+        mask = mask[:, 0, :, :]
+    if cfg.eval_threshold:
+        mask[gt < cfg.eval_threshold] = 1
+    gt = ma.masked_array(gt, mask)[:, :, :]
+    outputs = {}
+    for i in range(len(cfg.evaluation_dirs)):
+        if cfg.eval_range:
+            r = (int(cfg.eval_range[0]), int(cfg.eval_range[1]))
+            output = h5py.File('{}{}'.format(cfg.evaluation_dirs[i], 'output'), 'r').get(cfg.data_types[0])[r[0]:r[1], :, :]
+        else:
+            output = h5py.File('{}{}'.format(cfg.evaluation_dirs[i], 'output'), 'r').get(cfg.data_types[0])[:, :, :]
+        if output.ndim == 4:
+            output = output[:, 0, :, :]
+        output[output < 0.0] = 0.0
+        output = ma.masked_array(output, mask)[:, :, :]
+        outputs[cfg.eval_names[i]] = output
+    create_evaluation_maps(gt, outputs)
