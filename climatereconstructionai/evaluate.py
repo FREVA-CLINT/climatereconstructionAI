@@ -20,7 +20,7 @@ def evaluate(arg_file=None):
         gt = None
         outputs = None
 
-        dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, cfg.infill,
+        dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, "infill",
                                    cfg.data_types, cfg.lstm_steps, cfg.prev_next_steps)
         lstm = True
         if cfg.lstm_steps == 0:
