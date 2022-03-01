@@ -149,14 +149,14 @@ class NetCDFLoader(Dataset):
     def load_data(self, ind_data, img_indices, mask_indices):
 
         data_type = self.data_types[ind_data]
-        image = self.img_data[ind_data][data_type].values[img_indices]
         if self.mask_data is None:
             # Get masks from images
+            image = self.img_data[ind_data][data_type].values[mask_indices]
             mask = torch.from_numpy((1-(np.isnan(image))).astype(image.dtype))
-            image = np.nan_to_num(image)
         else:
             mask = torch.from_numpy(self.mask_data[ind_data][data_type].values[mask_indices])
-
+        image = self.img_data[ind_data][data_type].values[img_indices]
+        image = torch.from_numpy(np.nan_to_num(image))
         # # open netcdf file
         # try:
         #     total_data = torch.from_numpy(h5_data[indices, :, :])
@@ -172,7 +172,7 @@ class NetCDFLoader(Dataset):
         #         total_data = torch.cat([torch.stack(copy_indices[0][1] * [total_data[copy_indices[0][0]]]), total_data])
         #     else:
         #         total_data = torch.cat([total_data, torch.stack(copy_indices[0][1] * [total_data[copy_indices[0][0]]])])
-        return torch.from_numpy(image), mask
+        return image, mask
 
     def get_single_item(self, ind_data, index):
         if self.lstm_steps == 0:
