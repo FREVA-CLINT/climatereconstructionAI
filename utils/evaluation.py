@@ -487,7 +487,7 @@ def create_evaluation_maps(gt, outputs):
             divider = make_axes_locatable(ax)
             cax = divider.append_axes('right', size='10%', pad=0.6)
             cb = plt.colorbar(img, cax=cax, orientation='vertical')
-            cax.set_xlabel('{} in mm/h'.format(map_names[i][j]))
+            cax.set_xlabel('mm/h')
             plt.savefig('{}/{}.pdf'.format('evaluation/maps', map_names[i][j]), bbox_inches='tight')
             plt.clf()
             plt.close('all')
