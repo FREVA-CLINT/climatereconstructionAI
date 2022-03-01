@@ -1,0 +1,8 @@
+--device cpu
+--data-root-dir data/
+--model-dir tests/ref/
+--model-names test-1_100.pth
+--evaluation-dirs tests/out/evaluation/
+--img-names tas_hadcrut_187709_189308.nc
+--eval-names test-1
+--dataset-name hadcrut_mod
