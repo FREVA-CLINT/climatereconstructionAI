@@ -128,13 +128,12 @@ class NetCDFLoader(Dataset):
         assert lstm_steps == 0 or prev_next_steps == 0
 
         self.data_types = data_types
-        self.split = split
         self.lstm_steps = lstm_steps
         self.prev_next_steps = prev_next_steps
 
         if split == 'train':
             data_path = '{:s}/data_large/'.format(data_root)
-        elif split == 'test' or split == 'infill':
+        elif split == 'infill':
             data_path = '{:s}/test_large/'.format(data_root)
         elif split == 'val':
             data_path = '{:s}/val_large/'.format(data_root)
@@ -142,8 +141,11 @@ class NetCDFLoader(Dataset):
         self.img_data, self.img_length = get_data(data_path,img_names,data_types)
         self.mask_data, self.mask_length = get_data(mask_root,mask_names,data_types)
 
-        if self.split == "infill" and not self.mask_data is None:
-            assert self.img_length == self.mask_length
+        if self.mask_data is None:
+            self.mask_length = self.img_length
+        else:
+            if not cfg.shuffle_masks:
+                assert self.img_length == self.mask_length
 
 
     def load_data(self, ind_data, img_indices, mask_indices):
@@ -184,13 +186,13 @@ class NetCDFLoader(Dataset):
         img_indices = np.array(list(range(index - prev_steps, index + next_steps + 1)))
         img_indices[img_indices < 0] = 0
         img_indices[img_indices > self.img_length - 1] = self.img_length - 1
-        if self.split == 'infill':
-            mask_indices = img_indices
-        else:
+        if cfg.shuffle_masks:
             mask_indices = []
             for j in range(prev_steps + next_steps + 1):
                 mask_indices.append(random.randint(0, self.mask_length - 1))
             mask_indices = sorted(mask_indices)
+        else:
+            mask_indices = img_indices
 
         # load data from ranges
         images, masks = self.load_data(ind_data, img_indices, mask_indices)
