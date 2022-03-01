@@ -92,6 +92,7 @@ def set_common_args():
     arg_parser.add_argument('--pooling-layers', type=int_list, default='0', help="Number of pooling layers in the CNN")
     arg_parser.add_argument('--image-sizes', type=int_list, default='72', help="Spatial size of the datasets (latxlon must be of shape NxN)")
     arg_parser.add_argument('--weights', type=str, default=None, help="Initialization weight")
+    arg_parser.add_argument('--random-seed', type=int, default=None, help="Random seed for iteration loop and initialization weights")
     arg_parser.add_argument('--attention', action='store_true', help="Enable the attention module")
     arg_parser.add_argument('--channel-reduction-rate', type=int, default=1, help="Channel reduction rate for the attention module")
     arg_parser.add_argument('--disable-skip-layers', action='store_true', help="Disable the skip layers")
