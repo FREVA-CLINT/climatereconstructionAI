@@ -24,12 +24,13 @@ class InfiniteSampler(Sampler):
 
     def loop(self):
         i = 0
+        np.random.seed(cfg.random_seed)
         order = np.random.permutation(self.num_samples)
         while True:
             yield order[i]
             i += 1
             if i >= self.num_samples:
-                np.random.seed()
+                np.random.seed(cfg.random_seed)
                 order = np.random.permutation(self.num_samples)
                 i = 0
 

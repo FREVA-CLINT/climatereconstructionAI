@@ -14,7 +14,7 @@ class PConvBlock(nn.Module):
         self.mask_conv = nn.Conv2d(in_channels, out_channels, kernel, stride, padding, dilation, groups, False)
 
         if cfg.weights:
-            self.input_conv.apply(weights_init(cfg.weights))
+            self.input_conv.apply(weights_init(cfg.weights,random_seed=cfg.random_seed))
         torch.nn.init.constant_(self.mask_conv.weight, 1.0)
 
         if activation:
