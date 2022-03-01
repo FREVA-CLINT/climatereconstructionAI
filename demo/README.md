@@ -8,53 +8,43 @@ The present demo aims at giving an example of the climate dataset infilling (**e
 
 The `demo` folder contains:
 - a directory `inputs` with the following sub-directories:
-  - `test-large`: contains the climate datasets to be infilled:
-    - medium dataset: `tas_hadcrut_185001-201812.nc` is a netCDF file containing the HadCRUT4 monthly global temperature anomaly (in ºC) from 1850 to 2018 (2028 time steps in total) with a spatial resolution of 2.5º×5º (lat×lon). The dataset can be downloaded from the UK MET office ([HadCRUT4](https://www.metoffice.gov.uk/hadobs/hadcrut4/data/current/download.html))
-    - small dataset: `tas_hadcrut_187709_189308.nc` is a netCDF file containing the same HadCRUT4 data but for two dates only (September 1877 and August 1893)
-  - `masks`: contains the masks used for the missing values (optional)
-- two text files containing the input arguments of two examples:
-    - `demo-1_args.txt` is used to infill the medium dataset
-    - `demo-2_args.txt` is used to infill the small dataset
+  - `test-large`: contains the climate dataset to be infilled:
+    - `tas_hadcrut_187709_189308.nc` is a netCDF file containing the HadCRUT4 monthly global temperature anomaly (in ºC) for two dates (September 1877 and August 1893) with a spatial resolution of 2.5º×5º (lat×lon). The full dataset can be downloaded from the UK MET office ([HadCRUT4](https://www.metoffice.gov.uk/hadobs/hadcrut4/data/current/download.html))
+- a text file `demo_args.txt` containing the input arguments of the example
 - a directory `outputs` where the output files will be stored
 - a directory `images` containing some visualizations of the output files
 
 
 ## Usage
 
-The paths for the input and output directories defined in `demo-*_args.txt` are relative to the `demo` directory. Hence, the software should be run in the current directory.
+The paths for the input and output directories defined in `demo_args.txt` are relative to the `demo` directory. Hence, the software should be run in the current directory.
 
 ### CLI
 
 ```bash
-# Use the medium dataset
-crai-evaluate --load-from-file demo-1_args.txt
-
-# Use the small dataset
-crai-evaluate --load-from-file demo-2_args.txt
+crai-evaluate --load-from-file demo_args.txt
 ```
 
 ### Python module
 
 ```python
 from climatereconstructionai import evaluate
-
-# Use the medium dataset
-evaluate("demo-1_args.txt")
-
-# Use the small dataset
-evaluate("demo-2_args.txt")
+evaluate("demo_args.txt")
 ```
 
 ## Outputs
 
 ### The files
 
-Each evaluation produces 5 netCDF files contained in the `output` folder:
-- `demo-#_gt.nc` corresponds to the original dataset
-- `demo-#_mask.nc` contains the masks corresponding to the missing values
-- `demo-#_image.nc` is `demo-#_gt.nc` after applying the masks `demo-#_mask.nc`
-- `demo-#_output.nc` is the infilled dataset (all values being infilled)
-- `demo-#_output_comp.nc` is the **composite output dataset**: it is the original dataset `demo-#_gt.nc` where the missing values have been replaced by the values from `demo-#_output.nc`
+Each evaluation produces 5 netCDF files and 2 png files contained in the `outputs` folder:
+- `demo_gt.nc` corresponds to the original dataset
+- `demo_mask.nc` contains the masks corresponding to the missing values
+- `demo_image.nc` is `demo-#_gt.nc` after applying the masks `demo-#_mask.nc`
+- `demo_output.nc` is the infilled dataset (all values being infilled)
+- `demo_output_comp.nc` is the **composite output dataset**: it is the original dataset `demo_gt.nc` where the missing values have been replaced by the values from `demo_output.nc`
+- `demo_masked_gt_0.png` is a plot of the first timestep of `demo_gt.nc`
+- `demo_output_comp_0.png` is a plot of the first timestep of `demo_output_comp.nc`
+
 
 ### Visualization
 
@@ -62,4 +52,4 @@ We can visualize the infilling by comparing the original and the composite datas
 
 | Original dataset | Composite dataset |
 | --------------------- | -------------------------- |
-![Original dataset](images/demo-1_gt.png)  |  ![Composite dataset](images/demo-1_output_comp.png)
+![Original dataset](images/demo_masked_gt_0.png)  |  ![Composite dataset](images/demo_output_comp_0.png)
