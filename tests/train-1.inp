@@ -1,0 +1,10 @@
+--device cpu --batch-size 2
+--data-root-dir data/
+--log-dir tests/out/training/logs/
+--snapshot-dir tests/out/training/
+--img-names 20cr-1ens.nc
+--max-iter 100
+--save-model-interval 50
+--loss-criterion 0
+--weights kaiming
+--random-seed 3

@@ -1,5 +1,4 @@
---data-root-dir inputs/
---mask-dir inputs/masks/
+--data-root-dir ../data/
 --model-dir ../data/
 --model-names 20cr_20220114.pth
 --evaluation-dirs outputs
@@ -9,7 +8,6 @@
 --out-channels 1
 --lstm-steps 0
 --prev-next-steps 0
---infill infill
 --eval-names demo-1
 --dataset-name hadcrut_mod
 --plot-result 0
