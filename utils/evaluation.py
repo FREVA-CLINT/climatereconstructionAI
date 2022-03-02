@@ -404,7 +404,7 @@ def create_evaluation_report(gt, outputs):
 def init_font():
     from matplotlib import font_manager
 
-    font_dirs = ['../Nimbus Roman']
+    font_dirs = ['../fonts/Nimbus Roman']
     font_files = font_manager.findSystemFonts(fontpaths=font_dirs)
 
     for font_file in font_files:
@@ -493,7 +493,7 @@ def create_evaluation_maps(gt, outputs):
         for j in range(len(map_lists[i])):
             # plot and save data
             img = plt.imshow(np.squeeze(map_lists[i][j]), vmin=minimum, vmax=maximum, cmap='jet', aspect='auto')
-            plt.title(map_names[i][j])
+            #plt.title(map_names[i][j])
             plt.xlabel("km")
             plt.ylabel("km")
             ax = plt.gca()
