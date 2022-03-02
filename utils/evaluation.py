@@ -401,8 +401,19 @@ def create_evaluation_report(gt, outputs):
     pdf.output('reports/{}.pdf'.format(report_name), 'F')
 
 
+def init_font():
+    from matplotlib import font_manager
+
+    font_dirs = ['../Nimbus Roman']
+    font_files = font_manager.findSystemFonts(fontpaths=font_dirs)
+
+    for font_file in font_files:
+        font_manager.fontManager.addfont(font_file)
+
+
 def plot_ts(title, file_name, time_series_dict, time, unit):
-    plt.rcParams.update({'font.family': 'Times New Roman'})
+    init_font()
+    plt.rcParams.update({'font.family': 'Nimbus Roman'})
     index = 0
     for name, time_series in time_series_dict.items():
         if name=='Ground Truth':
@@ -457,6 +468,8 @@ def create_evaluation_graphs(gt, outputs):
 
 
 def create_evaluation_maps(gt, outputs):
+    init_font()
+    plt.rcParams.update({'font.family': 'Nimbus Roman'})
     timcor_maps = []
     rmse_maps = []
     sum_maps = [metrics.sum_map(gt)]
