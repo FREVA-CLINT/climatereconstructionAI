@@ -501,7 +501,7 @@ def create_evaluation_maps(gt, outputs):
             cax = divider.append_axes('right', size='10%', pad=0.6)
             cb = plt.colorbar(img, cax=cax, orientation='vertical')
             cax.set_xlabel('mm/h')
-            plt.savefig('{}/{}.pdf'.format('evaluation/maps', map_names[i][j]), bbox_inches='tight')
+            plt.savefig('{}/{}{}x{}.pdf'.format('evaluation/maps', map_names[i][j], cfg.image_sizes[0], cfg.image_sizes[0]), bbox_inches='tight')
             plt.clf()
             plt.close('all')
 
