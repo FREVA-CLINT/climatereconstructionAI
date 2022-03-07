@@ -489,7 +489,10 @@ def create_evaluation_maps(gt, outputs):
     map_names = [timcor_names, rmse_names, sum_names]
     for i in range(len(map_lists)):
         minimum = np.min(map_lists[i])
-        maximum = np.max(map_lists[i])
+        if 'RMSE' in map_names[i][0]:
+            maximum = 0.1
+        else:
+            maximum = np.max(map_lists[i])
         for j in range(len(map_lists[i])):
             # plot and save data
             img = plt.imshow(np.squeeze(map_lists[i][j]), vmin=minimum, vmax=maximum, cmap='jet', aspect='auto')
