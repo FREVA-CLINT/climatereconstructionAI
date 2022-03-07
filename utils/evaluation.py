@@ -482,7 +482,7 @@ def create_evaluation_maps(gt, outputs):
         rmse_maps.append(metrics.rmse_map(gt, output))
         sum_maps.append(metrics.sum_map(output))
         timcor_names.append('TimCor {}'.format(output_name))
-        rmse_names.append('RMSe {}'.format(output_name))
+        rmse_names.append('RMSE {}'.format(output_name))
         sum_names.append('Sum {}'.format(output_name))
 
     map_lists = [timcor_maps, rmse_maps, sum_maps]
