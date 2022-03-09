@@ -99,7 +99,7 @@ def set_common_args():
     arg_parser.add_argument('--attention', action='store_true', help="Enable the attention module")
     arg_parser.add_argument('--channel-reduction-rate', type=int, default=1, help="Channel reduction rate for the attention module")
     arg_parser.add_argument('--disable-skip-layers', action='store_true', help="Disable the skip layers")
-    arg_parser.add_argument('--disable-first-last-bn', action='store_true', help="Disable the batch normalization on the first and last layer")
+    arg_parser.add_argument('--disable-first-bn', action='store_true', help="Disable the batch normalization on the first layer")
     arg_parser.add_argument('--original-network', action='store_true', help="Use the original network architecture (from Kadow et al.)")
     arg_parser.add_argument('--out-channels', type=int, default=1, help="Number of channels for the output image")
     arg_parser.add_argument('--dataset-name', type=str, default=None, help="Name of the dataset for format checking")
