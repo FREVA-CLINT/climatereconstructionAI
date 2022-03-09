@@ -77,15 +77,13 @@ class PConvLSTM(nn.Module):
         for i in range(self.net_depth):
             if i == self.net_depth - 1:
                 activation = None
-                bn = False
                 bias = True
             else:
                 activation = nn.LeakyReLU()
-                bn = True,
                 bias = False
             decoding_layers.append(DecoderBlock(
                 conv_config=dec_conv_configs[i],
-                kernel=(3, 3), stride=(1, 1), activation=activation, lstm=lstm, bn=bn, bias=bias))
+                kernel=(3, 3), stride=(1, 1), activation=activation, lstm=lstm, bias=bias))
         self.decoder = nn.ModuleList(decoding_layers)
 
     def forward(self, input, input_mask, rea_input, rea_input_mask):
