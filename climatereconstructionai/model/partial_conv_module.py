@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import sys
+import logging
 
 from .. import config as cfg
 from ..utils.weights import weights_init
@@ -28,6 +29,10 @@ class PConvBlock(nn.Module):
 
     def forward(self, input, mask):
         output = self.input_conv(input * mask)
+
+        if cfg.verbose > 1:
+            logging.info("* size of the masks: {}".format(mask.size()))
+            logging.info("* % of non-zeros in the masks: {:.5f}".format(100.*mask.count_nonzero().item()/mask.numel()))
 
         if self.input_conv.bias is not None:
             output_bias = (self.input_conv.bias).view(1, -1, 1, 1).expand_as(output)

@@ -1,4 +1,5 @@
 import argparse
+import logging
 
 LAMBDA_DICT_IMG_INPAINTING = {
     'hole': 6.0, 'tv': 0.1, 'valid': 1.0, 'prc': 0.05, 'style': 120.0
@@ -75,6 +76,8 @@ def global_args(parser,arg_file):
     for i in range(out_channels):
         gt_channels.append((i + 1) * prev_next_steps + i * (prev_next_steps + 1))
 
+    logging.basicConfig(filename=log_dir+'/info.log', level=logging.INFO, filemode='w')
+
 def set_common_args():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument('--data-root-dir', type=str, default='../data/', help="Root directory containing the climate datasets")
@@ -100,6 +103,7 @@ def set_common_args():
     arg_parser.add_argument('--original-network', action='store_true', help="Use the original network architecture (from Kadow et al.)")
     arg_parser.add_argument('--out-channels', type=int, default=1, help="Number of channels for the output image")
     arg_parser.add_argument('--dataset-name', type=str, default=None, help="Name of the dataset for format checking")
+    arg_parser.add_argument('--verbose', type=int, default=0, help="Index controlling the verbosity of the log")
     return arg_parser
 
 def set_train_args(arg_file=None):
