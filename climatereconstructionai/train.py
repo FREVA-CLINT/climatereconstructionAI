@@ -14,6 +14,9 @@ from .utils.netcdfloader import NetCDFLoader, InfiniteSampler
 from .utils.evaluation import create_snapshot_image
 from .loss.inpainting_loss import InpaintingLoss
 from .loss.hole_loss import HoleLoss
+import logging
+
+
 
 
 def train(arg_file=None):
@@ -67,6 +70,9 @@ def train(arg_file=None):
         model.freeze_enc_bn = True
     else:
         lr = cfg.lr
+
+    if cfg.verbose > 1:
+        logging.info(model)
 
     # define optimizer and loss functions
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
