@@ -11,7 +11,7 @@ def init_enc_conv_configs(img_size, enc_dec_layers, pool_layers, start_channels)
         conv_config['bn'] = True
         if i == 0:
             conv_config['in_channels'] = start_channels
-            if cfg.disable_first_last_bn:
+            if cfg.disable_first_bn:
                 conv_config['bn'] = False
         else:
             conv_config['in_channels'] = img_size // (2 ** (enc_dec_layers - i))
@@ -66,8 +66,7 @@ def init_dec_conv_configs(img_size, enc_dec_layers, pool_layers, start_channels,
         if i == enc_dec_layers:
             conv_config['out_channels'] = end_channels
             conv_config['skip_channels'] = cfg.skip_layers * start_channels
-            if cfg.disable_first_last_bn:
-                conv_config['bn'] = False
+            conv_config['bn'] = False
         else:
             conv_config['out_channels'] = img_size // (2 ** i)
             conv_config['skip_channels'] = cfg.skip_layers * img_size // (2 ** i)
