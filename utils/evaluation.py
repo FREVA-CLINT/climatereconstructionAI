@@ -421,11 +421,11 @@ def plot_ts(title, file_name, time_series_dict, time, unit):
         else:
             param='{}-'.format(cfg.graph_colors[index])
             index+=1
-        plt.plot([i for i in range(len(time))], time_series, param, label=name)
+        plt.plot(range(len(time_series)), time_series, param, label=name)
         plt.xlabel("Year {}".format(time[0].year))
         plt.ylabel(title + " in " + unit)
     ax = plt.gca()
-    ax.set_xticks([i for i in range(len(time)) if time[i].month != time[i-1].month or i == 0])
+    ax.set_xticks(range(12))
     ax.set_xticklabels([calendar.month_abbr[time[i].month] for i in range(len(time)) if time[i].month != time[i-1].month or i == 0])
     plt.xticks(rotation=55)
     plt.legend()
@@ -444,20 +444,23 @@ def create_evaluation_graphs(gt, outputs):
     mean_timeseries = {}
     rmse_timeseries = {}
     rmse_over_mean_timeseries = {}
+    #fldcor_timeseries = {}
 
     # define output metrics
     for output_name, output in outputs.items():
         # calculate time series
-        max_timeseries[output_name] = metrics.max_timeseries(output)
-        min_timeseries[output_name] = metrics.min_timeseries(output)
-        mean_timeseries[output_name] = metrics.mean_timeseries(output)
-        rmse_timeseries[output_name] = metrics.rmse_timeseries(gt, output)
-        rmse_over_mean_timeseries[output_name] = metrics.rmse_over_mean_timeseries(gt, output)
+        max_timeseries[output_name] = metrics.max_timeseries(output, time)
+        min_timeseries[output_name] = metrics.min_timeseries(output, time)
+        mean_timeseries[output_name] = metrics.mean_timeseries(output, time)
+        rmse_timeseries[output_name] = metrics.rmse_timeseries(gt, output, time)
+        rmse_over_mean_timeseries[output_name] = metrics.rmse_over_mean_timeseries(gt, output, time)
+        #fldcor_timeseries[output_name] = metrics.fldcor_timeseries(gt, output, time)
+
 
     # set GT time series
-    max_timeseries['Ground Truth'] = metrics.max_timeseries(gt)
-    min_timeseries['Ground Truth'] = metrics.min_timeseries(gt)
-    mean_timeseries['Ground Truth'] = metrics.mean_timeseries(gt)
+    max_timeseries['Ground Truth'] = metrics.max_timeseries(gt, time)
+    min_timeseries['Ground Truth'] = metrics.min_timeseries(gt, time)
+    mean_timeseries['Ground Truth'] = metrics.mean_timeseries(gt, time)
 
     # create time series plots
     plot_ts('Maximum', 'MaxTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), max_timeseries, time, 'mm/h')
@@ -465,6 +468,7 @@ def create_evaluation_graphs(gt, outputs):
     plot_ts('Mean', 'MeanTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]),  mean_timeseries, time, 'mm/h')
     plot_ts('RMSE', 'RMSETS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), rmse_timeseries, time, 'mm/h')
     plot_ts('ME', 'METS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), rmse_over_mean_timeseries, time, 'mm/h')
+    #plot_ts('ME', 'FldCorTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), fldcor_timeseries, time, 'mm/h')
 
 
 def create_evaluation_maps(gt, outputs):
