@@ -14,7 +14,7 @@ def smooth(x, time):
     for bin in bins:
         if np.mean(bin):
             ts.append(np.mean(bin))
-    return ts
+    return np.asarray(ts)
 
 
 def rmse_over_mean(gt, output):

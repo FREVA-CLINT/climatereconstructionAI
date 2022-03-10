@@ -444,30 +444,34 @@ def create_evaluation_graphs(gt, outputs):
     mean_timeseries = {}
     rmse_timeseries = {}
     rmse_over_mean_timeseries = {}
+    new_rmse_over_mean = {}
     #fldcor_timeseries = {}
-
-    # define output metrics
-    for output_name, output in outputs.items():
-        # calculate time series
-        max_timeseries[output_name] = metrics.max_timeseries(output, time)
-        min_timeseries[output_name] = metrics.min_timeseries(output, time)
-        mean_timeseries[output_name] = metrics.mean_timeseries(output, time)
-        rmse_timeseries[output_name] = metrics.rmse_timeseries(gt, output, time)
-        rmse_over_mean_timeseries[output_name] = metrics.rmse_over_mean_timeseries(gt, output, time)
-        #fldcor_timeseries[output_name] = metrics.fldcor_timeseries(gt, output, time)
-
 
     # set GT time series
     max_timeseries['Ground Truth'] = metrics.max_timeseries(gt, time)
     min_timeseries['Ground Truth'] = metrics.min_timeseries(gt, time)
     mean_timeseries['Ground Truth'] = metrics.mean_timeseries(gt, time)
 
+    # define output metrics
+    for output_name, output in outputs.items():
+        # calculate time series
+        #max_timeseries[output_name] = metrics.max_timeseries(output, time)
+        #min_timeseries[output_name] = metrics.min_timeseries(output, time)
+        mean_timeseries[output_name] = metrics.mean_timeseries(output, time)
+        #rmse_timeseries[output_name] = metrics.rmse_timeseries(gt, output, time)
+        rmse_over_mean_timeseries[output_name] = metrics.rmse_over_mean_timeseries(gt, output, time)
+        new_rmse_over_mean[output_name] = np.abs(mean_timeseries[output_name] - mean_timeseries['Ground Truth'])
+        #fldcor_timeseries[output_name] = metrics.fldcor_timeseries(gt, output, time)
+
+
+
     # create time series plots
-    plot_ts('Maximum', 'MaxTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), max_timeseries, time, 'mm/h')
-    plot_ts('Minimum', 'MinTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), min_timeseries, time, 'mm/h')
+    #plot_ts('Maximum', 'MaxTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), max_timeseries, time, 'mm/h')
+    #plot_ts('Minimum', 'MinTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), min_timeseries, time, 'mm/h')
     plot_ts('Mean', 'MeanTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]),  mean_timeseries, time, 'mm/h')
-    plot_ts('RMSE', 'RMSETS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), rmse_timeseries, time, 'mm/h')
+    #plot_ts('RMSE', 'RMSETS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), rmse_timeseries, time, 'mm/h')
     plot_ts('ME', 'METS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), rmse_over_mean_timeseries, time, 'mm/h')
+    plot_ts('NewME', 'NewMETS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), new_rmse_over_mean, time, 'mm/h')
     #plot_ts('ME', 'FldCorTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), fldcor_timeseries, time, 'mm/h')
 
 
