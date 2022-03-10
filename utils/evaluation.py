@@ -418,6 +418,9 @@ def plot_ts(title, file_name, time_series_dict, time, unit):
     for name, time_series in time_series_dict.items():
         if name=='Ground Truth':
             param='k:'
+        elif 'New' in name:
+            param='{}:'.format(cfg.graph_colors[index])
+            index+=1
         else:
             param='{}-'.format(cfg.graph_colors[index])
             index+=1
@@ -460,7 +463,7 @@ def create_evaluation_graphs(gt, outputs):
         mean_timeseries[output_name] = metrics.mean_timeseries(output, time)
         #rmse_timeseries[output_name] = metrics.rmse_timeseries(gt, output, time)
         rmse_over_mean_timeseries[output_name] = metrics.rmse_over_mean_timeseries(gt, output, time)
-        new_rmse_over_mean[output_name] = np.abs(mean_timeseries[output_name] - mean_timeseries['Ground Truth'])
+        rmse_over_mean_timeseries[output_name + 'New'] = np.abs(mean_timeseries[output_name] - mean_timeseries['Ground Truth'])
         #fldcor_timeseries[output_name] = metrics.fldcor_timeseries(gt, output, time)
 
 
@@ -468,7 +471,7 @@ def create_evaluation_graphs(gt, outputs):
     # create time series plots
     #plot_ts('Maximum', 'MaxTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), max_timeseries, time, 'mm/h')
     #plot_ts('Minimum', 'MinTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), min_timeseries, time, 'mm/h')
-    plot_ts('Mean', 'MeanTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]),  mean_timeseries, time, 'mm/h')
+    #plot_ts('Mean', 'MeanTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]),  mean_timeseries, time, 'mm/h')
     #plot_ts('RMSE', 'RMSETS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), rmse_timeseries, time, 'mm/h')
     plot_ts('ME', 'METS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), rmse_over_mean_timeseries, time, 'mm/h')
     plot_ts('NewME', 'NewMETS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), new_rmse_over_mean, time, 'mm/h')
