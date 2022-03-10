@@ -419,8 +419,7 @@ def plot_ts(title, file_name, time_series_dict, time, unit):
         if name=='Ground Truth':
             param='k:'
         elif 'New' in name:
-            param='{}:'.format(cfg.graph_colors[index - len(cfg.graph_colors) + 1])
-            index+=1
+            param='{}:'.format(cfg.graph_colors[index])
         else:
             param='{}-'.format(cfg.graph_colors[index])
             index+=1
