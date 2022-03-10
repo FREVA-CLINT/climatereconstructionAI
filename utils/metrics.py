@@ -90,4 +90,4 @@ def rmse_timeseries(gt, output, time):
 
 
 def rmse_over_mean_timeseries(gt, output, time):
-    return smooth(np.sqrt((np.mean(gt,  axis=(1, 2)) - np.mean(output,  axis=(1, 2))) ** 2), time)
+    return smooth(np.abs((np.mean(gt,  axis=(1, 2)) - np.mean(output,  axis=(1, 2)))), time)
