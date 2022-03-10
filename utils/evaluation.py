@@ -418,8 +418,6 @@ def plot_ts(title, file_name, time_series_dict, time, unit):
     for name, time_series in time_series_dict.items():
         if name=='Ground Truth':
             param='k:'
-        elif 'New' in name:
-            param='{}:'.format(cfg.graph_colors[index])
         else:
             param='{}-'.format(cfg.graph_colors[index])
             index+=1
@@ -462,7 +460,7 @@ def create_evaluation_graphs(gt, outputs):
         mean_timeseries[output_name] = metrics.mean_timeseries(output, time)
         #rmse_timeseries[output_name] = metrics.rmse_timeseries(gt, output, time)
         rmse_over_mean_timeseries[output_name] = metrics.rmse_over_mean_timeseries(gt, output, time)
-        rmse_over_mean_timeseries[output_name + 'New'] = np.abs(mean_timeseries[output_name] - mean_timeseries['Ground Truth'])
+        new_rmse_over_mean[output_name] = np.abs(mean_timeseries[output_name] - mean_timeseries['Ground Truth'])
         #fldcor_timeseries[output_name] = metrics.fldcor_timeseries(gt, output, time)
 
 
