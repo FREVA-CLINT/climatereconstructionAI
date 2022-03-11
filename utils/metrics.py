@@ -55,7 +55,7 @@ def fldcor_timeseries(gt, output, time=None):
             mask[i] = 1
         else:
             time_series[i] = np.corrcoef(gt_flat, output_flat)[0][1]
-    if time.any():
+    if time and time.any():
         return smooth(ma.masked_array(np.array(time_series), mask), time)
     else:
         return ma.masked_array(np.array(time_series), mask)

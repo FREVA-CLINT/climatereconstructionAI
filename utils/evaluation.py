@@ -247,7 +247,7 @@ def create_evaluation_report(gt, outputs):
     report_name = ''
     for name in cfg.eval_names:
         report_name += name
-    pdf.output('reports/{}.pdf'.format(report_name), 'F')
+    pdf.output('evaluation/reports/{}.pdf'.format(report_name), 'F')
 
 
 def init_font():
