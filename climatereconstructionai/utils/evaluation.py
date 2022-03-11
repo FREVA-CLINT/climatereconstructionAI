@@ -41,6 +41,8 @@ def create_snapshot_image(model, dataset, filename):
             vmin, vmax = (0, 5)
         elif cfg.data_types[c] == 'tas':
             vmin, vmax = (-10, 35)
+        elif cfg.data_types[c] == 'TXx':
+            vmin, vmax = (-50, 50)
         data_list = [image[:, c, :, :], mask[:, c, :, :], output[:, c, :, :], output_comp[:, c, :, :], gt[:, c, :, :]]
 
         # plot and save data
