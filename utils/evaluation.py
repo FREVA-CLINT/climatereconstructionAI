@@ -67,25 +67,6 @@ def create_snapshot_image(model, dataset, filename):
     plt.close('all')
 
 
-def get_data(file, var):
-    data = Dataset(file)
-    time = data.variables['time']
-    variable = data.variables[var]
-    return variable, time
-
-
-def plot_data(time_series_dict, subplot, plot=False):
-    for name, time_series in time_series_dict.items():
-        subplot.plot([i for i in range(0, time_series.shape[0])], time_series, label=name)
-    if plot:
-        subplot.xlabel("Timesteps")
-        subplot.ylabel("Precipitation")
-    else:
-        subplot.set_xlabel("Timesteps")
-        subplot.set_ylabel("Precipitation")
-    subplot.legend(prop={'size': 6})
-
-
 def infill(model, dataset, partitions):
     if not os.path.exists(cfg.evaluation_dirs[0]):
         os.makedirs('{:s}'.format(cfg.evaluation_dirs[0]))
@@ -174,41 +155,7 @@ def create_evaluation_images(name, data_set, create_video=False, save_dir='image
                 writer.append_data(image)
 
 
-def plot_evaluation_maps(map_list, map_names, vmin, vmax):
-    # plot and save data
-    if len(map_list) > 1:
-        fig, axes = plt.subplots(nrows=((len(map_list) // 2) + (len(map_list) % 2)), ncols=2,  figsize=(2 * 4, 3 * ((len(map_list) // 2) + (len(map_list) % 2))))
-        fig.patch.set_facecolor('white')
-        for i in range((len(map_list) // 2) + (len(map_list) % 2)):
-            for j in range(2):
-                try:
-                    img = axes[i,j].imshow(np.squeeze(map_list[2*i + j]), vmin=vmin, vmax=vmax, cmap='jet', aspect='auto')
-                    axes[i,j].set_title(map_names[2*i + j])
-                    plt.colorbar(img, ax=axes[i,j])
-                except IndexError:
-                    if (len(map_list) // 2) + (len(map_list) % 2) == 1:
-                        img = axes[j].imshow(np.squeeze(map_list[j]), vmin=vmin, vmax=vmax, cmap='jet',
-                                                aspect='auto')
-                        axes[j].set_title(map_names[j])
-                        plt.colorbar(img, ax=axes[j])
-    else:
-        img = plt.imshow(np.squeeze(map_list[0]), vmin=vmin, vmax=vmax, cmap='jet', aspect='auto')
-        plt.title(map_names[0])
-        plt.colorbar(img)
-    plt.savefig('{}/{}.jpg'.format(cfg.evaluation_dirs[0], map_names[0]), bbox_inches='tight', pad_inches=0)
-    plt.clf()
-    plt.close('all')
-
-
 def create_evaluation_report(gt, outputs):
-    # define dicts for time series
-    max_timeseries = {}
-    min_timeseries = {}
-    mean_timeseries = {}
-    fldcor_timeseries = {}
-    rmse_timeseries = {}
-    rmse_over_mean_timeseries = {}
-
     # define arrays for dataframe
     data_sets = ['GT']
     rmses = ['0.0']
@@ -228,41 +175,6 @@ def create_evaluation_report(gt, outputs):
         total_prs.append(int(metrics.total_sum(output)))
         mean_fld_cors.append('%.5f' % metrics.timmean_fldor(gt, output))
         fld_cor_total_sum.append('%.5f' % metrics.fldor_timsum(gt, output))
-        # calculate time series
-        max_timeseries[output_name] = metrics.max_timeseries(output)
-        min_timeseries[output_name] = metrics.min_timeseries(output)
-        mean_timeseries[output_name] = metrics.mean_timeseries(output)
-        fldcor_timeseries[output_name] = metrics.fldcor_timeseries(gt, output)
-        rmse_timeseries[output_name] = metrics.rmse_timeseries(gt, output)
-        rmse_over_mean_timeseries[output_name] = metrics.rmse_over_mean_timeseries(gt, output)
-
-    timcor_maps = []
-    rmse_maps = []
-    sum_maps = [metrics.sum_map(gt)]
-    timcor_names = []
-    rmse_names = []
-    sum_names = ['Sum GT']
-
-
-    for output_name, output in outputs.items():
-        timcor_maps.append(metrics.timcor_map(gt, output))
-        rmse_maps.append(metrics.rmse_map(gt, output))
-        sum_maps.append(metrics.sum_map(output))
-        timcor_names.append('TimCor {}'.format(output_name))
-        rmse_names.append('RMSe {}'.format(output_name))
-        sum_names.append('Sum {}'.format(output_name))
-
-    total_maps = [timcor_maps, rmse_maps, sum_maps]
-    total_names = [timcor_names, rmse_names, sum_names]
-    vmins = [0,0,0]
-    vmaxs = [1,0.1,1000]
-    for i in range(len(total_maps)):
-        plot_evaluation_maps(total_maps[i], total_names[i], vmins[i], vmaxs[i])
-
-    # set GT time series
-    max_timeseries['Ground Truth'] = metrics.max_timeseries(gt)
-    min_timeseries['Ground Truth'] = metrics.min_timeseries(gt)
-    mean_timeseries['Ground Truth'] = metrics.mean_timeseries(gt)
 
     # create dataframe for metrics
     df = pd.DataFrame()
@@ -273,24 +185,6 @@ def create_evaluation_report(gt, outputs):
     df['Total Precipitation'] = total_prs
     df['Mean Field Correlation'] = mean_fld_cors
     df['Field Correlation of total Field Sum'] = fld_cor_total_sum
-
-    # create time series plots
-    fig, ((ax0, ax1), (ax2, ax3), (ax4, ax5)) = plt.subplots(nrows=3, ncols=2, figsize=(2 * 4, 9))
-    ax0.set_title('Max values')
-    plot_data(max_timeseries, ax0)
-    ax1.set_title('Min values')
-    plot_data(min_timeseries, ax1)
-    ax2.set_title('Mean values')
-    plot_data(mean_timeseries, ax2)
-    ax3.set_title('Field Cor vs GT')
-    plot_data(fldcor_timeseries, ax3)
-    ax4.set_title('RMSEs')
-    plot_data(rmse_timeseries, ax4)
-    ax5.set_title('RMSEs over mean')
-    plot_data(rmse_over_mean_timeseries, ax5)
-    fig.tight_layout()
-    plt.savefig(cfg.evaluation_dirs[0] + 'ts.png', dpi=300)
-    plt.clf()
 
     # Create PDF plot
     labels = []
@@ -345,55 +239,10 @@ def create_evaluation_report(gt, outputs):
 
     pdf.set_font('arial', 'B', 16)
     pdf.cell(50)
-    pdf.cell(75, 10, "Time Series with smoothin factor {}".format(cfg.smoothing_factor), 0, 2, 'C')
-    pdf.cell(90, 5, " ", 0, 2, 'C')
-    pdf.cell(-60)
-    pdf.image(cfg.evaluation_dirs[0] + 'ts.png', x=None, y=None, w=208, h=240, type='', link='')
-
-    pdf.add_page()
-
-    pdf.set_font('arial', 'B', 16)
-    pdf.cell(50)
     pdf.cell(75, 30, "Probabilistic Density Function", 0, 2, 'C')
     pdf.cell(90, 5, " ", 0, 2, 'C')
     pdf.cell(-60)
     pdf.image(cfg.evaluation_dirs[0] + 'pdf.png', x=None, y=None, w=208, h=218, type='', link='')
-
-    pdf.add_page()
-
-    width = 100
-    if len(total_maps[0]) > 1:
-        width = 200
-    pdf.set_font('arial', 'B', 16)
-    pdf.cell(50)
-    pdf.cell(75, 30, "RMSE Maps", 0, 2, 'C')
-    pdf.cell(90, 5, " ", 0, 2, 'C')
-    pdf.cell(-55)
-    pdf.image('{}/RMSe {}.jpg'.format(cfg.evaluation_dirs[0], cfg.eval_names[0]), x=None, y=None,  w=width, h=((len(total_maps[0]) // 2) + (len(total_maps[0]) % 2)) * 75, type='', link='')
-
-    pdf.add_page()
-
-    width = 100
-    if len(total_maps[1]) > 1:
-        width = 200
-    pdf.set_font('arial', 'B', 16)
-    pdf.cell(50)
-    pdf.cell(75, 30, "TimCor Maps", 0, 2, 'C')
-    pdf.cell(90, 5, " ", 0, 2, 'C')
-    pdf.cell(-55)
-    pdf.image('{}/TimCor {}.jpg'.format(cfg.evaluation_dirs[0], cfg.eval_names[0]), x=None, y=None, w=width, h=((len(total_maps[1]) // 2) + (len(total_maps[1]) % 2)) * 75, type='', link='')
-
-    pdf.add_page()
-
-    width = 100
-    if len(total_maps[2]) > 1:
-        width = 200
-    pdf.set_font('arial', 'B', 16)
-    pdf.cell(50)
-    pdf.cell(75, 30, "Sum Maps", 0, 2, 'C')
-    pdf.cell(90, 5, " ", 0, 2, 'C')
-    pdf.cell(-55)
-    pdf.image('{}/Sum {}.jpg'.format(cfg.evaluation_dirs[0], 'GT'), x=None, y=None, w=width, h=((len(total_maps[2]) // 2) + (len(total_maps[2]) % 2)) * 75, type='', link='')
 
     report_name = ''
     for name in cfg.eval_names:
@@ -455,10 +304,10 @@ def create_evaluation_graphs(gt, outputs):
     # define output metrics
     for output_name, output in outputs.items():
         # calculate time series
-        #max_timeseries[output_name] = metrics.max_timeseries(output, time)
-        #min_timeseries[output_name] = metrics.min_timeseries(output, time)
+        max_timeseries[output_name] = metrics.max_timeseries(output, time)
+        min_timeseries[output_name] = metrics.min_timeseries(output, time)
         mean_timeseries[output_name] = metrics.mean_timeseries(output, time)
-        #rmse_timeseries[output_name] = metrics.rmse_timeseries(gt, output, time)
+        rmse_timeseries[output_name] = metrics.rmse_timeseries(gt, output, time)
         rmse_over_mean_timeseries[output_name] = metrics.rmse_over_mean_timeseries(gt, output, time)
         new_rmse_over_mean[output_name] = np.abs(mean_timeseries[output_name] - mean_timeseries['Ground Truth'])
         #fldcor_timeseries[output_name] = metrics.fldcor_timeseries(gt, output, time)
@@ -466,10 +315,10 @@ def create_evaluation_graphs(gt, outputs):
 
 
     # create time series plots
-    #plot_ts('Maximum', 'MaxTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), max_timeseries, time, 'mm/h')
-    #plot_ts('Minimum', 'MinTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), min_timeseries, time, 'mm/h')
-    #plot_ts('Mean', 'MeanTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]),  mean_timeseries, time, 'mm/h')
-    #plot_ts('RMSE', 'RMSETS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), rmse_timeseries, time, 'mm/h')
+    plot_ts('Maximum', 'MaxTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), max_timeseries, time, 'mm/h')
+    plot_ts('Minimum', 'MinTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), min_timeseries, time, 'mm/h')
+    plot_ts('Mean', 'MeanTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]),  mean_timeseries, time, 'mm/h')
+    plot_ts('RMSE', 'RMSETS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), rmse_timeseries, time, 'mm/h')
     plot_ts('ME', 'METS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), rmse_over_mean_timeseries, time, 'mm/h')
     plot_ts('NewME', 'NewMETS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), new_rmse_over_mean, time, 'mm/h')
     #plot_ts('ME', 'FldCorTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), fldcor_timeseries, time, 'mm/h')
