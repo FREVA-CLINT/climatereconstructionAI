@@ -5,6 +5,7 @@ import logging
 
 from .. import config as cfg
 from ..utils.weights import weights_init
+from ..utils.masked_batchnorm import MaskedBatchNorm2d
 
 
 class PConvBlock(nn.Module):
@@ -21,7 +22,8 @@ class PConvBlock(nn.Module):
         if activation:
             self.activation = activation
         if bn:
-            self.bn = nn.BatchNorm2d(out_channels)
+            # self.bn = nn.BatchNorm2d(out_channels)
+            self.bn = MaskedBatchNorm2d(out_channels)
 
         # exclude mask gradients from backpropagation
         for param in self.mask_conv.parameters():
@@ -51,7 +53,14 @@ class PConvBlock(nn.Module):
         new_mask = new_mask.masked_fill_(no_update_holes, 0.0)
 
         if hasattr(self, 'bn'):
-            output = self.bn(output)
+            if cfg.disable_masked_bn:
+                output = self.bn(output)
+            else:
+                output = self.bn(output,new_mask)
+
+            if cfg.verbose > 1:
+                logging.info("* Mean after batch normalization: {:.5f}".format(output.mean()))
+                logging.info("* Std after batch normalization: {:.5f}".format(output.std()))
         if hasattr(self, 'activation'):
             output = self.activation(output)
 
