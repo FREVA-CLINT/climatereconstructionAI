@@ -100,6 +100,7 @@ def set_common_args():
     arg_parser.add_argument('--channel-reduction-rate', type=int, default=1, help="Channel reduction rate for the attention module")
     arg_parser.add_argument('--disable-skip-layers', action='store_true', help="Disable the skip layers")
     arg_parser.add_argument('--disable-first-bn', action='store_true', help="Disable the batch normalization on the first layer")
+    arg_parser.add_argument('--disable-masked-bn', action='store_true', help="Use standard batch normalization instead of masked BN")
     arg_parser.add_argument('--original-network', action='store_true', help="Use the original network architecture (from Kadow et al.)")
     arg_parser.add_argument('--out-channels', type=int, default=1, help="Number of channels for the output image")
     arg_parser.add_argument('--dataset-name', type=str, default=None, help="Name of the dataset for format checking")
@@ -121,7 +122,7 @@ def set_train_args(arg_file=None):
     arg_parser.add_argument('--save-model-interval', type=int, default=50000, help="Iteration step interval at which the model should be saved")
     arg_parser.add_argument('--loss-criterion', type=int, default=0, help="Index defining the loss function (0=original from Liu et al., 1=MAE of the hole region)")
     arg_parser.add_argument('--eval-timesteps', type=int_list, default="0,1,2,3,4", help="Iteration steps for which an evaluation is performed")
-    arg_parser.add_argument('--load-from-file', type=str, action=LoadFromFile, help="Load all the arguments from a text file")
+    arg_parser.add_argument('-f','--load-from-file', type=str, action=LoadFromFile, help="Load all the arguments from a text file")
     global_args(arg_parser,arg_file)
 
 def set_evaluate_args(arg_file=None):
@@ -134,5 +135,5 @@ def set_evaluate_args(arg_file=None):
     arg_parser.add_argument('--plot-results', type=int_list, default=None, help="Create plot images of the results for the comma separated list of time indices")
     arg_parser.add_argument('--partitions', type=int, default=1, help="Split the climate dataset into several partitions along the time coordinate")
     arg_parser.add_argument('--maxmem', type=int, default=None, help="Maximum available memory in MB (overwrite partitions parameter)")
-    arg_parser.add_argument('--load-from-file', type=str, action=LoadFromFile, help="Load all the arguments from a text file")
+    arg_parser.add_argument('-f','--load-from-file', type=str, action=LoadFromFile, help="Load all the arguments from a text file")
     global_args(arg_parser,arg_file)
