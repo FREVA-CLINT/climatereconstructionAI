@@ -118,6 +118,7 @@ def set_train_args(arg_file=None):
     arg_parser.add_argument('--lr-finetune', type=float, default=5e-5, help="Learning rate for fine tuning")
     arg_parser.add_argument('--max-iter', type=int, default=1000000, help="Maximum number of iterations")
     arg_parser.add_argument('--log-interval', type=int, default=None, help="Iteration step interval at which a tensorboard summary log should be written")
+    arg_parser.add_argument('--save-validation-loss', action='store_true', help="Save the validation loss")
     arg_parser.add_argument('--save-snapshot-image', action='store_true', help="Save evaluation images for the iteration steps defined in --log-interval")
     arg_parser.add_argument('--save-model-interval', type=int, default=50000, help="Iteration step interval at which the model should be saved")
     arg_parser.add_argument('--loss-criterion', type=int, default=0, help="Index defining the loss function (0=original from Liu et al., 1=MAE of the hole region)")

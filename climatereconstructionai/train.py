@@ -14,6 +14,7 @@ from .utils.netcdfloader import NetCDFLoader, InfiniteSampler
 from .utils.evaluation import create_snapshot_image
 from .loss.inpainting_loss import InpaintingLoss
 from .loss.hole_loss import HoleLoss
+from .loss.get_loss import get_loss
 import logging
 
 
@@ -38,6 +39,9 @@ def train(arg_file=None):
                                cfg.lstm_steps, cfg.prev_next_steps)
     iterator_train = iter(DataLoader(dataset_train, batch_size=cfg.batch_size,
                                      sampler=InfiniteSampler(len(dataset_train)),
+                                     num_workers=cfg.n_threads))
+    iterator_val = iter(DataLoader(dataset_val, batch_size=cfg.batch_size,
+                                     sampler=InfiniteSampler(len(dataset_val)),
                                      num_workers=cfg.n_threads))
 
     # define network model
@@ -99,16 +103,8 @@ def train(arg_file=None):
         image, mask, gt, rea_images, rea_masks, rea_gts = [x.to(cfg.device) for x in next(iterator_train)]
         output = model(image, mask, rea_images, rea_masks)
 
-        # calculate loss function and apply backpropagation
-        loss_dict = criterion(mask[:, cfg.lstm_steps, cfg.gt_channels, :, :],
-                              output[:, cfg.lstm_steps, :, :, :],
-                              gt[:, cfg.lstm_steps, cfg.gt_channels, :, :])
-        loss = 0.0
-        for key, factor in lambda_dict.items():
-            value = factor * loss_dict[key]
-            loss += value
-            if cfg.log_interval and (i + 1) % cfg.log_interval == 0:
-                writer.add_scalar('loss_{:s}'.format(key), value.item(), i + 1)
+        loss = get_loss(criterion, lambda_dict, mask, output, gt, writer, i, "train")
+
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -118,10 +114,21 @@ def train(arg_file=None):
             save_ckpt('{:s}/ckpt/{:d}.pth'.format(cfg.snapshot_dir, i + 1),
                       [('model', model)], [('optimizer', optimizer)], i + 1)
 
-        # create snapshot image
-        if cfg.save_snapshot_image and (i + 1) % cfg.log_interval == 0:
-            model.eval()
-            create_snapshot_image(model, dataset_val, '{:s}/images/iter_{:d}'.format(cfg.snapshot_dir, i + 1))
+
+        if cfg.log_interval and (i + 1) % cfg.log_interval == 0:
+
+            # Save loss for validation set
+            if cfg.save_validation_loss:
+                model.eval()
+                image, mask, gt, rea_images, rea_masks, rea_gts = [x.to(cfg.device) for x in next(iterator_val)]
+                with torch.no_grad():
+                    output = model(image, mask, rea_images, rea_masks)
+                get_loss(criterion, lambda_dict, mask, output, gt, writer, i, "val")
+
+            # create snapshot image
+            if cfg.save_snapshot_image:
+                model.eval()
+                create_snapshot_image(model, dataset_val, '{:s}/images/iter_{:d}'.format(cfg.snapshot_dir, i + 1))
 
     writer.close()
 

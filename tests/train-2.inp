@@ -1,13 +1,16 @@
 --device cpu --batch-size 3
 --data-root-dir data/
+--mask-dir data/
 --log-dir tests/out/training/logs/
 --snapshot-dir tests/out/training/
 --img-names 20cr-1ens.nc
+--mask-names hadcrut_missmask_1.nc
 --max-iter 15
 --resume-iter 10
 --finetune
 --loss-criterion 0
 --save-snapshot-image
---log-interval 3
+--log-interval 1
 --weights kaiming
 --random-seed 3
+--shuffle-masks
