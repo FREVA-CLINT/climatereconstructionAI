@@ -20,7 +20,7 @@ import utils.metrics as metrics
 
 
 def create_snapshot_image(model, dataset, filename):
-    image, mask, gt, rea_images, rea_masks, rea_gts = zip(*[dataset[int(i)] for i in range(dataset.__len__())])
+    image, mask, gt, rea_images, rea_masks, rea_gts = zip(*[dataset[int(i)] for i in cfg.eval_timesteps])
 
     image = torch.stack(image).to(cfg.device)
     mask = torch.stack(mask).to(cfg.device)
@@ -118,21 +118,12 @@ def infill(model, dataset, partitions):
     # create output_comp
     output_comp = mask * image + (1 - mask) * output
 
-    data_sets = {'GT': gt, 'Input': image}
-    data_sets['Base'] = output
-
-    create_video = False
-    if cfg.create_video:
-        create_video = True
-    for key,value in data_sets.items():
-        create_evaluation_images(key, value, create_video, save_dir='images/{}'.format(key))
-
     cvar = [image, mask, output, output_comp, gt]
     cname = ['image', 'mask', 'output', 'output_comp', 'gt']
     dname = ['time', 'lat', 'lon']
     for x in range(0, 5):
         h5 = h5py.File('%s' % (cfg.evaluation_dirs[0] + cname[x]), 'w')
-        h5.create_dataset(cfg.data_types[0], data=cvar[x].to(torch.device(cfg.device)))
+        h5.create_dataset(cfg.data_types[0], data=cvar[x].to(torch.device('cpu')))
         for dim in range(0, 3):
             h5[cfg.data_types[0]].dims[dim].label = dname[dim]
         h5.close()
