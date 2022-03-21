@@ -38,10 +38,12 @@ if cfg.infill:
                               radar_in_channels=2 * cfg.prev_next_steps + 1,
                               radar_out_channels=cfg.out_channels,
                               lstm=lstm).to(cfg.device)
+        optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=2e-4)
 
-        load_ckpt(snapshot, [('model', model)], cfg.device)
+        load_ckpt(snapshot, [('model', model)], cfg.device, [('optimizer', optimizer)])
 
         model.eval()
+        create_snapshot_image(model, dataset_val, 'testsomething')
 
         gt, output = infill(model, dataset_val, cfg.partitions)
         outputs = {cfg.eval_names[0]: output}

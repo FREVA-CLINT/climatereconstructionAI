@@ -68,7 +68,6 @@ def create_snapshot_image(model, dataset, filename):
 
 
 def infill(model, dataset, partitions):
-    create_snapshot_image(model, dataset, 'testingsomething')
     if not os.path.exists(cfg.evaluation_dirs[0]):
         os.makedirs('{:s}'.format(cfg.evaluation_dirs[0]))
     image = []
