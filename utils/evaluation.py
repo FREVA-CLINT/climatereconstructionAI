@@ -20,7 +20,7 @@ import utils.metrics as metrics
 
 
 def create_snapshot_image(model, dataset, filename):
-    image, mask, gt, rea_images, rea_masks, rea_gts = zip(*[dataset[int(i)] for i in cfg.eval_timesteps])
+    image, mask, gt, rea_images, rea_masks, rea_gts = zip(*[dataset[int(i)] for i in range(dataset.__len__())])
 
     image = torch.stack(image).to(cfg.device)
     mask = torch.stack(mask).to(cfg.device)
