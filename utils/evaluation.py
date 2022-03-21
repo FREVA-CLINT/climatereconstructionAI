@@ -118,6 +118,15 @@ def infill(model, dataset, partitions):
     # create output_comp
     output_comp = mask * image + (1 - mask) * output
 
+    data_sets = {'GT': gt, 'Input': image}
+    data_sets['Base'] = output
+
+    create_video = False
+    if cfg.create_video:
+        create_video = True
+    for key,value in data_sets.items():
+        create_evaluation_images(key, value, create_video, save_dir='images/{}'.format(key))
+
     cvar = [image, mask, output, output_comp, gt]
     cname = ['image', 'mask', 'output', 'output_comp', 'gt']
     dname = ['time', 'lat', 'lon']
