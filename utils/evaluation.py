@@ -95,10 +95,10 @@ def infill(model, dataset, partitions):
             output_part = model(image_part.to(cfg.device), mask_part.to(cfg.device),
                                 rea_images_part.to(cfg.device), rea_masks_part.to(cfg.device))
 
-        image_part = image_part[:, cfg.lstm_steps, :, :, :].to(torch.device(cfg.device))
-        mask_part = mask_part[:, cfg.lstm_steps, :, :, :].to(torch.device(cfg.device))
-        gt_part = gt_part[:, cfg.lstm_steps, :, :, :].to(torch.device(cfg.device))
-        output_part = output_part[:, cfg.lstm_steps, :, :, :].to(torch.device(cfg.device))
+        image_part = image_part[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
+        mask_part = mask_part[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
+        gt_part = gt_part[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
+        output_part = output_part[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
 
         # only select first channel
         image_part = torch.unsqueeze(image_part[:, cfg.prev_next_steps, :, :], dim=1)
