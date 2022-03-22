@@ -4,6 +4,7 @@ import sys
 
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
 
 from . import config as cfg
@@ -87,6 +88,7 @@ def train(arg_file=None):
         criterion = InpaintingLoss(VGG16FeatureExtractor()).to(cfg.device)
         lambda_dict = cfg.LAMBDA_DICT_IMG_INPAINTING
 
+    lr_scheduler = ReduceLROnPlateau(optimizer, 'min', patience=cfg.lr_scheduler_patience)
 
     # define start point
     start_iter = 0
@@ -97,16 +99,20 @@ def train(arg_file=None):
             param_group['lr'] = lr
         print('Starting from iter ', start_iter)
 
-    for i in tqdm(range(start_iter, cfg.max_iter)):
+    pbar = tqdm(range(start_iter, cfg.max_iter))
+    for i in pbar:
+
+        pbar.set_description("lr = {:.1e}".format(optimizer.param_groups[0]['lr']))
+
         # train model
         model.train()
         image, mask, gt, rea_images, rea_masks, rea_gts = [x.to(cfg.device) for x in next(iterator_train)]
         output = model(image, mask, rea_images, rea_masks)
 
-        loss = get_loss(criterion, lambda_dict, mask, output, gt, writer, i, "train")
+        train_loss = get_loss(criterion, lambda_dict, mask, output, gt, writer, i, "train")
 
         optimizer.zero_grad()
-        loss.backward()
+        train_loss.backward()
         optimizer.step()
 
         # save checkpoint
@@ -114,16 +120,14 @@ def train(arg_file=None):
             save_ckpt('{:s}/ckpt/{:d}.pth'.format(cfg.snapshot_dir, i + 1),
                       [('model', model)], [('optimizer', optimizer)], i + 1)
 
+        model.eval()
+        image, mask, gt, rea_images, rea_masks, rea_gts = [x.to(cfg.device) for x in next(iterator_val)]
+        with torch.no_grad():
+            output = model(image, mask, rea_images, rea_masks)
+        val_loss = get_loss(criterion, lambda_dict, mask, output, gt, writer, i, "val")
+        lr_scheduler.step(val_loss)
 
         if cfg.log_interval and (i + 1) % cfg.log_interval == 0:
-
-            # Save loss for validation set
-            if cfg.save_validation_loss:
-                model.eval()
-                image, mask, gt, rea_images, rea_masks, rea_gts = [x.to(cfg.device) for x in next(iterator_val)]
-                with torch.no_grad():
-                    output = model(image, mask, rea_images, rea_masks)
-                get_loss(criterion, lambda_dict, mask, output, gt, writer, i, "val")
 
             # create snapshot image
             if cfg.save_snapshot_image:

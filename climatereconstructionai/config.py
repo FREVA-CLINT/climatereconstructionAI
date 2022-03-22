@@ -1,5 +1,7 @@
 import argparse
 import logging
+import os
+import os.path
 
 LAMBDA_DICT_IMG_INPAINTING = {
     'hole': 6.0, 'tv': 0.1, 'valid': 1.0, 'prc': 0.05, 'style': 120.0
@@ -76,6 +78,8 @@ def global_args(parser,arg_file):
     for i in range(out_channels):
         gt_channels.append((i + 1) * prev_next_steps + i * (prev_next_steps + 1))
 
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
     logging.basicConfig(filename=log_dir+'/info.log', level=logging.INFO, filemode='w')
 
 def set_common_args():
@@ -118,7 +122,7 @@ def set_train_args(arg_file=None):
     arg_parser.add_argument('--lr-finetune', type=float, default=5e-5, help="Learning rate for fine tuning")
     arg_parser.add_argument('--max-iter', type=int, default=1000000, help="Maximum number of iterations")
     arg_parser.add_argument('--log-interval', type=int, default=None, help="Iteration step interval at which a tensorboard summary log should be written")
-    arg_parser.add_argument('--save-validation-loss', action='store_true', help="Save the validation loss")
+    arg_parser.add_argument('--lr-scheduler-patience', type=int, default=50000, help="Patience for the lr scheduler")
     arg_parser.add_argument('--save-snapshot-image', action='store_true', help="Save evaluation images for the iteration steps defined in --log-interval")
     arg_parser.add_argument('--save-model-interval', type=int, default=50000, help="Iteration step interval at which the model should be saved")
     arg_parser.add_argument('--loss-criterion', type=int, default=0, help="Index defining the loss function (0=original from Liu et al., 1=MAE of the hole region)")
