@@ -196,8 +196,7 @@ class NetCDFLoader(Dataset):
             mask_indices = img_indices
 
         if cfg.verbose > 1:
-            logging.info("* Image indices: {}".format(img_indices))
-            logging.info("* Mask indices: {}".format(mask_indices))
+            logging.info("* Image/mask index: {}, {}".format(img_indices,mask_indices))
 
         # load data from ranges
         images, masks = self.load_data(ind_data, img_indices, mask_indices)

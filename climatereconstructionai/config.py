@@ -117,6 +117,7 @@ def set_train_args(arg_file=None):
     arg_parser.add_argument('--resume-iter', type=int, help="Iteration step from which the training will be resumed")
     arg_parser.add_argument('--batch-size', type=int, default=18, help="Batch size")
     arg_parser.add_argument('--n-threads', type=int, default=64, help="Number of threads")
+    arg_parser.add_argument('--multi-gpus', action='store_true', help="Use multiple GPUs, if any")
     arg_parser.add_argument('--finetune', action='store_true', help="Enable the fine tuning mode (use fine tuning parameterization and disable batch normalization")
     arg_parser.add_argument('--lr', type=float, default=2e-4, help="Learning rate")
     arg_parser.add_argument('--lr-finetune', type=float, default=5e-5, help="Learning rate for fine tuning")
