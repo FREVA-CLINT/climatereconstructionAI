@@ -24,6 +24,7 @@ def load_ckpt(ckpt_name, models, device, optimizers=None):
     ckpt_dict = torch.load(ckpt_name, map_location=device)
     for prefix, model in models:
         assert isinstance(model, nn.Module)
+        ckpt_dict[prefix] = {key.replace("module.", ""): value for key, value in ckpt_dict[prefix].items()}
         model.load_state_dict(ckpt_dict[prefix], strict=False)
 
     if optimizers is not None:

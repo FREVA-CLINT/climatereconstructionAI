@@ -23,6 +23,8 @@ import logging
 
 def train(arg_file=None):
 
+    print("* Number of GPUs: ", torch.cuda.device_count())
+
     cfg.set_train_args(arg_file)
 
     if not os.path.exists(cfg.snapshot_dir):
@@ -68,6 +70,7 @@ def train(arg_file=None):
                           radar_in_channels=2 * cfg.prev_next_steps + 1,
                           radar_out_channels=cfg.out_channels,
                           lstm=lstm).to(cfg.device)
+    
 
     # define learning rate
     if cfg.finetune:
@@ -98,6 +101,9 @@ def train(arg_file=None):
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
         print('Starting from iter ', start_iter)
+   
+    if cfg.multi_gpus: 
+        model = torch.nn.DataParallel(model)
 
     pbar = tqdm(range(start_iter, cfg.max_iter))
     for i in pbar:

@@ -1,11 +1,37 @@
 
 from .. import config as cfg
+import torch
+
+class ModularizedFunction(torch.nn.Module):
+     def __init__(self, forward_op):
+         super().__init__()
+         self.forward_op = forward_op
+     
+     def forward(self, *args, **kwargs):
+         return self.forward_op(*args, **kwargs)
+
+class CriterionParallel(torch.nn.Module):
+     def __init__(self, criterion):
+         super().__init__()
+         if not isinstance(criterion, torch.nn.Module):
+             criterion = ModularizedFunction(criterion)
+         self.criterion = torch.nn.DataParallel(criterion)
+ 
+     def forward(self, *args, **kwargs):
+         dict = self.criterion(*args, **kwargs)
+         for key in dict.keys():
+             dict[key] = dict[key].mean()
+         return dict
 
 def get_loss(criterion, lambda_dict, mask, output, gt, writer, iter_index, setname):
-    loss_dict = criterion(mask[:, cfg.lstm_steps, cfg.gt_channels, :, :],
+
+    if cfg.multi_gpus:
+        loss_func = CriterionParallel(criterion)
+    else:
+        loss_func = criterion
+    loss_dict = loss_func(mask[:, cfg.lstm_steps, cfg.gt_channels, :, :],
                           output[:, cfg.lstm_steps, :, :, :],
                           gt[:, cfg.lstm_steps, cfg.gt_channels, :, :])
-
     losses = {"total": 0.0}
     for key, factor in lambda_dict.items():
         value = factor * loss_dict[key]
