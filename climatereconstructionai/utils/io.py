@@ -25,7 +25,7 @@ def load_ckpt(ckpt_name, models, device, optimizers=None):
     for prefix, model in models:
         assert isinstance(model, nn.Module)
         ckpt_dict[prefix] = {key.replace("module.", ""): value for key, value in ckpt_dict[prefix].items()}
-        model.load_state_dict(ckpt_dict[prefix], strict=False)
+        model.load_state_dict(ckpt_dict[prefix])
 
     if optimizers is not None:
         for prefix, optimizer in optimizers:
