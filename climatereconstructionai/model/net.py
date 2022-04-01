@@ -66,15 +66,9 @@ class PConvLSTM(nn.Module):
         # define encoding layers
         encoding_layers = []
         for i in range(0, self.net_depth):
-            if i == 0:
-                kernel = (7, 7)
-            elif i < radar_enc_dec_layers - 1:
-                kernel = (5, 5)
-            else:
-                kernel = (3, 3)
             encoding_layers.append(EncoderBlock(
                 conv_config=enc_conv_configs[i],
-                kernel=kernel, stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
+                kernel=enc_conv_configs[i]['kernel'], stride=(2, 2), activation=nn.ReLU(), lstm=lstm))
         self.encoder = nn.ModuleList(encoding_layers)
 
         # define decoding layers
@@ -88,7 +82,7 @@ class PConvLSTM(nn.Module):
                 bias = False
             decoding_layers.append(DecoderBlock(
                 conv_config=dec_conv_configs[i],
-                kernel=(3, 3), stride=(1, 1), activation=activation, lstm=lstm, bias=bias))
+                kernel=dec_conv_configs[i]['kernel'], stride=(1, 1), activation=activation, lstm=lstm, bias=bias))
         self.decoder = nn.ModuleList(decoding_layers)
 
     def forward(self, input, input_mask, rea_input, rea_input_mask):
