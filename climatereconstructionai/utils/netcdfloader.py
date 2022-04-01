@@ -116,7 +116,7 @@ def get_data(path,data_names,data_types):
 
         data, shape = [], []
         for i in range(ndata):
-            data.append(nc_checker('{}{}'.format(path,data_names[i]),data_types[i],cfg.image_sizes[i]))
+            data.append(nc_checker('{}{}'.format(path,data_names[i]),data_types[i],cfg.image_sizes[0]))
             shape.append(data[-1][data_types[i]].shape)
 
         assert len(set(shape)) == 1
