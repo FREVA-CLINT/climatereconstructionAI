@@ -91,7 +91,8 @@ def train(arg_file=None):
         criterion = InpaintingLoss(VGG16FeatureExtractor()).to(cfg.device)
         lambda_dict = cfg.LAMBDA_DICT_IMG_INPAINTING
 
-    lr_scheduler = ReduceLROnPlateau(optimizer, 'min', patience=cfg.lr_scheduler_patience)
+    if not cfg.lr_scheduler_patience is None:
+        lr_scheduler = ReduceLROnPlateau(optimizer, 'min', patience=cfg.lr_scheduler_patience)
 
     # define start point
     start_iter = 0
@@ -126,14 +127,17 @@ def train(arg_file=None):
             save_ckpt('{:s}/ckpt/{:d}.pth'.format(cfg.snapshot_dir, i + 1),
                       [('model', model)], [('optimizer', optimizer)], i + 1)
 
-        model.eval()
-        image, mask, gt, rea_images, rea_masks, rea_gts = [x.to(cfg.device) for x in next(iterator_val)]
-        with torch.no_grad():
-            output = model(image, mask, rea_images, rea_masks)
-        val_loss = get_loss(criterion, lambda_dict, mask, output, gt, writer, i, "val")
-        lr_scheduler.step(val_loss)
+        
 
         if cfg.log_interval and (i + 1) % cfg.log_interval == 0:
+
+            model.eval()
+            image, mask, gt, rea_images, rea_masks, rea_gts = [x.to(cfg.device) for x in next(iterator_val)]
+            with torch.no_grad():
+                output = model(image, mask, rea_images, rea_masks)
+            val_loss = get_loss(criterion, lambda_dict, mask, output, gt, writer, i, "val")
+            if not cfg.lr_scheduler_patience is None:
+                lr_scheduler.step(val_loss)
 
             # create snapshot image
             if cfg.save_snapshot_image:
