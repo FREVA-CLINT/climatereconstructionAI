@@ -1,5 +1,4 @@
 import argparse
-import logging
 import os
 import os.path
 
@@ -80,7 +79,6 @@ def global_args(parser,arg_file):
 
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
-    logging.basicConfig(filename=log_dir+'/info.log', level=logging.INFO, filemode='w')
 
 def set_common_args():
     arg_parser = argparse.ArgumentParser()
@@ -109,7 +107,6 @@ def set_common_args():
     arg_parser.add_argument('--global-padding', action='store_true', help="Use a custom padding for global dataset")
     arg_parser.add_argument('--out-channels', type=int, default=1, help="Number of channels for the output image")
     arg_parser.add_argument('--dataset-name', type=str, default=None, help="Name of the dataset for format checking")
-    arg_parser.add_argument('--verbose', type=int, default=0, help="Index controlling the verbosity of the log")
     return arg_parser
 
 def set_train_args(arg_file=None):
