@@ -364,12 +364,12 @@ def create_evaluation_maps(gt, outputs):
         if 'RMSE' in map_names[i][0]:
             maximum = 0.12
         elif 'Sum' in map_names[i][0]:
-            maximum = 1000
+            maximum = 500
         else:
             maximum = np.max(map_lists[i])
         for j in range(len(map_lists[i])):
             # plot and save data
-            img = plt.imshow(np.squeeze(map_lists[i][j]), vmin=minimum, vmax=maximum, cmap='RdBu', aspect='auto')
+            img = plt.imshow(np.squeeze(map_lists[i][j]), vmin=minimum, vmax=maximum, cmap=plt.cm.get_cmap('Blues', 6), aspect='auto')
             #plt.title(map_names[i][j])
             plt.xlabel("km")
             plt.ylabel("km")
