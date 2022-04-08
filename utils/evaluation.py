@@ -329,21 +329,36 @@ def create_evaluation_maps(gt, outputs):
     plt.rcParams.update({'font.family': 'Times New Roman', 'font.size': 22})
     timcor_maps = []
     rmse_maps = []
-    sum_maps = [metrics.sum_map(gt)]
     timcor_names = []
     rmse_names = []
-    sum_names = ['Sum GT']
-
+    if cfg.create_sum_maps:
+        sum_maps = [metrics.sum_map(gt)]
+        sum_names = ['Sum GT']
+    else:
+        sum_maps = []
+        sum_names =[]
     for output_name, output in outputs.items():
-        timcor_maps.append(metrics.timcor_map(gt, output))
-        rmse_maps.append(metrics.rmse_map(gt, output))
-        sum_maps.append(metrics.sum_map(output))
-        timcor_names.append('TimCor {}'.format(output_name))
-        rmse_names.append('RMSE {}'.format(output_name))
-        sum_names.append('Sum {}'.format(output_name))
+        if cfg.create_sum_maps:
+            sum_maps.append(metrics.sum_map(output))
+            sum_names.append('Sum {}'.format(output_name))
+        if cfg.create_timcor_maps:
+            timcor_maps.append(metrics.timcor_map(gt, output))
+            timcor_names.append('TimCor {}'.format(output_name))
+        if cfg.create_rmse_maps:
+            rmse_maps.append(metrics.rmse_map(gt, output))
+            rmse_names.append('RMSE {}'.format(output_name))
 
-    map_lists = [timcor_maps, rmse_maps, sum_maps]
-    map_names = [timcor_names, rmse_names, sum_names]
+    map_lists = []
+    map_names = []
+    if cfg.create_sum_maps:
+        map_lists.append(sum_maps)
+        map_names.append(sum_names)
+    if cfg.create_rmse_maps:
+        map_lists.append(rmse_maps)
+        map_names.append(rmse_names)
+    if cfg.create_timcor_maps:
+        map_lists.append(timcor_maps)
+        map_names.append(timcor_names)
     for i in range(len(map_lists)):
         minimum = np.min(map_lists[i])
         if 'RMSE' in map_names[i][0]:

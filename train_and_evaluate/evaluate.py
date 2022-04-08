@@ -133,7 +133,7 @@ if cfg.create_graphs:
         outputs[cfg.eval_names[i]] = output
     create_evaluation_graphs(gt, outputs)
 
-if cfg.create_maps:
+if cfg.create_rmse_maps or cfg.create_timcor_maps or cfg.create_sum_maps:
     if cfg.eval_range:
         r = (int(cfg.eval_range[0]), int(cfg.eval_range[1]))
         gt = h5py.File('{}{}'.format(cfg.evaluation_dirs[0], 'gt'), 'r').get(cfg.data_types[0])[r[0]:r[1], :, :]
