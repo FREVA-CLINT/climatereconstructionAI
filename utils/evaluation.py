@@ -374,7 +374,7 @@ def create_evaluation_maps(gt, outputs):
             plt.xlabel("km")
             plt.ylabel("km")
             ax = plt.gca()
-            ax.set_yticks([i for i in range(cfg.image_sizes[0]) if i % 100 == 0])
+            ax.set_yticks([i+12 for i in range(cfg.image_sizes[0]) if i % 100 == 0])
             ax.set_yticklabels([i for i in range(cfg.image_sizes[0]) if i % 100 == 0][::-1])
             ax.set_xticks([i for i in range(cfg.image_sizes[0]) if i % 100 == 0])
             ax.set_xticklabels([i for i in range(cfg.image_sizes[0]) if i % 100 == 0])
