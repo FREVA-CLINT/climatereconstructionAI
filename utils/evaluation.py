@@ -369,7 +369,7 @@ def create_evaluation_maps(gt, outputs):
             maximum = np.max(map_lists[i])
         for j in range(len(map_lists[i])):
             # plot and save data
-            img = plt.imshow(np.squeeze(map_lists[i][j]), vmin=minimum, vmax=maximum, cmap=plt.cm.get_cmap('Blues', 8), aspect='auto')
+            img = plt.imshow(np.squeeze(map_lists[i][j]), vmin=minimum, vmax=maximum, cmap='Blues', aspect='auto')
             #plt.title(map_names[i][j])
             plt.xlabel("km")
             plt.ylabel("km")
