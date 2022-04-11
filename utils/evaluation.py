@@ -363,7 +363,7 @@ def create_evaluation_maps(gt, outputs):
         minimum = np.min(map_lists[i])
         if 'RMSE' in map_names[i][0]:
             maximum = 0.1
-        if 'TimCor' in map_names[i][0]:
+        elif 'TimCor' in map_names[i][0]:
             maximum = 0.8
         elif 'Sum' in map_names[i][0]:
             maximum = 800
