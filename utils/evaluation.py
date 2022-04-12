@@ -309,7 +309,7 @@ def create_evaluation_graphs(gt, outputs):
         mean_timeseries[output_name] = metrics.mean_timeseries(output, time)
         rmse_timeseries[output_name] = metrics.rmse_timeseries(gt, output, time)
         rmse_over_mean_timeseries[output_name] = metrics.rmse_over_mean_timeseries(gt, output, time)
-        new_rmse_over_mean[output_name] = np.abs(mean_timeseries[output_name] - mean_timeseries['Ground Truth'])
+        #new_rmse_over_mean[output_name] = np.abs(mean_timeseries[output_name] - mean_timeseries['Ground Truth'])
         #fldcor_timeseries[output_name] = metrics.fldcor_timeseries(gt, output, time)
 
 
@@ -320,7 +320,7 @@ def create_evaluation_graphs(gt, outputs):
     plot_ts('Mean', 'MeanTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]),  mean_timeseries, time, 'mm/h')
     plot_ts('RMSE', 'RMSETS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), rmse_timeseries, time, 'mm/h')
     plot_ts('AME', 'METS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), rmse_over_mean_timeseries, time, 'mm/h')
-    plot_ts('NewME', 'NewMETS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), new_rmse_over_mean, time, 'mm/h')
+    #plot_ts('NewME', 'NewMETS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), new_rmse_over_mean, time, 'mm/h')
     #plot_ts('ME', 'FldCorTS{}x{}'.format(cfg.image_sizes[0], cfg.image_sizes[0]), fldcor_timeseries, time, 'mm/h')
 
 
