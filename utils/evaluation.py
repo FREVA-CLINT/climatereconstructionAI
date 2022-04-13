@@ -368,8 +368,8 @@ def create_evaluation_maps(gt, outputs):
         elif 'TimCor' in map_names[i][0]:
             maximum = 0.8
         elif 'Sum' in map_names[i][0]:
-            maximum = 500
-            minimum = -500
+            maximum = 250
+            minimum = -250
         else:
             maximum = np.max(map_lists[i])
         for j in range(len(map_lists[i])):
