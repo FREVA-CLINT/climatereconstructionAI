@@ -10,6 +10,6 @@ python train_and_evaluate/train.py \
  --prev-next-steps 0 \
  --out-channels 1 \
  --max-iter 1000000 \
- --save-model-interval 10 \
- --log-interval 1000 \
- --save-snapshot-image \
+# --save-model-interval 10 \
+# --log-interval 1000 \
+# --save-snapshot-image \
