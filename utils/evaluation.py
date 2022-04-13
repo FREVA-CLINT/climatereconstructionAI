@@ -331,15 +331,16 @@ def create_evaluation_maps(gt, outputs):
     rmse_maps = []
     timcor_names = []
     rmse_names = []
-    if cfg.create_sum_maps:
-        sum_maps = [metrics.sum_map(gt)]
-        sum_names = ['Sum GT']
-    else:
-        sum_maps = []
-        sum_names =[]
+    #if cfg.create_sum_maps:
+    #    sum_maps = [metrics.sum_map(gt)]
+    #    sum_names = ['Sum GT']
+    #else:
+    gt_sum_map = metrics.sum_map(gt)
+    sum_maps = []
+    sum_names =[]
     for output_name, output in outputs.items():
         if cfg.create_sum_maps:
-            sum_maps.append(metrics.sum_map(output))
+            sum_maps.append(gt_sum_map - metrics.sum_map(output))
             sum_names.append('Sum {}'.format(output_name))
         if cfg.create_timcor_maps:
             timcor_maps.append(metrics.timcor_map(gt, output))
@@ -366,8 +367,8 @@ def create_evaluation_maps(gt, outputs):
             maximum = 0.1
         elif 'TimCor' in map_names[i][0]:
             maximum = 0.8
-        elif 'Sum' in map_names[i][0]:
-            maximum = 800
+        #elif 'Sum' in map_names[i][0]:
+        #    maximum = 800
         else:
             maximum = np.max(map_lists[i])
         for j in range(len(map_lists[i])):
