@@ -340,7 +340,7 @@ def create_evaluation_maps(gt, outputs):
     sum_names =[]
     for output_name, output in outputs.items():
         if cfg.create_sum_maps:
-            sum_maps.append(gt_sum_map - metrics.sum_map(output))
+            sum_maps.append(metrics.sum_map(output) - gt_sum_map)
             sum_names.append('Sum {}'.format(output_name))
         if cfg.create_timcor_maps:
             timcor_maps.append(metrics.timcor_map(gt, output))
