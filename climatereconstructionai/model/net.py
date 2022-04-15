@@ -20,17 +20,17 @@ class PConvLSTM(nn.Module):
         self.lstm = lstm
 
         # initialize channel inputs and outputs and image size for encoder and decoder
-        if cfg.original_network:
-            enc_conv_configs = init_enc_conv_configs_orig(radar_img_size, radar_enc_dec_layers,
-                                                    radar_out_channels)
-            dec_conv_configs = init_dec_conv_configs_orig(radar_img_size, radar_enc_dec_layers,
-                                                    radar_out_channels)
-        else:
+        if cfg.n_filters is None:
             enc_conv_configs = init_enc_conv_configs(radar_img_size, radar_enc_dec_layers,
                                                      radar_pool_layers, radar_in_channels)
             dec_conv_configs = init_dec_conv_configs(radar_img_size, radar_enc_dec_layers,
                                                      radar_pool_layers, radar_in_channels,
                                                      radar_out_channels)
+        else:
+            enc_conv_configs = init_enc_conv_configs_orig(radar_img_size, radar_enc_dec_layers,
+                                                    radar_out_channels, cfg.n_filters)
+            dec_conv_configs = init_dec_conv_configs_orig(radar_img_size, radar_enc_dec_layers,
+                                                    radar_out_channels, cfg.n_filters)
 
         if cfg.attention:
             self.attention_depth = rea_enc_layers + rea_pool_layers
