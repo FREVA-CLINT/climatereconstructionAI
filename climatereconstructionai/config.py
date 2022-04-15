@@ -103,8 +103,8 @@ def set_common_args():
     arg_parser.add_argument('--disable-skip-layers', action='store_true', help="Disable the skip layers")
     arg_parser.add_argument('--disable-first-bn', action='store_true', help="Disable the batch normalization on the first layer")
     arg_parser.add_argument('--disable-masked-bn', action='store_true', help="Use standard batch normalization instead of masked BN")
-    arg_parser.add_argument('--original-network', action='store_true', help="Use the original network architecture (from Kadow et al.)")
     arg_parser.add_argument('--global-padding', action='store_true', help="Use a custom padding for global dataset")
+    arg_parser.add_argument('--n-filters', type=int, default=None, help="Number of filters for the first/last layer")
     arg_parser.add_argument('--out-channels', type=int, default=1, help="Number of channels for the output image")
     arg_parser.add_argument('--dataset-name', type=str, default=None, help="Name of the dataset for format checking")
     return arg_parser
