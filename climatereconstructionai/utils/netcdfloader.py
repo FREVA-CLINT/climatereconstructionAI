@@ -54,8 +54,6 @@ def nc_checker(filename,data_type,image_size):
 
     if not cfg.dataset_name is None:
 
-        min_tsteps = 2
-
         ds_dims = list(ds[data_type].dims)
         ndims = len(cfg.dataset_format["dimensions"])
 
@@ -72,38 +70,36 @@ def nc_checker(filename,data_type,image_size):
 
         shape = ds[data_type].shape
 
-        if shape[0] < min_tsteps:
-            logging.error('Not enough time steps in file {}.\nThe minimum number of time steps is: {}'.format(basename,min_tsteps))
-            sys.exit()
-
+        step = []
         regrid = False
         for i in range(2):
             coordinate = cfg.dataset_format["axes"][i+1]
 
-            step = np.unique(np.gradient(ds[data_type][coordinate].values))
-            if len(step) != 1:
+            step.append(np.unique(np.gradient(ds[data_type][coordinate].values)))
+            if len(step[i]) != 1:
                 logging.error('The {} grid in file {} is not uniform.'.format(coordinate,basename))
                 sys.exit()
 
             extent = cfg.dataset_format["grid"][i][1]-cfg.dataset_format["grid"][i][0]
-            if abs( ds[data_type][coordinate].values[-1] - ds[data_type][coordinate].values[0] + step - extent ) > 1e-2:
+            if abs( ds[data_type][coordinate].values[-1] - ds[data_type][coordinate].values[0] + step[i] - extent ) > 1e-2:
                 logging.error('Incorrect {} extent in file {}.\nThe extent should be: {}'.format(coordinate,basename,extent))
                 sys.exit()
 
             if shape[i+1] != image_size:
+                step[i] *= shape[i+1]/image_size
                 logging.warning('The length of {} does not correspond to the image size for file {}.'.format(coordinate,basename))
                 regrid = True
 
         if regrid:
             logging.warning('The spatial coordinates have been interpolated using nearest_s2d in file {}.'.format(basename))
-            grid = xr.Dataset({cfg.dataset_format["axes"][1]: ([cfg.dataset_format["axes"][1]], xe.util._grid_1d(*cfg.dataset_format["grid"][0])[0]),
-                              cfg.dataset_format["axes"][2]: ([cfg.dataset_format["axes"][2]], xe.util._grid_1d(*cfg.dataset_format["grid"][1])[0])})
+            grid = xr.Dataset({cfg.dataset_format["axes"][1]: ([cfg.dataset_format["axes"][1]], xe.util._grid_1d(*cfg.dataset_format["grid"][0][:2],step[0])[0]),
+                              cfg.dataset_format["axes"][2]: ([cfg.dataset_format["axes"][2]], xe.util._grid_1d(*cfg.dataset_format["grid"][1][:2],step[1])[0])})
             ds = xe.Regridder(ds, grid, "nearest_s2d")(ds,keep_attrs=True)
 
         if ds[data_type].dtype != "float32":
             logging.warning('Incorrect data type for file {}.\nData type has been converted to float32.'.format(basename))
             ds[data_type] = ds[data_type].astype(dtype=np.float32)
-
+    
     return ds
 
 def get_data(path,data_names,data_types):
