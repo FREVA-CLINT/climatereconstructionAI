@@ -45,6 +45,8 @@ def evaluate(arg_file=None):
                               radar_out_channels=cfg.out_channels,
                               lstm=lstm).to(cfg.device)
 
+        if cfg.print_model:
+            print(model)
         load_ckpt("{}/{}".format(cfg.model_dir,cfg.model_names[i_model]), [('model', model)], cfg.device)
 
         model.eval()
