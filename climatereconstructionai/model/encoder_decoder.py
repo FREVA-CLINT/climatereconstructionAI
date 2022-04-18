@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import sys
-import torch.nn.functional as F
 
 from .. import config as cfg
 from .conv_lstm_module import ConvLSTMBlock
@@ -73,8 +72,9 @@ class DecoderBlock(nn.Module):
         skip_mask = lstm_to_batch(skip_mask)
 
         # interpolate input and mask
-        h = F.interpolate(input, scale_factor=2, mode='nearest')
-        h_mask = F.interpolate(mask, scale_factor=2, mode='nearest')
+        m = nn.Upsample(skip_input.size()[-2:], mode='nearest')
+        h = m(input)
+        h_mask = m(mask)
 
         if cfg.skip_layers:
             # skip layers: pass results from encoding layers to decoding layers
