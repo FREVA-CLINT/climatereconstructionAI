@@ -26,7 +26,7 @@ class PConvBlock(nn.Module):
             self.trans_pad = bound_pad
         else:
             self.trans_pad = F.pad
-            
+
         self.input_conv = nn.Conv2d(in_channels, out_channels, kernel, stride, 0, dilation, groups, bias)
         self.mask_conv = nn.Conv2d(in_channels, out_channels, kernel, stride, 0, dilation, groups, False)
 
