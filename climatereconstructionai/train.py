@@ -102,6 +102,8 @@ def train(arg_file=None):
     if cfg.multi_gpus: 
         model = torch.nn.DataParallel(model)
 
+    min_iter = 0.2*cfg.max_iter
+    min_loss = float("inf")
     pbar = tqdm(range(start_iter, cfg.max_iter))
     for i in pbar:
 
@@ -118,12 +120,6 @@ def train(arg_file=None):
         train_loss.backward()
         optimizer.step()
 
-        # save checkpoint
-        if (i + 1) % cfg.save_model_interval == 0 or (i + 1) == cfg.max_iter:
-            save_ckpt('{:s}/ckpt/{:d}.pth'.format(cfg.snapshot_dir, i + 1),
-                      [('model', model)], [('optimizer', optimizer)], i + 1)
-
-        
 
         if cfg.log_interval and (i + 1) % cfg.log_interval == 0:
 
@@ -140,7 +136,17 @@ def train(arg_file=None):
                 model.eval()
                 create_snapshot_image(model, dataset_val, '{:s}/images/iter_{:d}'.format(cfg.snapshot_dir, i + 1))
 
+            # save checkpoint
+            if (i + 1) > min_iter and val_loss < min_loss:
+                save_ckpt('{:s}/ckpt/optimal.pth'.format(cfg.snapshot_dir),
+                          [('model', model)], [('optimizer', optimizer)], i + 1)
+                min_loss = val_loss
+        if (i + 1) % cfg.save_model_interval == 0 or (i + 1) == cfg.max_iter:
+            save_ckpt('{:s}/ckpt/{:d}.pth'.format(cfg.snapshot_dir, i + 1),
+                      [('model', model)], [('optimizer', optimizer)], i + 1)
+
     writer.close()
+    print("* Minimum validation loss: ", min_loss)
 
 if __name__ == "__main__":
     train()
