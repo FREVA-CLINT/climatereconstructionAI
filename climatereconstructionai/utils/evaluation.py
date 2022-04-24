@@ -126,13 +126,12 @@ def infill(model, dataset, eval_path):
     gt = torch.cat(gt)
     output = torch.cat(output)
 
+    image[np.where(mask==0)] = np.nan
     # create output_comp
     output_comp = mask * image + (1 - mask) * output
 
     cvar = {'gt': gt, 'mask': mask, 'image': image, 'output': output, 'output_comp': output_comp}
     create_outputs(cvar, dataset.img_data[0], eval_path)
-
-    return np.ma.masked_array(gt, mask)[:, 0, :, :], np.ma.masked_array(output_comp[:, 0, :, :], mask[:, 0, :, :])
 
 def create_outputs(cvar, img_data, eval_path):
 
@@ -152,4 +151,4 @@ def create_outputs(cvar, img_data, eval_path):
     dims = ds[data_type].dims
     lon, lat = ds[data_type][dims[2]].values, ds[data_type][dims[1]].values
     output_names = [output_name, '{}_{}'.format(eval_path,"masked_gt")]
-    plot_data(lon,lat,[cvar["output_comp"],cvar["gt"]/cvar["mask"]],output_names,data_type,cfg.plot_results,*cfg.dataset_format["scale"])
+    plot_data(lon,lat,[cvar["output_comp"],cvar["image"]],output_names,data_type,cfg.plot_results,*cfg.dataset_format["scale"])
