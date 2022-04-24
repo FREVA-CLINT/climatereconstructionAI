@@ -51,8 +51,7 @@ def evaluate(arg_file=None):
 
         model.eval()
 
-        gt, output = infill(model, dataset_val, "{}/{}".format(cfg.evaluation_dirs[0],cfg.eval_names[i_model]))
-        outputs = {cfg.eval_names[i_model]: output}
+        infill(model, dataset_val, "{}/{}".format(cfg.evaluation_dirs[0],cfg.eval_names[i_model]))
 
 if __name__ == "__main__":
     evaluate()
