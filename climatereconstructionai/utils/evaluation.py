@@ -126,9 +126,9 @@ def infill(model, dataset, eval_path):
     gt = torch.cat(gt)
     output = torch.cat(output)
 
-    image[np.where(mask==0)] = np.nan
     # create output_comp
     output_comp = mask * image + (1 - mask) * output
+    image[np.where(mask==0)] = np.nan
 
     cvar = {'gt': gt, 'mask': mask, 'image': image, 'output': output, 'output_comp': output_comp}
     create_outputs(cvar, dataset.img_data[0], eval_path)
