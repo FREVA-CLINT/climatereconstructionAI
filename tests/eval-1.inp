@@ -5,4 +5,4 @@
 --evaluation-dirs tests/out/evaluation/
 --img-names tas_hadcrut_187709_189308.nc
 --eval-names test-1
---dataset-name hadcrut_mod
+--dataset-name hadcrut-mod
