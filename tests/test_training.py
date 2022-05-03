@@ -1,5 +1,6 @@
 import pytest
 import shutil
+import numpy as np
 
 testdir = "tests/"
 
@@ -12,6 +13,7 @@ def test_training_run(file):
 @pytest.mark.training
 @pytest.mark.parametrize("model", ["10.pth","15.pth"])
 def test_comp_models(model):
+    # threshold = 1e-1
     print()
     import torch
     model_ref = torch.load(testdir+"ref/"+model)["model"]
@@ -20,3 +22,4 @@ def test_comp_models(model):
         assert k_ref == k_run
         print("* Checking {}...".format(k_ref))
         assert model_ref[k_ref].ne(model_run[k_run]).sum().item() == 0
+        # assert np.isclose(model_ref[k_ref],model_run[k_run],atol=0.,rtol=threshold).sum().item() == model_ref[k_ref].numel()
