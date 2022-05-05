@@ -1,0 +1,22 @@
+{
+  "hadcrut": {
+    "dimensions": ["time", "latitude", "longitude"],
+    "axes": ["time", "latitude", "longitude"],
+    "grid": [[-90,90,2.5],[0,360,5]],
+    "scale": [[-3,3],"RdBu_r"]
+  },
+
+  "hadcrut-mod": {
+  "dimensions": ["time", "lat", "lon"],
+    "axes": ["time", "lat", "lon"],
+    "grid": [[-90,90,2.5],[0,360,5]],
+    "scale": [[-3,3],"RdBu_r"]
+  },
+
+  "None": {
+    "dimensions": null,
+    "axes": null,
+    "grid": null,
+    "scale": [null, null]
+  }
+}
