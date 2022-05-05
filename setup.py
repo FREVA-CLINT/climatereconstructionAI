@@ -37,15 +37,7 @@ setup(
     package_dir={'': 'src'},
     packages=find_packages(where='src'),
     python_requires='>=3.7, <4',
-    nstall_requires=reqs,
-    # install_requires=['peppercorn'],
-    # extras_require={  # Optional
-    #     'dev': ['check-manifest'],
-    #     'test': ['coverage'],
-    # },
-    # package_data={
-    #     'sample': ['package_data.dat'],
-    # },
-    data_files=[('models', ['data/20cr_20220114.pth'])],
-    scripts=['bin/crai-evaluate'],
+    include_package_data=True,
+    install_requires=reqs,
+    # data_files=[('models', ['data/20cr_20220114.pth'])],
 )

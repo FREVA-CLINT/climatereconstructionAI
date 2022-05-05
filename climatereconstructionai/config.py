@@ -1,6 +1,8 @@
 import argparse
 import os
 import os.path
+import pkgutil
+import json
 
 LAMBDA_DICT_IMG_INPAINTING = {
     'hole': 6.0, 'tv': 0.1, 'valid': 1.0, 'prc': 0.05, 'style': 120.0
@@ -11,27 +13,10 @@ LAMBDA_DICT_HOLE = {
 
 def get_format(dataset_name):
 
-    dataset_format = {}
-    dataset_format["hadcrut-mod"] = {\
-    "dimensions": ["time", "lat", "lon"],\
-    "axes": ["time", "lat", "lon"],\
-    "grid": [[-90,90,2.5],[0,360,5]],\
-    "scale": ["symmetric","RdBu_r"],\
-    }
-    dataset_format["hadcrut"] = {\
-    "dimensions": ["time", "latitude", "longitude"],\
-    "axes": ["time", "latitude", "longitude"],\
-    "grid": [[-90,90,2.5],[0,360,5]],\
-    "scale": ["symmetric","RdBu_r"],\
-    }
-    dataset_format[None] = {\
-    "dimensions": None,\
-    "axes": None,\
-    "grid": None,\
-    "scale": [None, None],\
-    }
+    json_data = pkgutil.get_data(__name__, "static/dataset_format.json")
+    dataset_format = json.loads(json_data)
 
-    return dataset_format[dataset_name]
+    return dataset_format[str(dataset_name)]
 
 
 class LoadFromFile (argparse.Action):
