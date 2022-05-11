@@ -3,8 +3,7 @@
   <component name="ChangeListManager">
     <list default="true" id="4160296b-1198-41f9-9c42-69b101bbeff9" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/climatereconstructionai/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/climatereconstructionai/config.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/climatereconstructionai/model/partial_conv_module.py" beforeDir="false" afterPath="$PROJECT_DIR$/climatereconstructionai/model/partial_conv_module.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/climatereconstructionai/utils/netcdfloader.py" beforeDir="false" afterPath="$PROJECT_DIR$/climatereconstructionai/utils/netcdfloader.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
