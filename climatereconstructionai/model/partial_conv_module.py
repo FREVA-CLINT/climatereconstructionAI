@@ -37,10 +37,10 @@ class PConvBlock(nn.Module):
         if activation:
             self.activation = activation
         if bn:
-            if cfg.disable_masked_bn:
-                self.bn = nn.BatchNorm2d(out_channels)
-            else:
+            if cfg.masked_bn:
                 self.bn = MaskedBatchNorm2d(out_channels)
+            else:
+                self.bn = nn.BatchNorm2d(out_channels)
 
         # exclude mask gradients from backpropagation
         for param in self.mask_conv.parameters():
@@ -70,10 +70,10 @@ class PConvBlock(nn.Module):
         new_mask = new_mask.masked_fill_(no_update_holes, 0.0)
 
         if hasattr(self, 'bn'):
-            if cfg.disable_masked_bn:
-                output = self.bn(output)
-            else:
+            if cfg.masked_bn:
                 output = self.bn(output,new_mask)
+            else:
+                output = self.bn(output)
 
         if hasattr(self, 'activation'):
             output = self.activation(output)
