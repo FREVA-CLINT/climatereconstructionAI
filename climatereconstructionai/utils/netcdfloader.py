@@ -223,7 +223,7 @@ class NetCDFLoader(Dataset):
         if len(images) == 1:
             return masked[0], masks[0], images[0], torch.tensor([]), torch.tensor([]), torch.tensor([])
         else:
-            return masked[0], masks[0], images[0], torch.cat(masked[1:], dim=1), torch.cat(masks[1:], dim=1), torch.cat(gts[1:], dim=1)
+            return masked[0], masks[0], images[0], torch.cat(masked[1:], dim=1), torch.cat(masks[1:], dim=1), torch.cat(images[1:], dim=1)
 
 
     def __len__(self):
