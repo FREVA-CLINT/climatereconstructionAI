@@ -98,6 +98,7 @@ def set_train_args(arg_file=None):
     arg_parser = set_common_args()
     arg_parser.add_argument('--snapshot-dir', type=str, default='snapshots/', help="Parent directory of the training checkpoints and the snapshot images")
     arg_parser.add_argument('--resume-iter', type=int, help="Iteration step from which the training will be resumed")
+    arg_parser.add_argument('--img-index', type=int, default=None, help="Use the image and mask from the specified channel index to create the masked image")
     arg_parser.add_argument('--batch-size', type=int, default=18, help="Batch size")
     arg_parser.add_argument('--n-threads', type=int, default=64, help="Number of threads")
     arg_parser.add_argument('--multi-gpus', action='store_true', help="Use multiple GPUs, if any")

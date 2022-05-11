@@ -43,7 +43,7 @@ def nc_checker(filename,data_type,image_size):
 
     try:
         # We use load_dataset instead of open_dataset because of lazy transpose
-        ds = xr.load_dataset(filename)
+        ds = xr.load_dataset(filename,decode_times=False)
     except:
         logging.error('Impossible to read the input file {}.\nPlease, check that the input file is a netCDF file and is not corrupted.'.format(basename))
         sys.exit()
@@ -99,7 +99,6 @@ def nc_checker(filename,data_type,image_size):
         if ds[data_type].dtype != "float32":
             logging.warning('Incorrect data type for file {}.\nData type has been converted to float32.'.format(basename))
             ds[data_type] = ds[data_type].astype(dtype=np.float32)
-    
     return ds
 
 def get_data(path,data_names,data_types):
@@ -115,8 +114,8 @@ def get_data(path,data_names,data_types):
             data.append(nc_checker('{}{}'.format(path,data_names[i]),data_types[i],cfg.image_sizes[0]))
             shape.append(data[-1][data_types[i]].shape)
 
-        assert len(set(shape)) == 1
-
+        if cfg.img_index is None:
+            assert len(set(shape)) == 1
         return data, shape[0][0]
 
 class NetCDFLoader(Dataset):
@@ -173,7 +172,7 @@ class NetCDFLoader(Dataset):
         #         total_data = torch.cat([total_data, torch.stack(copy_indices[0][1] * [total_data[copy_indices[0][0]]])])
         return image, mask
 
-    def get_single_item(self, ind_data, index):
+    def get_single_item(self, ind_data, index, shuffle_masks):
         if self.lstm_steps == 0:
             prev_steps = next_steps = self.prev_next_steps
         else:
@@ -183,7 +182,7 @@ class NetCDFLoader(Dataset):
         img_indices = np.array(list(range(index - prev_steps, index + next_steps + 1)))
         img_indices[img_indices < 0] = 0
         img_indices[img_indices > self.img_length - 1] = self.img_length - 1
-        if cfg.shuffle_masks:
+        if shuffle_masks:
             mask_indices = []
             for j in range(prev_steps + next_steps + 1):
                 mask_indices.append(random.randint(0, self.mask_length - 1))
@@ -206,19 +205,26 @@ class NetCDFLoader(Dataset):
 
     def __getitem__(self, index):
 
-        image, mask = self.get_single_item(0,index)
         images = []
         masks = []
-        for i in range(1, len(self.data_types)):
-            img, m = self.get_single_item(i,index)
-            images.append(img)
-            masks.append(m)
-        if images and masks:
-            images = torch.cat(images, dim=1)
-            masks = torch.cat(masks, dim=1)
-            return mask*image, mask, image, masks*images, masks, images
+        masked = []
+        for i in range(len(self.data_types)):
+
+            if i == cfg.img_index:
+                image, mask = self.get_single_item(i,index,False)
+                masks[0] = masks[0]*mask
+                masked[0] = image*masks[0]
+            else:
+                image, mask = self.get_single_item(i,index,cfg.shuffle_masks)
+                images.append(image)
+                masks.append(mask)
+                masked.append(image*mask)
+
+        if len(images) == 1:
+            return masked[0], masks[0], images[0], torch.tensor([]), torch.tensor([]), torch.tensor([])
         else:
-            return mask*image, mask, image, torch.tensor([]), torch.tensor([]), torch.tensor([])
+            return masked[0], masks[0], images[0], torch.cat(masked[1:], dim=1), torch.cat(masks[1:], dim=1), torch.cat(gts[1:], dim=1)
+
 
     def __len__(self):
         return self.img_length
