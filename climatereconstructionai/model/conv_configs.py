@@ -27,6 +27,7 @@ def init_enc_conv_configs(img_size, enc_dec_layers, pool_layers, start_channels)
         conv_configs.append(conv_config)
     for i in range(pool_layers):
         conv_config = {}
+        conv_config['bn'] = True
         conv_config['in_channels'] = img_size
         conv_config['kernel'] = (3, 3)
         conv_config['out_channels'] = img_size
@@ -40,6 +41,7 @@ def init_dec_conv_configs(img_size, enc_dec_layers, pool_layers, start_channels,
     conv_configs = []
     for i in range(pool_layers):
         conv_config = {}
+        conv_config['bn'] = True
         conv_config['in_channels'] = img_size
         conv_config['kernel'] = (3, 3)
         conv_config['out_channels'] = img_size
