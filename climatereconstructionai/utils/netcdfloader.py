@@ -109,14 +109,14 @@ def get_data(path,data_names,data_types):
         ndata = len(data_names)
         assert ndata == len(data_types)
 
-        data, shape = [], []
+        data, lengths = [], []
         for i in range(ndata):
             data.append(nc_checker('{}{}'.format(path,data_names[i]),data_types[i],cfg.image_sizes[0]))
-            shape.append(data[-1][data_types[i]].shape)
+            lengths.append(len(data[-1][data_types[i]]))
 
         if cfg.img_index is None:
-            assert len(set(shape)) == 1
-        return data, shape[0][0]
+            assert len(set(lengths)) == 1
+        return data, lengths[0]
 
 class NetCDFLoader(Dataset):
     def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, lstm_steps, prev_next_steps):
