@@ -10,6 +10,14 @@ import logging
 
 from .. import config as cfg
 
+def SteadyMaskLoader(path, mask_name, data_type):
+
+    if mask_name is None:
+        return None
+    else:
+        steady_mask, _ = load_netcdf(path, [mask_name], [data_type])
+        print(steady_mask)
+        return torch.from_numpy(steady_mask[0][data_type].values)
 
 class InfiniteSampler(Sampler):
     def __init__(self, num_samples, data_source=None):
@@ -101,7 +109,7 @@ def nc_checker(filename,data_type,image_size):
             ds[data_type] = ds[data_type].astype(dtype=np.float32)
     return ds
 
-def get_data(path,data_names,data_types):
+def load_netcdf(path,data_names,data_types):
 
     if data_names is None:
         return None, None
@@ -134,8 +142,8 @@ class NetCDFLoader(Dataset):
         elif split == 'val':
             data_path = '{:s}/val_large/'.format(data_root)
 
-        self.img_data, self.img_length = get_data(data_path,img_names,data_types)
-        self.mask_data, self.mask_length = get_data(mask_root,mask_names,data_types)
+        self.img_data, self.img_length = load_netcdf(data_path,img_names,data_types)
+        self.mask_data, self.mask_length = load_netcdf(mask_root,mask_names,data_types)
 
         if self.mask_data is None:
             self.mask_length = self.img_length
