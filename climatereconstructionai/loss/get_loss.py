@@ -23,12 +23,21 @@ class CriterionParallel(torch.nn.Module):
              dict[key] = dict[key].mean()
          return dict
 
-def get_loss(criterion, lambda_dict, mask, output, gt, writer, iter_index, setname):
+def get_loss(criterion, lambda_dict, img_mask, loss_mask, output, gt, writer, iter_index, setname):
 
     if cfg.multi_gpus:
         loss_func = CriterionParallel(criterion)
     else:
         loss_func = criterion
+
+    if loss_mask is None:
+        mask = img_mask
+    else:
+        mask = img_mask + loss_mask
+        if not ((mask==0) | (mask==1)).all():
+            print("Error! Not all values in mask are zeros or ones!")
+            exit()
+
     loss_dict = loss_func(mask[:, cfg.lstm_steps, cfg.gt_channels, :, :],
                           output[:, cfg.lstm_steps, :, :, :],
                           gt[:, cfg.lstm_steps, cfg.gt_channels, :, :])

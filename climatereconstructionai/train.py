@@ -11,7 +11,7 @@ from . import config as cfg
 from .model.net import PConvLSTM
 from .utils.featurizer import VGG16FeatureExtractor
 from .utils.io import load_ckpt, save_ckpt
-from .utils.netcdfloader import NetCDFLoader, InfiniteSampler
+from .utils.netcdfloader import NetCDFLoader, InfiniteSampler, SteadyMaskLoader
 from .utils.evaluation import create_snapshot_image
 from .loss.inpainting_loss import InpaintingLoss
 from .loss.hole_loss import HoleLoss
@@ -45,6 +45,8 @@ def train(arg_file=None):
     iterator_val = iter(DataLoader(dataset_val, batch_size=cfg.batch_size,
                                      sampler=InfiniteSampler(len(dataset_val)),
                                      num_workers=cfg.n_threads))
+
+    steady_mask = SteadyMaskLoader(cfg.mask_dir, cfg.steady_mask, cfg.data_types[0]).to(cfg.device)
 
     # define network model
     lstm = True
@@ -114,7 +116,7 @@ def train(arg_file=None):
         image, mask, gt, rea_images, rea_masks, rea_gts = [x.to(cfg.device) for x in next(iterator_train)]
         output = model(image, mask, rea_images, rea_masks)
 
-        train_loss = get_loss(criterion, lambda_dict, mask, output, gt, writer, i, "train")
+        train_loss = get_loss(criterion, lambda_dict, mask, steady_mask, output, gt, writer, i, "train")
 
         optimizer.zero_grad()
         train_loss.backward()
@@ -127,7 +129,7 @@ def train(arg_file=None):
             image, mask, gt, rea_images, rea_masks, rea_gts = [x.to(cfg.device) for x in next(iterator_val)]
             with torch.no_grad():
                 output = model(image, mask, rea_images, rea_masks)
-            val_loss = get_loss(criterion, lambda_dict, mask, output, gt, writer, i, "val")
+            val_loss = get_loss(criterion, lambda_dict, mask, steady_mask, output, gt, writer, i, "val")
             if not cfg.lr_scheduler_patience is None:
                 lr_scheduler.step(val_loss)
 
