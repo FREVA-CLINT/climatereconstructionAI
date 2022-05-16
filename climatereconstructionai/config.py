@@ -91,6 +91,7 @@ def set_common_args():
     arg_parser.add_argument('--disable-first-bn', action='store_true', help="Disable the batch normalization on the first layer")
     arg_parser.add_argument('--masked-bn', action='store_true', help="Use masked batch normalization instead of standard BN")
     arg_parser.add_argument('--global-padding', action='store_true', help="Use a custom padding for global dataset")
+    arg_parser.add_argument('--normalize-images', action='store_true', help="Normalize the input images to 0 mean and 1 std")
     arg_parser.add_argument('--n-filters', type=int, default=None, help="Number of filters for the first/last layer")
     arg_parser.add_argument('--out-channels', type=int, default=1, help="Number of channels for the output image")
     arg_parser.add_argument('--dataset-name', type=str, default=None, help="Name of the dataset for format checking")

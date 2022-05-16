@@ -4,6 +4,7 @@ import torch
 import xarray as xr
 import xesmf as xe
 from torch.utils.data import Dataset, Sampler
+from torchvision import transforms
 import os
 import sys
 import logging
@@ -125,6 +126,16 @@ def load_netcdf(path,data_names,data_types):
             assert len(set(lengths)) == 1
         return data, lengths[0]
 
+def img_normalization(img_data,data_types):
+
+    img_mean, img_std, img_tf = [], [], []
+    for i in range(len(data_types)):
+        img_mean.append(img_data[i][data_types[i]].mean().item())
+        img_std.append(img_data[i][data_types[i]].std().item())
+        img_tf.append(transforms.Normalize(mean=[img_mean[-1]], std=[img_std[-1]]))
+
+    return img_mean, img_std, img_tf
+
 class NetCDFLoader(Dataset):
     def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, lstm_steps, prev_next_steps):
         super(NetCDFLoader, self).__init__()
@@ -150,6 +161,9 @@ class NetCDFLoader(Dataset):
             if not cfg.shuffle_masks:
                 assert self.img_length == self.mask_length
 
+        if cfg.normalize_images:
+            self.img_mean, self.img_std, self.img_tf = img_normalization(self.img_data,data_types)
+
 
     def load_data(self, ind_data, img_indices, mask_indices):
 
@@ -162,6 +176,11 @@ class NetCDFLoader(Dataset):
             mask = torch.from_numpy(self.mask_data[ind_data][data_type].values[mask_indices])
         image = self.img_data[ind_data][data_type].values[img_indices]
         image = torch.from_numpy(np.nan_to_num(image))
+
+        if cfg.normalize_images:
+            image = self.img_tf[ind_data](image)
+        # print(img_indices,image.mean(),image.std())
+
         # # open netcdf file
         # try:
         #     total_data = torch.from_numpy(h5_data[indices, :, :])
