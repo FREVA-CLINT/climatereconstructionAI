@@ -19,6 +19,17 @@ def SteadyMaskLoader(path, mask_name, data_type):
         steady_mask, _ = load_netcdf(path, [mask_name], [data_type])
         return torch.from_numpy(steady_mask[0][data_type].values)
 
+
+def img_normalization(img_data,data_types):
+
+    img_mean, img_std, img_tf = [], [], []
+    for i in range(len(data_types)):
+        img_mean.append(img_data[i][data_types[i]].mean().item())
+        img_std.append(img_data[i][data_types[i]].std().item())
+        img_tf.append(transforms.Normalize(mean=[img_mean[-1]], std=[img_std[-1]]))
+
+    return img_mean, img_std, img_tf
+
 class InfiniteSampler(Sampler):
     def __init__(self, num_samples, data_source=None):
         super().__init__(data_source)
@@ -126,15 +137,6 @@ def load_netcdf(path,data_names,data_types):
             assert len(set(lengths)) == 1
         return data, lengths[0]
 
-def img_normalization(img_data,data_types):
-
-    img_mean, img_std, img_tf = [], [], []
-    for i in range(len(data_types)):
-        img_mean.append(img_data[i][data_types[i]].mean().item())
-        img_std.append(img_data[i][data_types[i]].std().item())
-        img_tf.append(transforms.Normalize(mean=[img_mean[-1]], std=[img_std[-1]]))
-
-    return img_mean, img_std, img_tf
 
 class NetCDFLoader(Dataset):
     def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, lstm_steps, prev_next_steps):
@@ -161,8 +163,7 @@ class NetCDFLoader(Dataset):
             if not cfg.shuffle_masks:
                 assert self.img_length == self.mask_length
 
-        if cfg.normalize_images:
-            self.img_mean, self.img_std, self.img_tf = img_normalization(self.img_data,data_types)
+        self.img_mean, self.img_std, self.img_tf = img_normalization(self.img_data,data_types)
 
 
     def load_data(self, ind_data, img_indices, mask_indices):
