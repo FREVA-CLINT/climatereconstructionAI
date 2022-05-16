@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os.path
 from tensorboardX import SummaryWriter
+from torchvision import transforms
 from .netcdfloader import SteadyMaskLoader
 from .plotdata import plot_data
 
@@ -139,11 +140,15 @@ def infill(model, dataset, eval_path):
     image[np.where(mask==0)] = np.nan
 
     cvar = {'gt': gt, 'mask': mask, 'image': image, 'output': output, 'output_comp': output_comp}
-    create_outputs(cvar, dataset.img_data[0], eval_path)
+    create_outputs(cvar, dataset.img_data[0], dataset.img_mean[0], dataset.img_std[0], eval_path)
 
-def create_outputs(cvar, img_data, eval_path):
+def inv_normalization(img_data, img_mean, img_std):
+    return img_std*img_data+img_mean
+
+def create_outputs(cvar, img_data, img_mean, img_std, eval_path):
 
     data_type = cfg.data_types[0]
+    out_tf = transforms.Normalize(mean=[-img_mean/img_std], std=[1./img_std])
 
     for cname in cvar:
         output_name = '{}_{}'.format(eval_path,cname)
@@ -151,7 +156,7 @@ def create_outputs(cvar, img_data, eval_path):
         ds = img_data.copy()
         ds[data_type].values = cvar[cname].to(torch.device('cpu')).detach().numpy()[:,0,:,:]
         if cfg.normalize_images:
-            image = self.img_tf[ind_data](image)
+            ds[data_type].values = inv_normalization(ds[data_type].values, img_mean, img_std)
 
         if not cfg.dataset_name is None:
         # We transpose back
