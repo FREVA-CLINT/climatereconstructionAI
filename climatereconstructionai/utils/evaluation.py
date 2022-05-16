@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os.path
 from tensorboardX import SummaryWriter
+from .netcdfloader import SteadyMaskLoader
 from .plotdata import plot_data
 
 from .. import config as cfg
@@ -125,6 +126,13 @@ def infill(model, dataset, eval_path):
     mask = torch.cat(mask)
     gt = torch.cat(gt)
     output = torch.cat(output)
+
+    steady_mask = SteadyMaskLoader(cfg.mask_dir, cfg.steady_mask, cfg.data_types[0]).to(cfg.device)
+    if not steady_mask is None:
+        steady_mask = 1-steady_mask
+        image /= steady_mask
+        gt /= steady_mask
+        output /= steady_mask
 
     # create output_comp
     output_comp = mask * image + (1 - mask) * output

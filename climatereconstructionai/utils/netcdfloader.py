@@ -16,7 +16,6 @@ def SteadyMaskLoader(path, mask_name, data_type):
         return None
     else:
         steady_mask, _ = load_netcdf(path, [mask_name], [data_type])
-        print(steady_mask)
         return torch.from_numpy(steady_mask[0][data_type].values)
 
 class InfiniteSampler(Sampler):
