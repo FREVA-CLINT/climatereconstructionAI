@@ -150,6 +150,8 @@ def create_outputs(cvar, img_data, eval_path):
 
         ds = img_data.copy()
         ds[data_type].values = cvar[cname].to(torch.device('cpu')).detach().numpy()[:,0,:,:]
+        if cfg.normalize_images:
+            image = self.img_tf[ind_data](image)
 
         if not cfg.dataset_name is None:
         # We transpose back
