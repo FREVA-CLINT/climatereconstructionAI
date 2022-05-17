@@ -163,7 +163,5 @@ def create_outputs(cvar, img_data, img_mean, img_std, eval_path):
             ds[data_type] = ds[data_type].transpose(*cfg.dataset_format["dimensions"])
         ds.to_netcdf(output_name+".nc")
 
-    dims = ds[data_type].dims
-    lon, lat = ds[data_type][dims[2]].values, ds[data_type][dims[1]].values
     output_names = [output_name, '{}_{}'.format(eval_path,"masked_gt")]
-    plot_data(lon,lat,[cvar["output_comp"],cvar["image"]],output_names,data_type,cfg.plot_results,*cfg.dataset_format["scale"])
+    plot_data(ds.coords,[cvar["output_comp"],cvar["image"]],output_names,data_type,cfg.plot_results,*cfg.dataset_format["scale"])

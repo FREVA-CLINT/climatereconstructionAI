@@ -8,7 +8,7 @@ def get_longname(var):
 
     return lname
 
-def plot_data(lon,lat,data,output_names,data_type,time_indices,vlim,cmap):
+def plot_data(coords,data,output_names,data_type,time_indices,vlim,cmap):
 
     if not time_indices is None:
 
@@ -18,6 +18,11 @@ def plot_data(lon,lat,data,output_names,data_type,time_indices,vlim,cmap):
         import cartopy.crs as ccrs
         import cartopy
         from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+        for dim in coords.dims:
+            for key in ("time", "lon", "lat"):
+                if key in dim:
+                    globals()[key] = coords[dim].values
 
         ndata = len(data)
 
@@ -46,6 +51,7 @@ def plot_data(lon,lat,data,output_names,data_type,time_indices,vlim,cmap):
                 image = ax.pcolormesh(lon,lat,data[i][j].squeeze(),vmin=vmin,vmax=vmax,cmap=cmap,transform=ccrs.PlateCarree(),shading='auto')
                 ax.set_facecolor('grey')
                 ax.yaxis.set_ticks_position("left")
-                cb = plt.colorbar(image,location="bottom")
+                cb = plt.colorbar(image,location="bottom",pad=0.05)
                 cb.set_label(get_longname(data_type),size=14)
+                plt.title(time[j],pad=15,size=14)
                 plt.savefig(output_names[i]+"_"+str(j)+".png", dpi=150, bbox_inches='tight')
