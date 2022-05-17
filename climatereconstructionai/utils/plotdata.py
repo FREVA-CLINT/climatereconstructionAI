@@ -8,7 +8,7 @@ def get_longname(var):
 
     return lname
 
-def plot_data(lon,lat,data,output_names,data_type,time_indices,scale_type,cmap):
+def plot_data(lon,lat,data,output_names,data_type,time_indices,vlim,cmap):
 
     if not time_indices is None:
 
@@ -24,12 +24,11 @@ def plot_data(lon,lat,data,output_names,data_type,time_indices,scale_type,cmap):
         if cmap is None:
             cmap = "RdBu_r"
 
-        vmin = min([np.nanmin(data[i][time_indices]) for i in range(ndata)])
-        vmax = max([np.nanmax(data[i][time_indices]) for i in range(ndata)])
-        if scale_type == "symmetric":
-            vlim = max([abs(vmin),abs(vmax)])
-            vmin = -vlim
-            vmax = vlim
+        if vlim is None:
+            vmin = min([np.nanmin(data[i][time_indices]) for i in range(ndata)])
+            vmax = max([np.nanmax(data[i][time_indices]) for i in range(ndata)])
+        else:
+            vmin, vmax = vlim
 
         for i in range(ndata):
             for j in time_indices:
@@ -44,7 +43,7 @@ def plot_data(lon,lat,data,output_names,data_type,time_indices,scale_type,cmap):
                 ax.add_feature(cartopy.feature.COASTLINE, edgecolor="black")
                 ax.add_feature(cartopy.feature.BORDERS, edgecolor="black", linestyle="--")
 
-                image = ax.pcolormesh(lon,lat,data[i][j].squeeze(),vmin=-vlim,vmax=vlim,cmap=cmap,transform=ccrs.PlateCarree(),shading='auto')
+                image = ax.pcolormesh(lon,lat,data[i][j].squeeze(),vmin=-vmin,vmax=vmax,cmap=cmap,transform=ccrs.PlateCarree(),shading='auto')
                 ax.set_facecolor('grey')
                 ax.yaxis.set_ticks_position("left")
                 cb = plt.colorbar(image,location="bottom")
