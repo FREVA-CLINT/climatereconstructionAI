@@ -1,11 +1,33 @@
 
 import xesmf as xe
+import xarray as xr
 import logging
 import sys
 import numpy as np
 from .. import config as cfg
 
-def check_ncformat(ds,data_type,image_size,basename):
+def reformat_dataset(ds1,ds2,data_type):
+
+    if not cfg.dataset_name is None:
+        ds2[data_type] = ds2[data_type].transpose(*cfg.dataset_format["dimensions"])
+
+        regrid = False
+        for i in range(2):
+            coordinate = cfg.dataset_format["dimensions"][i+1]
+            if not ds1[coordinate].equals(ds2[coordinate]):
+                regrid = True
+
+        if regrid:
+            ds2 = xe.Regridder(ds2, ds1, "nearest_s2d")(ds2,keep_attrs=True)
+            del ds2.attrs["regrid_method"]
+
+        dtype = ds1[data_type].dtype
+        if dtype != ds2[data_type].dtype:
+            ds2[data_type] = ds2[data_type].astype(dtype=dtype)
+
+    return ds2
+
+def dataset_formatter(ds,data_type,image_size,basename):
 
     if not data_type in list(ds.keys()):
         logging.error('Variable name \'{}\' not found in file {}.'.format(data_type,basename))

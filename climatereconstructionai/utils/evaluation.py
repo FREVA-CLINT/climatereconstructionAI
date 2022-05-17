@@ -6,6 +6,7 @@ import os.path
 from tensorboardX import SummaryWriter
 from torchvision import transforms
 from .netcdfloader import SteadyMaskLoader
+from .netcdfformatter import reformat_dataset
 from .plotdata import plot_data
 
 from .. import config as cfg
@@ -140,28 +141,29 @@ def infill(model, dataset, eval_path):
     image[np.where(mask==0)] = np.nan
 
     cvar = {'gt': gt, 'mask': mask, 'image': image, 'output': output, 'output_comp': output_comp}
-    create_outputs(cvar, dataset.img_data[0], dataset.img_mean[0], dataset.img_std[0], eval_path)
+    create_outputs(cvar, dataset, 0, eval_path)
 
 def inv_normalization(img_data, img_mean, img_std):
     return img_std*img_data+img_mean
 
-def create_outputs(cvar, img_data, img_mean, img_std, eval_path):
+def create_outputs(cvar, dataset, ind_data, eval_path):
 
-    data_type = cfg.data_types[0]
-    out_tf = transforms.Normalize(mean=[-img_mean/img_std], std=[1./img_std])
+    data_type = cfg.data_types[ind_data]
+
+    output_names = ['{}_{}'.format(eval_path,"output_comp"), '{}_{}'.format(eval_path,"masked_gt")]
+    plot_data(dataset.xr_dss[1].coords,[cvar["output_comp"],cvar["image"]],output_names,data_type,cfg.plot_results,*cfg.dataset_format["scale"])
 
     for cname in cvar:
         output_name = '{}_{}'.format(eval_path,cname)
 
-        ds = img_data.copy()
+        ds = dataset.xr_dss[1].copy()
+
         ds[data_type].values = cvar[cname].to(torch.device('cpu')).detach().numpy()[:,0,:,:]
         if cfg.normalize_images:
-            ds[data_type].values = inv_normalization(ds[data_type].values, img_mean, img_std)
+            ds[data_type].values = inv_normalization(ds[data_type].values, dataset.img_mean[ind_data], dataset.img_std[ind_data])
 
-        if not cfg.dataset_name is None:
-        # We transpose back
-            ds[data_type] = ds[data_type].transpose(*cfg.dataset_format["dimensions"])
+        ds = reformat_dataset(dataset.xr_dss[0],ds,data_type)
+        ds.attrs["history"] = "Infilled using CRAI (Climate Reconstruction AI: https://github.com/FREVA-CLINT/climatereconstructionAI)\n"+ds.attrs["history"]
         ds.to_netcdf(output_name+".nc")
 
-    output_names = [output_name, '{}_{}'.format(eval_path,"masked_gt")]
-    plot_data(ds.coords,[cvar["output_comp"],cvar["image"]],output_names,data_type,cfg.plot_results,*cfg.dataset_format["scale"])
+
