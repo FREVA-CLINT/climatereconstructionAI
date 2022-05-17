@@ -17,7 +17,7 @@ def SteadyMaskLoader(path, mask_name, data_type, device):
         return None
     else:
         steady_mask, _ = load_netcdf(path, [mask_name], [data_type])
-        return torch.from_numpy(steady_mask[0][data_type].values).to(device)
+        return torch.from_numpy(steady_mask[0]).to(device)
 
 
 def img_normalization(img_data):
@@ -78,7 +78,7 @@ def nc_loadchecker(filename,data_type,image_size,keep_dss=False):
         ds[data_type] = np.empty(0,dtype=dtype)
         return [ds, ds1], [ds1[data_type].values]
     else:
-        return ds1[data_type].values
+        return None, [ds1[data_type].values]
 
 def load_netcdf(path,data_names,data_types,keep_dss=False):
 
@@ -91,7 +91,7 @@ def load_netcdf(path,data_names,data_types,keep_dss=False):
         dss, data = nc_loadchecker('{}{}'.format(path,data_names[0]),data_types[0],cfg.image_sizes[0],keep_dss=keep_dss)
         lengths = [len(data[0])]
         for i in range(1,ndata):
-            data.append(nc_loadchecker('{}{}'.format(path,data_names[i]),data_types[i],cfg.image_sizes[i]))
+            data += nc_loadchecker('{}{}'.format(path,data_names[i]),data_types[i],cfg.image_sizes[i])[1]
             lengths.append(len(data[-1]))
 
         if cfg.img_index is None:
