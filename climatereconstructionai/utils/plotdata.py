@@ -43,7 +43,7 @@ def plot_data(lon,lat,data,output_names,data_type,time_indices,vlim,cmap):
                 ax.add_feature(cartopy.feature.COASTLINE, edgecolor="black")
                 ax.add_feature(cartopy.feature.BORDERS, edgecolor="black", linestyle="--")
 
-                image = ax.pcolormesh(lon,lat,data[i][j].squeeze(),vmin=-vmin,vmax=vmax,cmap=cmap,transform=ccrs.PlateCarree(),shading='auto')
+                image = ax.pcolormesh(lon,lat,data[i][j].squeeze(),vmin=vmin,vmax=vmax,cmap=cmap,transform=ccrs.PlateCarree(),shading='auto')
                 ax.set_facecolor('grey')
                 ax.yaxis.set_ticks_position("left")
                 cb = plt.colorbar(image,location="bottom")

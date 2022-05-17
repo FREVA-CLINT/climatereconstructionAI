@@ -46,7 +46,7 @@ def train(arg_file=None):
                                      sampler=InfiniteSampler(len(dataset_val)),
                                      num_workers=cfg.n_threads))
 
-    steady_mask = SteadyMaskLoader(cfg.mask_dir, cfg.steady_mask, cfg.data_types[0]).to(cfg.device)
+    steady_mask = SteadyMaskLoader(cfg.mask_dir, cfg.steady_mask, cfg.data_types[0], cfg.device)
 
     # define network model
     lstm = True
