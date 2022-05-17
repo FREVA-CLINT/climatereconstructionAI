@@ -7,7 +7,7 @@ from torchvision import transforms
 import os
 import sys
 import logging
-from .netcdfchecker import check_ncformat
+from .netcdfformatter import dataset_formatter
 
 from .. import config as cfg
 
@@ -20,12 +20,12 @@ def SteadyMaskLoader(path, mask_name, data_type, device):
         return torch.from_numpy(steady_mask[0][data_type].values).to(device)
 
 
-def img_normalization(img_data,data_types):
+def img_normalization(img_data):
 
     img_mean, img_std, img_tf = [], [], []
-    for i in range(len(data_types)):
-        img_mean.append(img_data[i][data_types[i]].mean().item())
-        img_std.append(img_data[i][data_types[i]].std().item())
+    for i in range(len(img_data)):
+        img_mean.append(np.nanmean(img_data[i]))
+        img_std.append(np.nanstd(img_data[i]))
         img_tf.append(transforms.Normalize(mean=[img_mean[-1]], std=[img_std[-1]]))
 
     return img_mean, img_std, img_tf
@@ -53,7 +53,7 @@ class InfiniteSampler(Sampler):
                 order = np.random.permutation(self.num_samples)
                 i = 0
 
-def nc_loadchecker(filename,data_type,image_size):
+def nc_loadchecker(filename,data_type,image_size,keep_dss=False):
 
     basename = filename.split("/")[-1]
 
@@ -70,11 +70,17 @@ def nc_loadchecker(filename,data_type,image_size):
             logging.error('Impossible to read the input file {}.\nPlease, check that the input file is a netCDF file and is not corrupted.'.format(basename))
             sys.exit()
 
-    ds = check_ncformat(ds,data_type,image_size,basename)
+    ds1 = dataset_formatter(ds,data_type,image_size,basename)
 
-    return ds
+    if keep_dss:
+        dtype = ds[data_type].dtype
+        ds = ds.drop(data_type)
+        ds[data_type] = np.empty(0,dtype=dtype)
+        return [ds, ds1], [ds1[data_type].values]
+    else:
+        return ds1[data_type].values
 
-def load_netcdf(path,data_names,data_types):
+def load_netcdf(path,data_names,data_types,keep_dss=False):
 
     if data_names is None:
         return None, None
@@ -82,14 +88,19 @@ def load_netcdf(path,data_names,data_types):
         ndata = len(data_names)
         assert ndata == len(data_types)
 
-        data, lengths = [], []
-        for i in range(ndata):
-            data.append(nc_loadchecker('{}{}'.format(path,data_names[i]),data_types[i],cfg.image_sizes[0]))
-            lengths.append(len(data[-1][data_types[i]]))
+        dss, data = nc_loadchecker('{}{}'.format(path,data_names[0]),data_types[0],cfg.image_sizes[0],keep_dss=keep_dss)
+        lengths = [len(data[0])]
+        for i in range(1,ndata):
+            data.append(nc_loadchecker('{}{}'.format(path,data_names[i]),data_types[i],cfg.image_sizes[i]))
+            lengths.append(len(data[-1]))
 
         if cfg.img_index is None:
             assert len(set(lengths)) == 1
-        return data, lengths[0]
+
+        if keep_dss:
+            return dss, data, lengths[0]
+        else:
+            return data, lengths[0]
 
 
 class NetCDFLoader(Dataset):
@@ -101,14 +112,16 @@ class NetCDFLoader(Dataset):
         self.lstm_steps = lstm_steps
         self.prev_next_steps = prev_next_steps
 
-        if split == 'train':
-            data_path = '{:s}/data_large/'.format(data_root)
-        elif split == 'infill':
+        if split == 'infill':
             data_path = '{:s}/test_large/'.format(data_root)
-        elif split == 'val':
-            data_path = '{:s}/val_large/'.format(data_root)
+            self.xr_dss, self.img_data, self.img_length = load_netcdf(data_path,img_names,data_types,keep_dss=True)
+        else:
+            if split == 'train':
+                data_path = '{:s}/data_large/'.format(data_root)
+            elif split == 'val':
+                data_path = '{:s}/val_large/'.format(data_root)
+            self.img_data, self.img_length = load_netcdf(data_path,img_names,data_types)
 
-        self.img_data, self.img_length = load_netcdf(data_path,img_names,data_types)
         self.mask_data, self.mask_length = load_netcdf(mask_root,mask_names,data_types)
 
         if self.mask_data is None:
@@ -117,19 +130,18 @@ class NetCDFLoader(Dataset):
             if not cfg.shuffle_masks:
                 assert self.img_length == self.mask_length
 
-        self.img_mean, self.img_std, self.img_tf = img_normalization(self.img_data,data_types)
+        self.img_mean, self.img_std, self.img_tf = img_normalization(self.img_data)
 
 
     def load_data(self, ind_data, img_indices, mask_indices):
 
-        data_type = self.data_types[ind_data]
         if self.mask_data is None:
             # Get masks from images
-            image = self.img_data[ind_data][data_type].values[mask_indices]
+            image = self.img_data[ind_data][mask_indices]
             mask = torch.from_numpy((1-(np.isnan(image))).astype(image.dtype))
         else:
-            mask = torch.from_numpy(self.mask_data[ind_data][data_type].values[mask_indices])
-        image = self.img_data[ind_data][data_type].values[img_indices]
+            mask = torch.from_numpy(self.mask_data[ind_data][mask_indices])
+        image = self.img_data[ind_data][img_indices]
         image = torch.from_numpy(np.nan_to_num(image))
 
         if cfg.normalize_images:
