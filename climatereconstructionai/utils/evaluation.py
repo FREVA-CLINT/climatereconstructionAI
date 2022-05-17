@@ -128,7 +128,7 @@ def infill(model, dataset, eval_path):
     gt = torch.cat(gt)
     output = torch.cat(output)
 
-    steady_mask = SteadyMaskLoader(cfg.mask_dir, cfg.steady_mask, cfg.data_types[0]).to(cfg.device)
+    steady_mask = SteadyMaskLoader(cfg.mask_dir, cfg.steady_mask, cfg.data_types[0], cfg.device)
     if not steady_mask is None:
         steady_mask = 1-steady_mask
         image /= steady_mask
