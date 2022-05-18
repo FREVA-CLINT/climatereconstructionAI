@@ -40,16 +40,16 @@ Each evaluation produces 5 netCDF files and 2 png files contained in the `output
 - `demo_gt.nc` corresponds to the original dataset
 - `demo_mask.nc` contains the masks corresponding to the missing values
 - `demo_image.nc` is `demo-#_gt.nc` after applying the masks `demo-#_mask.nc`
-- `demo_output.nc` is the infilled dataset (all values being infilled)
-- `demo_output_comp.nc` is the **composite output dataset**: it is the original dataset `demo_gt.nc` where the missing values have been replaced by the values from `demo_output.nc`
+- `demo_output.nc` is the dataset where all values (valid and missing values) are being infilled)
+- `demo_infilled.nc` is the **infilled dataset**: it is the original dataset `demo_gt.nc` where the missing values have been replaced by the values from `demo_output.nc`
 - `demo_masked_gt_0.png` is a plot of the first timestep of `demo_gt.nc`
-- `demo_output_comp_0.png` is a plot of the first timestep of `demo_output_comp.nc`
+- `demo_infilled_0.png` is a plot of the first timestep of `demo_infilled.nc`
 
 
 ### Visualization
 
-We can visualize the infilling by comparing the original and the composite datasets for a specific date (here September 1877):
+We can visualize the infilling by comparing the original and the infilled datasets for a specific date (here September 1877):
 
 | Original dataset | Composite dataset |
 | --------------------- | -------------------------- |
-![Original dataset](images/demo_masked_gt_0.png)  |  ![Composite dataset](images/demo_output_comp_0.png)
+![Original dataset](images/demo_masked_gt_0.png)  |  ![Composite dataset](images/demo_infilled_0.png)

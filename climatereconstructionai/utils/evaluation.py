@@ -140,7 +140,7 @@ def infill(model, dataset, eval_path):
     output_comp = mask * image + (1 - mask) * output
     image[np.where(mask==0)] = np.nan
 
-    cvar = {'gt': gt, 'mask': mask, 'image': image, 'output': output, 'output_comp': output_comp}
+    cvar = {'gt': gt, 'mask': mask, 'image': image, 'output': output, 'infilled': output_comp}
     create_outputs(cvar, dataset, 0, eval_path)
 
 def inv_normalization(img_data, img_mean, img_std):
@@ -150,8 +150,8 @@ def create_outputs(cvar, dataset, ind_data, eval_path):
 
     data_type = cfg.data_types[ind_data]
 
-    output_names = ['{}_{}'.format(eval_path,"output_comp"), '{}_{}'.format(eval_path,"masked_gt")]
-    plot_data(dataset.xr_dss[1].coords,[cvar["output_comp"],cvar["image"]],output_names,data_type,cfg.plot_results,*cfg.dataset_format["scale"])
+    output_names = ['{}_{}'.format(eval_path,"infilled"), '{}_{}'.format(eval_path,"masked_gt")]
+    plot_data(dataset.xr_dss[1].coords,[cvar["infilled"],cvar["image"]],output_names,data_type,cfg.plot_results,*cfg.dataset_format["scale"])
 
     for cname in cvar:
         output_name = '{}_{}'.format(eval_path,cname)
