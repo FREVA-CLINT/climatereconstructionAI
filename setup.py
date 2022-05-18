@@ -39,5 +39,4 @@ setup(
     python_requires='>=3.7, <4',
     include_package_data=True,
     install_requires=reqs,
-    # data_files=[('models', ['data/20cr_20220114.pth'])],
 )

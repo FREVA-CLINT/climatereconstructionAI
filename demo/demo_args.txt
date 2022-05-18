@@ -1,13 +1,14 @@
 --data-root-dir ../data/
 --model-dir ../data/
---model-names 20cr_20220114.pth
+--model-names 20crtasgn72.pth
 --evaluation-dirs outputs
 --img-names tas_hadcrut_187709_189308.nc
 --data-types tas
 --device cpu --image-sizes 72
+--n-filters 18
 --out-channels 1
 --lstm-steps 0
 --prev-next-steps 0
 --eval-names demo
---dataset-name hadcrut_mod
+--dataset-name hadcrut-mod
 --plot-result 0
