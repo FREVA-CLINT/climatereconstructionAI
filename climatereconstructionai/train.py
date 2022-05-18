@@ -17,11 +17,12 @@ from .loss.inpainting_loss import InpaintingLoss
 from .loss.hole_loss import HoleLoss
 from .loss.get_loss import get_loss
 
-
+import torch.multiprocessing
 
 
 def train(arg_file=None):
-
+    
+    torch.multiprocessing.set_sharing_strategy('file_system')
     print("* Number of GPUs: ", torch.cuda.device_count())
 
     cfg.set_train_args(arg_file)
