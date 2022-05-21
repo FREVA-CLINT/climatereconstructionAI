@@ -91,7 +91,7 @@ def load_netcdf(path,data_names,data_types,keep_dss=False):
         dss, data = nc_loadchecker('{}{}'.format(path,data_names[0]),data_types[0],cfg.image_sizes[0],keep_dss=keep_dss)
         lengths = [len(data[0])]
         for i in range(1,ndata):
-            data += nc_loadchecker('{}{}'.format(path,data_names[i]),data_types[i],cfg.image_sizes[i])[1]
+            data += nc_loadchecker('{}{}'.format(path,data_names[i]),data_types[i],cfg.image_sizes[0])[1]
             lengths.append(len(data[-1]))
 
         if cfg.img_index is None:
@@ -107,7 +107,7 @@ class NetCDFLoader(Dataset):
     def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, lstm_steps, prev_next_steps):
         super(NetCDFLoader, self).__init__()
         assert lstm_steps == 0 or prev_next_steps == 0
-
+        
         self.data_types = data_types
         self.lstm_steps = lstm_steps
         self.prev_next_steps = prev_next_steps
@@ -182,7 +182,6 @@ class NetCDFLoader(Dataset):
             mask_indices = sorted(mask_indices)
         else:
             mask_indices = img_indices
-
         # load data from ranges
         images, masks = self.load_data(ind_data, img_indices, mask_indices)
 
@@ -204,7 +203,7 @@ class NetCDFLoader(Dataset):
         for i in range(len(self.data_types)):
 
             if i == cfg.img_index:
-                image, mask = self.get_single_item(i,index,False)
+                image, mask = self.get_single_item(i,index,cfg.shuffle_masks)#False)
                 masks[0] = masks[0]*mask
                 masked[0] = image*masks[0]
             else:
@@ -217,7 +216,6 @@ class NetCDFLoader(Dataset):
             return masked[0], masks[0], images[0], torch.tensor([]), torch.tensor([]), torch.tensor([])
         else:
             return masked[0], masks[0], images[0], torch.cat(masked[1:], dim=1), torch.cat(masks[1:], dim=1), torch.cat(images[1:], dim=1)
-
 
     def __len__(self):
         return self.img_length
