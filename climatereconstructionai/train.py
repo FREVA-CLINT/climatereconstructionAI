@@ -88,7 +88,10 @@ def train(arg_file=None):
         lambda_dict = cfg.LAMBDA_DICT_HOLE
     else:
         criterion = InpaintingLoss(VGG16FeatureExtractor()).to(cfg.device)
-        lambda_dict = cfg.LAMBDA_DICT_IMG_INPAINTING
+        if cfg.loss_criterion == 0:
+            lambda_dict = cfg.LAMBDA_DICT_IMG_INPAINTING
+        elif cfg.loss_criterion == 2:
+            lambda_dict = cfg.LAMBDA_DICT_IMG_INPAINTING2
 
     if not cfg.lr_scheduler_patience is None:
         lr_scheduler = ReduceLROnPlateau(optimizer, 'min', patience=cfg.lr_scheduler_patience)
