@@ -37,9 +37,9 @@ class InpaintingLoss(nn.Module):
 
             # define different loss function from features from output and output_comp
             if self.extractor:
-                feat_output = self.extractor(torch.cat([output_ch] * 3, 1))
-                feat_output_comp = self.extractor(torch.cat([output_comp_ch] * 3, 1))
-                feat_gt = self.extractor(torch.cat([gt_ch] * 3, 1))
+                feat_output = self.extractor(output_ch)
+                feat_output_comp = self.extractor(output_comp_ch)
+                feat_gt = self.extractor(gt_ch)
                 for i in range(len(feat_gt)):
                     loss_dict['prc'] += self.l1(feat_output[i], feat_gt[i])
                     loss_dict['prc'] += self.l1(feat_output_comp[i], feat_gt[i])
