@@ -151,7 +151,7 @@ def create_outputs(cvar, dataset, ind_data, eval_path):
     data_type = cfg.data_types[ind_data]
 
     output_name = '{}_{}'.format(eval_path,"combined")
-    plot_data(dataset.xr_dss[1].coords,[cvar["image"],cvar["infilled"]],["Original","Infilled"],output_name,data_type,cfg.plot_results,*cfg.dataset_format["scale"])
+    plot_data(dataset.xr_dss[1].coords,[cvar["image"],cvar["infilled"]],["Original","Reconstructed"],output_name,data_type,cfg.plot_results,*cfg.dataset_format["scale"])
 
     for cname in cvar:
         output_name = '{}_{}'.format(eval_path,cname)
