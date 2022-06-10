@@ -8,7 +8,7 @@ def get_longname(var):
 
     return lname
 
-def plot_data(coords,data,output_names,data_type,time_indices,vlim,cmap):
+def plot_data(coords,data,titles,output_name,data_type,time_indices,vlim,cmap):
 
     if not time_indices is None:
 
@@ -17,7 +17,6 @@ def plot_data(coords,data,output_names,data_type,time_indices,vlim,cmap):
         from matplotlib import colors
         import cartopy.crs as ccrs
         import cartopy
-        from mpl_toolkits.axes_grid1 import make_axes_locatable
 
         for dim in coords.dims:
             for key in ("time", "lon", "lat"):
@@ -35,23 +34,31 @@ def plot_data(coords,data,output_names,data_type,time_indices,vlim,cmap):
         else:
             vmin, vmax = vlim
 
-        for i in range(ndata):
-            for j in time_indices:
 
-                fig, ax = plt.subplots()
-                ax.axis('off')
-
-                ax = plt.axes(projection=ccrs.Robinson(central_longitude=180))
-                gl = ax.gridlines(crs=ccrs.Robinson(), draw_labels=False, linewidth=0.1)
+        for j in time_indices:
+            fig = plt.figure(figsize=(9*ndata, 6))
+            axes = []
+            for i in range(ndata):
+                axes.append(fig.add_subplot(1,ndata,i+1, projection=ccrs.Robinson()))
+                # axes[i].axis('off')
+                gl = axes[i].gridlines(crs=ccrs.Robinson(), draw_labels=False, linewidth=0.1)
                 gl.top_labels = False
                 gl.right_labels = False
-                ax.add_feature(cartopy.feature.COASTLINE, edgecolor="black")
-                ax.add_feature(cartopy.feature.BORDERS, edgecolor="black", linestyle="--")
+                axes[i].add_feature(cartopy.feature.COASTLINE, edgecolor="black")
+                axes[i].add_feature(cartopy.feature.BORDERS, edgecolor="black", linestyle="--")
 
-                image = ax.pcolormesh(lon,lat,data[i][j].squeeze(),vmin=vmin,vmax=vmax,cmap=cmap,transform=ccrs.PlateCarree(),shading='auto')
-                ax.set_facecolor('grey')
-                ax.yaxis.set_ticks_position("left")
-                cb = plt.colorbar(image,location="bottom",pad=0.05)
-                cb.set_label(get_longname(data_type),size=14)
-                plt.title(time[j],pad=15,size=14)
-                plt.savefig(output_names[i]+"_"+str(j)+".png", dpi=150, bbox_inches='tight')
+                image = axes[i].pcolormesh(lon,lat,data[i][j].squeeze(),vmin=vmin,vmax=vmax,cmap=cmap,transform=ccrs.PlateCarree(),shading='auto')
+                axes[i].set_facecolor('grey')
+                axes[i].yaxis.set_ticks_position("left")
+                axes[i].set_title(titles[i],size=18)
+
+            cb = plt.colorbar(image,location="bottom",ax=axes,fraction=0.1,pad=0.1)
+            cb.set_label(get_longname(data_type),size=14)
+
+            fig.suptitle(time[j],size=20)
+
+            if ndata == 2:
+                bbox_props = dict(boxstyle="rarrow,pad=0.3", fc="black", lw=2)
+                plt.text(0.51, 0.53, "CRAI", ha="center", va="center", color="white", size=18, bbox=bbox_props, transform=plt.gcf().transFigure)
+
+            plt.savefig(output_name+"_"+str(j)+".png", dpi=150, bbox_inches='tight')
