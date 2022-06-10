@@ -150,8 +150,8 @@ def create_outputs(cvar, dataset, ind_data, eval_path):
 
     data_type = cfg.data_types[ind_data]
 
-    output_names = ['{}_{}'.format(eval_path,"infilled"), '{}_{}'.format(eval_path,"masked_gt")]
-    plot_data(dataset.xr_dss[1].coords,[cvar["infilled"],cvar["image"]],output_names,data_type,cfg.plot_results,*cfg.dataset_format["scale"])
+    output_name = '{}_{}'.format(eval_path,"combined")
+    plot_data(dataset.xr_dss[1].coords,[cvar["image"],cvar["infilled"]],["Original","Infilled"],output_name,data_type,cfg.plot_results,*cfg.dataset_format["scale"])
 
     for cname in cvar:
         output_name = '{}_{}'.format(eval_path,cname)
