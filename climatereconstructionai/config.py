@@ -4,6 +4,9 @@ import os.path
 import pkgutil
 import json
 
+MEAN = 0.449
+STD = 0.226
+
 LAMBDA_DICT_IMG_INPAINTING = {
     'hole': 6.0, 'tv': 0.1, 'valid': 1.0, 'prc': 0.05, 'style': 120.0
 }
@@ -95,7 +98,7 @@ def set_common_args():
     arg_parser.add_argument('--disable-first-bn', action='store_true', help="Disable the batch normalization on the first layer")
     arg_parser.add_argument('--masked-bn', action='store_true', help="Use masked batch normalization instead of standard BN")
     arg_parser.add_argument('--global-padding', action='store_true', help="Use a custom padding for global dataset")
-    arg_parser.add_argument('--normalize-images', action='store_true', help="Normalize the input images to 0 mean and 1 std")
+    arg_parser.add_argument('--normalize-images', action='store_true', help="Normalize the input images to imagenet mean and std")
     arg_parser.add_argument('--n-filters', type=int, default=None, help="Number of filters for the first/last layer")
     arg_parser.add_argument('--out-channels', type=int, default=1, help="Number of channels for the output image")
     arg_parser.add_argument('--dataset-name', type=str, default=None, help="Name of the dataset for format checking")

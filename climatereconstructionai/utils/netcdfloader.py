@@ -3,11 +3,11 @@ import numpy as np
 import torch
 import xarray as xr
 from torch.utils.data import Dataset, Sampler
-from torchvision import transforms
 import os
 import sys
 import logging
 from .netcdfformatter import dataset_formatter
+from .normalizer import img_normalization
 
 from .. import config as cfg
 
@@ -19,16 +19,6 @@ def SteadyMaskLoader(path, mask_name, data_type, device):
         steady_mask, _ = load_netcdf(path, [mask_name], [data_type])
         return torch.from_numpy(steady_mask[0]).to(device)
 
-
-def img_normalization(img_data):
-
-    img_mean, img_std, img_tf = [], [], []
-    for i in range(len(img_data)):
-        img_mean.append(np.nanmean(img_data[i]))
-        img_std.append(np.nanstd(img_data[i]))
-        img_tf.append(transforms.Normalize(mean=[img_mean[-1]], std=[img_std[-1]]))
-
-    return img_mean, img_std, img_tf
 
 class InfiniteSampler(Sampler):
     def __init__(self, num_samples, data_source=None):

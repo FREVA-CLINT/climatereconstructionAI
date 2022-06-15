@@ -4,10 +4,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os.path
 from tensorboardX import SummaryWriter
-from torchvision import transforms
 from .netcdfloader import SteadyMaskLoader
 from .netcdfformatter import reformat_dataset
 from .plotdata import plot_data
+from .normalizer import renormalize
 
 from .. import config as cfg
 
@@ -143,9 +143,6 @@ def infill(model, dataset, eval_path):
     cvar = {'gt': gt, 'mask': mask, 'image': image, 'output': output, 'infilled': output_comp}
     create_outputs(cvar, dataset, 0, eval_path)
 
-def inv_normalization(img_data, img_mean, img_std):
-    return img_std*img_data+img_mean
-
 def create_outputs(cvar, dataset, ind_data, eval_path):
 
     data_type = cfg.data_types[ind_data]
@@ -160,7 +157,7 @@ def create_outputs(cvar, dataset, ind_data, eval_path):
 
         ds[data_type].values = cvar[cname].to(torch.device('cpu')).detach().numpy()[:,0,:,:]
         if cfg.normalize_images:
-            ds[data_type].values = inv_normalization(ds[data_type].values, dataset.img_mean[ind_data], dataset.img_std[ind_data])
+            ds[data_type].values = renormalize(ds[data_type].values, dataset.img_mean[ind_data], dataset.img_std[ind_data])
 
         ds = reformat_dataset(dataset.xr_dss[0],ds,data_type)
         ds.attrs["history"] = "Infilled using CRAI (Climate Reconstruction AI: https://github.com/FREVA-CLINT/climatereconstructionAI)\n"+ds.attrs["history"]
