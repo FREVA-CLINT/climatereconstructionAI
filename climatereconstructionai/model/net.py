@@ -9,7 +9,7 @@ from .conv_configs import *
 
 def progstat(iter, ntot):
     if cfg.progress_fwd:
-        f = open("progfwd.info", "w")
+        f = open(cfg.log_dir+"/progfwd.info", "w")
         print(int(100 * (iter + 1) / ntot), file=f)
         f.close()
 
