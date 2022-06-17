@@ -128,7 +128,6 @@ def set_evaluate_args(arg_file=None):
     arg_parser.add_argument('--evaluation-dirs', type=str_list, default='evaluation/', help="Directory where the output files will be stored")
     arg_parser.add_argument('--eval-names', type=str_list, default='output', help="Prefix used for the output filenames")
     arg_parser.add_argument('--create-graph', action='store_true', help="Create a Tensorboard graph of the NN")
-    arg_parser.add_argument('--print-model', action='store_true', help="Print the model")
     arg_parser.add_argument('--plot-results', type=int_list, default=None, help="Create plot images of the results for the comma separated list of time indices")
     arg_parser.add_argument('--partitions', type=int, default=1, help="Split the climate dataset into several partitions along the time coordinate")
     arg_parser.add_argument('--maxmem', type=int, default=None, help="Maximum available memory in MB (overwrite partitions parameter)")
