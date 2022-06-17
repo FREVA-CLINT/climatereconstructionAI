@@ -7,6 +7,11 @@ from .attention_module import AttentionEncoderBlock
 from .encoder_decoder import EncoderBlock, DecoderBlock
 from .conv_configs import *
 
+def progstat(iter, ntot):
+    if cfg.progress_fwd:
+        f = open("progfwd.info", "w")
+        print(int(100 * (iter + 1) / ntot), file=f)
+        f.close()
 
 class PConvLSTM(nn.Module):
     def __init__(self, radar_img_size=512, radar_enc_dec_layers=4, radar_pool_layers=4, radar_in_channels=1,
@@ -101,6 +106,7 @@ class PConvLSTM(nn.Module):
 
         # forward pass encoding layers
         for i in range(self.net_depth):
+
             if h_rea.size()[1] != 0 and h.shape[3] == h_rea.shape[3]:
                 if not cfg.attention:
                     hs[i] = torch.cat([hs[i], h_rea], dim=2)
@@ -127,6 +133,8 @@ class PConvLSTM(nn.Module):
             lstm_states.append(lstm_state)
             hs_mask.append(h_mask)
 
+            progstat(i, 2 * self.net_depth)
+
         # concat attentions
         if cfg.attention:
             hs[self.net_depth - self.attention_depth] = torch.cat([hs[self.net_depth - self.attention_depth], rea_input], dim=2)
@@ -151,12 +159,15 @@ class PConvLSTM(nn.Module):
 
         # forward pass decoding layers
         for i in range(self.net_depth):
+
             lstm_state_h, lstm_state_c = None, None
             if self.lstm:
                 lstm_state_h, lstm_state_c = lstm_states[self.net_depth - 1 - i]
             h, h_mask, lstm_state = self.decoder[i](h, hs[self.net_depth - i - 1],
                                                     h_mask, hs_mask[self.net_depth - i - 1],
                                                     (lstm_state_h, lstm_state_c))
+
+            progstat(i + self.net_depth, 2 * self.net_depth)
 
         # return last element of output from last decoding layer
         return h
