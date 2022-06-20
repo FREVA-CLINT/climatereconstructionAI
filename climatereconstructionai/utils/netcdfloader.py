@@ -4,9 +4,7 @@ import torch
 import xarray as xr
 from torch.utils.data import Dataset, Sampler
 import os
-import sys
-import logging
-from .netcdfformatter import dataset_formatter
+from .netcdfchecker import dataset_formatter
 from .normalizer import img_normalization
 
 from .. import config as cfg
@@ -57,8 +55,7 @@ def nc_loadchecker(filename,data_type,image_size,keep_dss=False):
         try:
             ds = xr.load_dataset(filename,decode_times=False)
         except:
-            logging.error('Impossible to read the input file {}.\nPlease, check that the input file is a netCDF file and is not corrupted.'.format(basename))
-            sys.exit()
+            raise ValueError('Impossible to read the input file {}.\nPlease, check that the input file is a netCDF file and is not corrupted.'.format(basename))
 
     ds1 = dataset_formatter(ds,data_type,image_size,basename)
 
