@@ -28,8 +28,6 @@ def reformat_dataset(ds1,ds2,data_type):
 
 def dataset_formatter(ds,data_type,image_size,basename):
 
-    basename = "\x1B[3m" + basename + "\x1B[0m"
-
     if not data_type in list(ds.keys()):
         raise ValueError('Variable name \'{}\' not found in {}.'.format(data_type,basename))
 
