@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import os.path
 from tensorboardX import SummaryWriter
 from .netcdfloader import SteadyMaskLoader
-from .netcdfformatter import reformat_dataset
+from .netcdfchecker import reformat_dataset
 from .plotdata import plot_data
 from .normalizer import renormalize
 
