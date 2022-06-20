@@ -50,6 +50,4 @@ Each evaluation produces 5 netCDF files and 2 png files contained in the `output
 
 We can visualize the infilling by comparing the original and the infilled datasets for a specific date (here September 1877):
 
-| Original dataset | Composite dataset |
-| --------------------- | -------------------------- |
-![Original dataset](images/demo_masked_gt_0.png)  |  ![Composite dataset](images/demo_infilled_0.png)
+![Original dataset](images/demo_combined_0.png)

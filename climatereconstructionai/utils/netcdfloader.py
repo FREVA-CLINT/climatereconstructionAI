@@ -55,7 +55,7 @@ def nc_loadchecker(filename,data_type,image_size,keep_dss=False):
         try:
             ds = xr.load_dataset(filename,decode_times=False)
         except:
-            raise ValueError('Impossible to read the input file {}.\nPlease, check that the input file is a netCDF file and is not corrupted.'.format(basename))
+            raise ValueError('Impossible to read {}.\nPlease, check that the input file is a netCDF file and is not corrupted.'.format(basename))
 
     ds1 = dataset_formatter(ds,data_type,image_size,basename)
 
