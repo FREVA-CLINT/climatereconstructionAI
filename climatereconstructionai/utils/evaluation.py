@@ -147,20 +147,19 @@ def create_outputs(cvar, dataset, ind_data, eval_path):
 
     data_type = cfg.data_types[ind_data]
 
-    output_name = '{}_{}'.format(eval_path,"combined")
-    plot_data(dataset.xr_dss[1].coords,[cvar["image"],cvar["infilled"]],["Original","Reconstructed"],output_name,data_type,cfg.plot_results,*cfg.dataset_format["scale"])
-
     for cname in cvar:
         output_name = '{}_{}'.format(eval_path,cname)
 
         ds = dataset.xr_dss[1].copy()
 
-        ds[data_type].values = cvar[cname].to(torch.device('cpu')).detach().numpy()[:,0,:,:]
         if cfg.normalize_images:
-            ds[data_type].values = renormalize(ds[data_type].values, dataset.img_mean[ind_data], dataset.img_std[ind_data])
+            cvar[cname] = renormalize(cvar[cname], dataset.img_mean[ind_data], dataset.img_std[ind_data])
+        ds[data_type].values = cvar[cname].to(torch.device('cpu')).detach().numpy()[:,0,:,:]
 
         ds = reformat_dataset(dataset.xr_dss[0],ds,data_type)
         ds.attrs["history"] = "Infilled using CRAI (Climate Reconstruction AI: https://github.com/FREVA-CLINT/climatereconstructionAI)\n"+ds.attrs["history"]
         ds.to_netcdf(output_name+".nc")
 
+    output_name = '{}_{}'.format(eval_path,"combined")
+    plot_data(dataset.xr_dss[1].coords,[cvar["image"],cvar["infilled"]],["Original","Reconstructed"],output_name,data_type,cfg.plot_results,*cfg.dataset_format["scale"])
 
