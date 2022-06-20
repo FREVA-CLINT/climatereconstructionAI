@@ -43,6 +43,7 @@ def train(arg_file=None):
         sequence_steps = cfg.gru_steps
     else:
         recurrent = False
+        sequence_steps = 0
 
     # create data sets
     dataset_train = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, 'train', cfg.data_types,
