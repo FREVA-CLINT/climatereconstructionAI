@@ -82,6 +82,7 @@ def set_common_args():
     arg_parser.add_argument('--shuffle-masks', action='store_true', help="Select mask indices randomly")
     arg_parser.add_argument('--prev-next', type=int, default=0, help="")
     arg_parser.add_argument('--lstm-steps', type=int, default=0, help="Number of considered sequences for lstm (0 = lstm module is disabled)")
+    arg_parser.add_argument('--gru-steps', type=int, default=0, help="Number of considered sequences for gru (0 = gru module is disabled)")
     arg_parser.add_argument('--prev-next-steps', type=int, default=0, help="")
     arg_parser.add_argument('--encoding-layers', type=int_list, default='3', help="Number of encoding layers in the CNN")
     arg_parser.add_argument('--pooling-layers', type=int_list, default='0', help="Number of pooling layers in the CNN")

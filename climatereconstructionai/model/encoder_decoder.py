@@ -4,72 +4,83 @@ import sys
 
 from .. import config as cfg
 from .conv_lstm_module import ConvLSTMBlock
+from .traj_gru_module import TrajGRUBlock
 from .partial_conv_module import PConvBlock
 
 
-def lstm_to_batch(input):
+def sequence_to_batch(input):
     return torch.reshape(input, (-1, input.shape[2], input.shape[3], input.shape[4]))
 
 
-def batch_to_lstm(input, batch_size):
+def batch_to_sequence(input, batch_size):
+    if cfg.lstm_steps:
+        steps = cfg.lstm_steps
+    elif cfg.gru_steps:
+        steps = cfg.gru_steps
+    else:
+        steps = 0
     return torch.reshape(input,
-                         (batch_size, 2 * cfg.lstm_steps + 1, input.shape[1], input.shape[2], input.shape[3]))
+                         (batch_size, 2 * steps + 1, input.shape[1], input.shape[2], input.shape[3]))
 
 
 class EncoderBlock(nn.Module):
-    def __init__(self, conv_config, kernel, stride, activation, dilation=(1, 1), groups=1,
-                 lstm=False):
+    def __init__(self, conv_config, kernel, stride, activation, dilation=(1, 1), groups=1):
         super().__init__()
         padding = kernel[0] // 2, kernel[1] // 2
         self.partial_conv = PConvBlock(conv_config['in_channels'], conv_config['out_channels'], kernel,
                                        stride, padding, dilation, groups, False, activation, conv_config['bn'])
 
-        if lstm:
-            self.lstm_conv = ConvLSTMBlock(conv_config['out_channels'], conv_config['out_channels'],
-                                           conv_config['img_size'] // 2, kernel, (1, 1), padding, (1, 1), groups)
+        if cfg.lstm_steps:
+            self.recurrent_conv = ConvLSTMBlock(conv_config['out_channels'], conv_config['out_channels'],
+                                                conv_config['img_size'] // 2, kernel, (1, 1), padding, (1, 1), groups)
+        elif cfg.gru_steps:
+            self.recurrent_conv = TrajGRUBlock(conv_config['out_channels'], conv_config['out_channels'],
+                                               (cfg.batch_size, conv_config['img_size'] // 2, conv_config['img_size'] // 2))
 
-    def forward(self, input, mask, lstm_state=None):
+    def forward(self, input, mask, recurrent_state=None):
         batch_size = input.shape[0]
 
-        input = lstm_to_batch(input)
-        mask = lstm_to_batch(mask)
+        input = sequence_to_batch(input)
+        mask = sequence_to_batch(mask)
 
         # apply partial convolution
         output, mask = self.partial_conv(input, mask)
 
-        output = batch_to_lstm(output, batch_size)
-        mask = batch_to_lstm(mask, batch_size)
+        output = batch_to_sequence(output, batch_size)
+        mask = batch_to_sequence(mask, batch_size)
 
         # apply LSTM convolution
-        if hasattr(self, 'lstm_conv'):
-            output, lstm_state = self.lstm_conv(output, lstm_state)
+        if hasattr(self, 'recurrent_conv'):
+            output, recurrent_state = self.recurrent_conv(output, recurrent_state)
 
-        return output, mask, lstm_state
+        return output, mask, recurrent_state
 
 
 class DecoderBlock(nn.Module):
-    def __init__(self, conv_config, kernel, stride, activation, dilation=(1, 1), groups=1,
-                 lstm=False, bias=False):
+    def __init__(self, conv_config, kernel, stride, activation, dilation=(1, 1), groups=1, bias=False):
         super().__init__()
         padding = kernel[0] // 2, kernel[1] // 2
         self.partial_conv = PConvBlock(conv_config['in_channels'] + conv_config['skip_channels'],
                                        conv_config['out_channels'], kernel, stride, padding, dilation, groups, bias,
                                        activation, conv_config['bn'])
-        if lstm:
-            self.lstm_conv = ConvLSTMBlock(conv_config['in_channels'], conv_config['in_channels'],
-                                           conv_config['img_size'] // 2, kernel, (1, 1), padding, (1, 1), groups)
+        if cfg.lstm_steps:
+            self.recurrent_conv = ConvLSTMBlock(conv_config['in_channels'], conv_config['in_channels'],
+                                                conv_config['img_size'] // 2, kernel, (1, 1), padding, (1, 1), groups)
+        elif cfg.gru_steps:
+            self.recurrent_conv = TrajGRUBlock(conv_config['in_channels'], conv_config['in_channels'],
+                                               (cfg.batch_size, conv_config['img_size'] // 2, conv_config['img_size'] // 2))
 
-    def forward(self, input, skip_input, mask, skip_mask, lstm_state=None):
+    def forward(self, input, skip_input, mask, skip_mask, recurrent_state=None):
         # apply LSTM convolution
-        if hasattr(self, 'lstm_conv'):
-            input, lstm_state = self.lstm_conv(input, lstm_state)
+        if hasattr(self, 'recurrent_conv'):
+            input, recurrent_state = self.recurrent_conv(input, recurrent_state)
 
         batch_size = input.shape[0]
 
-        input = lstm_to_batch(input)
-        mask = lstm_to_batch(mask)
-        skip_input = lstm_to_batch(skip_input)
-        skip_mask = lstm_to_batch(skip_mask)
+        input = sequence_to_batch(input)
+        mask = sequence_to_batch(mask)
+        skip_input = sequence_to_batch(skip_input)
+        skip_mask = sequence_to_batch(skip_mask)
 
         # interpolate input and mask
         m = nn.Upsample(skip_input.size()[-2:], mode='nearest')
@@ -84,7 +95,7 @@ class DecoderBlock(nn.Module):
         # apply partial convolution
         output, mask = self.partial_conv(h, h_mask)
 
-        output = batch_to_lstm(output, batch_size)
-        mask = batch_to_lstm(mask, batch_size)
+        output = batch_to_sequence(output, batch_size)
+        mask = batch_to_sequence(mask, batch_size)
 
-        return output, mask, lstm_state
+        return output, mask, recurrent_state
