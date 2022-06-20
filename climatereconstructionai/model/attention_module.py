@@ -4,14 +4,14 @@ import torch.nn.functional as F
 import sys
 
 from .. import config as cfg
-from .encoder_decoder import EncoderBlock, lstm_to_batch, batch_to_lstm
+from .encoder_decoder import EncoderBlock, sequence_to_batch, batch_to_sequence
 
 
 class AttentionEncoderBlock(nn.Module):
-    def __init__(self, conv_config, kernel, stride, activation, lstm):
+    def __init__(self, conv_config, kernel, stride, activation):
         super().__init__()
         self.partial_conv_enc = EncoderBlock(conv_config=conv_config, kernel=kernel, stride=stride,
-                                             activation=activation, lstm=lstm)
+                                             activation=activation)
         self.channel_attention_block = nn.Sequential(
             nn.Flatten(),
             nn.Linear(in_features=conv_config['out_channels'],
@@ -25,13 +25,13 @@ class AttentionEncoderBlock(nn.Module):
             nn.Sigmoid()
         )
 
-    def forward(self, h_rea, h_rea_mask, rea_lstm_state, h):
-        h_rea, h_rea_mask, rea_lstm_state = self.partial_conv_enc(h_rea, h_rea_mask, rea_lstm_state)
+    def forward(self, h_rea, h_rea_mask, rea_recurrent_state, h):
+        h_rea, h_rea_mask, rea_recurrent_state = self.partial_conv_enc(h_rea, h_rea_mask, rea_recurrent_state)
         batch_size = h_rea.shape[0]
 
-        # convert lstm steps to batch dimension
-        h_rea = lstm_to_batch(h_rea)
-        h = lstm_to_batch(h)
+        # convert sequence steps to batch dimension
+        h_rea = sequence_to_batch(h_rea)
+        h = sequence_to_batch(h)
 
         # channel attention
         channel_attention = self.forward_channel_attention(h_rea)
@@ -42,11 +42,11 @@ class AttentionEncoderBlock(nn.Module):
         )
         attention = channel_attention * spatial_attention
 
-        # convert batches to lstm dimension
-        h_rea = batch_to_lstm(h_rea, batch_size)
-        attention = batch_to_lstm(attention, batch_size)
+        # convert batches to sequence dimension
+        h_rea = batch_to_sequence(h_rea, batch_size)
+        attention = batch_to_sequence(attention, batch_size)
 
-        return h_rea, h_rea_mask, rea_lstm_state, attention
+        return h_rea, h_rea_mask, rea_recurrent_state, attention
 
     def forward_channel_attention(self, input):
         attention_max = F.max_pool2d(input, input.shape[2])

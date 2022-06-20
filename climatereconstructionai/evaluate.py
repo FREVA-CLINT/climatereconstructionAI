@@ -20,12 +20,17 @@ def evaluate(arg_file=None):
         gt = None
         outputs = None
 
-        dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, "infill",
-                                   cfg.data_types, cfg.lstm_steps, cfg.prev_next_steps)
+        if cfg.lstm_steps:
+            recurrent = True
+            sequence_steps = cfg.lstm_steps
+        elif cfg.gru_steps:
+            recurrent = True
+            sequence_steps = cfg.gru_steps
+        else:
+            recurrent = False
 
-        lstm = True
-        if cfg.lstm_steps == 0:
-            lstm = False
+        dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, "infill",
+                                   cfg.data_types, sequence_steps, cfg.prev_next_steps)
 
         if len(cfg.image_sizes) > 1:
             model = PConvLSTM(radar_img_size=cfg.image_sizes[0],
@@ -37,14 +42,14 @@ def evaluate(arg_file=None):
                               rea_enc_layers=cfg.encoding_layers[1],
                               rea_pool_layers=cfg.pooling_layers[1],
                               rea_in_channels=(len(cfg.image_sizes) - 1) * (2 * cfg.prev_next_steps + 1),
-                              lstm=lstm).to(cfg.device)
+                              recurrent=recurrent).to(cfg.device)
         else:
             model = PConvLSTM(radar_img_size=cfg.image_sizes[0],
                               radar_enc_dec_layers=cfg.encoding_layers[0],
                               radar_pool_layers=cfg.pooling_layers[0],
                               radar_in_channels=2 * cfg.prev_next_steps + 1,
                               radar_out_channels=cfg.out_channels,
-                              lstm=lstm).to(cfg.device)
+                              recurrent=recurrent).to(cfg.device)
 
         load_ckpt("{}/{}".format(cfg.model_dir,cfg.model_names[i_model]), [('model', model)], cfg.device)
 

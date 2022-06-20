@@ -35,11 +35,20 @@ def train(arg_file=None):
         os.makedirs(cfg.log_dir)
     writer = SummaryWriter(log_dir=cfg.log_dir)
 
+    if cfg.lstm_steps:
+        recurrent = True
+        sequence_steps = cfg.lstm_steps
+    elif cfg.gru_steps:
+        recurrent = True
+        sequence_steps = cfg.gru_steps
+    else:
+        recurrent = False
+
     # create data sets
     dataset_train = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, 'train', cfg.data_types,
-                                 cfg.lstm_steps, cfg.prev_next_steps)
+                                 sequence_steps, cfg.prev_next_steps)
     dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, 'val', cfg.data_types,
-                               cfg.lstm_steps, cfg.prev_next_steps)
+                               sequence_steps, cfg.prev_next_steps)
     iterator_train = iter(DataLoader(dataset_train, batch_size=cfg.batch_size,
                                      sampler=InfiniteSampler(len(dataset_train)),
                                      num_workers=cfg.n_threads))
@@ -50,10 +59,6 @@ def train(arg_file=None):
     steady_mask = SteadyMaskLoader(cfg.mask_dir, cfg.steady_mask, cfg.data_types[0], cfg.device)
 
     # define network model
-    lstm = True
-    if cfg.lstm_steps == 0:
-        lstm = False
-
     if len(cfg.image_sizes) > 1:
         model = PConvLSTM(radar_img_size=cfg.image_sizes[0],
                           radar_enc_dec_layers=cfg.encoding_layers[0],
@@ -64,14 +69,14 @@ def train(arg_file=None):
                           rea_enc_layers=cfg.encoding_layers[1],
                           rea_pool_layers=cfg.pooling_layers[1],
                           rea_in_channels=(len(cfg.image_sizes) - 1) * (2*cfg.prev_next_steps + 1),
-                          lstm=lstm).to(cfg.device)
+                          recurrent=recurrent).to(cfg.device)
     else:
         model = PConvLSTM(radar_img_size=cfg.image_sizes[0],
                           radar_enc_dec_layers=cfg.encoding_layers[0],
                           radar_pool_layers=cfg.pooling_layers[0],
                           radar_in_channels=2 * cfg.prev_next_steps + 1,
                           radar_out_channels=cfg.out_channels,
-                          lstm=lstm).to(cfg.device)
+                          recurrent=recurrent).to(cfg.device)
     
 
     # define learning rate
