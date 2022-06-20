@@ -28,6 +28,7 @@ def evaluate(arg_file=None):
             sequence_steps = cfg.gru_steps
         else:
             recurrent = False
+            sequence_steps = 0
 
         dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, "infill",
                                    cfg.data_types, sequence_steps, cfg.prev_next_steps)
