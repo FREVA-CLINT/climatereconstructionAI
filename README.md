@@ -1,6 +1,6 @@
 # Climate Reconstruction via Image Inpainting using Partial Convolutions
 
-**[Applied implementation] (https://github.com/naoto0804/pytorch-inpainting-with-partial-conv)**
+**[Applied implementation](https://github.com/naoto0804/pytorch-inpainting-with-partial-conv)** 
 
 **[Official implementation](https://github.com/NVIDIA/partialconv) is released by the authors.**
 
