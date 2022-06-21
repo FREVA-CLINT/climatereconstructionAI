@@ -189,12 +189,11 @@ class NetCDFLoader(Dataset):
         masked = []
         for i in range(len(self.data_types)):
 
+            image, mask = self.get_single_item(i,index,cfg.shuffle_masks)
             if i == cfg.img_index:
-                image, mask = self.get_single_item(i,index,cfg.shuffle_masks)#False)
                 masks[0] = masks[0]*mask
                 masked[0] = image*masks[0]
             else:
-                image, mask = self.get_single_item(i,index,cfg.shuffle_masks)
                 images.append(image)
                 masks.append(mask)
                 masked.append(image*mask)

@@ -8,7 +8,7 @@ LAMBDA_DICT_IMG_INPAINTING = {
     'hole': 6.0, 'tv': 0.1, 'valid': 1.0, 'prc': 0.05, 'style': 120.0
 }
 LAMBDA_DICT_IMG_INPAINTING2 = {
-    'hole': 3.5, 'tv': 0.1, 'valid': 3.5, 'prc': 0.05, 'style': 120.0
+    'hole': 0.0, 'tv': 0.1, 'valid': 7.0, 'prc': 0.05, 'style': 120.0
 }
 LAMBDA_DICT_HOLE = {
     'hole': 1.0
