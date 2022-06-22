@@ -1,17 +1,15 @@
 import torch
 import torch.nn as nn
-import sys
 
-from .. import config as cfg
 from .attention_module import AttentionEncoderBlock
-from .encoder_decoder import EncoderBlock, DecoderBlock
 from .conv_configs import *
+from .encoder_decoder import EncoderBlock, DecoderBlock
 
 
-def progstat(iter, ntot):
+def progstat(index, numel):
     if cfg.progress_fwd:
         f = open(cfg.log_dir + "/progfwd.info", "w")
-        print(int(100 * (iter + 1) / ntot), file=f)
+        print(int(100 * (index + 1) / numel), file=f)
         f.close()
 
 
@@ -57,11 +55,10 @@ class PConvLSTM(nn.Module):
                 if i != self.attention_depth - 1:
                     dec_conv_configs[i]['out_channels'] += \
                         attention_enc_conv_configs[self.attention_depth - i - 1]['in_channels']
-                dec_conv_configs[i]['skip_channels'] += cfg.skip_layers * \
-                                                        attention_enc_conv_configs[self.attention_depth - i - 1][
-                                                            'in_channels']
-                dec_conv_configs[i]['in_channels'] += attention_enc_conv_configs[self.attention_depth - i - 1][
-                    'out_channels']
+                dec_conv_configs[i]['skip_channels'] += \
+                    cfg.skip_layers * attention_enc_conv_configs[self.attention_depth - i - 1]['in_channels']
+                dec_conv_configs[i]['in_channels'] += \
+                    attention_enc_conv_configs[self.attention_depth - i - 1]['out_channels']
 
             self.attention_module = nn.ModuleList(attention_layers)
 

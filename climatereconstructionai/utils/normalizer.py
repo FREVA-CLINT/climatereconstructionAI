@@ -1,9 +1,8 @@
-
 import numpy as np
 from torchvision import transforms
 
-def img_normalization(img_data):
 
+def img_normalization(img_data):
     img_std, img_mean, img_tf = [], [], []
     for i in range(len(img_data)):
         img_mean.append(np.nanmean(img_data[i]))
@@ -12,5 +11,6 @@ def img_normalization(img_data):
 
     return img_mean, img_std, img_tf
 
+
 def renormalize(img_data, img_mean, img_std):
-    return img_std*img_data+img_mean
+    return img_std * img_data + img_mean

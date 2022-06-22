@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import sys
 
 from .utils import gram_matrix, total_variation_loss
 

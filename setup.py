@@ -1,12 +1,11 @@
-
-from setuptools import setup, find_packages
 import pathlib
+from pip.req import parse_requirements
+from setuptools import setup, find_packages
 
 here = pathlib.Path(__file__).parent.resolve()
 
 long_description = (here / 'README.md').read_text(encoding='utf-8')
 
-from pip.req import parse_requirements
 reqs = [str(ir.req) for ir in parse_requirements(here / 'requirements.txt')]
 
 setup(
@@ -17,7 +16,7 @@ setup(
     url='https://github.com/FREVA-CLINT/climatereconstructionAI',
     # author='Naoto Inoue, Christopher Kadow, Stephan Seitz, Johannes Meuer, Étienne Plésiat'.
     author='Climate Informatics and Technology group at DKRZ (Deutsches Klimarechenzentrum)',
-    #author_email='author@example.com',
+    # author_email='author@example.com',
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Science/Research',

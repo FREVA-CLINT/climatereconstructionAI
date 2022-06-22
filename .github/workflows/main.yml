@@ -25,7 +25,6 @@ jobs:
       - name: Test with conda
         run: |
             source activate crai
-            mamba install pytest
             pytest tests
       - name: Lint with flake8 ⚙️
         run: |

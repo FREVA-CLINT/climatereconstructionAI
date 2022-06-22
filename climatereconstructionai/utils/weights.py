@@ -2,12 +2,12 @@ import numpy as np
 from torch import nn, manual_seed
 
 
-def weights_init(init_type='gaussian',random_seed=None):
+def weights_init(init_type='gaussian', random_seed=None):
     def init_fun(m):
         classname = m.__class__.__name__
         if (classname.find('Conv') == 0 or classname.find(
                 'Linear') == 0) and hasattr(m, 'weight'):
-            if not random_seed is None:
+            if random_seed is not None:
                 manual_seed(random_seed)
             if init_type == 'gaussian':
                 nn.init.normal_(m.weight, 0.0, 0.02)

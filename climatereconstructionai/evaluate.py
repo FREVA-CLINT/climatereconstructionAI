@@ -1,13 +1,12 @@
-import sys
 import os
-from . import config as cfg
+
 from .model.net import PConvLSTM
 from .utils.evaluation import *
-from .utils.netcdfloader import NetCDFLoader
 from .utils.io import load_ckpt
+from .utils.netcdfloader import NetCDFLoader
+
 
 def evaluate(arg_file=None):
-
     cfg.set_evaluate_args(arg_file)
 
     if not os.path.exists(cfg.log_dir):
@@ -17,8 +16,6 @@ def evaluate(arg_file=None):
     assert n_models == len(cfg.eval_names)
 
     for i_model in range(n_models):
-        gt = None
-        outputs = None
 
         if cfg.lstm_steps:
             recurrent = True
@@ -52,11 +49,12 @@ def evaluate(arg_file=None):
                               radar_out_channels=cfg.out_channels,
                               recurrent=recurrent).to(cfg.device)
 
-        load_ckpt("{}/{}".format(cfg.model_dir,cfg.model_names[i_model]), [('model', model)], cfg.device)
+        load_ckpt("{}/{}".format(cfg.model_dir, cfg.model_names[i_model]), [('model', model)], cfg.device)
 
         model.eval()
 
-        infill(model, dataset_val, "{}/{}".format(cfg.evaluation_dirs[0],cfg.eval_names[i_model]))
+        infill(model, dataset_val, "{}/{}".format(cfg.evaluation_dirs[0], cfg.eval_names[i_model]))
+
 
 if __name__ == "__main__":
     evaluate()
