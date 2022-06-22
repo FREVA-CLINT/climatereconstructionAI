@@ -183,7 +183,7 @@ class NetCDFLoader(Dataset):
                     images[1:], dim=0).transpose(0, 1)
             else:
                 return masked[0], masks[0], images[0], torch.cat(masked[1:], dim=1), torch.cat(
-                  masks[1:], dim=1), torch.cat(images[1:], dim=1)
+                    masks[1:], dim=1), torch.cat(images[1:], dim=1)
 
     def __len__(self):
         return self.img_length
