@@ -1,8 +1,8 @@
 --device cpu
 --data-root-dir data/
 --model-dir tests/ref/
---model-names 10.pth
+--model-names minimum-1.inp.pth
 --evaluation-dirs tests/out/evaluation/
 --img-names tas_hadcrut_187709_189308.nc
---eval-names test-1
+--eval-names minimum-1
 --dataset-name hadcrut-mod
