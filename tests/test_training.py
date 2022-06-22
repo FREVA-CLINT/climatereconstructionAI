@@ -1,22 +1,24 @@
 import numpy as np
 import pytest
+import os
 
 testdir = "tests/"
 
 
 @pytest.mark.training
-@pytest.mark.parametrize("file", ["train-1.inp", "train-2.inp"])
+@pytest.mark.parametrize("file", os.listdir(testdir + "in/training/"))
 def test_training_run(file):
     from climatereconstructionai import train
-    train(testdir + file)
+    train('{}in/training/{}'.format(testdir, file))
+    os.rename('{}out/training/ckpt/10.pth'.format(testdir), '{}out/training/ckpt/{}.pth'.format(testdir, file))
 
 
 @pytest.mark.training
-@pytest.mark.parametrize("model", ["10.pth", "15.pth"])
+@pytest.mark.parametrize("model", os.listdir(testdir + "in/training/"))
 def test_comp_models(model):
     import torch
-    model_ref = torch.load(testdir + "ref/" + model)["model"]
-    model_run = torch.load(testdir + "out/training/ckpt/" + model)["model"]
+    model_ref = torch.load(testdir + "ref/" + model + ".pth")["model"]
+    model_run = torch.load(testdir + "out/training/ckpt/" + model + ".pth")["model"]
     for k_ref, k_run in zip(model_ref.keys(), model_run.keys()):
         assert k_ref == k_run
         print("* Checking {}...".format(k_ref))
