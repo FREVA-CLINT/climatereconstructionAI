@@ -1,11 +1,10 @@
 import torch
 import torch.nn as nn
-import sys
 
-from .. import config as cfg
 from .conv_lstm_module import ConvLSTMBlock
-from .traj_gru_module import TrajGRUBlock
 from .partial_conv_module import PConvBlock
+from .traj_gru_module import TrajGRUBlock
+from .. import config as cfg
 
 
 def sequence_to_batch(input):
@@ -35,7 +34,8 @@ class EncoderBlock(nn.Module):
                                                 conv_config['img_size'] // 2, kernel, (1, 1), padding, (1, 1), groups)
         elif cfg.gru_steps:
             self.recurrent_conv = TrajGRUBlock(conv_config['out_channels'], conv_config['out_channels'],
-                                               (cfg.batch_size, conv_config['img_size'] // 2, conv_config['img_size'] // 2))
+                                               (cfg.batch_size, conv_config['img_size'] // 2,
+                                                conv_config['img_size'] // 2))
 
     def forward(self, input, mask, recurrent_state=None):
         batch_size = input.shape[0]
@@ -68,7 +68,8 @@ class DecoderBlock(nn.Module):
                                                 conv_config['img_size'] // 2, kernel, (1, 1), padding, (1, 1), groups)
         elif cfg.gru_steps:
             self.recurrent_conv = TrajGRUBlock(conv_config['in_channels'], conv_config['in_channels'],
-                                               (cfg.batch_size, conv_config['img_size'] // 2, conv_config['img_size'] // 2))
+                                               (cfg.batch_size, conv_config['img_size'] // 2,
+                                                conv_config['img_size'] // 2))
 
     def forward(self, input, skip_input, mask, skip_mask, recurrent_state=None):
         # apply LSTM convolution

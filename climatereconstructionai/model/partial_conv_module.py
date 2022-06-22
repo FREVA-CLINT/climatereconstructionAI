@@ -1,27 +1,25 @@
 import torch
 import torch.nn as nn
-import sys
-
-from .. import config as cfg
-from ..utils.weights import weights_init
-from ..utils.masked_batchnorm import MaskedBatchNorm2d
-
 import torch.nn.functional as F
 
+from .. import config as cfg
+from ..utils.masked_batchnorm import MaskedBatchNorm2d
+from ..utils.weights import weights_init
 
-def bound_pad(input,padding):
 
-    input = F.pad(input,(0,0,padding[2],0), "constant", float(input[:,:,0,:].mean()))
-    input = F.pad(input,(0,0,0,padding[3]), "constant", float(input[:,:,-1,:].mean()))
-    input = F.pad(input,(padding[0],padding[1],0,0), mode="circular")
+def bound_pad(input, padding):
+    input = F.pad(input, (0, 0, padding[2], 0), "constant", float(input[:, :, 0, :].mean()))
+    input = F.pad(input, (0, 0, 0, padding[3]), "constant", float(input[:, :, -1, :].mean()))
+    input = F.pad(input, (padding[0], padding[1], 0, 0), mode="circular")
 
     return input
+
 
 class PConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel, stride, padding, dilation, groups, bias, activation, bn):
         super().__init__()
 
-        self.padding = 2*padding
+        self.padding = 2 * padding
         if cfg.global_padding:
             self.trans_pad = bound_pad
         else:
@@ -31,7 +29,7 @@ class PConvBlock(nn.Module):
         self.mask_conv = nn.Conv2d(in_channels, out_channels, kernel, stride, 0, dilation, groups, False)
 
         if cfg.weights:
-            self.input_conv.apply(weights_init(cfg.weights,random_seed=cfg.random_seed))
+            self.input_conv.apply(weights_init(cfg.weights, random_seed=cfg.random_seed))
         torch.nn.init.constant_(self.mask_conv.weight, 1.0)
 
         if activation:
@@ -48,13 +46,13 @@ class PConvBlock(nn.Module):
 
     def forward(self, input, mask):
 
-        pad_input = self.trans_pad(input,self.padding)
-        pad_mask = self.trans_pad(mask,self.padding)
+        pad_input = self.trans_pad(input, self.padding)
+        pad_mask = self.trans_pad(mask, self.padding)
 
-        output = self.input_conv(pad_input*pad_mask)
+        output = self.input_conv(pad_input * pad_mask)
 
         if self.input_conv.bias is not None:
-            output_bias = (self.input_conv.bias).view(1, -1, 1, 1).expand_as(output)
+            output_bias = self.input_conv.bias.view(1, -1, 1, 1).expand_as(output)
         else:
             output_bias = torch.zeros_like(output)
 
@@ -71,7 +69,7 @@ class PConvBlock(nn.Module):
 
         if hasattr(self, 'bn'):
             if cfg.masked_bn:
-                output = self.bn(output,new_mask)
+                output = self.bn(output, new_mask)
             else:
                 output = self.bn(output)
 

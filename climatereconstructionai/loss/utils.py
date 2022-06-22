@@ -11,5 +11,5 @@ def gram_matrix(feat):
 
 def total_variation_loss(image):
     loss = torch.mean(torch.abs(image[:, :, :, :-1] - image[:, :, :, 1:])) + \
-           torch.mean(torch.abs(image[:, :, :-1, :] - image[:, :, 1:, :]))
+        torch.mean(torch.abs(image[:, :, :-1, :] - image[:, :, 1:, :]))
     return loss

@@ -1,35 +1,33 @@
 import os
-import torch
-import sys
 
+import torch
+import torch.multiprocessing
 from tensorboardX import SummaryWriter
-from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from . import config as cfg
+from .loss.get_loss import get_loss
+from .loss.hole_loss import HoleLoss
+from .loss.inpainting_loss import InpaintingLoss
 from .model.net import PConvLSTM
+from .utils.evaluation import create_snapshot_image
 from .utils.featurizer import VGG16FeatureExtractor
 from .utils.io import load_ckpt, save_ckpt
-from .utils.netcdfloader import NetCDFLoader, InfiniteSampler, SteadyMaskLoader
-from .utils.evaluation import create_snapshot_image
-from .loss.inpainting_loss import InpaintingLoss
-from .loss.hole_loss import HoleLoss
-from .loss.get_loss import get_loss
-
-import torch.multiprocessing
+from .utils.netcdfloader import NetCDFLoader, InfiniteSampler, load_steadymask
 
 
 def train(arg_file=None):
-    
     torch.multiprocessing.set_sharing_strategy('file_system')
     print("* Number of GPUs: ", torch.cuda.device_count())
 
     cfg.set_train_args(arg_file)
 
-    if not os.path.exists(cfg.snapshot_dir):
-        os.makedirs('{:s}/images'.format(cfg.snapshot_dir))
-        os.makedirs('{:s}/ckpt'.format(cfg.snapshot_dir))
+    for subdir in ("", "/images", "/ckpt"):
+        outdir = cfg.snapshot_dir + subdir
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
 
     if not os.path.exists(cfg.log_dir):
         os.makedirs(cfg.log_dir)
@@ -46,7 +44,8 @@ def train(arg_file=None):
         sequence_steps = 0
 
     # create data sets
-    dataset_train = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, 'train', cfg.data_types,
+    dataset_train = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, 'train',
+                                 cfg.data_types,
                                  sequence_steps, cfg.prev_next_steps)
     dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, 'val', cfg.data_types,
                                sequence_steps, cfg.prev_next_steps)
@@ -54,22 +53,22 @@ def train(arg_file=None):
                                      sampler=InfiniteSampler(len(dataset_train)),
                                      num_workers=cfg.n_threads))
     iterator_val = iter(DataLoader(dataset_val, batch_size=cfg.batch_size,
-                                     sampler=InfiniteSampler(len(dataset_val)),
-                                     num_workers=cfg.n_threads))
+                                   sampler=InfiniteSampler(len(dataset_val)),
+                                   num_workers=cfg.n_threads))
 
-    steady_mask = SteadyMaskLoader(cfg.mask_dir, cfg.steady_mask, cfg.data_types[0], cfg.device)
+    steady_mask = load_steadymask(cfg.mask_dir, cfg.steady_mask, cfg.data_types[0], cfg.device)
 
     # define network model
     if len(cfg.image_sizes) > 1:
         model = PConvLSTM(radar_img_size=cfg.image_sizes[0],
                           radar_enc_dec_layers=cfg.encoding_layers[0],
                           radar_pool_layers=cfg.pooling_layers[0],
-                          radar_in_channels=2*cfg.prev_next_steps + 1,
+                          radar_in_channels=2 * cfg.prev_next_steps + 1,
                           radar_out_channels=cfg.out_channels,
                           rea_img_size=cfg.image_sizes[1],
                           rea_enc_layers=cfg.encoding_layers[1],
                           rea_pool_layers=cfg.pooling_layers[1],
-                          rea_in_channels=(len(cfg.image_sizes) - 1) * (2*cfg.prev_next_steps + 1),
+                          rea_in_channels=(len(cfg.image_sizes) - 1) * (2 * cfg.prev_next_steps + 1),
                           recurrent=recurrent).to(cfg.device)
     else:
         model = PConvLSTM(radar_img_size=cfg.image_sizes[0],
@@ -78,7 +77,6 @@ def train(arg_file=None):
                           radar_in_channels=2 * cfg.prev_next_steps + 1,
                           radar_out_channels=cfg.out_channels,
                           recurrent=recurrent).to(cfg.device)
-    
 
     # define learning rate
     if cfg.finetune:
@@ -98,20 +96,23 @@ def train(arg_file=None):
             lambda_dict = cfg.LAMBDA_DICT_IMG_INPAINTING
         elif cfg.loss_criterion == 2:
             lambda_dict = cfg.LAMBDA_DICT_IMG_INPAINTING2
+        else:
+            raise ValueError("Unknown loss_criterion value.")
 
-    if not cfg.lr_scheduler_patience is None:
+    if cfg.lr_scheduler_patience is not None:
         lr_scheduler = ReduceLROnPlateau(optimizer, 'min', patience=cfg.lr_scheduler_patience)
 
     # define start point
     start_iter = 0
     if cfg.resume_iter:
         start_iter = load_ckpt(
-            '{}/ckpt/{}.pth'.format(cfg.snapshot_dir, cfg.resume_iter), [('model', model)], cfg.device, [('optimizer', optimizer)])
+            '{}/ckpt/{}.pth'.format(cfg.snapshot_dir, cfg.resume_iter), [('model', model)], cfg.device,
+            [('optimizer', optimizer)])
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
         print('Starting from iter ', start_iter)
-   
-    if cfg.multi_gpus: 
+
+    if cfg.multi_gpus:
         model = torch.nn.DataParallel(model)
 
     pbar = tqdm(range(start_iter, cfg.max_iter))
@@ -130,7 +131,6 @@ def train(arg_file=None):
         train_loss.backward()
         optimizer.step()
 
-
         if cfg.log_interval and (i + 1) % cfg.log_interval == 0:
 
             model.eval()
@@ -138,7 +138,7 @@ def train(arg_file=None):
             with torch.no_grad():
                 output = model(image, mask, rea_images, rea_masks)
             val_loss = get_loss(criterion, lambda_dict, mask, steady_mask, output, gt, writer, i, "val")
-            if not cfg.lr_scheduler_patience is None:
+            if cfg.lr_scheduler_patience is not None:
                 lr_scheduler.step(val_loss)
 
             # create snapshot image
@@ -151,6 +151,7 @@ def train(arg_file=None):
                       [('model', model)], [('optimizer', optimizer)], i + 1)
 
     writer.close()
+
 
 if __name__ == "__main__":
     train()

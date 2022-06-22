@@ -1,10 +1,9 @@
 import torch
-from torch import nn
 import torch.nn.functional as F
-import sys
+from torch import nn
 
-from .. import config as cfg
 from .encoder_decoder import EncoderBlock, sequence_to_batch, batch_to_sequence
+from .. import config as cfg
 
 
 class AttentionEncoderBlock(nn.Module):

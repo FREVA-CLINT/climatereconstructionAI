@@ -1,0 +1,32 @@
+name: build ⚙️
+
+on: [pull_request]
+
+jobs:
+  conda:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10"]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup conda with Python ${{ matrix.python-version }}
+        uses: s-weigand/setup-conda@v1
+        with:
+          update-conda: true
+          python-version: ${{ matrix.python-version }}
+          conda-channels: defaults, conda-forge, pytorch
+      - name: Conda env configuration with mamba
+        run: |
+            conda install mamba
+            mamba env create -f environment.yml
+            source activate crai
+            pip install -e ".[dev]"
+      - name: Test with conda
+        run: |
+            source activate crai
+            pytest tests
+      - name: Lint with flake8 ⚙️
+        run: |
+            mamba install flake8
+            flake8 . --max-line-length=120 --per-file-ignores='climatereconstructionai/config.py:F821' --ignore=F405

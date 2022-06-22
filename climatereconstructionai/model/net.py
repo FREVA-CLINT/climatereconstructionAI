@@ -1,17 +1,17 @@
 import torch
 import torch.nn as nn
-import sys
 
-from .. import config as cfg
 from .attention_module import AttentionEncoderBlock
+from .conv_configs import init_enc_conv_configs, init_dec_conv_configs, \
+    init_enc_conv_configs_orig, init_dec_conv_configs_orig
 from .encoder_decoder import EncoderBlock, DecoderBlock
-from .conv_configs import *
+from .. import config as cfg
 
 
-def progstat(iter, ntot):
+def progstat(index, numel):
     if cfg.progress_fwd:
         f = open(cfg.log_dir + "/progfwd.info", "w")
-        print(int(100 * (iter + 1) / ntot), file=f)
+        print(int(100 * (index + 1) / numel), file=f)
         f.close()
 
 
@@ -57,11 +57,10 @@ class PConvLSTM(nn.Module):
                 if i != self.attention_depth - 1:
                     dec_conv_configs[i]['out_channels'] += \
                         attention_enc_conv_configs[self.attention_depth - i - 1]['in_channels']
-                dec_conv_configs[i]['skip_channels'] += cfg.skip_layers * \
-                                                        attention_enc_conv_configs[self.attention_depth - i - 1][
-                                                            'in_channels']
-                dec_conv_configs[i]['in_channels'] += attention_enc_conv_configs[self.attention_depth - i - 1][
-                    'out_channels']
+                dec_conv_configs[i]['skip_channels'] += \
+                    cfg.skip_layers * attention_enc_conv_configs[self.attention_depth - i - 1]['in_channels']
+                dec_conv_configs[i]['in_channels'] += \
+                    attention_enc_conv_configs[self.attention_depth - i - 1]['out_channels']
 
             self.attention_module = nn.ModuleList(attention_layers)
 
@@ -154,7 +153,7 @@ class PConvLSTM(nn.Module):
                     attention_lstm_state_h, attention_lstm_state_c = attentions_recurrent_states[i]
                     lstm_state_h = torch.cat([lstm_state_h, attention_lstm_state_h], dim=1)
                     lstm_state_c = torch.cat([lstm_state_c, attention_lstm_state_c], dim=1)
-                    lstm_states[i + (self.net_depth - self.attention_depth)] = (lstm_state_h, lstm_state_c)
+                    recurrent_states[i + (self.net_depth - self.attention_depth)] = (lstm_state_h, lstm_state_c)
 
         # reverse all hidden states
         if self.recurrent:
