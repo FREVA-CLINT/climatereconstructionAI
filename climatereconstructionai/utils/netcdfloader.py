@@ -173,9 +173,9 @@ class NetCDFLoader(Dataset):
 
         if len(images) == 1:
             if cfg.prev_next_steps:
-                return masked[0], masks[0], images[0], torch.tensor([]), torch.tensor([]), torch.tensor([])
-            else:
                 return masked[0].transpose(0,1), masks[0].transpose(0,1), images[0].transpose(0,1), torch.tensor([]), torch.tensor([]), torch.tensor([])
+            else:
+                return masked[0], masks[0], images[0], torch.tensor([]), torch.tensor([]), torch.tensor([])
         else:
             if cfg.prev_next_steps:
                 return masked[0].transpose(0,1), masks[0].transpose(0,1), images[0].transpose(0,1), torch.cat(masked[1:], dim=0).transpose(0,1), torch.cat(masks[1:], dim=0).transpose(0,1), torch.cat(images[1:], dim=0).transpose(0,1)
