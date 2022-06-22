@@ -27,9 +27,10 @@ def train(arg_file=None):
 
     cfg.set_train_args(arg_file)
 
-    if not os.path.exists(cfg.snapshot_dir):
-        os.makedirs('{:s}/images'.format(cfg.snapshot_dir))
-        os.makedirs('{:s}/ckpt'.format(cfg.snapshot_dir))
+    for dir in ("", "/images", "/ckpt"):
+        outdir = cfg.snapshot_dir + dir
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
 
     if not os.path.exists(cfg.log_dir):
         os.makedirs(cfg.log_dir)
