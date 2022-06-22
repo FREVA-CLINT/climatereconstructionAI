@@ -91,13 +91,11 @@ def load_netcdf(path, data_names, data_types, keep_dss=False):
 
 
 class NetCDFLoader(Dataset):
-    def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, lstm_steps, prev_next_steps):
+    def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, time_steps):
         super(NetCDFLoader, self).__init__()
-        assert lstm_steps == 0 or prev_next_steps == 0
 
         self.data_types = data_types
-        self.lstm_steps = lstm_steps
-        self.prev_next_steps = prev_next_steps
+        self.time_steps = time_steps
 
         if split == 'infill':
             data_path = '{:s}/test_large/'.format(data_root)
@@ -136,18 +134,13 @@ class NetCDFLoader(Dataset):
         return image, mask
 
     def get_single_item(self, ind_data, index, shuffle_masks):
-        if self.lstm_steps == 0:
-            prev_steps = next_steps = self.prev_next_steps
-        else:
-            prev_steps = next_steps = self.lstm_steps
-
         # define range of lstm or prev-next steps -> adjust, if out of boundaries
-        img_indices = np.array(list(range(index - prev_steps, index + next_steps + 1)))
+        img_indices = np.array(list(range(index - self.time_steps, index + self.time_steps + 1)))
         img_indices[img_indices < 0] = 0
         img_indices[img_indices > self.img_length - 1] = self.img_length - 1
         if shuffle_masks:
             mask_indices = []
-            for j in range(prev_steps + next_steps + 1):
+            for j in range(2 * self.time_steps + 1):
                 mask_indices.append(random.randint(0, self.mask_length - 1))
             mask_indices = sorted(mask_indices)
         else:
@@ -156,12 +149,8 @@ class NetCDFLoader(Dataset):
         images, masks = self.load_data(ind_data, img_indices, mask_indices)
 
         # stack to correct dimensions
-        if self.lstm_steps == 0:
-            images = torch.cat([images], dim=0).unsqueeze(0)
-            masks = torch.cat([masks], dim=0).unsqueeze(0)
-        else:
-            images = torch.stack([images], dim=1)
-            masks = torch.stack([masks], dim=1)
+        images = torch.stack([images], dim=1)
+        masks = torch.stack([masks], dim=1)
 
         return images, masks
 
@@ -182,10 +171,19 @@ class NetCDFLoader(Dataset):
                 masked.append(image * mask)
 
         if len(images) == 1:
-            return masked[0], masks[0], images[0], torch.tensor([]), torch.tensor([]), torch.tensor([])
+            if cfg.prev_next_steps:
+                return masked[0].transpose(0, 1), masks[0].transpose(0, 1), images[0].transpose(0, 1), torch.tensor(
+                    []), torch.tensor([]), torch.tensor([])
+            else:
+                return masked[0], masks[0], images[0], torch.tensor([]), torch.tensor([]), torch.tensor([])
         else:
-            return masked[0], masks[0], images[0], torch.cat(masked[1:], dim=1), torch.cat(masks[1:], dim=1), torch.cat(
-                images[1:], dim=1)
+            if cfg.prev_next_steps:
+                return masked[0].transpose(0, 1), masks[0].transpose(0, 1), images[0].transpose(0, 1), torch.cat(
+                    masked[1:], dim=0).transpose(0, 1), torch.cat(masks[1:], dim=0).transpose(0, 1), torch.cat(
+                    images[1:], dim=0).transpose(0, 1)
+            else:
+                return masked[0], masks[0], images[0], torch.cat(masked[1:], dim=1), torch.cat(
+                    masks[1:], dim=1), torch.cat(images[1:], dim=1)
 
     def __len__(self):
         return self.img_length

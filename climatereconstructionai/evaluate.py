@@ -20,16 +20,19 @@ def evaluate(arg_file=None):
 
         if cfg.lstm_steps:
             recurrent = True
-            sequence_steps = cfg.lstm_steps
+            time_steps = cfg.lstm_steps
         elif cfg.gru_steps:
             recurrent = True
-            sequence_steps = cfg.gru_steps
+            time_steps = cfg.gru_steps
+        elif cfg.prev_next_steps:
+            recurrent = False
+            time_steps = cfg.prev_next_steps
         else:
             recurrent = False
-            sequence_steps = 0
+            time_steps = 0
 
         dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, "infill",
-                                   cfg.data_types, sequence_steps, cfg.prev_next_steps)
+                                   cfg.data_types, time_steps)
 
         if len(cfg.image_sizes) > 1:
             model = PConvLSTM(radar_img_size=cfg.image_sizes[0],

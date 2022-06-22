@@ -35,20 +35,22 @@ def train(arg_file=None):
 
     if cfg.lstm_steps:
         recurrent = True
-        sequence_steps = cfg.lstm_steps
+        time_steps = cfg.lstm_steps
     elif cfg.gru_steps:
         recurrent = True
-        sequence_steps = cfg.gru_steps
+        time_steps = cfg.gru_steps
+    elif cfg.prev_next_steps:
+        recurrent = False
+        time_steps = cfg.prev_next_steps
     else:
         recurrent = False
-        sequence_steps = 0
+        time_steps = 0
 
     # create data sets
     dataset_train = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, 'train',
-                                 cfg.data_types,
-                                 sequence_steps, cfg.prev_next_steps)
+                                 cfg.data_types, time_steps)
     dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, 'val', cfg.data_types,
-                               sequence_steps, cfg.prev_next_steps)
+                               time_steps)
     iterator_train = iter(DataLoader(dataset_train, batch_size=cfg.batch_size,
                                      sampler=InfiniteSampler(len(dataset_train)),
                                      num_workers=cfg.n_threads))
