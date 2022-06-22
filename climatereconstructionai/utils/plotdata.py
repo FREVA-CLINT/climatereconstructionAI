@@ -15,10 +15,11 @@ def plot_data(coords, data, titles, output_name, data_type, time_indices, vlim, 
         import cartopy.crs as ccrs
         import cartopy
 
+        dims = {}
         for dim in coords.dims:
             for key in ("time", "lon", "lat"):
                 if key in dim:
-                    globals()[key] = coords[dim].values
+                    dims[key] = coords[dim].values
 
         ndata = len(data)
 
@@ -43,8 +44,8 @@ def plot_data(coords, data, titles, output_name, data_type, time_indices, vlim, 
                 axes[i].add_feature(cartopy.feature.COASTLINE, edgecolor="black")
                 axes[i].add_feature(cartopy.feature.BORDERS, edgecolor="black", linestyle="--")
 
-                image = axes[i].pcolormesh(lon, lat, data[i][j].squeeze(), vmin=vmin, vmax=vmax, cmap=cmap,
-                                           transform=ccrs.PlateCarree(), shading='auto')
+                image = axes[i].pcolormesh(dims["lon"], dims["lat"], data[i][j].squeeze(), vmin=vmin, vmax=vmax,
+                                           cmap=cmap, transform=ccrs.PlateCarree(), shading='auto')
                 axes[i].set_facecolor('grey')
                 axes[i].yaxis.set_ticks_position("left")
                 axes[i].set_title(titles[i], size=18)
@@ -53,7 +54,7 @@ def plot_data(coords, data, titles, output_name, data_type, time_indices, vlim, 
                     cb = plt.colorbar(image, location="bottom", ax=axes, fraction=0.1, pad=0.1)
                     cb.set_label(get_longname(data_type), size=14)
 
-            fig.suptitle(time[j], size=20)
+            fig.suptitle(dims["time"][j], size=20)
 
             if ndata == 2:
                 bbox_props = dict(boxstyle="rarrow,pad=0.3", fc="black", lw=2)

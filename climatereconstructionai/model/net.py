@@ -2,8 +2,10 @@ import torch
 import torch.nn as nn
 
 from .attention_module import AttentionEncoderBlock
-from .conv_configs import *
+from .conv_configs import init_enc_conv_configs, init_dec_conv_configs, \
+    init_enc_conv_configs_orig, init_dec_conv_configs_orig
 from .encoder_decoder import EncoderBlock, DecoderBlock
+from .. import config as cfg
 
 
 def progstat(index, numel):
@@ -151,7 +153,7 @@ class PConvLSTM(nn.Module):
                     attention_lstm_state_h, attention_lstm_state_c = attentions_recurrent_states[i]
                     lstm_state_h = torch.cat([lstm_state_h, attention_lstm_state_h], dim=1)
                     lstm_state_c = torch.cat([lstm_state_c, attention_lstm_state_c], dim=1)
-                    lstm_states[i + (self.net_depth - self.attention_depth)] = (lstm_state_h, lstm_state_c)
+                    recurrent_states[i + (self.net_depth - self.attention_depth)] = (lstm_state_h, lstm_state_c)
 
         # reverse all hidden states
         if self.recurrent:

@@ -46,10 +46,8 @@ class BaseConvRNN(nn.Module):
         i2h_dilate_ksize_h = 1 + (self._i2h_kernel[0] - 1) * self._i2h_dilate[0]
         i2h_dilate_ksize_w = 1 + (self._i2h_kernel[1] - 1) * self._i2h_dilate[1]
         self._batch_size, self._height, self._width = b_h_w
-        self._state_height = (self._height + 2 * self._i2h_pad[0] - i2h_dilate_ksize_h) \
-                             // self._i2h_stride[0] + 1
-        self._state_width = (self._width + 2 * self._i2h_pad[1] - i2h_dilate_ksize_w) \
-                            // self._i2h_stride[1] + 1
+        self._state_height = (self._height + 2 * self._i2h_pad[0] - i2h_dilate_ksize_h) // self._i2h_stride[0] + 1
+        self._state_width = (self._width + 2 * self._i2h_pad[1] - i2h_dilate_ksize_w) // self._i2h_stride[1] + 1
         self._curr_states = None
         self._counter = 0
 

@@ -29,4 +29,4 @@ jobs:
       - name: Lint with flake8 ⚙️
         run: |
             mamba install flake8
-            flake8 .
+            flake8 . --max-line-length=120 --per-file-ignores='climatereconstructionai/config.py:F821' --ignore=F405

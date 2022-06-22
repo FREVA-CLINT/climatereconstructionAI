@@ -51,14 +51,10 @@ def nc_loadchecker(filename, data_type, image_size, keep_dss=False):
 
     try:
         # We use load_dataset instead of open_dataset because of lazy transpose
-        ds = xr.load_dataset(filename)
-    except:
-        try:
-            ds = xr.load_dataset(filename, decode_times=False)
-        except:
-            raise ValueError(
-                'Impossible to read {}.\nPlease, check that the input file is a netCDF file and is not corrupted.'
-                    .format(basename))
+        ds = xr.load_dataset(filename, decode_times=False)
+    except Exception:
+        raise ValueError('Impossible to read {}.'
+                         '\nPlease, check that it is a netCDF file and it is not corrupted.'.format(basename))
 
     ds1 = dataset_formatter(ds, data_type, image_size, basename)
 
@@ -136,23 +132,7 @@ class NetCDFLoader(Dataset):
 
         if cfg.normalize_images:
             image = self.img_tf[ind_data](image)
-        # print(img_indices,image.mean(),image.std())
 
-        # # open netcdf file
-        # try:
-        #     total_data = torch.from_numpy(h5_data[indices, :, :])
-        # except TypeError:
-        #     # get indices that occur more than once
-        #     unique, counts = np.unique(indices, return_counts=True)
-        #     copy_indices = [(index, counts[index] - 1) for index in range(len(counts)) if counts[index] > 1]
-        #     if h5_data.ndim == 4:
-        #         total_data = torch.from_numpy(h5_data[unique, 0, :, :])
-        #     else:
-        #         total_data = torch.from_numpy(h5_data[unique, :, :])
-        #     if unique[copy_indices[0][0]] == 0:
-        #         total_data = torch.cat([torch.stack(copy_indices[0][1] * [total_data[copy_indices[0][0]]]), total_data])
-        #     else:
-        #         total_data = torch.cat([total_data, torch.stack(copy_indices[0][1] * [total_data[copy_indices[0][0]]])])
         return image, mask
 
     def get_single_item(self, ind_data, index, shuffle_masks):

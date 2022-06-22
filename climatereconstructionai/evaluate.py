@@ -1,9 +1,10 @@
 import os
 
 from .model.net import PConvLSTM
-from .utils.evaluation import *
+from .utils.evaluation import infill
 from .utils.io import load_ckpt
 from .utils.netcdfloader import NetCDFLoader
+from . import config as cfg
 
 
 def evaluate(arg_file=None):
