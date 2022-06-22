@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from torchvision import models
 
+
 class VGG16FeatureExtractor(nn.Module):
     def __init__(self):
         super().__init__()

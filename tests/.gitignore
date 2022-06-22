@@ -1,1 +1,4 @@
-out/
+out/**/*.pth
+out/**/*.nc
+out/**/*.jpg
+out/**/events.*
