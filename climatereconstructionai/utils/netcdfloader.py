@@ -91,12 +91,12 @@ def load_netcdf(path,data_names,data_types,keep_dss=False):
 
 
 class NetCDFLoader(Dataset):
-    def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, lstm_steps, prev_next_steps):
+    def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, recurrent_steps, prev_next_steps):
         super(NetCDFLoader, self).__init__()
-        assert lstm_steps == 0 or prev_next_steps == 0
+        assert recurrent_steps == 0 or prev_next_steps == 0
         
         self.data_types = data_types
-        self.lstm_steps = lstm_steps
+        self.recurrent_steps = recurrent_steps
         self.prev_next_steps = prev_next_steps
 
         if split == 'infill':
@@ -133,30 +133,14 @@ class NetCDFLoader(Dataset):
 
         if cfg.normalize_images:
             image = self.img_tf[ind_data](image)
-        # print(img_indices,image.mean(),image.std())
 
-        # # open netcdf file
-        # try:
-        #     total_data = torch.from_numpy(h5_data[indices, :, :])
-        # except TypeError:
-        #     # get indices that occur more than once
-        #     unique, counts = np.unique(indices, return_counts=True)
-        #     copy_indices = [(index, counts[index] - 1) for index in range(len(counts)) if counts[index] > 1]
-        #     if h5_data.ndim == 4:
-        #         total_data = torch.from_numpy(h5_data[unique, 0, :, :])
-        #     else:
-        #         total_data = torch.from_numpy(h5_data[unique, :, :])
-        #     if unique[copy_indices[0][0]] == 0:
-        #         total_data = torch.cat([torch.stack(copy_indices[0][1] * [total_data[copy_indices[0][0]]]), total_data])
-        #     else:
-        #         total_data = torch.cat([total_data, torch.stack(copy_indices[0][1] * [total_data[copy_indices[0][0]]])])
         return image, mask
 
     def get_single_item(self, ind_data, index, shuffle_masks):
-        if self.lstm_steps == 0:
+        if self.recurrent_steps == 0:
             prev_steps = next_steps = self.prev_next_steps
         else:
-            prev_steps = next_steps = self.lstm_steps
+            prev_steps = next_steps = self.recurrent_steps
 
         # define range of lstm or prev-next steps -> adjust, if out of boundaries
         img_indices = np.array(list(range(index - prev_steps, index + next_steps + 1)))
@@ -173,7 +157,7 @@ class NetCDFLoader(Dataset):
         images, masks = self.load_data(ind_data, img_indices, mask_indices)
 
         # stack to correct dimensions
-        if self.lstm_steps == 0:
+        if self.recurrent_steps == 0:
             images = torch.cat([images], dim=0).unsqueeze(0)
             masks = torch.cat([masks], dim=0).unsqueeze(0)
         else:
