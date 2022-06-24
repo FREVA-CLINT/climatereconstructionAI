@@ -51,7 +51,7 @@ def nc_loadchecker(filename, data_type, image_size, keep_dss=False):
 
     try:
         # We use load_dataset instead of open_dataset because of lazy transpose
-        ds = xr.load_dataset(filename, decode_times=False)
+        ds = xr.open_dataset(filename, decode_times=False)
     except Exception:
         raise ValueError('Impossible to read {}.'
                          '\nPlease, check that it is a netCDF file and it is not corrupted.'.format(basename))
