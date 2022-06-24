@@ -41,7 +41,7 @@ def lim_list(arg):
     return lim
 
 
-def global_args(parser, arg_file):
+def global_args(parser, arg_file=None, prog_func=None):
     import torch
 
     if arg_file is None:
@@ -49,6 +49,9 @@ def global_args(parser, arg_file):
         argv = sys.argv[1:]
     else:
         argv = ["--load-from-file", arg_file]
+
+    global progress_fwd
+    progress_fwd = prog_func
 
     args = parser.parse_args(argv)
 
@@ -120,7 +123,6 @@ def set_common_args():
     arg_parser.add_argument('--masked-bn', action='store_true',
                             help="Use masked batch normalization instead of standard BN")
     arg_parser.add_argument('--global-padding', action='store_true', help="Use a custom padding for global dataset")
-    arg_parser.add_argument('--progress-fwd', action='store_true', help="Print the progress of the forward propagation")
     arg_parser.add_argument('--normalize-images', action='store_true',
                             help="Normalize the input images to 0 mean and 1 std")
     arg_parser.add_argument('--n-filters', type=int, default=None, help="Number of filters for the first/last layer")
@@ -162,7 +164,7 @@ def set_train_args(arg_file=None):
     global_args(arg_parser, arg_file)
 
 
-def set_evaluate_args(arg_file=None):
+def set_evaluate_args(arg_file=None, prog_func=None):
     arg_parser = set_common_args()
     arg_parser.add_argument('--model-dir', type=str, default='snapshots/ckpt/', help="Directory of the trained models")
     arg_parser.add_argument('--model-names', type=str_list, default='1000000.pth', help="Model names")
@@ -179,4 +181,4 @@ def set_evaluate_args(arg_file=None):
                             help="Maximum available memory in MB (overwrite partitions parameter)")
     arg_parser.add_argument('-f', '--load-from-file', type=str, action=LoadFromFile,
                             help="Load all the arguments from a text file")
-    global_args(arg_parser, arg_file)
+    global_args(arg_parser, arg_file, prog_func)
