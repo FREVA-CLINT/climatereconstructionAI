@@ -149,7 +149,8 @@ class CRAINet(nn.Module):
                     recurrent_fusion_state_h, recurrent_fusion_state_c = recurrent_fusion_states[i]
                     recurrent_state_h = torch.cat([recurrent_state_h, recurrent_fusion_state_h], dim=1)
                     recurrent_state_c = torch.cat([recurrent_state_c, recurrent_fusion_state_c], dim=1)
-                    recurrent_states[i + (self.net_depth - self.attention_depth)] = (recurrent_state_h, recurrent_state_c)
+                    recurrent_states[i + (self.net_depth - self.attention_depth)] = (recurrent_state_h,
+                                                                                     recurrent_state_c)
                 elif cfg.gru_steps:
                     recurrent_state_h = recurrent_states[i + (self.net_depth - self.attention_depth)]
                     recurrent_fusion_state_h = recurrent_fusion_states[i]
