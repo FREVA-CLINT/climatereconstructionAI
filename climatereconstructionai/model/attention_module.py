@@ -24,16 +24,17 @@ class AttentionEncoderBlock(nn.Module):
             nn.Sigmoid()
         )
 
-    def forward(self, h_rea, h_rea_mask, rea_recurrent_state, h):
-        h_rea, h_rea_mask, rea_recurrent_state = self.partial_conv_enc(h_rea, h_rea_mask, rea_recurrent_state)
-        batch_size = h_rea.shape[0]
+    def forward(self, h_fusion, h_fusion_mask, recurrent_fusion_state, h):
+        h_fusion, h_fusion_mask, recurrent_fusion_state = self.partial_conv_enc(h_fusion, h_fusion_mask,
+                                                                                recurrent_fusion_state)
+        batch_size = h_fusion.shape[0]
 
         # convert sequence steps to batch dimension
-        h_rea = sequence_to_batch(h_rea)
+        h_fusion = sequence_to_batch(h_fusion)
         h = sequence_to_batch(h)
 
         # channel attention
-        channel_attention = self.forward_channel_attention(h_rea)
+        channel_attention = self.forward_channel_attention(h_fusion)
         # spatial attention
         spatial_attention = self.spatial_attention_block(
             torch.cat([torch.max(h, keepdim=True, dim=1)[0],
@@ -42,10 +43,10 @@ class AttentionEncoderBlock(nn.Module):
         attention = channel_attention * spatial_attention
 
         # convert batches to sequence dimension
-        h_rea = batch_to_sequence(h_rea, batch_size)
+        h_fusion = batch_to_sequence(h_fusion, batch_size)
         attention = batch_to_sequence(attention, batch_size)
 
-        return h_rea, h_rea_mask, rea_recurrent_state, attention
+        return h_fusion, h_fusion_mask, recurrent_fusion_state, attention
 
     def forward_channel_attention(self, input):
         attention_max = F.max_pool2d(input, input.shape[2])

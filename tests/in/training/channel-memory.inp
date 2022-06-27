@@ -15,6 +15,6 @@
 --weights kaiming
 --random-seed 3
 --shuffle-masks
---prev-next-steps 2
+--channel-steps 2
 --lstm-steps 0
 --gru-steps 0

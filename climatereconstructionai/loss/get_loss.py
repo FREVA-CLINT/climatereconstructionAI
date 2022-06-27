@@ -40,6 +40,8 @@ def get_loss(criterion, lambda_dict, img_mask, loss_mask, output, gt, writer, it
             print("Error! Not all values in mask are zeros or ones!")
             exit()
 
+
+
     loss_dict = loss_func(mask[:, cfg.lstm_steps, cfg.gt_channels, :, :],
                           output[:, cfg.lstm_steps, :, :, :],
                           gt[:, cfg.lstm_steps, cfg.gt_channels, :, :])

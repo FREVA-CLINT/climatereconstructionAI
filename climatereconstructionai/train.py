@@ -11,7 +11,7 @@ from . import config as cfg
 from .loss.get_loss import get_loss
 from .loss.hole_loss import HoleLoss
 from .loss.inpainting_loss import InpaintingLoss
-from .model.net import PConvLSTM
+from .model.net import CRAINet
 from .utils.evaluation import create_snapshot_image
 from .utils.featurizer import VGG16FeatureExtractor
 from .utils.io import load_ckpt, save_ckpt
@@ -34,16 +34,12 @@ def train(arg_file=None):
     writer = SummaryWriter(log_dir=cfg.log_dir)
 
     if cfg.lstm_steps:
-        recurrent = True
         time_steps = cfg.lstm_steps
     elif cfg.gru_steps:
-        recurrent = True
         time_steps = cfg.gru_steps
-    elif cfg.prev_next_steps:
-        recurrent = False
-        time_steps = cfg.prev_next_steps
+    elif cfg.channel_steps:
+        time_steps = cfg.channel_steps
     else:
-        recurrent = False
         time_steps = 0
 
     # create data sets
@@ -62,23 +58,21 @@ def train(arg_file=None):
 
     # define network model
     if len(cfg.image_sizes) > 1:
-        model = PConvLSTM(radar_img_size=cfg.image_sizes[0],
-                          radar_enc_dec_layers=cfg.encoding_layers[0],
-                          radar_pool_layers=cfg.pooling_layers[0],
-                          radar_in_channels=2 * cfg.prev_next_steps + 1,
-                          radar_out_channels=cfg.out_channels,
-                          rea_img_size=cfg.image_sizes[1],
-                          rea_enc_layers=cfg.encoding_layers[1],
-                          rea_pool_layers=cfg.pooling_layers[1],
-                          rea_in_channels=(len(cfg.image_sizes) - 1) * (2 * cfg.prev_next_steps + 1),
-                          recurrent=recurrent).to(cfg.device)
+        model = CRAINet(img_size=cfg.image_sizes[0],
+                        enc_dec_layers=cfg.encoding_layers[0],
+                        pool_layers=cfg.pooling_layers[0],
+                        in_channels=2 * cfg.channel_steps + 1,
+                        out_channels=cfg.out_channels,
+                        fusion_img_size=cfg.image_sizes[1],
+                        fusion_enc_layers=cfg.encoding_layers[1],
+                        fusion_pool_layers=cfg.pooling_layers[1],
+                        fusion_in_channels=(len(cfg.image_sizes) - 1) * (2 * cfg.channel_steps + 1)).to(cfg.device)
     else:
-        model = PConvLSTM(radar_img_size=cfg.image_sizes[0],
-                          radar_enc_dec_layers=cfg.encoding_layers[0],
-                          radar_pool_layers=cfg.pooling_layers[0],
-                          radar_in_channels=2 * cfg.prev_next_steps + 1,
-                          radar_out_channels=cfg.out_channels,
-                          recurrent=recurrent).to(cfg.device)
+        model = CRAINet(img_size=cfg.image_sizes[0],
+                        enc_dec_layers=cfg.encoding_layers[0],
+                        pool_layers=cfg.pooling_layers[0],
+                        in_channels=2 * cfg.channel_steps + 1,
+                        out_channels=cfg.out_channels).to(cfg.device)
 
     # define learning rate
     if cfg.finetune:
@@ -124,8 +118,8 @@ def train(arg_file=None):
 
         # train model
         model.train()
-        image, mask, gt, rea_images, rea_masks, rea_gts = [x.to(cfg.device) for x in next(iterator_train)]
-        output = model(image, mask, rea_images, rea_masks)
+        image, mask, gt, fusion_image, fusion_mask, fusion_gt = [x.to(cfg.device) for x in next(iterator_train)]
+        output = model(image, mask, fusion_image, fusion_mask)
 
         train_loss = get_loss(criterion, lambda_dict, mask, steady_mask, output, gt, writer, i, "train")
 
@@ -136,9 +130,9 @@ def train(arg_file=None):
         if cfg.log_interval and (i + 1) % cfg.log_interval == 0:
 
             model.eval()
-            image, mask, gt, rea_images, rea_masks, rea_gts = [x.to(cfg.device) for x in next(iterator_val)]
+            image, mask, gt, fusion_image, fusion_mask, fusion_gt = [x.to(cfg.device) for x in next(iterator_val)]
             with torch.no_grad():
-                output = model(image, mask, rea_images, rea_masks)
+                output = model(image, mask, fusion_image, fusion_mask)
             val_loss = get_loss(criterion, lambda_dict, mask, steady_mask, output, gt, writer, i, "val")
             if cfg.lr_scheduler_patience is not None:
                 lr_scheduler.step(val_loss)
