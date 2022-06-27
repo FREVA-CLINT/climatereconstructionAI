@@ -63,6 +63,7 @@ def global_args(parser, arg_file):
 
     global skip_layers
     global gt_channels
+    global recurrent_steps
 
     if disable_skip_layers:
         skip_layers = 0
@@ -71,10 +72,17 @@ def global_args(parser, arg_file):
 
     gt_channels = []
     for i in range(out_channels):
-        gt_channels.append((i + 1) * prev_next_steps + i * (prev_next_steps + 1))
+        gt_channels.append((i + 1) * channel_steps + i * (channel_steps + 1))
 
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
+
+    if lstm_steps:
+        recurrent_steps = lstm_steps
+    elif gru_steps:
+        recurrent_steps = gru_steps
+    else:
+        recurrent_steps = 0
 
 
 def set_common_args():
@@ -95,12 +103,12 @@ def set_common_args():
                             help="Use the image and mask from the specified channel index to create the masked image")
     arg_parser.add_argument('--device', type=str, default='cuda', help="Device used by PyTorch (cuda or cpu)")
     arg_parser.add_argument('--shuffle-masks', action='store_true', help="Select mask indices randomly")
-    arg_parser.add_argument('--prev-next', type=int, default=0, help="")
+    arg_parser.add_argument('--channel-steps', type=int, default=0,
+                            help="Number of considered sequences for channeled memory (0 = memory module is disabled)")
     arg_parser.add_argument('--lstm-steps', type=int, default=0,
                             help="Number of considered sequences for lstm (0 = lstm module is disabled)")
     arg_parser.add_argument('--gru-steps', type=int, default=0,
                             help="Number of considered sequences for gru (0 = gru module is disabled)")
-    arg_parser.add_argument('--prev-next-steps', type=int, default=0, help="")
     arg_parser.add_argument('--encoding-layers', type=int_list, default='3',
                             help="Number of encoding layers in the CNN")
     arg_parser.add_argument('--pooling-layers', type=int_list, default='0', help="Number of pooling layers in the CNN")

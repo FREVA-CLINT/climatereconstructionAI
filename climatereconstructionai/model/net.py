@@ -15,37 +15,34 @@ def progstat(index, numel):
         f.close()
 
 
-class PConvLSTM(nn.Module):
-    def __init__(self, radar_img_size=512, radar_enc_dec_layers=4, radar_pool_layers=4, radar_in_channels=1,
-                 radar_out_channels=1,
-                 rea_img_size=None, rea_enc_layers=None, rea_pool_layers=None, rea_in_channels=0,
-                 recurrent=True):
+class CRAINet(nn.Module):
+    def __init__(self, img_size=512, enc_dec_layers=4, pool_layers=4, in_channels=1, out_channels=1,
+                 fusion_img_size=None, fusion_enc_layers=None, fusion_pool_layers=None, fusion_in_channels=0):
         super().__init__()
 
         self.freeze_enc_bn = False
-        self.net_depth = radar_enc_dec_layers + radar_pool_layers
-        self.recurrent = recurrent
+        self.net_depth = enc_dec_layers + pool_layers
 
         # initialize channel inputs and outputs and image size for encoder and decoder
         if cfg.n_filters is None:
-            enc_conv_configs = init_enc_conv_configs(radar_img_size, radar_enc_dec_layers,
-                                                     radar_pool_layers, radar_in_channels)
-            dec_conv_configs = init_dec_conv_configs(radar_img_size, radar_enc_dec_layers,
-                                                     radar_pool_layers, radar_in_channels,
-                                                     radar_out_channels)
+            enc_conv_configs = init_enc_conv_configs(img_size, enc_dec_layers,
+                                                     pool_layers, in_channels)
+            dec_conv_configs = init_dec_conv_configs(img_size, enc_dec_layers,
+                                                     pool_layers, in_channels,
+                                                     out_channels)
         else:
-            enc_conv_configs = init_enc_conv_configs_orig(radar_img_size, radar_enc_dec_layers,
-                                                          radar_out_channels, cfg.n_filters)
-            dec_conv_configs = init_dec_conv_configs_orig(radar_img_size, radar_enc_dec_layers,
-                                                          radar_out_channels, cfg.n_filters)
+            enc_conv_configs = init_enc_conv_configs_orig(img_size, enc_dec_layers,
+                                                          out_channels, cfg.n_filters)
+            dec_conv_configs = init_dec_conv_configs_orig(img_size, enc_dec_layers,
+                                                          out_channels, cfg.n_filters)
 
         if cfg.attention:
-            self.attention_depth = rea_enc_layers + rea_pool_layers
-            attention_enc_conv_configs = init_enc_conv_configs(rea_img_size, rea_enc_layers,
-                                                               rea_pool_layers, rea_in_channels)
+            self.attention_depth = fusion_enc_layers + fusion_pool_layers
+            attention_enc_conv_configs = init_enc_conv_configs(fusion_img_size, fusion_enc_layers,
+                                                               fusion_pool_layers, fusion_in_channels)
             attention_layers = []
             for i in range(self.attention_depth):
-                if i < rea_enc_layers:
+                if i < fusion_enc_layers:
                     kernel = (5, 5)
                 else:
                     kernel = (3, 3)
@@ -64,10 +61,10 @@ class PConvLSTM(nn.Module):
 
             self.attention_module = nn.ModuleList(attention_layers)
 
-        elif rea_img_size:
-            self.channel_fusion_depth = rea_enc_layers + rea_pool_layers
-            enc_conv_configs[self.net_depth - self.channel_fusion_depth]['in_channels'] += rea_in_channels
-            dec_conv_configs[self.channel_fusion_depth - 1]['skip_channels'] += cfg.skip_layers * rea_in_channels
+        elif fusion_img_size:
+            self.channel_fusion_depth = fusion_enc_layers + fusion_pool_layers
+            enc_conv_configs[self.net_depth - self.channel_fusion_depth]['in_channels'] += fusion_in_channels
+            dec_conv_configs[self.channel_fusion_depth - 1]['skip_channels'] += cfg.skip_layers * fusion_in_channels
 
         # define encoding layers
         encoding_layers = []
@@ -91,7 +88,7 @@ class PConvLSTM(nn.Module):
                 kernel=dec_conv_configs[i]['kernel'], stride=(1, 1), activation=activation, bias=bias))
         self.decoder = nn.ModuleList(decoding_layers)
 
-    def forward(self, input, input_mask, attention_input, attention_input_mask):
+    def forward(self, input, input_mask, fusion_input, fusion_input_mask):
         # create lists for skip connections
         h = input
         h_mask = input_mask
@@ -99,19 +96,18 @@ class PConvLSTM(nn.Module):
         hs_mask = [h_mask]
         recurrent_states = []
 
-        h_attention = attention_input
-        h_attention_mask = attention_input_mask
-        attentions = []
-        attentions_mask = []
-        attentions_recurrent_states = []
+        h_fusion = fusion_input
+        h_fusion_mask = fusion_input_mask
+        hs_fusion = []
+        hs_fusion_mask = []
+        recurrent_fusion_states = []
 
         # forward pass encoding layers
         for i in range(self.net_depth):
-
-            if h_attention.size()[1] != 0 and h.shape[3] == h_attention.shape[3]:
+            if h_fusion.size()[1] != 0 and h.shape[3] == h_fusion.shape[3]:
                 if not cfg.attention:
-                    hs[i] = torch.cat([hs[i], h_attention], dim=2)
-                    hs_mask[i] = torch.cat([hs_mask[i], h_attention_mask], dim=2)
+                    hs[i] = torch.cat([hs[i], h_fusion], dim=2)
+                    hs_mask[i] = torch.cat([hs_mask[i], h_fusion_mask], dim=2)
 
             h, h_mask, recurrent_state = self.encoder[i](hs[i],
                                                          hs_mask[i],
@@ -120,14 +116,14 @@ class PConvLSTM(nn.Module):
             # execute attention module if configured
             if cfg.attention and i >= (self.net_depth - self.attention_depth):
                 attention_index = i - (self.net_depth - self.attention_depth)
-                h_attention, h_attention_mask, attention_recurrent_state, attention = \
-                    self.attention_module[attention_index](h_attention,
-                                                           h_attention_mask,
+                h_fusion, h_fusion_mask, attention_recurrent_state, attention = \
+                    self.attention_module[attention_index](h_fusion,
+                                                           h_fusion_mask,
                                                            None,
                                                            h)
-                attentions.append(attention)
-                attentions_mask.append(h_attention_mask)
-                attentions_recurrent_states.append(attention_recurrent_state)
+                hs_fusion.append(attention)
+                hs_fusion_mask.append(h_fusion_mask)
+                recurrent_fusion_states.append(attention_recurrent_state)
 
             # save hidden states for skip connections
             hs.append(h)
@@ -139,24 +135,30 @@ class PConvLSTM(nn.Module):
         # concat attentions
         if cfg.attention:
             hs[self.net_depth - self.attention_depth] = torch.cat(
-                [hs[self.net_depth - self.attention_depth], attention_input], dim=2)
+                [hs[self.net_depth - self.attention_depth], fusion_input], dim=2)
             hs_mask[self.net_depth - self.attention_depth] = torch.cat(
-                [hs_mask[self.net_depth - self.attention_depth], attention_input_mask], dim=2)
+                [hs_mask[self.net_depth - self.attention_depth], fusion_input_mask], dim=2)
             for i in range(self.attention_depth):
                 hs[i + (self.net_depth - self.attention_depth) + 1] = torch.cat(
-                    [hs[i + (self.net_depth - self.attention_depth) + 1], attentions[i]], dim=2)
+                    [hs[i + (self.net_depth - self.attention_depth) + 1], hs_fusion[i]], dim=2)
                 hs_mask[i + (self.net_depth - self.attention_depth) + 1] = torch.cat(
-                    [hs_mask[i + (self.net_depth - self.attention_depth) + 1], attentions_mask[i]], dim=2)
+                    [hs_mask[i + (self.net_depth - self.attention_depth) + 1], hs_fusion_mask[i]], dim=2)
 
                 if cfg.lstm_steps:
-                    lstm_state_h, lstm_state_c = recurrent_states[i + (self.net_depth - self.attention_depth)]
-                    attention_lstm_state_h, attention_lstm_state_c = attentions_recurrent_states[i]
-                    lstm_state_h = torch.cat([lstm_state_h, attention_lstm_state_h], dim=1)
-                    lstm_state_c = torch.cat([lstm_state_c, attention_lstm_state_c], dim=1)
-                    recurrent_states[i + (self.net_depth - self.attention_depth)] = (lstm_state_h, lstm_state_c)
+                    recurrent_state_h, recurrent_state_c = recurrent_states[i + (self.net_depth - self.attention_depth)]
+                    recurrent_fusion_state_h, recurrent_fusion_state_c = recurrent_fusion_states[i]
+                    recurrent_state_h = torch.cat([recurrent_state_h, recurrent_fusion_state_h], dim=1)
+                    recurrent_state_c = torch.cat([recurrent_state_c, recurrent_fusion_state_c], dim=1)
+                    recurrent_states[i + (self.net_depth - self.attention_depth)] = (recurrent_state_h,
+                                                                                     recurrent_state_c)
+                elif cfg.gru_steps:
+                    recurrent_state_h = recurrent_states[i + (self.net_depth - self.attention_depth)]
+                    recurrent_fusion_state_h = recurrent_fusion_states[i]
+                    recurrent_state_h = torch.cat([recurrent_state_h, recurrent_fusion_state_h], dim=1)
+                    recurrent_states[i + (self.net_depth - self.attention_depth)] = recurrent_state_h
 
         # reverse all hidden states
-        if self.recurrent:
+        if cfg.recurrent_steps:
             for i in range(self.net_depth):
                 hs[i] = torch.flip(hs[i], (1,))
                 hs_mask[i] = torch.flip(hs_mask[i], (1,))
@@ -165,7 +167,7 @@ class PConvLSTM(nn.Module):
 
         # forward pass decoding layers
         for i in range(self.net_depth):
-            if self.recurrent:
+            if cfg.recurrent_steps:
                 h, h_mask, recurrent_state = self.decoder[i](h, hs[self.net_depth - i - 1],
                                                              h_mask, hs_mask[self.net_depth - i - 1],
                                                              recurrent_states[self.net_depth - 1 - i])

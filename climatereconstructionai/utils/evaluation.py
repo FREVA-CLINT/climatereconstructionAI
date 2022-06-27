@@ -14,23 +14,23 @@ from .. import config as cfg
 
 
 def create_snapshot_image(model, dataset, filename):
-    image, mask, gt, rea_images, rea_masks, rea_gts = zip(*[dataset[int(i)] for i in cfg.eval_timesteps])
+    image, mask, gt, fusion_image, fusion_mask, fusion_gt = zip(*[dataset[int(i)] for i in cfg.eval_timesteps])
 
     image = torch.stack(image).to(cfg.device)
     mask = torch.stack(mask).to(cfg.device)
     gt = torch.stack(gt).to(cfg.device)
-    if rea_images:
-        rea_images = torch.stack(rea_images).to(cfg.device)
-        rea_masks = torch.stack(rea_masks).to(cfg.device)
+    if fusion_image:
+        fusion_image = torch.stack(fusion_image).to(cfg.device)
+        fusion_mask = torch.stack(fusion_mask).to(cfg.device)
 
     with torch.no_grad():
-        output = model(image, mask, rea_images, rea_masks)
+        output = model(image, mask, fusion_image, fusion_mask)
 
     # select last element of lstm sequence as evaluation element
-    image = image[:, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
-    gt = gt[:, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
-    mask = mask[:, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
-    output = output[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
+    image = image[:, cfg.recurrent_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
+    gt = gt[:, cfg.recurrent_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
+    mask = mask[:, cfg.recurrent_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
+    output = output[:, cfg.recurrent_steps, :, :, :].to(torch.device('cpu'))
 
     output_comp = mask * image + (1 - mask) * output
 
@@ -102,7 +102,7 @@ def infill(model, dataset, eval_path):
         for i in range(6):
             data_part.append(torch.stack([dataset[j][i] for j in range(i_start, i_end)]))
 
-        # Tensors in data_part: image_part, mask_part, gt_part, rea_images_part, rea_masks_part, rea_gts_part
+        # Tensors in data_part: image_part, mask_part, gt_part, fusion_image_part, fusion_mask_part, fusion_gt_part
 
         if split == 0 and cfg.create_graph:
             writer = SummaryWriter(log_dir=cfg.log_dir)
@@ -116,10 +116,11 @@ def infill(model, dataset, eval_path):
 
         # image_part, mask_part, gt_part
         for i in range(3):
-            data_part[i] = data_part[i][:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
+            data_part[i] = data_part[i][:, cfg.recurrent_steps, :, :, :].to(torch.device('cpu'))
             # only select first channel
-            data_part[i] = torch.unsqueeze(data_part[i][:, cfg.prev_next_steps, :, :], dim=1)
-        output_part = output_part[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
+            data_part[i] = torch.unsqueeze(data_part[i][:, cfg.channel_steps, :, :], dim=1)
+
+        output_part = output_part[:, cfg.recurrent_steps, :, :, :].to(torch.device('cpu'))
 
         image.append(data_part[0])
         mask.append(data_part[1])
