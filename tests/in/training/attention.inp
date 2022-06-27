@@ -1,0 +1,18 @@
+--device cpu --batch-size 2
+--data-root-dir data/
+--mask-dir data/
+--log-dir tests/out/training/logs/
+--snapshot-dir tests/out/training/
+--img-names 20cr-1ens.nc,20cr-1ens.nc,20cr-1ens.nc
+--data-types tas,tas,tas
+--image-sizes 72,72,72
+--encoding-layers 2,2,2
+--pooling-layers 1,1,1
+--mask-names hadcrut_missmask_1.nc,hadcrut_missmask_1.nc,hadcrut_missmask_1.nc
+--max-iter 10
+--loss-criterion 0
+--log-interval 1
+--weights kaiming
+--random-seed 3
+--shuffle-masks
+--attention
