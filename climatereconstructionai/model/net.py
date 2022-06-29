@@ -9,10 +9,8 @@ from .. import config as cfg
 
 
 def progstat(index, numel):
-    if cfg.progress_fwd:
-        f = open(cfg.log_dir + "/progfwd.info", "w")
-        print(int(100 * (index + 1) / numel), file=f)
-        f.close()
+    if cfg.progress_fwd is not None:
+        cfg.progress_fwd('Infilling...', int(100 * (index + 1) / numel))
 
 
 class CRAINet(nn.Module):

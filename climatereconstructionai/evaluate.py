@@ -7,8 +7,8 @@ from .utils.netcdfloader import NetCDFLoader
 from . import config as cfg
 
 
-def evaluate(arg_file=None):
-    cfg.set_evaluate_args(arg_file)
+def evaluate(arg_file=None, prog_func=None):
+    cfg.set_evaluate_args(arg_file, prog_func)
 
     if not os.path.exists(cfg.log_dir):
         os.makedirs(cfg.log_dir)
