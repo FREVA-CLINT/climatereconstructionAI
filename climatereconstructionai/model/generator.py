@@ -38,3 +38,41 @@ class Generator(nn.Module):
             elif isinstance(m, nn.BatchNorm2d):
                 nn.init.normal_(m.weight.data, 1.0, 0.02)
                 nn.init.constant_(m.bias.data, 0)
+
+
+class PytorchGenerator(nn.Module):
+    def __init__(self, img_size, in_channels, seed_size):
+        super(PytorchGenerator, self).__init__()
+        self.main = nn.Sequential(
+            # input is Z, going into a convolution
+            nn.ConvTranspose2d(seed_size, img_size * 4, 9, 1, 0, bias=False),
+            nn.BatchNorm2d(img_size * 4),
+            nn.ReLU(True),
+            # state size. (ngf*8) x 9 x 9
+            nn.ConvTranspose2d(img_size * 4, img_size * 2, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(img_size * 2),
+            nn.ReLU(True),
+            # state size. (ngf*4) x 18 x 18
+            nn.ConvTranspose2d(img_size * 2, img_size, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(img_size),
+            nn.ReLU(True),
+            # state size. (ngf*2) x 36 x 36
+            nn.ConvTranspose2d(img_size, in_channels, 4, 2, 1, bias=False),
+            nn.Tanh()
+            # state size. (ngf) x 72 x 72
+        )
+        self.weights_init()
+
+    def forward(self, input):
+        for layer in self.main:
+            input = layer(input)
+            print("GEN {}".format(input.shape))
+        return input
+
+    def weights_init(self):
+        for m in self.modules():
+            if isinstance(m, nn.ConvTranspose2d):
+                nn.init.normal_(m.weight.data, 0.0, 0.02)
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.normal_(m.weight.data, 1.0, 0.02)
+                nn.init.constant_(m.bias.data, 0)

@@ -9,8 +9,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from climatereconstructionai.loss.gan_loss import DiscriminatorLoss, GeneratorLoss
-from climatereconstructionai.model.discriminator import Discriminator
-from climatereconstructionai.model.generator import Generator
+from climatereconstructionai.model.discriminator import PytorchDiscriminator as Discriminator
+from climatereconstructionai.model.generator import PytorchGenerator as Generator
 from . import config as cfg
 from .loss.get_loss import get_loss
 from .loss.hole_loss import HoleLoss
@@ -63,7 +63,7 @@ def train(arg_file=None):
                                    num_workers=cfg.n_threads))
 
     steady_mask = load_steadymask(cfg.mask_dir, cfg.steady_mask, cfg.data_types[0], cfg.device)
-    seed_size = 2
+    seed_size = 100
 
     # define network model
     if len(cfg.image_sizes) > 1:
@@ -84,10 +84,8 @@ def train(arg_file=None):
         lr = cfg.lr
 
     # define optimizer and loss functions
-    generator_optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, generator.parameters()), lr=lr,
-                                           betas=(0.5, 0.99))
-    discriminator_optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, discriminator.parameters()), lr=lr,
-                                               betas=(0.5, 0.99))
+    generator_optimizer = torch.optim.Adam(generator.parameters(), lr=lr, betas=(0.5, 0.99))
+    discriminator_optimizer = torch.optim.Adam(discriminator.parameters(), lr=lr, betas=(0.5, 0.99))
 
     if cfg.loss_criterion == 0:
         lambda_dict = cfg.LAMBDA_DICT_GAN
@@ -115,15 +113,15 @@ def train(arg_file=None):
         generator = torch.nn.DataParallel(generator)
         discriminator = torch.nn.DataParallel(discriminator)
 
-    real_label = 1
-    fake_label = 0
+    real_label = 1.
+    fake_label = 0.
 
     criterion = nn.BCELoss()
 
     pbar = tqdm(range(start_iter, cfg.max_iter))
     for i in pbar:
         image, mask, gt, rea_images, rea_masks, rea_gts = [x.to(cfg.device) for x in next(iterator_train)]
-        noise = torch.randn(cfg.batch_size, seed_size, 9, 9).to(cfg.device)
+        noise = torch.randn(cfg.batch_size, seed_size, 1, 1).to(cfg.device)
 
         pbar.set_description("lr = {:.1e}".format(generator_optimizer.param_groups[0]['lr']))
 
@@ -131,14 +129,14 @@ def train(arg_file=None):
         generator.train()
         discriminator.train()
 
-        label = torch.full((cfg.batch_size, 1), real_label, dtype=torch.float, device=cfg.device)
+        label = torch.full((cfg.batch_size, 1, 1, 1), real_label, dtype=torch.float, device=cfg.device)
         discriminator.zero_grad()
 
         # train with gt
         discr_gt = discriminator(gt[:, 0, :, :, :])
         discriminator_loss_real = criterion(discr_gt, label)
         discriminator_loss_real.backward()
-        d_x = discr_gt.mean()
+        d_x = discr_gt.mean().item()
 
         #train with fake output
         label.fill_(fake_label)
@@ -146,7 +144,7 @@ def train(arg_file=None):
         discr_output = discriminator(output.detach())
         discriminator_loss_fake = criterion(discr_output, label)
         discriminator_loss_fake.backward()
-        d_g_z1 = discr_output.mean()
+        d_g_z1 = discr_output.mean().item()
 
         discriminator_loss = discriminator_loss_real + discriminator_loss_fake
         discriminator_optimizer.step()
@@ -155,7 +153,7 @@ def train(arg_file=None):
         label.fill_(real_label)
         generator_loss = criterion(discr_output, label)
         generator_loss.backward()
-        d_g_z2 = output.mean()
+        d_g_z2 = discr_output.mean().item()
         generator_optimizer.step()
 
         if cfg.log_interval and (i + 1) % cfg.log_interval == 0:
