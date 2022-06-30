@@ -1,6 +1,7 @@
 import os
 
 import torch
+import torch.nn as nn
 import torch.multiprocessing
 from tensorboardX import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -88,9 +89,6 @@ def train(arg_file=None):
     discriminator_optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, discriminator.parameters()), lr=lr,
                                                betas=(0.5, 0.99))
 
-    generator_criterion =GeneratorLoss().to(cfg.device)
-    discriminator_criterion = DiscriminatorLoss().to(cfg.device)
-
     if cfg.loss_criterion == 0:
         lambda_dict = cfg.LAMBDA_DICT_GAN
     elif cfg.loss_criterion == 2:
@@ -117,6 +115,11 @@ def train(arg_file=None):
         generator = torch.nn.DataParallel(generator)
         discriminator = torch.nn.DataParallel(discriminator)
 
+    real_label = 1
+    fake_label = 0
+
+    criterion = nn.BCELoss()
+
     pbar = tqdm(range(start_iter, cfg.max_iter))
     for i in pbar:
         image, mask, gt, rea_images, rea_masks, rea_gts = [x.to(cfg.device) for x in next(iterator_train)]
@@ -128,20 +131,20 @@ def train(arg_file=None):
         generator.train()
         discriminator.train()
 
-        real_label = torch.full((cfg.batch_size, 1), 1, dtype=image.dtype).to(cfg.device)
-        fake_label = torch.full((cfg.batch_size, 1), 0, dtype=image.dtype).to(cfg.device)
+        label = torch.full((cfg.batch_size, 1), real_label, dtype=torch.float, device=cfg.device)
         discriminator.zero_grad()
 
         # train with gt
         discr_gt = discriminator(gt[:, 0, :, :, :])
-        discriminator_loss_real = discriminator_criterion(discr_gt, real_label)
+        discriminator_loss_real = criterion(discr_gt, label)
         discriminator_loss_real.backward()
         d_x = discr_gt.mean()
 
         #train with fake output
+        label.fill_(fake_label)
         output = generator(noise)
         discr_output = discriminator(output.detach())
-        discriminator_loss_fake = discriminator_criterion(discr_output, fake_label)
+        discriminator_loss_fake = criterion(discr_output, label)
         discriminator_loss_fake.backward()
         d_g_z1 = discr_output.mean()
 
@@ -149,7 +152,8 @@ def train(arg_file=None):
         discriminator_optimizer.step()
 
         discr_output = discriminator(output)
-        generator_loss = discriminator_criterion(discr_output, real_label)
+        label.fill_(real_label)
+        generator_loss = criterion(discr_output, label)
         generator_loss.backward()
         d_g_z2 = output.mean()
         generator_optimizer.step()

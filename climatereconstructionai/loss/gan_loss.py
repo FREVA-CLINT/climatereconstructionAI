@@ -23,7 +23,7 @@ class GeneratorLoss(nn.Module):
 class DiscriminatorLoss(nn.Module):
     def __init__(self):
         super().__init__()
-        self.mse_loss = nn.MSELoss()
+        self.mse_loss = nn.BCELoss()
 
     def forward(self, prediction, label):
         loss = self.mse_loss(prediction, label)
