@@ -66,7 +66,6 @@ class PytorchGenerator(nn.Module):
     def forward(self, input):
         for layer in self.main:
             input = layer(input)
-            print("GEN {}".format(input.shape))
         return input
 
     def weights_init(self):
