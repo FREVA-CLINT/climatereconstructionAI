@@ -15,7 +15,7 @@ from .. import config as cfg
 
 def create_snapshot_image(model, dataset, filename):
     image, mask, gt, rea_images, rea_masks, rea_gts = zip(*[dataset[int(i)] for i in cfg.eval_timesteps])
-    noise = torch.randn(cfg.batch_size, 100, 1, 1).to(cfg.device)
+    noise = torch.randn(cfg.batch_size, 50, 9, 9).to(cfg.device)
 
     image = torch.stack(image).to(cfg.device)
     mask = torch.stack(mask).to(cfg.device)
