@@ -24,6 +24,7 @@ def create_snapshot_image(model, dataset, filename):
     with torch.no_grad():
         output = model(noise)
 
+    output = output.to(torch.device('cpu'))
     # select last element of lstm sequence as evaluation element
     image = image[:, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
     gt = gt[:, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))

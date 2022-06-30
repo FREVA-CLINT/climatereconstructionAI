@@ -67,11 +67,11 @@ def train(arg_file=None):
 
     # define network model
     if len(cfg.image_sizes) > 1:
-        generator = Generator(img_size=cfg.image_sizes[0], in_channels=2 * cfg.prev_next_steps + 1, seed_size=seed_size)
+        generator = Generator(img_size=cfg.image_sizes[0], in_channels=2 * cfg.prev_next_steps + 1, seed_size=seed_size).to(cfg.device)
         discriminator = Discriminator(img_size=cfg.image_sizes[0],
                                       in_channels=2 * cfg.prev_next_steps + 1).to(cfg.device)
     else:
-        generator = Generator(img_size=cfg.image_sizes[0], in_channels=2 * cfg.prev_next_steps + 1, seed_size=seed_size)
+        generator = Generator(img_size=cfg.image_sizes[0], in_channels=2 * cfg.prev_next_steps + 1, seed_size=seed_size).to(cfg.device)
         discriminator = Discriminator(img_size=cfg.image_sizes[0],
                                       in_channels=2 * cfg.prev_next_steps + 1).to(cfg.device)
 
@@ -179,11 +179,6 @@ def train(arg_file=None):
         # Update G
         generator_optimizer.step()
 
-        # Output training stats
-        if i % 50 == 0:
-            print('[%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
-                  % (i, errD.item(), errG.item(), D_x, D_G_z1, D_G_z2))
-
         # Save Losses for plotting later
         G_losses.append(errG.item())
         D_losses.append(errD.item())
@@ -194,6 +189,9 @@ def train(arg_file=None):
             writer.add_scalar('d_g_z1', D_G_z1, i + 1)
             writer.add_scalar('d_g_z2', D_G_z2, i + 1)
             generator.eval()
+
+            print('[%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
+                  % (i, errD.item(), errG.item(), D_x, D_G_z1, D_G_z2))
 
             # create snapshot image
             if cfg.save_snapshot_image:
