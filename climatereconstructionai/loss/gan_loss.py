@@ -12,11 +12,11 @@ def total_variation_loss(image):
 class GeneratorLoss(nn.Module):
     def __init__(self):
         super().__init__()
-        self.l1 = nn.L1Loss()
+        self.mse_loss = nn.MSELoss()
 
     def forward(self, discr_output):
         loss_dict = {}
-        loss_dict['gan'] = torch.mean(discr_output)
+        loss_dict['gan'] = self.mse_loss(0, discr_output)
         return loss_dict
 
 
