@@ -118,6 +118,96 @@ def train(arg_file=None):
 
     criterion = nn.BCELoss()
 
+    # Training Loop
+
+    # Lists to keep track of progress
+    img_list = []
+    G_losses = []
+    D_losses = []
+    iters = 0
+    pbar = tqdm(range(start_iter, cfg.max_iter))
+
+    print("Starting Training Loop...")
+    # For each batch in the dataloader
+    for i in pbar:
+        image, mask, gt, rea_images, rea_masks, rea_gts = [x.to(cfg.device) for x in next(iterator_train)]
+        ############################
+        # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
+        ###########################
+        ## Train with all-real batch
+        discriminator.zero_grad()
+        # Format batch
+        label = torch.full((cfg.batch_size,), real_label, dtype=torch.float, device=cfg.device)
+        # Forward pass real batch through D
+        output = discriminator(gt[:, 0, :, :, :]).view(-1)
+        # Calculate loss on all-real batch
+        errD_real = criterion(output, label)
+        # Calculate gradients for D in backward pass
+        errD_real.backward()
+        D_x = output.mean().item()
+
+        ## Train with all-fake batch
+        # Generate batch of latent vectors
+        noise = torch.randn(cfg.batch_size, seed_size, 1, 1, device=cfg.device)
+        # Generate fake image batch with G
+        fake = generator(noise)
+        label.fill_(fake_label)
+        # Classify all fake batch with D
+        output = discriminator(fake.detach()).view(-1)
+        # Calculate D's loss on the all-fake batch
+        errD_fake = criterion(output, label)
+        # Calculate the gradients for this batch, accumulated (summed) with previous gradients
+        errD_fake.backward()
+        D_G_z1 = output.mean().item()
+        # Compute error of D as sum over the fake and the real batches
+        errD = errD_real + errD_fake
+        # Update D
+        discriminator_optimizer.step()
+
+        ############################
+        # (2) Update G network: maximize log(D(G(z)))
+        ###########################
+        generator.zero_grad()
+        label.fill_(real_label)  # fake labels are real for generator cost
+        # Since we just updated D, perform another forward pass of all-fake batch through D
+        output = discriminator(fake).view(-1)
+        # Calculate G's loss based on this output
+        errG = criterion(output, label)
+        # Calculate gradients for G
+        errG.backward()
+        D_G_z2 = output.mean().item()
+        # Update G
+        generator_optimizer.step()
+
+        # Output training stats
+        if i % 50 == 0:
+            print('[%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
+                  % (i, errD.item(), errG.item(), D_x, D_G_z1, D_G_z2))
+
+        # Save Losses for plotting later
+        G_losses.append(errG.item())
+        D_losses.append(errD.item())
+
+        if cfg.log_interval and (i + 1) % cfg.log_interval == 0:
+            writer.add_scalar('loss_gen', errG, i + 1)
+            writer.add_scalar('loss_dis', errD, i + 1)
+            writer.add_scalar('d_g_z1', D_G_z1, i + 1)
+            writer.add_scalar('d_g_z2', D_G_z2, i + 1)
+            generator.eval()
+
+            # create snapshot image
+            if cfg.save_snapshot_image:
+                generator.eval()
+                create_snapshot_image(generator, dataset_val, '{:s}/images/iter_{:d}'.format(cfg.snapshot_dir, i + 1))
+
+        if (i + 1) % cfg.save_model_interval == 0 or (i + 1) == cfg.max_iter:
+            save_ckpt('{:s}/ckpt/generator_{:d}.pth'.format(cfg.snapshot_dir, i + 1),
+                      [('model', generator)], [('optimizer', generator_optimizer)], i + 1)
+            save_ckpt('{:s}/ckpt/discriminator_{:d}.pth'.format(cfg.snapshot_dir, i + 1),
+                      [('model', discriminator)], [('optimizer', discriminator_optimizer)], i + 1)
+
+    writer.close()
+"""
     pbar = tqdm(range(start_iter, cfg.max_iter))
     for i in pbar:
         image, mask, gt, rea_images, rea_masks, rea_gts = [x.to(cfg.device) for x in next(iterator_train)]
@@ -175,7 +265,7 @@ def train(arg_file=None):
                       [('model', discriminator)], [('optimizer', discriminator_optimizer)], i + 1)
 
     writer.close()
-
+"""
 
 if __name__ == "__main__":
     train()
