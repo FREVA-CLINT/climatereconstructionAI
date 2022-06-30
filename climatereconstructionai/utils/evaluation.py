@@ -15,24 +15,21 @@ from .. import config as cfg
 
 def create_snapshot_image(model, dataset, filename):
     image, mask, gt, rea_images, rea_masks, rea_gts = zip(*[dataset[int(i)] for i in cfg.eval_timesteps])
+    noise = torch.randn(cfg.batch_size, 2, 9, 9).to(cfg.device)
 
     image = torch.stack(image).to(cfg.device)
     mask = torch.stack(mask).to(cfg.device)
     gt = torch.stack(gt).to(cfg.device)
-    if rea_images:
-        rea_images = torch.stack(rea_images).to(cfg.device)
-        rea_masks = torch.stack(rea_masks).to(cfg.device)
 
     with torch.no_grad():
-        output = model(image, mask, rea_images, rea_masks)
+        output = model(noise)
 
     # select last element of lstm sequence as evaluation element
     image = image[:, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
     gt = gt[:, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
     mask = mask[:, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
-    output = output[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
 
-    output_comp = mask * image + (1 - mask) * output
+    output_comp = output
 
     # set mask
     mask = 1 - mask

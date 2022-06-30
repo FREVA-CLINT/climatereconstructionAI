@@ -9,6 +9,7 @@ from tqdm import tqdm
 
 from climatereconstructionai.loss.gan_loss import DiscriminatorLoss, GeneratorLoss
 from climatereconstructionai.model.discriminator import Discriminator
+from climatereconstructionai.model.generator import Generator
 from . import config as cfg
 from .loss.get_loss import get_loss
 from .loss.hole_loss import HoleLoss
@@ -61,42 +62,17 @@ def train(arg_file=None):
                                    num_workers=cfg.n_threads))
 
     steady_mask = load_steadymask(cfg.mask_dir, cfg.steady_mask, cfg.data_types[0], cfg.device)
+    seed_size = 2
 
     # define network model
     if len(cfg.image_sizes) > 1:
-        generator = PConvLSTM(radar_img_size=cfg.image_sizes[0],
-                              radar_enc_dec_layers=cfg.encoding_layers[0],
-                              radar_pool_layers=cfg.pooling_layers[0],
-                              radar_in_channels=2 * cfg.prev_next_steps + 1,
-                              radar_out_channels=cfg.out_channels,
-                              rea_img_size=cfg.image_sizes[1],
-                              rea_enc_layers=cfg.encoding_layers[1],
-                              rea_pool_layers=cfg.pooling_layers[1],
-                              rea_in_channels=(len(cfg.image_sizes) - 1) * (2 * cfg.prev_next_steps + 1),
-                              recurrent=recurrent).to(cfg.device)
-        discriminator = Discriminator(radar_img_size=cfg.image_sizes[0],
-                                      radar_enc_dec_layers=cfg.encoding_layers[0],
-                                      radar_pool_layers=cfg.pooling_layers[0],
-                                      radar_in_channels=2 * cfg.prev_next_steps + 1,
-                                      radar_out_channels=cfg.out_channels,
-                                      rea_img_size=cfg.image_sizes[1],
-                                      rea_enc_layers=cfg.encoding_layers[1],
-                                      rea_pool_layers=cfg.pooling_layers[1],
-                                      rea_in_channels=(len(cfg.image_sizes) - 1) * (2 * cfg.prev_next_steps + 1),
-                                      recurrent=recurrent).to(cfg.device)
+        generator = Generator(img_size=cfg.image_sizes[0], in_channels=2 * cfg.prev_next_steps + 1, seed_size=seed_size)
+        discriminator = Discriminator(img_size=cfg.image_sizes[0],
+                                      in_channels=2 * cfg.prev_next_steps + 1).to(cfg.device)
     else:
-        generator = PConvLSTM(radar_img_size=cfg.image_sizes[0],
-                              radar_enc_dec_layers=cfg.encoding_layers[0],
-                              radar_pool_layers=cfg.pooling_layers[0],
-                              radar_in_channels=2 * cfg.prev_next_steps + 1,
-                              radar_out_channels=cfg.out_channels,
-                              recurrent=recurrent).to(cfg.device)
-        discriminator = Discriminator(radar_img_size=cfg.image_sizes[0],
-                                      radar_enc_dec_layers=cfg.encoding_layers[0],
-                                      radar_pool_layers=cfg.pooling_layers[0],
-                                      radar_in_channels=2 * cfg.prev_next_steps + 1,
-                                      radar_out_channels=cfg.out_channels,
-                                      recurrent=recurrent).to(cfg.device)
+        generator = Generator(img_size=cfg.image_sizes[0], in_channels=2 * cfg.prev_next_steps + 1, seed_size=seed_size)
+        discriminator = Discriminator(img_size=cfg.image_sizes[0],
+                                      in_channels=2 * cfg.prev_next_steps + 1).to(cfg.device)
 
     # define learning rate
     if cfg.finetune:
@@ -144,7 +120,7 @@ def train(arg_file=None):
     pbar = tqdm(range(start_iter, cfg.max_iter))
     for i in pbar:
         image, mask, gt, rea_images, rea_masks, rea_gts = [x.to(cfg.device) for x in next(iterator_train)]
-        image = torch.rand(image.shape)
+        noise = torch.randn(cfg.batch_size, seed_size, 9, 9).to(cfg.device)
 
         pbar.set_description("lr = {:.1e}".format(generator_optimizer.param_groups[0]['lr']))
 
@@ -157,14 +133,14 @@ def train(arg_file=None):
         discriminator.zero_grad()
 
         # train with gt
-        discr_gt = discriminator(gt, mask)
+        discr_gt = discriminator(gt[:, 0, :, :, :])
         discriminator_loss_real = discriminator_criterion(discr_gt, real_label)
         discriminator_loss_real.backward()
         d_x = discr_gt.mean()
 
         #train with fake output
-        output = generator(image, mask, rea_images, rea_masks)
-        discr_output = discriminator(output.detach(), mask)
+        output = generator(noise)
+        discr_output = discriminator(output.detach())
         discriminator_loss_fake = discriminator_criterion(discr_output, fake_label)
         discriminator_loss_fake.backward()
         d_g_z1 = discr_output.mean()
@@ -172,14 +148,17 @@ def train(arg_file=None):
         discriminator_loss = discriminator_loss_real + discriminator_loss_fake
         discriminator_optimizer.step()
 
-        discr_output = discriminator(output, mask)
+        discr_output = discriminator(output)
         generator_loss = discriminator_criterion(discr_output, real_label)
         generator_loss.backward()
         d_g_z2 = output.mean()
         generator_optimizer.step()
 
         if cfg.log_interval and (i + 1) % cfg.log_interval == 0:
-
+            writer.add_scalar('loss_gen', generator_loss, i + 1)
+            writer.add_scalar('loss_dis', discriminator_loss, i + 1)
+            writer.add_scalar('d_g_z1', d_g_z1, i + 1)
+            writer.add_scalar('d_g_z2', d_g_z2, i + 1)
             generator.eval()
 
             # create snapshot image
