@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from climatereconstructionai.loss.gan_loss import DiscriminatorLoss, GeneratorLoss
-from climatereconstructionai.model.discriminator import Discriminator as Discriminator
+from climatereconstructionai.model.discriminator import PytorchDiscriminator as Discriminator
 from climatereconstructionai.model.generator import Pytorch64x64Generator as Generator
 from . import config as cfg
 from .loss.get_loss import get_loss
