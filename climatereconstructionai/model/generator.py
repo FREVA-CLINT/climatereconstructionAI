@@ -87,11 +87,11 @@ class Pytorch64x64Generator(nn.Module):
             nn.ReLU(True),
             # state size. (ngf*8) x 4 x 4
             nn.ConvTranspose2d(img_size * 8, img_size * 4, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(ngf * 4),
+            nn.BatchNorm2d(img_size * 4),
             nn.ReLU(True),
             # state size. (ngf*4) x 8 x 8
             nn.ConvTranspose2d( img_size * 4, img_size * 2, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(ngf * 2),
+            nn.BatchNorm2d(img_size * 2),
             nn.ReLU(True),
             # state size. (ngf*2) x 16 x 16
             nn.ConvTranspose2d( img_size * 2, img_size, 4, 2, 1, bias=False),
