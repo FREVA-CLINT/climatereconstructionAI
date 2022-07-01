@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 from climatereconstructionai.loss.gan_loss import DiscriminatorLoss, GeneratorLoss
 from climatereconstructionai.model.discriminator import Discriminator as Discriminator
-from climatereconstructionai.model.generator import Generator as Generator
+from climatereconstructionai.model.generator import Pytorch64x64Generator as Generator
 from . import config as cfg
 from .loss.get_loss import get_loss
 from .loss.hole_loss import HoleLoss
@@ -63,15 +63,14 @@ def train(arg_file=None):
                                    num_workers=cfg.n_threads))
 
     steady_mask = load_steadymask(cfg.mask_dir, cfg.steady_mask, cfg.data_types[0], cfg.device)
-    seed_size = 50
 
     # define network model
     if len(cfg.image_sizes) > 1:
-        generator = Generator(img_size=cfg.image_sizes[0], in_channels=2 * cfg.prev_next_steps + 1, seed_size=seed_size).to(cfg.device)
+        generator = Generator(img_size=cfg.image_sizes[0], in_channels=2 * cfg.prev_next_steps + 1, seed_size=cfg.seed_size).to(cfg.device)
         discriminator = Discriminator(img_size=cfg.image_sizes[0],
                                       in_channels=2 * cfg.prev_next_steps + 1).to(cfg.device)
     else:
-        generator = Generator(img_size=cfg.image_sizes[0], in_channels=2 * cfg.prev_next_steps + 1, seed_size=seed_size).to(cfg.device)
+        generator = Generator(img_size=cfg.image_sizes[0], in_channels=2 * cfg.prev_next_steps + 1, seed_size=cfg.seed_size).to(cfg.device)
         discriminator = Discriminator(img_size=cfg.image_sizes[0],
                                       in_channels=2 * cfg.prev_next_steps + 1).to(cfg.device)
 
@@ -148,7 +147,7 @@ def train(arg_file=None):
 
         ## Train with all-fake batch
         # Generate batch of latent vectors
-        noise = torch.randn(cfg.batch_size, seed_size, 9, 9, device=cfg.device)
+        noise = torch.randn(cfg.batch_size, cfg.seed_size, 1, 1, device=cfg.device)
         # Generate fake image batch with G
         fake = generator(noise)
         label.fill_(fake_label)

@@ -128,6 +128,7 @@ def set_common_args():
     arg_parser.add_argument('--n-filters', type=int, default=None, help="Number of filters for the first/last layer")
     arg_parser.add_argument('--out-channels', type=int, default=1, help="Number of channels for the output image")
     arg_parser.add_argument('--dataset-name', type=str, default=None, help="Name of the dataset for format checking")
+    arg_parser.add_argument('--seed-size', type=int, default=100, help="Size of the seed for GAN")
     return arg_parser
 
 
