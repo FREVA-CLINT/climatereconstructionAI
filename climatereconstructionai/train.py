@@ -58,11 +58,6 @@ def train(arg_file=None):
     iterator_train = iter(DataLoader(dataset_train, batch_size=cfg.batch_size,
                                      sampler=InfiniteSampler(len(dataset_train)),
                                      num_workers=cfg.n_threads))
-    iterator_val = iter(DataLoader(dataset_val, batch_size=cfg.batch_size,
-                                   sampler=InfiniteSampler(len(dataset_val)),
-                                   num_workers=cfg.n_threads))
-
-    steady_mask = load_steadymask(cfg.mask_dir, cfg.steady_mask, cfg.data_types[0], cfg.device)
 
     # define network model
     if len(cfg.image_sizes) > 1:
@@ -87,13 +82,6 @@ def train(arg_file=None):
     generator_optimizer = torch.optim.Adam(generator.parameters(), lr=lr_gen, betas=(0.5, 0.999))
     discriminator_optimizer = torch.optim.Adam(discriminator.parameters(), lr=lr_discr, betas=(0.5, 0.999))
 
-    if cfg.loss_criterion == 0:
-        lambda_dict = cfg.LAMBDA_DICT_GAN
-    elif cfg.loss_criterion == 2:
-        lambda_dict = cfg.LAMBDA_DICT_IMG_INPAINTING2
-    else:
-        raise ValueError("Unknown loss_criterion value.")
-
     # define start point
     start_iter = 0
     if cfg.resume_iter:
@@ -116,7 +104,7 @@ def train(arg_file=None):
     real_label = 1.
     fake_label = 0.
 
-    criterion = nn.BCELoss()
+    criterion = nn.MSELoss()
 
     # Training Loop
 
