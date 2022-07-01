@@ -105,11 +105,11 @@ def train(arg_file=None):
     # Training Loop
 
     # Lists to keep track of progress
-    img_list = []
     G_losses = []
     D_losses = []
-    iters = 0
     pbar = tqdm(range(start_iter, cfg.max_iter))
+
+    constant_noise = torch.randn(cfg.batch_size, cfg.seed_size, 1, 1, device=cfg.device)
 
     print("Starting Training Loop...")
     # For each batch in the dataloader
@@ -180,7 +180,7 @@ def train(arg_file=None):
             # create snapshot image
             if cfg.save_snapshot_image:
                 generator.eval()
-                create_snapshot_image(generator, dataset_val, '{:s}/images/iter_{:d}'.format(cfg.snapshot_dir, i + 1))
+                create_snapshot_image(generator, dataset_val, '{:s}/images/iter_{:d}'.format(cfg.snapshot_dir, i + 1), constant_noise)
 
         if (i + 1) % cfg.save_model_interval == 0 or (i + 1) == cfg.max_iter:
             save_ckpt('{:s}/ckpt/generator_{:d}.pth'.format(cfg.snapshot_dir, i + 1),

@@ -13,16 +13,15 @@ from .plotdata import plot_data
 from .. import config as cfg
 
 
-def create_snapshot_image(model, dataset, filename):
+def create_snapshot_image(model, dataset, filename, constant_noise):
     image, mask, gt, rea_images, rea_masks, rea_gts = zip(*[dataset[int(i)] for i in cfg.eval_timesteps])
-    noise = torch.randn(cfg.batch_size, cfg.seed_size, 1, 1).to(cfg.device)
 
     image = torch.stack(image).to(cfg.device)
     mask = torch.stack(mask).to(cfg.device)
     gt = torch.stack(gt).to(cfg.device)
 
     with torch.no_grad():
-        output = model(noise)
+        output = model(constant_noise)
 
     output = output.to(torch.device('cpu'))
     # select last element of lstm sequence as evaluation element
