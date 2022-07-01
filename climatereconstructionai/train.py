@@ -148,7 +148,7 @@ def train(arg_file=None):
 
         ## Train with all-fake batch
         # Generate batch of latent vectors
-        noise = torch.randn(cfg.image_sizes[0], cfg.seed_size, 1, 1, device=cfg.device)
+        noise = torch.randn(cfg.batch_size, cfg.seed_size, 1, 1, device=cfg.device)
         # Generate fake image batch with G
         fake = generator(noise)
         label.fill_(fake_label)
