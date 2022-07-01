@@ -143,8 +143,10 @@ def set_train_args(arg_file=None):
     arg_parser.add_argument('--finetune', action='store_true',
                             help="Enable the fine tuning mode (use fine tuning parameterization "
                                  "and disable batch normalization")
-    arg_parser.add_argument('--lr', type=float, default=2e-4, help="Learning rate")
-    arg_parser.add_argument('--lr-finetune', type=float, default=5e-5, help="Learning rate for fine tuning")
+    arg_parser.add_argument('--lr-gen', type=float, default=2e-4, help="Learning rate generator")
+    arg_parser.add_argument('--lr-discr', type=float, default=2e-4, help="Learning rate discriminator")
+    arg_parser.add_argument('--lr-gen-finetune', type=float, default=5e-5, help="Learning rate for fine tuning generator")
+    arg_parser.add_argument('--lr-discr-finetune', type=float, default=5e-5, help="Learning rate for fine tuning discriminator")
     arg_parser.add_argument('--max-iter', type=int, default=1000000, help="Maximum number of iterations")
     arg_parser.add_argument('--log-interval', type=int, default=None,
                             help="Iteration step interval at which a tensorboard summary log should be written")

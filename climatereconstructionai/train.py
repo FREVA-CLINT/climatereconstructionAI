@@ -76,15 +76,16 @@ def train(arg_file=None):
 
     # define learning rate
     if cfg.finetune:
-        lr = cfg.lr_finetune
+        lr_gen = cfg.lr_gen_finetune
+        lr_discr = cfg.lr_discr_finetune
         generator.freeze_enc_bn = True
         discriminator.freeze_enc_bn = True
     else:
-        lr = cfg.lr
-
+        lr_gen = cfg.lr_gen
+        lr_discr = cfg.lr_discr
     # define optimizer and loss functions
-    generator_optimizer = torch.optim.Adam(generator.parameters(), lr=lr, betas=(0.5, 0.99))
-    discriminator_optimizer = torch.optim.Adam(discriminator.parameters(), lr=lr, betas=(0.5, 0.99))
+    generator_optimizer = torch.optim.Adam(generator.parameters(), lr=lr_gen, betas=(0.5, 0.999))
+    discriminator_optimizer = torch.optim.Adam(discriminator.parameters(), lr=lr_discr, betas=(0.5, 0.999))
 
     if cfg.loss_criterion == 0:
         lambda_dict = cfg.LAMBDA_DICT_GAN
@@ -147,7 +148,7 @@ def train(arg_file=None):
 
         ## Train with all-fake batch
         # Generate batch of latent vectors
-        noise = torch.randn(cfg.batch_size, cfg.seed_size, 1, 1, device=cfg.device)
+        noise = torch.randn(cfg.image_sizes[0], cfg.seed_size, 1, 1, device=cfg.device)
         # Generate fake image batch with G
         fake = generator(noise)
         label.fill_(fake_label)
