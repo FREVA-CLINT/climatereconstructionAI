@@ -60,14 +60,10 @@ def train(arg_file=None):
                                      num_workers=cfg.n_threads))
 
     # define network model
-    if len(cfg.image_sizes) > 1:
-        generator = Generator(img_size=cfg.image_sizes[0], in_channels=2 * cfg.prev_next_steps + 1, seed_size=cfg.seed_size).to(cfg.device)
-        discriminator = Discriminator(img_size=cfg.image_sizes[0],
-                                      in_channels=2 * cfg.prev_next_steps + 1).to(cfg.device)
-    else:
-        generator = Generator(img_size=cfg.image_sizes[0], in_channels=2 * cfg.prev_next_steps + 1, seed_size=cfg.seed_size).to(cfg.device)
-        discriminator = Discriminator(img_size=cfg.image_sizes[0],
-                                      in_channels=2 * cfg.prev_next_steps + 1).to(cfg.device)
+    generator = Generator(img_size=cfg.image_sizes[0], in_channels=2 * cfg.prev_next_steps + 1,
+                          seed_size=cfg.seed_size).to(cfg.device)
+    discriminator = Discriminator(img_size=cfg.image_sizes[0],
+                                  in_channels=2 * cfg.prev_next_steps + 1).to(cfg.device)
 
     # define learning rate
     if cfg.finetune:
@@ -104,7 +100,7 @@ def train(arg_file=None):
     real_label = 1.
     fake_label = 0.
 
-    criterion = nn.MSELoss()
+    criterion = nn.BCELoss()
 
     # Training Loop
 
@@ -193,6 +189,8 @@ def train(arg_file=None):
                       [('model', discriminator)], [('optimizer', discriminator_optimizer)], i + 1)
 
     writer.close()
+
+
 """
     pbar = tqdm(range(start_iter, cfg.max_iter))
     for i in pbar:
