@@ -100,7 +100,7 @@ def train(arg_file=None):
     real_label = 1.
     fake_label = 0.
 
-    criterion = nn.BCELoss()
+    criterion = nn.L1Loss()
 
     # Training Loop
 
