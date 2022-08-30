@@ -1,8 +1,8 @@
 import os
 
 from .model.net import PConvLSTM
-from .utils.evaluation import infill
-from .utils.io import load_ckpt
+from .utils.evaluation import infill, create_outputs
+from .utils.io import load_ckpt, load_model
 from .utils.netcdfloader import NetCDFLoader
 from . import config as cfg
 
@@ -53,11 +53,18 @@ def evaluate(arg_file=None, prog_func=None):
                               radar_out_channels=cfg.out_channels,
                               recurrent=recurrent).to(cfg.device)
 
-        load_ckpt("{}/{}".format(cfg.model_dir, cfg.model_names[i_model]), [('model', model)], cfg.device)
-
-        model.eval()
-
-        infill(model, dataset_val, "{}/{}".format(cfg.evaluation_dirs[0], cfg.eval_names[i_model]))
+        ckpt_dict = load_ckpt("{}/{}".format(cfg.model_dir, cfg.model_names[i_model]), cfg.device)
+        output_name = "{}/{}".format(cfg.evaluation_dirs[0], cfg.eval_names[i_model])
+        outputs = []
+        for k in range(len(ckpt_dict["iters"])):
+            load_model(ckpt_dict, model, s_iter=ckpt_dict["iters"][k])
+            model.eval()
+            outputs.append(infill(model, dataset_val))
+            if cfg.split_outputs:
+                create_outputs(outputs, dataset_val, output_name, k)
+                outputs = []
+        if not cfg.split_outputs:
+            create_outputs(outputs, dataset_val, output_name)
 
 
 if __name__ == "__main__":

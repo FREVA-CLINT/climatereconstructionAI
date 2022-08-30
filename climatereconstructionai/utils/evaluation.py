@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from tensorboardX import SummaryWriter
+import xarray as xr
 
 from .netcdfchecker import reformat_dataset
 from .netcdfloader import load_steadymask
@@ -78,7 +79,7 @@ def get_partitions(parameters, length):
     return partitions
 
 
-def infill(model, dataset, eval_path):
+def infill(model, dataset):
     if not os.path.exists(cfg.evaluation_dirs[0]):
         os.makedirs('{:s}'.format(cfg.evaluation_dirs[0]))
     image = []
@@ -142,28 +143,45 @@ def infill(model, dataset, eval_path):
     output_comp = mask * image + (1 - mask) * output
     image[np.where(mask == 0)] = np.nan
 
-    cvar = {'gt': gt, 'mask': mask, 'image': image, 'output': output, 'infilled': output_comp}
-    create_outputs(cvar, dataset, 0, eval_path)
+    outputs = {'gt': gt, 'mask': mask, 'image': image, 'output': output, 'infilled': output_comp}
+
+    return outputs
 
 
-def create_outputs(cvar, dataset, ind_data, eval_path):
+def create_outputs(outputs, dataset, eval_path, ind_mod=None, ind_data=0):
     data_type = cfg.data_types[ind_data]
 
-    for cname in cvar:
+    if ind_mod is None:
+        suffix = [""]
+    else:
+        suffix = ["." + str(ind_mod + 1)]
+
+    n_out = len(outputs)
+
+    for cname in outputs[0]:
         output_name = '{}_{}'.format(eval_path, cname)
 
-        ds = dataset.xr_dss[1].copy()
+        dss = []
+        for i in range(n_out):
+            dss.append(dataset.xr_dss[1].copy())
 
-        if cfg.normalize_images:
-            cvar[cname] = renormalize(cvar[cname], dataset.img_mean[ind_data], dataset.img_std[ind_data])
-        ds[data_type].values = cvar[cname].to(torch.device('cpu')).detach().numpy()[:, 0, :, :]
+            if cfg.normalize_images:
+                outputs[i][cname] = renormalize(outputs[i][cname],
+                                                dataset.img_mean[ind_data], dataset.img_std[ind_data])
+            dss[-1][data_type].values = outputs[i][cname].to(torch.device('cpu')).detach().numpy()[:, 0, :, :]
 
-        ds = reformat_dataset(dataset.xr_dss[0], ds, data_type)
+            dss[-1] = reformat_dataset(dataset.xr_dss[0], dss[-1], data_type)
+
+        ds = xr.concat(dss, dim="time").sortby('time')
         ds.attrs["history"] = "Infilled using CRAI " \
                               "(Climate Reconstruction AI: https://github.com/FREVA-CLINT/climatereconstructionAI)\n" \
                               + ds.attrs["history"]
-        ds.to_netcdf(output_name + ".nc")
+        ds.to_netcdf(output_name + suffix[0] + ".nc")
 
-    output_name = '{}_{}'.format(eval_path, "combined")
-    plot_data(dataset.xr_dss[1].coords, [cvar["image"], cvar["infilled"]], ["Original", "Reconstructed"], output_name,
-              data_type, cfg.plot_results, *cfg.dataset_format["scale"])
+    if ind_mod is None:
+        suffix = ["." + str(i + 1) for i in range(n_out)]
+
+    for i in range(n_out):
+        output_name = '{}_{}{}'.format(eval_path, "combined", suffix[i])
+        plot_data(dataset.xr_dss[1].coords, [outputs[i]["image"], outputs[i]["infilled"]],
+                  ["Original", "Reconstructed"], output_name, data_type, cfg.plot_results, *cfg.dataset_format["scale"])

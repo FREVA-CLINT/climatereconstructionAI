@@ -14,7 +14,7 @@ from .loss.inpainting_loss import InpaintingLoss
 from .model.net import PConvLSTM
 from .utils.evaluation import create_snapshot_image
 from .utils.featurizer import VGG16FeatureExtractor
-from .utils.io import load_ckpt, save_ckpt
+from .utils.io import load_ckpt, load_model, save_ckpt
 from .utils.netcdfloader import NetCDFLoader, InfiniteSampler, load_steadymask
 
 
@@ -107,9 +107,9 @@ def train(arg_file=None):
     # define start point
     start_iter = 0
     if cfg.resume_iter:
-        start_iter = load_ckpt(
-            '{}/ckpt/{}.pth'.format(cfg.snapshot_dir, cfg.resume_iter), [('model', model)], cfg.device,
-            [('optimizer', optimizer)])
+        ckpt_dict = load_ckpt('{}/ckpt/{}.pth'.format(cfg.snapshot_dir, cfg.resume_iter), cfg.device)
+        start_iter = load_model(ckpt_dict, model, optimizer)
+
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
         print('Starting from iter ', start_iter)
@@ -117,9 +117,14 @@ def train(arg_file=None):
     if cfg.multi_gpus:
         model = torch.nn.DataParallel(model)
 
+    i = cfg.max_iter - (cfg.n_final_models - 1) * cfg.final_models_interval
+    final_models = range(i, cfg.max_iter + 1, cfg.final_models_interval)
+
+    savelist = []
     pbar = tqdm(range(start_iter, cfg.max_iter))
     for i in pbar:
 
+        n_iter = i + 1
         pbar.set_description("lr = {:.1e}".format(optimizer.param_groups[0]['lr']))
 
         # train model
@@ -133,7 +138,7 @@ def train(arg_file=None):
         train_loss.backward()
         optimizer.step()
 
-        if cfg.log_interval and (i + 1) % cfg.log_interval == 0:
+        if cfg.log_interval and n_iter % cfg.log_interval == 0:
 
             model.eval()
             image, mask, gt, rea_images, rea_masks, rea_gts = [x.to(cfg.device) for x in next(iterator_val)]
@@ -146,13 +151,16 @@ def train(arg_file=None):
             # create snapshot image
             if cfg.save_snapshot_image:
                 model.eval()
-                create_snapshot_image(model, dataset_val, '{:s}/images/iter_{:d}'.format(cfg.snapshot_dir, i + 1))
+                create_snapshot_image(model, dataset_val, '{:s}/images/iter_{:d}'.format(cfg.snapshot_dir, n_iter))
 
-        if (i + 1) % cfg.save_model_interval == 0 or (i + 1) == cfg.max_iter:
-            save_ckpt('{:s}/ckpt/{:d}.pth'.format(cfg.snapshot_dir, i + 1),
-                      [('model', model)], [('optimizer', optimizer)], i + 1)
+        if n_iter % cfg.save_model_interval == 0:
+            save_ckpt('{:s}/ckpt/{:d}.pth'.format(cfg.snapshot_dir, n_iter), [(n_iter, model, optimizer)])
+
+        if n_iter in final_models:
+            savelist.append((n_iter, model, optimizer))
 
     writer.close()
+    save_ckpt('{:s}/ckpt/final.pth'.format(cfg.snapshot_dir), savelist)
 
 
 if __name__ == "__main__":
