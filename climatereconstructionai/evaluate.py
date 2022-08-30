@@ -56,8 +56,8 @@ def evaluate(arg_file=None, prog_func=None):
         ckpt_dict = load_ckpt("{}/{}".format(cfg.model_dir, cfg.model_names[i_model]), cfg.device)
         output_name = "{}/{}".format(cfg.evaluation_dirs[0], cfg.eval_names[i_model])
         outputs = []
-        for k in range(len(ckpt_dict["iters"])):
-            load_model(ckpt_dict, model, s_iter=ckpt_dict["iters"][k])
+        for k in range(len(ckpt_dict["labels"])):
+            load_model(ckpt_dict, model, label=ckpt_dict["labels"][k])
             model.eval()
             outputs.append(infill(model, dataset_val))
             if cfg.split_outputs:
