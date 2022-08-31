@@ -155,10 +155,10 @@ def train(arg_file=None):
                 create_snapshot_image(model, dataset_val, '{:s}/images/iter_{:d}'.format(cfg.snapshot_dir, n_iter))
 
         if n_iter % cfg.save_model_interval == 0:
-            save_ckpt('{:s}/ckpt/{:d}.pth'.format(cfg.snapshot_dir, n_iter), [(n_iter, model, optimizer)])
+            save_ckpt('{:s}/ckpt/{:d}.pth'.format(cfg.snapshot_dir, n_iter), [(str(n_iter), n_iter, model, optimizer)])
 
         if n_iter in final_models:
-            savelist.append((n_iter, copy.deepcopy(model), copy.deepcopy(optimizer)))
+            savelist.append((str(n_iter), n_iter, copy.deepcopy(model), copy.deepcopy(optimizer)))
 
     writer.close()
     save_ckpt('{:s}/ckpt/final.pth'.format(cfg.snapshot_dir), savelist)
