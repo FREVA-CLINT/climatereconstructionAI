@@ -6,6 +6,7 @@ from tensorboardX import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import copy
 
 from . import config as cfg
 from .loss.get_loss import get_loss
@@ -157,7 +158,7 @@ def train(arg_file=None):
             save_ckpt('{:s}/ckpt/{:d}.pth'.format(cfg.snapshot_dir, n_iter), [(n_iter, model, optimizer)])
 
         if n_iter in final_models:
-            savelist.append((n_iter, model, optimizer))
+            savelist.append((n_iter, copy.deepcopy(model), copy.deepcopy(optimizer)))
 
     writer.close()
     save_ckpt('{:s}/ckpt/final.pth'.format(cfg.snapshot_dir), savelist)
