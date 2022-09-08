@@ -13,5 +13,6 @@
 --loss-criterion 0
 --log-interval 1
 --weights kaiming
---random-seed 3
+--loop-random-seed 3
+--weights-random-seed 3
 --shuffle-masks

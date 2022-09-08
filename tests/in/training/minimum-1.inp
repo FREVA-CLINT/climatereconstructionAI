@@ -10,5 +10,6 @@
 --loss-criterion 0
 --eval-timesteps 0,1,2
 --weights kaiming
---random-seed 3
+--loop-random-seed 3
+--weights-random-seed 3
 --shuffle-masks

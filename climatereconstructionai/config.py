@@ -112,8 +112,10 @@ def set_common_args():
     arg_parser.add_argument('--weights', type=str, default=None, help="Initialization weight")
     arg_parser.add_argument('--steady-mask', type=str, default=None,
                             help="Filename of a netCDF file containing a single mask to be applied to all timesteps")
-    arg_parser.add_argument('--random-seed', type=int, default=None,
-                            help="Random seed for iteration loop and initialization weights")
+    arg_parser.add_argument('--loop-random-seed', type=int, default=None,
+                            help="Random seed for iteration loop")
+    arg_parser.add_argument('--weights-random-seed', type=int, default=None,
+                            help="Random seed for weights initialization")
     arg_parser.add_argument('--attention', action='store_true', help="Enable the attention module")
     arg_parser.add_argument('--channel-reduction-rate', type=int, default=1,
                             help="Channel reduction rate for the attention module")

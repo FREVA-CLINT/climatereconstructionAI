@@ -32,13 +32,13 @@ class InfiniteSampler(Sampler):
 
     def loop(self):
         i = 0
-        np.random.seed(cfg.random_seed)
+        np.random.seed(cfg.loop_random_seed)
         order = np.random.permutation(self.num_samples)
         while True:
             yield order[i]
             i += 1
             if i >= self.num_samples:
-                np.random.seed(cfg.random_seed)
+                np.random.seed(cfg.loop_random_seed)
                 order = np.random.permutation(self.num_samples)
                 i = 0
 
@@ -94,9 +94,12 @@ class NetCDFLoader(Dataset):
     def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, time_steps):
         super(NetCDFLoader, self).__init__()
 
+        self.random = random.Random(cfg.loop_random_seed)
+
         self.data_types = data_types
         self.time_steps = time_steps
 
+        mask_path = mask_root
         if split == 'infill':
             data_path = '{:s}/test_large/'.format(data_root)
             self.xr_dss, self.img_data, self.img_length = load_netcdf(data_path, img_names, data_types, keep_dss=True)
@@ -105,9 +108,11 @@ class NetCDFLoader(Dataset):
                 data_path = '{:s}/data_large/'.format(data_root)
             else:
                 data_path = '{:s}/val_large/'.format(data_root)
+                if not cfg.shuffle_masks:
+                    mask_path = '{:s}/val/'.format(mask_root) 
             self.img_data, self.img_length = load_netcdf(data_path, img_names, data_types)
 
-        self.mask_data, self.mask_length = load_netcdf(mask_root, mask_names, data_types)
+        self.mask_data, self.mask_length = load_netcdf(mask_path, mask_names, data_types)
 
         if self.mask_data is None:
             self.mask_length = self.img_length
@@ -141,7 +146,7 @@ class NetCDFLoader(Dataset):
         if shuffle_masks:
             mask_indices = []
             for j in range(2 * self.time_steps + 1):
-                mask_indices.append(random.randint(0, self.mask_length - 1))
+                mask_indices.append(self.random.randint(0, self.mask_length - 1))
             mask_indices = sorted(mask_indices)
         else:
             mask_indices = img_indices
