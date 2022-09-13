@@ -13,6 +13,7 @@
 --log-interval 1
 --weights kaiming
 --loop-random-seed 3
---weights-random-seed 3
+--cuda-random-seed 3
+--deterministic
 --shuffle-masks
 --vlim=-3,3

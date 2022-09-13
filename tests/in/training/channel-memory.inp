@@ -14,7 +14,8 @@
 --log-interval 1
 --weights kaiming
 --loop-random-seed 3
---weights-random-seed 3
+--cuda-random-seed 3
+--deterministic
 --shuffle-masks
 --prev-next-steps 2
 --lstm-steps 0

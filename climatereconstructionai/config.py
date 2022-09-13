@@ -114,8 +114,9 @@ def set_common_args():
                             help="Filename of a netCDF file containing a single mask to be applied to all timesteps")
     arg_parser.add_argument('--loop-random-seed', type=int, default=None,
                             help="Random seed for iteration loop")
-    arg_parser.add_argument('--weights-random-seed', type=int, default=None,
-                            help="Random seed for weights initialization")
+    arg_parser.add_argument('--cuda-random-seed', type=int, default=None,
+                            help="Random seed for CUDA")
+    arg_parser.add_argument('--deterministic', action='store_true', help="Disable cudnn backends for reproducibility")
     arg_parser.add_argument('--attention', action='store_true', help="Enable the attention module")
     arg_parser.add_argument('--channel-reduction-rate', type=int, default=1,
                             help="Channel reduction rate for the attention module")

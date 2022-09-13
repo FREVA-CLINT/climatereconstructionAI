@@ -7,6 +7,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import copy
+import numpy as np
 
 from . import config as cfg
 from .loss.get_loss import get_loss
@@ -20,10 +21,20 @@ from .utils.netcdfloader import NetCDFLoader, InfiniteSampler, load_steadymask
 
 
 def train(arg_file=None):
+    
+    cfg.set_train_args(arg_file)
+    
+    np.random.seed(cfg.loop_random_seed)
+    if cfg.cuda_random_seed is not None:
+        torch.manual_seed(cfg.cuda_random_seed)
+
+    if cfg.deterministic:
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.enabled = False
+
     torch.multiprocessing.set_sharing_strategy('file_system')
     print("* Number of GPUs: ", torch.cuda.device_count())
-
-    cfg.set_train_args(arg_file)
 
     for subdir in ("", "/images", "/ckpt"):
         outdir = cfg.snapshot_dir + subdir

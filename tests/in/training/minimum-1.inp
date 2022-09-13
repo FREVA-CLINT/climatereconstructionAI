@@ -11,5 +11,6 @@
 --eval-timesteps 0,1,2
 --weights kaiming
 --loop-random-seed 3
---weights-random-seed 3
+--cuda-random-seed 3
+--deterministic
 --shuffle-masks
