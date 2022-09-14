@@ -18,12 +18,16 @@ from .utils.evaluation import create_snapshot_image
 from .utils.featurizer import VGG16FeatureExtractor
 from .utils.io import load_ckpt, load_model, save_ckpt
 from .utils.netcdfloader import NetCDFLoader, InfiniteSampler, load_steadymask
+from .utils.profiler import load_profiler
 
 
 def train(arg_file=None):
     
     cfg.set_train_args(arg_file)
-    
+
+    print("* Number of GPUs: ", torch.cuda.device_count())
+    torch.multiprocessing.set_sharing_strategy('file_system')
+
     np.random.seed(cfg.loop_random_seed)
     if cfg.cuda_random_seed is not None:
         torch.manual_seed(cfg.cuda_random_seed)
@@ -32,9 +36,6 @@ def train(arg_file=None):
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.enabled = False
-
-    torch.multiprocessing.set_sharing_strategy('file_system')
-    print("* Number of GPUs: ", torch.cuda.device_count())
 
     for subdir in ("", "/images", "/ckpt"):
         outdir = cfg.snapshot_dir + subdir
@@ -126,6 +127,8 @@ def train(arg_file=None):
             param_group['lr'] = lr
         print('Starting from iter ', start_iter)
 
+    prof = load_profiler(start_iter)
+
     if cfg.multi_gpus:
         model = torch.nn.DataParallel(model)
 
@@ -134,6 +137,7 @@ def train(arg_file=None):
 
     savelist = []
     pbar = tqdm(range(start_iter, cfg.max_iter))
+    prof.start()
     for i in pbar:
 
         n_iter = i + 1
@@ -170,7 +174,9 @@ def train(arg_file=None):
 
         if n_iter in final_models:
             savelist.append((str(n_iter), n_iter, copy.deepcopy(model), copy.deepcopy(optimizer)))
-
+        prof.step()
+    
+    prof.stop()
     writer.close()
     save_ckpt('{:s}/ckpt/final.pth'.format(cfg.snapshot_dir), savelist)
 
