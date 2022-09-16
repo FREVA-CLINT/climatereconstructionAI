@@ -86,16 +86,16 @@ def set_common_args():
                             help="Root directory containing the climate datasets")
     arg_parser.add_argument('--mask-dir', type=str, default='masks/', help="Directory containing the mask datasets")
     arg_parser.add_argument('--log-dir', type=str, default='logs/', help="Directory where the log files will be stored")
-    arg_parser.add_argument('--img-names', type=str_list, default='train.nc',
-                            help="Comma separated list of netCDF files (climate dataset)")
+    arg_parser.add_argument('--data-names', type=str_list, default='train.nc',
+                            help="Comma separated list of netCDF files (climate dataset) for training/infilling")
     arg_parser.add_argument('--mask-names', type=str_list, default=None,
                             help="Comma separated list of netCDF files (mask dataset). "
                                  "If None, it extracts the masks from the climate dataset")
     arg_parser.add_argument('--data-types', type=str_list, default='tas',
                             help="Comma separated list of variable types, "
-                                 "in the same order as img-names and mask-names")
-    arg_parser.add_argument('--img-index', type=int, default=None,
-                            help="Use the image and mask from the specified channel index to create the masked image")
+                                 "in the same order as data-names and mask-names")
+    arg_parser.add_argument('--input-data-index', type=int, default=None,
+                            help="Use the climate data and mask from the specified channel index to create the masked data")
     arg_parser.add_argument('--device', type=str, default='cuda', help="Device used by PyTorch (cuda or cpu)")
     arg_parser.add_argument('--shuffle-masks', action='store_true', help="Select mask indices randomly")
     arg_parser.add_argument('--prev-next', type=int, default=0, help="")
@@ -126,10 +126,10 @@ def set_common_args():
     arg_parser.add_argument('--masked-bn', action='store_true',
                             help="Use masked batch normalization instead of standard BN")
     arg_parser.add_argument('--global-padding', action='store_true', help="Use a custom padding for global dataset")
-    arg_parser.add_argument('--normalize-images', action='store_true',
-                            help="Normalize the input images to 0 mean and 1 std")
+    arg_parser.add_argument('--normalize-data', action='store_true',
+                            help="Normalize the input climate data to 0 mean and 1 std")
     arg_parser.add_argument('--n-filters', type=int, default=None, help="Number of filters for the first/last layer")
-    arg_parser.add_argument('--out-channels', type=int, default=1, help="Number of channels for the output image")
+    arg_parser.add_argument('--out-channels', type=int, default=1, help="Number of channels for the output data")
     arg_parser.add_argument('--dataset-name', type=str, default=None, help="Name of the dataset for format checking")
     arg_parser.add_argument('--profile', action='store_true', help="Profile code using tensorboard profiler")
     return arg_parser
@@ -137,6 +137,8 @@ def set_common_args():
 
 def set_train_args(arg_file=None):
     arg_parser = set_common_args()
+    arg_parser.add_argument('--val-names', type=str_list, default=None,
+                            help="Comma separated list of netCDF files (climate dataset) for validation")
     arg_parser.add_argument('--snapshot-dir', type=str, default='snapshots/',
                             help="Parent directory of the training checkpoints and the snapshot images")
     arg_parser.add_argument('--resume-iter', type=int, help="Iteration step from which the training will be resumed")
@@ -170,6 +172,9 @@ def set_train_args(arg_file=None):
     arg_parser.add_argument('--vlim', type=lim_list, default=None,
                             help="Comma separated list of vmin,vmax values for the color scale of the snapshot images")
     global_args(arg_parser, arg_file)
+
+    if globals()["val_names"] is None:
+        globals()["val_names"] = globals()["data_names"].copy()
 
 
 def set_evaluate_args(arg_file=None, prog_func=None):

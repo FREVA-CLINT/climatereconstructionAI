@@ -79,7 +79,7 @@ def load_netcdf(path, data_names, data_types, keep_dss=False):
             data += nc_loadchecker('{}{}'.format(path, data_names[i]), data_types[i], cfg.image_sizes[0])[1]
             lengths.append(len(data[-1]))
 
-        if cfg.img_index is None:
+        if cfg.input_data_index is None:
             assert len(set(lengths)) == 1
 
         if keep_dss:
@@ -99,13 +99,13 @@ class NetCDFLoader(Dataset):
 
         mask_path = mask_root
         if split == 'infill':
-            data_path = '{:s}/test_large/'.format(data_root)
+            data_path = '{:s}/test/'.format(data_root)
             self.xr_dss, self.img_data, self.img_length = load_netcdf(data_path, img_names, data_types, keep_dss=True)
         else:
             if split == 'train':
-                data_path = '{:s}/data_large/'.format(data_root)
+                data_path = '{:s}/train/'.format(data_root)
             else:
-                data_path = '{:s}/val_large/'.format(data_root)
+                data_path = '{:s}/val/'.format(data_root)
                 if not cfg.shuffle_masks:
                     mask_path = '{:s}/val/'.format(mask_root) 
             self.img_data, self.img_length = load_netcdf(data_path, img_names, data_types)
@@ -131,7 +131,7 @@ class NetCDFLoader(Dataset):
         image = self.img_data[ind_data][img_indices]
         image = torch.from_numpy(np.nan_to_num(image))
 
-        if cfg.normalize_images:
+        if cfg.normalize_data:
             image = self.img_tf[ind_data](image)
 
         return image, mask
@@ -165,7 +165,7 @@ class NetCDFLoader(Dataset):
         for i in range(len(self.data_types)):
 
             image, mask = self.get_single_item(i, index, cfg.shuffle_masks)
-            if i == cfg.img_index:
+            if i == cfg.input_data_index:
                 masks[0] = masks[0] * mask
                 masked[0] = image * masks[0]
             else:

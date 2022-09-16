@@ -31,7 +31,7 @@ def evaluate(arg_file=None, prog_func=None):
             recurrent = False
             time_steps = 0
 
-        dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.img_names, cfg.mask_dir, cfg.mask_names, "infill",
+        dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.data_names, cfg.mask_dir, cfg.mask_names, "infill",
                                    cfg.data_types, time_steps)
 
         if len(cfg.image_sizes) > 1:

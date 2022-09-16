@@ -165,7 +165,7 @@ def create_outputs(outputs, dataset, eval_path, ind_mod=None, ind_data=0):
         for i in range(n_out):
             dss.append(dataset.xr_dss[1].copy())
 
-            if cfg.normalize_images:
+            if cfg.normalize_data:
                 outputs[i][cname] = renormalize(outputs[i][cname],
                                                 dataset.img_mean[ind_data], dataset.img_std[ind_data])
             dss[-1][data_type].values = outputs[i][cname].to(torch.device('cpu')).detach().numpy()[:, 0, :, :]
