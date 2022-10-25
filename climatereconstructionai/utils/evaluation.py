@@ -172,7 +172,7 @@ def create_outputs(outputs, dataset, eval_path, ind_mod=None, ind_data=0):
 
             dss[-1] = reformat_dataset(dataset.xr_dss[0], dss[-1], data_type)
 
-        ds = xr.concat(dss, dim="time").sortby('time')
+        ds = xr.concat(dss, dim="time", data_vars="minimal").sortby('time')
         ds.attrs["history"] = "Infilled using CRAI " \
                               "(Climate Reconstruction AI: https://github.com/FREVA-CLINT/climatereconstructionAI)\n" \
                               + ds.attrs["history"]
