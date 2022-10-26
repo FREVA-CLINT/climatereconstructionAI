@@ -141,14 +141,15 @@ def train(arg_file=None):
     for i in pbar:
 
         n_iter = i + 1
-        pbar.set_description("lr = {:.1e}".format(optimizer.param_groups[0]['lr']))
+        lr_val = optimizer.param_groups[0]['lr']
+        pbar.set_description("lr = {:.1e}".format(lr_val))
 
         # train model
         model.train()
         image, mask, gt, rea_images, rea_masks, rea_gts = [x.to(cfg.device) for x in next(iterator_train)]
         output = model(image, mask, rea_images, rea_masks)
 
-        train_loss = get_loss(criterion, lambda_dict, mask, steady_mask, output, gt, writer, i, "train")
+        train_loss = get_loss(criterion, lambda_dict, mask, steady_mask, output, gt, writer, n_iter, "train")
 
         optimizer.zero_grad()
         train_loss.backward()
@@ -160,7 +161,10 @@ def train(arg_file=None):
             image, mask, gt, rea_images, rea_masks, rea_gts = [x.to(cfg.device) for x in next(iterator_val)]
             with torch.no_grad():
                 output = model(image, mask, rea_images, rea_masks)
-            val_loss = get_loss(criterion, lambda_dict, mask, steady_mask, output, gt, writer, i, "val")
+            val_loss = get_loss(criterion, lambda_dict, mask, steady_mask, output, gt, writer, n_iter, "val")
+
+            writer.add_scalar('lr', lr_val, n_iter)
+
             if cfg.lr_scheduler_patience is not None:
                 lr_scheduler.step(val_loss)
 

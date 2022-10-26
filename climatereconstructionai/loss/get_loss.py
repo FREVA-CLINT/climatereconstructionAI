@@ -49,8 +49,8 @@ def get_loss(criterion, lambda_dict, img_mask, loss_mask, output, gt, writer, it
         losses[key] = value
         losses["total"] += value
 
-    if cfg.log_interval and (iter_index + 1) % cfg.log_interval == 0:
+    if cfg.log_interval and iter_index % cfg.log_interval == 0:
         for key in losses.keys():
-            writer.add_scalar('loss_{:s}-{:s}'.format(setname, key), losses[key], iter_index + 1)
+            writer.add_scalar('loss_{:s}-{:s}'.format(setname, key), losses[key], iter_index)
 
     return losses["total"]
