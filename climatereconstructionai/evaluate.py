@@ -44,14 +44,16 @@ def evaluate(arg_file=None, prog_func=None):
                               rea_enc_layers=cfg.encoding_layers[1],
                               rea_pool_layers=cfg.pooling_layers[1],
                               rea_in_channels=(len(cfg.image_sizes) - 1) * (2 * cfg.prev_next_steps + 1),
-                              recurrent=recurrent).to(cfg.device)
+                              recurrent=recurrent,
+                              bounds=dataset_val.bounds).to(cfg.device)
         else:
             model = PConvLSTM(radar_img_size=cfg.image_sizes[0],
                               radar_enc_dec_layers=cfg.encoding_layers[0],
                               radar_pool_layers=cfg.pooling_layers[0],
                               radar_in_channels=2 * cfg.prev_next_steps + 1,
                               radar_out_channels=cfg.out_channels,
-                              recurrent=recurrent).to(cfg.device)
+                              recurrent=recurrent,
+                              bounds=dataset_val.bounds).to(cfg.device)
 
         ckpt_dict = load_ckpt("{}/{}".format(cfg.model_dir, cfg.model_names[i_model]), cfg.device)
         output_name = "{}/{}".format(cfg.evaluation_dirs[0], cfg.eval_names[i_model])

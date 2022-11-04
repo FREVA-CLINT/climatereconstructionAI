@@ -7,7 +7,7 @@ import xarray as xr
 from torch.utils.data import Dataset, Sampler
 
 from .netcdfchecker import dataset_formatter
-from .normalizer import img_normalization
+from .normalizer import img_normalization, bnd_normalization
 from .. import config as cfg
 
 
@@ -119,6 +119,9 @@ class NetCDFLoader(Dataset):
                 assert self.img_length == self.mask_length
 
         self.img_mean, self.img_std, self.img_tf = img_normalization(self.img_data)
+
+        self.bounds = bnd_normalization(cfg.min_bounds, cfg.max_bounds, cfg.out_channels, cfg.normalize_data, 
+                self.img_mean, self.img_std)
 
     def load_data(self, ind_data, img_indices, mask_indices):
 

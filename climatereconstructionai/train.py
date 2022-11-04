@@ -84,14 +84,16 @@ def train(arg_file=None):
                           rea_enc_layers=cfg.encoding_layers[1],
                           rea_pool_layers=cfg.pooling_layers[1],
                           rea_in_channels=(len(cfg.image_sizes) - 1) * (2 * cfg.prev_next_steps + 1),
-                          recurrent=recurrent).to(cfg.device)
+                          recurrent=recurrent,
+                          bounds=dataset_train.bounds).to(cfg.device)
     else:
         model = PConvLSTM(radar_img_size=cfg.image_sizes[0],
                           radar_enc_dec_layers=cfg.encoding_layers[0],
                           radar_pool_layers=cfg.pooling_layers[0],
                           radar_in_channels=2 * cfg.prev_next_steps + 1,
                           radar_out_channels=cfg.out_channels,
-                          recurrent=recurrent).to(cfg.device)
+                          recurrent=recurrent,
+                          bounds=dataset_train.bounds).to(cfg.device)
 
     # define learning rate
     if cfg.finetune:

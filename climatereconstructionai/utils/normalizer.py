@@ -14,3 +14,18 @@ def img_normalization(img_data):
 
 def renormalize(img_data, img_mean, img_std):
     return img_std * img_data + img_mean
+
+def bnd_normalization(min_bounds, max_bounds, out_channels, normalize_data, img_mean, img_std):
+
+    bounds = np.ones((out_channels, 2)) * np.inf
+    k = 0
+    for bound in (min_bounds, max_bounds):
+        bounds[:, k] = bound
+        
+        if normalize_data:
+            bounds[:, k] = (bounds[:, k] - img_mean) / img_std
+
+        k += 1
+
+    return bounds
+

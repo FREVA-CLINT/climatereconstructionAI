@@ -5,6 +5,7 @@ from .attention_module import AttentionEncoderBlock
 from .conv_configs import init_enc_conv_configs, init_dec_conv_configs, \
     init_enc_conv_configs_orig, init_dec_conv_configs_orig
 from .encoder_decoder import EncoderBlock, DecoderBlock
+from .bounds_scaler import constrain_bounds  
 from .. import config as cfg
 
 
@@ -17,7 +18,7 @@ class PConvLSTM(nn.Module):
     def __init__(self, radar_img_size=512, radar_enc_dec_layers=4, radar_pool_layers=4, radar_in_channels=1,
                  radar_out_channels=1,
                  rea_img_size=None, rea_enc_layers=None, rea_pool_layers=None, rea_in_channels=0,
-                 recurrent=True):
+                 recurrent=True, bounds=None):
         super().__init__()
 
         self.freeze_enc_bn = False
@@ -88,6 +89,8 @@ class PConvLSTM(nn.Module):
                 conv_config=dec_conv_configs[i],
                 kernel=dec_conv_configs[i]['kernel'], stride=(1, 1), activation=activation, bias=bias))
         self.decoder = nn.ModuleList(decoding_layers)
+
+        self.binder = constrain_bounds(bounds)
 
     def forward(self, input, input_mask, attention_input, attention_input_mask):
         # create lists for skip connections
@@ -172,6 +175,8 @@ class PConvLSTM(nn.Module):
                                                              h_mask, hs_mask[self.net_depth - i - 1],
                                                              None)
             progstat(i + self.net_depth, 2 * self.net_depth)
+
+        h = self.binder.scale(h)
 
         # return last element of output from last decoding layer
         return h
