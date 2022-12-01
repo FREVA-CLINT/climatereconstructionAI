@@ -11,12 +11,12 @@ from .normalizer import img_normalization, bnd_normalization
 from .. import config as cfg
 
 
-def load_steadymask(path, mask_name, data_type, device):
-    if mask_name is None:
+def load_steadymask(path, mask_names, data_types, device):
+    if mask_names is None:
         return None
     else:
-        steady_mask, _ = load_netcdf(path, [mask_name], [data_type])
-        return torch.from_numpy(steady_mask[0]).to(device)
+        steady_mask, _ = load_netcdf(path, mask_names, data_types)
+        return torch.cat([torch.from_numpy(mask).to(device) for mask in steady_mask])
 
 
 class InfiniteSampler(Sampler):
@@ -60,9 +60,11 @@ def nc_loadchecker(filename, data_type, image_size, keep_dss=False):
         dtype = ds[data_type].dtype
         ds = ds.drop_vars(data_type)
         ds[data_type] = np.empty(0, dtype=dtype)
-        return [ds, ds1], [ds1[data_type].values]
+        dss = [ds, ds1]
     else:
-        return None, [ds1[data_type].values]
+        dss = None
+
+    return dss, ds1[data_type].values, ds1[data_type].shape[0]
 
 
 def load_netcdf(path, data_names, data_types, keep_dss=False):
@@ -72,12 +74,8 @@ def load_netcdf(path, data_names, data_types, keep_dss=False):
         ndata = len(data_names)
         assert ndata == len(data_types)
 
-        dss, data = nc_loadchecker('{}{}'.format(path, data_names[0]), data_types[0], cfg.image_sizes[0],
-                                   keep_dss=keep_dss)
-        lengths = [len(data[0])]
-        for i in range(1, ndata):
-            data += nc_loadchecker('{}{}'.format(path, data_names[i]), data_types[i], cfg.image_sizes[0])[1]
-            lengths.append(len(data[-1]))
+        dss, data, lengths = zip(*[nc_loadchecker('{}{}'.format(path, data_names[i]), data_types[i], cfg.image_sizes[i],
+                                   keep_dss=keep_dss) for i in range(ndata)])
 
         if cfg.input_data_index is None:
             assert len(set(lengths)) == 1
@@ -178,18 +176,21 @@ class NetCDFLoader(Dataset):
 
         if len(images) == 1:
             if cfg.prev_next_steps:
-                return masked[0].transpose(0, 1), masks[0].transpose(0, 1), images[0].transpose(0, 1), torch.tensor(
-                    []), torch.tensor([]), torch.tensor([])
+                return masked[0].transpose(0, 1).unsqueeze(1), masks[0].transpose(0, 1).unsqueeze(1), \
+                       images[0].transpose(0, 1).unsqueeze(1)
             else:
-                return masked[0], masks[0], images[0], torch.tensor([]), torch.tensor([]), torch.tensor([])
+                return masked[0].unsqueeze(1), masks[0].unsqueeze(1), images[0].unsqueeze(1)
         else:
             if cfg.prev_next_steps:
-                return masked[0].transpose(0, 1), masks[0].transpose(0, 1), images[0].transpose(0, 1), torch.cat(
-                    masked[1:], dim=0).transpose(0, 1), torch.cat(masks[1:], dim=0).transpose(0, 1), torch.cat(
-                    images[1:], dim=0).transpose(0, 1)
+                return torch.cat(masked, dim=0).transpose(0, 1), torch.cat(masks, dim=0).transpose(0, 1),
+                torch.cat(images, dim=0).transpose(0, 1)
+                #return masked[0].transpose(0, 1), masks[0].transpose(0, 1), images[0].transpose(0, 1), torch.cat(
+                #    masked[1:], dim=0).transpose(0, 1), torch.cat(masks[1:], dim=0).transpose(0, 1), torch.cat(
+                #    images[1:], dim=0).transpose(0, 1)
             else:
-                return masked[0], masks[0], images[0], torch.cat(masked[1:], dim=1), torch.cat(
-                    masks[1:], dim=1), torch.cat(images[1:], dim=1)
+                return torch.cat(masked, dim=1), torch.cat(masks, dim=1), torch.cat(images, dim=1)
+                #return masked[0], masks[0], images[0], torch.cat(masked[1:], dim=1), torch.cat(
+                #    masks[1:], dim=1), torch.cat(images[1:], dim=1)
 
     def __len__(self):
         return self.img_length

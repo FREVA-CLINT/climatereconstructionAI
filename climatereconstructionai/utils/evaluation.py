@@ -15,30 +15,27 @@ from .. import config as cfg
 
 
 def create_snapshot_image(model, dataset, filename):
-    image, mask, gt, rea_images, rea_masks, rea_gts = zip(*[dataset[int(i)] for i in cfg.eval_timesteps])
+    images, masks, gts = zip(*[dataset[int(i)] for i in cfg.eval_timesteps])
 
-    image = torch.stack(image).to(cfg.device)
-    mask = torch.stack(mask).to(cfg.device)
+    images = torch.stack(images).to(cfg.device)
+    masks = torch.stack(masks).to(cfg.device)
     gt = torch.stack(gt).to(cfg.device)
-    if rea_images:
-        rea_images = torch.stack(rea_images).to(cfg.device)
-        rea_masks = torch.stack(rea_masks).to(cfg.device)
 
     with torch.no_grad():
-        output = model(image, mask, rea_images, rea_masks)
+        output = model(images, masks)
 
     # select last element of lstm sequence as evaluation element
-    image = image[:, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
+    images = images[:, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
     gt = gt[:, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
-    mask = mask[:, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
+    masks = masks[:, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
     output = output[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
 
-    output_comp = mask * image + (1 - mask) * output
+    output_comp = masks * images + (1 - masks) * output
 
     # set mask
-    mask = 1 - mask
-    image = np.ma.masked_array(image, mask)
-    mask = np.ma.masked_array(mask, mask)
+    masks = 1 - masks
+    images = np.ma.masked_array(images, masks)
+    masks = np.ma.masked_array(masks, masks)
 
     for c in range(output.shape[1]):
 
@@ -48,13 +45,13 @@ def create_snapshot_image(model, dataset, filename):
         else:
             vmin = cfg.vlim[0]
             vmax = cfg.vlim[1]
-        data_list = [image[:, c, :, :], mask[:, c, :, :], output[:, c, :, :], output_comp[:, c, :, :], gt[:, c, :, :]]
+        data_list = [images[:, c, :, :], masks[:, c, :, :], output[:, c, :, :], output_comp[:, c, :, :], gt[:, c, :, :]]
 
         # plot and save data
-        fig, axes = plt.subplots(nrows=len(data_list), ncols=image.shape[0], figsize=(20, 20))
+        fig, axes = plt.subplots(nrows=len(data_list), ncols=images.shape[0], figsize=(20, 20))
         fig.patch.set_facecolor('black')
         for i in range(len(data_list)):
-            for j in range(image.shape[0]):
+            for j in range(images.shape[0]):
                 axes[i, j].axis("off")
                 axes[i, j].imshow(np.squeeze(data_list[i][j]), vmin=vmin, vmax=vmax)
         plt.subplots_adjust(wspace=0.012, hspace=0.012)
@@ -82,10 +79,13 @@ def get_partitions(parameters, length):
 def infill(model, dataset):
     if not os.path.exists(cfg.evaluation_dirs[0]):
         os.makedirs('{:s}'.format(cfg.evaluation_dirs[0]))
-    image = []
-    mask = []
-    gt = []
-    output = []
+    # images = []
+    # masks = []
+    # gt = []
+    # output = []
+
+    data_dict = {'image': [], 'mask': [], 'gt': [], 'output': [], 'infilled': []}
+    keys = list(data_dict.keys())
 
     partitions = get_partitions(model.parameters(), dataset.img_length)
 
@@ -94,94 +94,98 @@ def infill(model, dataset):
 
     n_elements = dataset.__len__() // partitions
     for split in range(partitions):
-        data_part = []
+        # data_part = []
         i_start = split * n_elements
         if split == partitions - 1:
             i_end = dataset.__len__()
         else:
             i_end = i_start + n_elements
-        for i in range(6):
-            data_part.append(torch.stack([dataset[j][i] for j in range(i_start, i_end)]))
+        # print(len(dataset[0]))
+        # for i in range(3):
+        #     data_part.append(torch.stack([dataset[j][i] for j in range(i_start, i_end)]))
+
+        for i in range(3):
+            data_dict[keys[i]].append(torch.stack([dataset[j][i] for j in range(i_start, i_end)]))
 
         # Tensors in data_part: image_part, mask_part, gt_part, rea_images_part, rea_masks_part, rea_gts_part
 
         if split == 0 and cfg.create_graph:
             writer = SummaryWriter(log_dir=cfg.log_dir)
-            writer.add_graph(model, [data_part[0], data_part[1], data_part[3], data_part[4]])
+            writer.add_graph(model, [data_dict["image"][-1], data_dict["mask"][-1], data_dict["gt"][-1]])
             writer.close()
 
         # get results from trained network
         with torch.no_grad():
-            output_part = model(data_part[0].to(cfg.device), data_part[1].to(cfg.device),
-                                data_part[3].to(cfg.device), data_part[4].to(cfg.device))
+            data_dict["output"].append(model(data_dict["image"][-1].to(cfg.device), data_dict["mask"][-1].to(cfg.device)))
 
         # image_part, mask_part, gt_part
-        for i in range(3):
-            data_part[i] = data_part[i][:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
+        # for i in range(3):
+        #     data_part[i] = data_part[i][:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
             # only select first channel
-            data_part[i] = torch.unsqueeze(data_part[i][:, cfg.prev_next_steps, :, :], dim=1)
-        output_part = output_part[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
+            #data_part[i] = torch.unsqueeze(data_part[i][:, cfg.prev_next_steps, :, :], dim=1)
+        # output_part = output_part[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
+        for key in keys[:4]:
+            data_dict[key][-1] = data_dict[key][-1][:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
 
-        image.append(data_part[0])
-        mask.append(data_part[1])
-        gt.append(data_part[2])
-        output.append(output_part)
+        #
+        #
+        # images.append(data_part[0])
+        # masks.append(data_part[1])
+        # gt.append(data_part[2])
+        # output.append(output_part)
+    for key in keys[:4]:
+        data_dict[key] = torch.cat(data_dict[key])
+    # images = torch.cat(images)
+    # masks = torch.cat(mask)
+    # gt = torch.cat(gt)
+    # output = torch.cat(output)
 
-    image = torch.cat(image)
-    mask = torch.cat(mask)
-    gt = torch.cat(gt)
-    output = torch.cat(output)
-
-    steady_mask = load_steadymask(cfg.mask_dir, cfg.steady_mask, cfg.data_types[0], cfg.device)
+    steady_mask = load_steadymask(cfg.mask_dir, cfg.steady_masks, cfg.data_types, cfg.device)
     if steady_mask is not None:
         steady_mask = 1 - steady_mask
-        image /= steady_mask
-        gt /= steady_mask
-        output /= steady_mask
+        for key in ('gt', 'image', 'output'):
+            data_dict[key] /= steady_mask
 
     # create output_comp
-    output_comp = mask * image + (1 - mask) * output
-    image[np.where(mask == 0)] = np.nan
+    data_dict["infilled"] = data_dict["mask"] * data_dict["image"] + (1 - data_dict["mask"]) * data_dict["output"]
+    data_dict["image"][np.where(data_dict["mask"] == 0)] = np.nan
 
-    outputs = {'gt': gt, 'mask': mask, 'image': image, 'output': output, 'infilled': output_comp}
-
-    return outputs
+    return data_dict
 
 
-def create_outputs(outputs, dataset, eval_path, ind_mod=None, ind_data=0):
-    data_type = cfg.data_types[ind_data]
+def create_outputs(outputs, dataset, eval_path, suffix=""):
 
-    if ind_mod is None:
-        suffix = [""]
-    else:
-        suffix = ["." + str(ind_mod + 1)]
+    if suffix != "":
+        suffix = "." + str(suffix)
 
     n_out = len(outputs)
 
-    for cname in outputs[0]:
-        output_name = '{}_{}'.format(eval_path, cname)
+    for j in range(len(eval_path)):
 
-        dss = []
+        data_type = cfg.data_types[j]
+
+        for cname in outputs[0]:
+
+            output_name = '{}_{}'.format(eval_path[j], cname)
+
+            dss = []
+            for i in range(n_out):
+                dss.append(dataset.xr_dss[j][1].copy())
+
+                if cfg.normalize_data and cname != "masks":
+                    outputs[i][cname][:,j,:,:] = renormalize(outputs[i][cname][:,j,:,:],
+                                                    dataset.img_mean[j], dataset.img_std[j])
+                dss[-1][data_type].values = outputs[i][cname].to(torch.device('cpu')).detach().numpy()[:, j, :, :]
+
+                dss[-1] = reformat_dataset(dataset.xr_dss[j][0], dss[-1], data_type)
+
+            ds = xr.concat(dss, dim="time", data_vars="minimal").sortby('time')
+            ds.attrs["history"] = "Infilled using CRAI " \
+                                  "(Climate Reconstruction AI: https://github.com/FREVA-CLINT/climatereconstructionAI)\n" \
+                                  + ds.attrs["history"]
+            ds.to_netcdf(output_name + suffix + ".nc")
+
         for i in range(n_out):
-            dss.append(dataset.xr_dss[1].copy())
-
-            if cfg.normalize_data and cname != "mask":
-                outputs[i][cname] = renormalize(outputs[i][cname],
-                                                dataset.img_mean[ind_data], dataset.img_std[ind_data])
-            dss[-1][data_type].values = outputs[i][cname].to(torch.device('cpu')).detach().numpy()[:, 0, :, :]
-
-            dss[-1] = reformat_dataset(dataset.xr_dss[0], dss[-1], data_type)
-
-        ds = xr.concat(dss, dim="time", data_vars="minimal").sortby('time')
-        ds.attrs["history"] = "Infilled using CRAI " \
-                              "(Climate Reconstruction AI: https://github.com/FREVA-CLINT/climatereconstructionAI)\n" \
-                              + ds.attrs["history"]
-        ds.to_netcdf(output_name + suffix[0] + ".nc")
-
-    if ind_mod is None:
-        suffix = ["." + str(i + 1) for i in range(n_out)]
-
-    for i in range(n_out):
-        output_name = '{}_{}{}'.format(eval_path, "combined", suffix[i])
-        plot_data(dataset.xr_dss[1].coords, [outputs[i]["image"], outputs[i]["infilled"]],
-                  ["Original", "Reconstructed"], output_name, data_type, cfg.plot_results, *cfg.dataset_format["scale"])
+            output_name = '{}_{}.{}'.format(eval_path[j], "combined", i + 1)
+            plot_data(dataset.xr_dss[j][1].coords, [outputs[i]["image"][:,j,:,:], outputs[i]["infilled"][:,j,:,:]],
+                      ["Original", "Reconstructed"], output_name, data_type, cfg.plot_results, *cfg.dataset_format["scale"])

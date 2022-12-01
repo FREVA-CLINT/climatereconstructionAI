@@ -14,7 +14,6 @@ def evaluate(arg_file=None, prog_func=None):
         os.makedirs(cfg.log_dir)
 
     n_models = len(cfg.model_names)
-    assert n_models == len(cfg.eval_names)
 
     for i_model in range(n_models):
 
@@ -56,17 +55,17 @@ def evaluate(arg_file=None, prog_func=None):
                               bounds=dataset_val.bounds).to(cfg.device)
 
         ckpt_dict = load_ckpt("{}/{}".format(cfg.model_dir, cfg.model_names[i_model]), cfg.device)
-        output_name = "{}/{}".format(cfg.evaluation_dirs[0], cfg.eval_names[i_model])
+        output_names = ["{}/{}".format(cfg.evaluation_dirs[0], name) for name in cfg.eval_names]
         outputs = []
         for k in range(len(ckpt_dict["labels"])):
             load_model(ckpt_dict, model, label=ckpt_dict["labels"][k])
             model.eval()
             outputs.append(infill(model, dataset_val))
             if cfg.split_outputs:
-                create_outputs(outputs, dataset_val, output_name, k)
+                create_outputs(outputs, dataset_val, output_names, k)
                 outputs = []
         if not cfg.split_outputs:
-            create_outputs(outputs, dataset_val, output_name)
+            create_outputs(outputs, dataset_val, output_names)
 
 
 if __name__ == "__main__":

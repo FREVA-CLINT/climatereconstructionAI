@@ -92,16 +92,16 @@ class PConvLSTM(nn.Module):
 
         self.binder = constrain_bounds(bounds)
 
-    def forward(self, input, input_mask, attention_input, attention_input_mask):
+    def forward(self, input, input_mask):
         # create lists for skip connections
-        h = input
-        h_mask = input_mask
+        h = input[:, :, 0, :, :].unsqueeze(dim=2)
+        h_mask = input_mask[:, :, 0, :, :].unsqueeze(dim=2)
         hs = [h]
         hs_mask = [h_mask]
         recurrent_states = []
 
-        h_attention = attention_input
-        h_attention_mask = attention_input_mask
+        h_attention = input[:, :, 1:, :, :]
+        h_attention_mask = input_mask[:, :, 1:, :, :]
         attentions = []
         attentions_mask = []
         attentions_recurrent_states = []
