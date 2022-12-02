@@ -15,8 +15,10 @@ def load_steadymask(path, mask_names, data_types, device):
     if mask_names is None:
         return None
     else:
+        assert len(mask_names) == cfg.out_channels
         steady_mask, _ = load_netcdf(path, mask_names, data_types[:cfg.out_channels])
-        return torch.stack([torch.from_numpy(mask).to(device) for mask in steady_mask])
+        # stack + squeeze ensures that it works with steady masks with one timestep or no timestep
+        return torch.stack([torch.from_numpy(mask).to(device) for mask in steady_mask]).squeeze()
 
 
 class InfiniteSampler(Sampler):
