@@ -16,7 +16,7 @@ def load_steadymask(path, mask_names, data_types, device):
         return None
     else:
         steady_mask, _ = load_netcdf(path, mask_names, data_types)
-        return torch.cat([torch.from_numpy(mask).to(device) for mask in steady_mask])
+        return torch.stack([torch.from_numpy(mask).to(device) for mask in steady_mask])
 
 
 class InfiniteSampler(Sampler):
