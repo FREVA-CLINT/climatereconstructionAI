@@ -3,7 +3,7 @@
 --mask-dir data/
 --log-dir tests/out/training/logs/
 --snapshot-dir tests/out/training/
---img-names 20cr-1ens.nc,20cr-1ens.nc,20cr-1ens.nc
+--data-names 20cr-1ens.nc,20cr-1ens.nc,20cr-1ens.nc
 --data-types tas,tas,tas
 --image-sizes 72,72,72
 --encoding-layers 2,2,2
