@@ -148,10 +148,10 @@ def train(arg_file=None):
 
         # train model
         model.train()
-        images, masks, gt = [x.to(cfg.device) for x in next(iterator_train)]
-        output = model(images, masks)
+        image, mask, gt = [x.to(cfg.device) for x in next(iterator_train)]
+        output = model(image, mask)
 
-        train_loss = get_loss(criterion, lambda_dict, masks, steady_mask, output, gt, writer, n_iter, "train")
+        train_loss = get_loss(criterion, lambda_dict, mask, steady_mask, output, gt, writer, n_iter, "train")
 
         optimizer.zero_grad()
         train_loss.backward()
@@ -160,10 +160,10 @@ def train(arg_file=None):
         if cfg.log_interval and n_iter % cfg.log_interval == 0:
 
             model.eval()
-            images, masks, gt = [x.to(cfg.device) for x in next(iterator_val)]
+            image, mask, gt = [x.to(cfg.device) for x in next(iterator_val)]
             with torch.no_grad():
-                output = model(images, masks)
-            val_loss = get_loss(criterion, lambda_dict, masks, steady_mask, output, gt, writer, n_iter, "val")
+                output = model(image, mask)
+            val_loss = get_loss(criterion, lambda_dict, mask, steady_mask, output, gt, writer, n_iter, "val")
 
             writer.add_scalar('lr', lr_val, n_iter)
 

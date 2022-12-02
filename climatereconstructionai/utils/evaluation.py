@@ -15,45 +15,46 @@ from .. import config as cfg
 
 
 def create_snapshot_image(model, dataset, filename):
-    images, masks, gts = zip(*[dataset[int(i)] for i in cfg.eval_timesteps])
 
-    images = torch.stack(images).to(cfg.device)
-    masks = torch.stack(masks).to(cfg.device)
-    gt = torch.stack(gt).to(cfg.device)
+    data_dict = {}
+    data_dict["image"], data_dict["mask"], data_dict["gt"] = zip(*[dataset[int(i)] for i in cfg.eval_timesteps])
+
+    for key in data_dict.keys():
+        data_dict[key] = torch.stack(data_dict[key]).to(cfg.device)
 
     with torch.no_grad():
-        output = model(images, masks)
+        data_dict["output"] = model(data_dict["image"], data_dict["mask"])
 
     # select last element of lstm sequence as evaluation element
-    images = images[:, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
-    gt = gt[:, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
-    masks = masks[:, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
-    output = output[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
+    for key in data_dict.keys():
+        data_dict[key] = data_dict[key][:, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
 
-    output_comp = masks * images + (1 - masks) * output
+    data_dict["infilled"] = data_dict["mask"] * data_dict["image"] + (1 - data_dict["mask"]) * data_dict["output"]
+    keys = list(data_dict.keys())
 
     # set mask
-    masks = 1 - masks
-    images = np.ma.masked_array(images, masks)
-    masks = np.ma.masked_array(masks, masks)
+    data_dict["mask"] = 1 - data_dict["mask"]
+    data_dict["image"] = np.ma.masked_array(data_dict["image"], data_dict["mask"])
+    data_dict["mask"] = np.ma.masked_array(data_dict["mask"], data_dict["mask"])
 
-    for c in range(output.shape[1]):
+    n_rows = len(data_dict)
+    n_cols = data_dict["image"].shape[0]
+    for c in range(data_dict["output"].shape[1]):
 
         if cfg.vlim is None:
-            vmin = gt[:, c, :, :].min().item()
-            vmax = gt[:, c, :, :].max().item()
+            vmin = data_dict["gt"][:, c, :, :].min().item()
+            vmax = data_dict["gt"][:, c, :, :].max().item()
         else:
             vmin = cfg.vlim[0]
             vmax = cfg.vlim[1]
-        data_list = [images[:, c, :, :], masks[:, c, :, :], output[:, c, :, :], output_comp[:, c, :, :], gt[:, c, :, :]]
 
         # plot and save data
-        fig, axes = plt.subplots(nrows=len(data_list), ncols=images.shape[0], figsize=(20, 20))
+        fig, axes = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(20, 20))
         fig.patch.set_facecolor('black')
-        for i in range(len(data_list)):
-            for j in range(images.shape[0]):
+        for i in range(n_rows):
+            for j in range(n_cols):
                 axes[i, j].axis("off")
-                axes[i, j].imshow(np.squeeze(data_list[i][j]), vmin=vmin, vmax=vmax)
+                axes[i, j].imshow(np.squeeze(data_dict[keys[i]][j]), vmin=vmin, vmax=vmax)
         plt.subplots_adjust(wspace=0.012, hspace=0.012)
         plt.savefig(filename + '_' + str(c) + '.jpg', bbox_inches='tight', pad_inches=0)
     plt.clf()
@@ -79,10 +80,6 @@ def get_partitions(parameters, length):
 def infill(model, dataset):
     if not os.path.exists(cfg.evaluation_dirs[0]):
         os.makedirs('{:s}'.format(cfg.evaluation_dirs[0]))
-    # images = []
-    # masks = []
-    # gt = []
-    # output = []
 
     data_dict = {'image': [], 'mask': [], 'gt': [], 'output': [], 'infilled': []}
     keys = list(data_dict.keys())
@@ -94,20 +91,14 @@ def infill(model, dataset):
 
     n_elements = dataset.__len__() // partitions
     for split in range(partitions):
-        # data_part = []
         i_start = split * n_elements
         if split == partitions - 1:
             i_end = dataset.__len__()
         else:
             i_end = i_start + n_elements
-        # print(len(dataset[0]))
-        # for i in range(3):
-        #     data_part.append(torch.stack([dataset[j][i] for j in range(i_start, i_end)]))
 
         for i in range(3):
             data_dict[keys[i]].append(torch.stack([dataset[j][i] for j in range(i_start, i_end)]))
-
-        # Tensors in data_part: image_part, mask_part, gt_part, rea_images_part, rea_masks_part, rea_gts_part
 
         if split == 0 and cfg.create_graph:
             writer = SummaryWriter(log_dir=cfg.log_dir)
@@ -118,27 +109,11 @@ def infill(model, dataset):
         with torch.no_grad():
             data_dict["output"].append(model(data_dict["image"][-1].to(cfg.device), data_dict["mask"][-1].to(cfg.device)))
 
-        # image_part, mask_part, gt_part
-        # for i in range(3):
-        #     data_part[i] = data_part[i][:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
-            # only select first channel
-            #data_part[i] = torch.unsqueeze(data_part[i][:, cfg.prev_next_steps, :, :], dim=1)
-        # output_part = output_part[:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
         for key in keys[:4]:
             data_dict[key][-1] = data_dict[key][-1][:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
 
-        #
-        #
-        # images.append(data_part[0])
-        # masks.append(data_part[1])
-        # gt.append(data_part[2])
-        # output.append(output_part)
     for key in keys[:4]:
         data_dict[key] = torch.cat(data_dict[key])
-    # images = torch.cat(images)
-    # masks = torch.cat(mask)
-    # gt = torch.cat(gt)
-    # output = torch.cat(output)
 
     steady_mask = load_steadymask(cfg.mask_dir, cfg.steady_masks, cfg.data_types, cfg.device)
     if steady_mask is not None:
@@ -146,7 +121,6 @@ def infill(model, dataset):
         for key in ('gt', 'image', 'output'):
             data_dict[key] /= steady_mask
 
-    # create output_comp
     data_dict["infilled"] = data_dict["mask"] * data_dict["image"] + (1 - data_dict["mask"]) * data_dict["output"]
     data_dict["image"][np.where(data_dict["mask"] == 0)] = np.nan
 
