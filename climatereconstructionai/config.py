@@ -112,7 +112,8 @@ def set_common_args():
                             help="Spatial size of the datasets (latxlon must be of shape NxN)")
     arg_parser.add_argument('--weights', type=str, default=None, help="Initialization weight")
     arg_parser.add_argument('--steady-masks', type=str_list, default=None,
-                            help="Comma separated list of netCDF files containing a single mask to be applied to all timesteps")
+                            help="Comma separated list of netCDF files containing a single mask to be applied "
+                                 "to all timesteps. The number of steady-masks must be the same as out-channels")
     arg_parser.add_argument('--loop-random-seed', type=int, default=None,
                             help="Random seed for iteration loop")
     arg_parser.add_argument('--cuda-random-seed', type=int, default=None,
