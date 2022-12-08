@@ -27,9 +27,9 @@ class PConvLSTM(nn.Module):
 
         # initialize channel inputs and outputs and image size for encoder and decoder
         if cfg.n_filters is None:
-            enc_conv_configs = init_enc_conv_configs(radar_img_size, radar_enc_dec_layers,
+            enc_conv_configs = init_enc_conv_configs(cfg.conv_factor, radar_img_size, radar_enc_dec_layers,
                                                      radar_pool_layers, radar_in_channels)
-            dec_conv_configs = init_dec_conv_configs(radar_img_size, radar_enc_dec_layers,
+            dec_conv_configs = init_dec_conv_configs(cfg.conv_factor, radar_img_size, radar_enc_dec_layers,
                                                      radar_pool_layers, radar_in_channels,
                                                      radar_out_channels)
         else:
@@ -40,7 +40,7 @@ class PConvLSTM(nn.Module):
 
         if cfg.attention:
             self.attention_depth = rea_enc_layers + rea_pool_layers
-            attention_enc_conv_configs = init_enc_conv_configs(rea_img_size, rea_enc_layers,
+            attention_enc_conv_configs = init_enc_conv_configs(cfg.conv_factor, rea_img_size, rea_enc_layers,
                                                                rea_pool_layers, rea_in_channels)
             attention_layers = []
             for i in range(self.attention_depth):
