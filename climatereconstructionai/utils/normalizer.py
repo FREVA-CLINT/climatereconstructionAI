@@ -12,26 +12,26 @@ def img_normalization(img_data):
     return img_mean, img_std, img_tf
 
 
-def renormalize(img_data, img_mean, img_std, cname):
-    if cfg.normalize_data and cname != "mask":
-        return img_std * img_data + img_mean
-    else:
-        return img_data
+def renormalize(img_data, img_mean, img_std):
+    return img_std * img_data + img_mean
 
-def bnd_normalization(img_mean, img_std):
+def bnd_normalization(img_mean, img_std, stat_target):
 
     bounds = np.ones((cfg.out_channels, 2)) * np.inf
-    if cfg.target_data_indices == []:
-        idx = list(range(cfg.out_channels))
+    if stat_target is None:
+        if cfg.target_data_indices == []:
+            mean_val , std_val = img_mean[:cfg.out_channels], img_std[:cfg.out_channels]
+        else:
+            mean_val = [img_mean[i] for i in cfg.target_data_indices]
+            std_val = [img_std[i] for i in cfg.target_data_indices]
     else:
-        idx = cfg.target_data_indices
+        mean_val , std_val = stat_target["mean"], stat_target["std"]
     k = 0
     for bound in (cfg.min_bounds, cfg.max_bounds):
         bounds[:, k] = bound
         
         if cfg.normalize_data:
-            for i in range(cfg.out_channels):
-                bounds[i, k] = (bounds[i, k] - img_mean[idx[i]]) / img_std[idx[i]]
+            bounds[:, k] = (bounds[:, k] - mean_val) / std_val
 
         k += 1
 

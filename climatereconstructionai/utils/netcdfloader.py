@@ -89,7 +89,7 @@ def load_netcdf(path, data_names, data_types, keep_dss=False):
 
 
 class NetCDFLoader(Dataset):
-    def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, time_steps):
+    def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, time_steps, stat_target=None):
         super(NetCDFLoader, self).__init__()
 
         self.random = random.Random(cfg.loop_random_seed)
@@ -120,7 +120,7 @@ class NetCDFLoader(Dataset):
 
         self.img_mean, self.img_std, self.img_tf = img_normalization(self.img_data)
 
-        self.bounds = bnd_normalization(self.img_mean, self.img_std)
+        self.bounds = bnd_normalization(self.img_mean, self.img_std, stat_target)
 
     def load_data(self, ind_data, img_indices, mask_indices):
 

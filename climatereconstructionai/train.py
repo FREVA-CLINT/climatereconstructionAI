@@ -74,6 +74,12 @@ def train(arg_file=None):
 
     steady_mask = load_steadymask(cfg.mask_dir, cfg.steady_masks, cfg.data_types, cfg.device)
 
+    if cfg.target_data_indices == []:
+        stat_target = None
+    else:
+        stat_target = {"mean": [dataset_train.img_mean[i] for i in cfg.target_data_indices],
+                        "std": [dataset_train.img_std[i] for i in cfg.target_data_indices]}
+
     # define network model
     if len(cfg.image_sizes) > 1:
         model = PConvLSTM(radar_img_size=cfg.image_sizes[0],
@@ -181,7 +187,8 @@ def train(arg_file=None):
                 create_snapshot_image(model, dataset_val, '{:s}/images/iter_{:d}'.format(cfg.snapshot_dir, n_iter))
 
         if n_iter % cfg.save_model_interval == 0:
-            save_ckpt('{:s}/ckpt/{:d}.pth'.format(cfg.snapshot_dir, n_iter), [(str(n_iter), n_iter, model, optimizer)])
+            save_ckpt('{:s}/ckpt/{:d}.pth'.format(cfg.snapshot_dir, n_iter), stat_target,
+                      [(str(n_iter), n_iter, model, optimizer)])
 
         if n_iter in final_models:
             savelist.append((str(n_iter), n_iter, copy.deepcopy(model), copy.deepcopy(optimizer)))
@@ -189,7 +196,7 @@ def train(arg_file=None):
     
     prof.stop()
     writer.close()
-    save_ckpt('{:s}/ckpt/final.pth'.format(cfg.snapshot_dir), savelist)
+    save_ckpt('{:s}/ckpt/final.pth'.format(cfg.snapshot_dir), stat_target, savelist)
 
 
 if __name__ == "__main__":

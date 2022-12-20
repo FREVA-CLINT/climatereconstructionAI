@@ -53,7 +53,7 @@ def create_snapshot_image(model, dataset, filename):
                 vmin = cfg.vlim[0]
                 vmax = cfg.vlim[1]
 
-            axes[k, 0].text(-0.5,0.5, key + " " + str(c), size=24, va="center",
+            axes[k, 0].text(-0.5,0.5, key + " " + str(c) +"\n"+str(vmin)+"\n"+str(vmax), size=24, va="center",
                             transform=axes[k, 0].transAxes, color="white")
 
             for j in range(n_cols):
@@ -134,27 +134,47 @@ def infill(model, dataset):
     return data_dict
 
 
-def create_outputs(outputs, dataset, eval_path, suffix=""):
+def create_outputs(outputs, dataset, eval_path, stat_target, suffix=""):
 
     if suffix != "":
         suffix = "." + str(suffix)
+
+    if cfg.target_data_indices == []:
+        mean_val, std_val = dataset.img_mean[:cfg.out_channels], dataset.img_std[:cfg.out_channels]
+        cnames = ["gt", "mask", "image", "output", "infilled"]
+        pnames = ["image", "infilled"]
+    else:
+        mean_val = [dataset.img_mean[i] for i in cfg.target_data_indices]
+        std_val = [dataset.img_std[i] for i in cfg.target_data_indices]
+        cnames = ["gt", "mask", "output"]
+        pnames = ["gt", "output"]
 
     n_out = len(outputs)
 
     for j in range(len(eval_path)):
 
-        data_type = cfg.data_types[j]
+        if cfg.target_data_indices == []:
+            ind = j
+        else:
+            ind = cfg.target_data_indices[j]
 
-        for cname in outputs[0]:
+        data_type = cfg.data_types[ind]
+
+        for cname in cnames:
 
             output_name = '{}_{}'.format(eval_path[j], cname)
 
             dss = []
             for i in range(n_out):
-                dss.append(dataset.xr_dss[j][1].copy())
+                dss.append(dataset.xr_dss[ind][1].copy())
 
-                outputs[i][cname][:,j,:,:] = renormalize(outputs[i][cname][:,j,:,:],
-                                                dataset.img_mean[j], dataset.img_std[j], cname)
+                if cfg.normalize_data and cname != "mask":
+                    if cname == "output" and stat_target is not None:
+                        outputs[i][cname][:,j,:,:] = renormalize(outputs[i][cname][:,j,:,:],
+                                                            stat_target["mean"][j], stat_target["std"][j])
+                    else:
+                        outputs[i][cname][:,j,:,:] = renormalize(outputs[i][cname][:,j,:,:], mean_val[j], std_val[j])
+
                 dss[-1][data_type].values = outputs[i][cname].to(torch.device('cpu')).detach().numpy()[:, j, :, :]
 
                 dss[-1] = reformat_dataset(dataset.xr_dss[j][0], dss[-1], data_type)
@@ -167,5 +187,5 @@ def create_outputs(outputs, dataset, eval_path, suffix=""):
 
         for i in range(n_out):
             output_name = '{}_{}.{}'.format(eval_path[j], "combined", i + 1)
-            plot_data(dataset.xr_dss[j][1].coords, [outputs[i]["image"][:,j,:,:], outputs[i]["infilled"][:,j,:,:]],
+            plot_data(dataset.xr_dss[j][1].coords, [outputs[i][pnames[0]][:,j,:,:], outputs[i][pnames[1]][:,j,:,:]],
                       ["Original", "Reconstructed"], output_name, data_type, cfg.plot_results, *cfg.dataset_format["scale"])

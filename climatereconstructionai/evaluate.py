@@ -30,8 +30,15 @@ def evaluate(arg_file=None, prog_func=None):
             recurrent = False
             time_steps = 0
 
+        ckpt_dict = load_ckpt("{}/{}".format(cfg.model_dir, cfg.model_names[i_model]), cfg.device)
+
+        try:
+            stat_target = ckpt_dict["stat_target"]
+        except:
+            stat_target = None
+
         dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.data_names, cfg.mask_dir, cfg.mask_names, "infill",
-                                   cfg.data_types, time_steps)
+                                   cfg.data_types, time_steps, stat_target)
 
         if len(cfg.image_sizes) > 1:
             model = PConvLSTM(radar_img_size=cfg.image_sizes[0],
@@ -42,7 +49,8 @@ def evaluate(arg_file=None, prog_func=None):
                               rea_img_size=cfg.image_sizes[1],
                               rea_enc_layers=cfg.encoding_layers[1],
                               rea_pool_layers=cfg.pooling_layers[1],
-                              rea_in_channels=(len(cfg.image_sizes) - 1) * (2 * cfg.prev_next_steps + 1),
+                              rea_in_channels=(len(cfg.image_sizes) - 1 - len(cfg.target_data_indices))
+                                              * (2 * cfg.prev_next_steps + 1),
                               recurrent=recurrent,
                               bounds=dataset_val.bounds).to(cfg.device)
         else:
@@ -54,18 +62,18 @@ def evaluate(arg_file=None, prog_func=None):
                               recurrent=recurrent,
                               bounds=dataset_val.bounds).to(cfg.device)
 
-        ckpt_dict = load_ckpt("{}/{}".format(cfg.model_dir, cfg.model_names[i_model]), cfg.device)
         output_names = ["{}/{}".format(cfg.evaluation_dirs[0], name) for name in cfg.eval_names]
         outputs = []
         for k in range(len(ckpt_dict["labels"])):
-            load_model(ckpt_dict, model, label=ckpt_dict["labels"][k])
+            label = ckpt_dict["labels"][k]
+            load_model(ckpt_dict, model, label=label)
             model.eval()
             outputs.append(infill(model, dataset_val))
             if cfg.split_outputs:
-                create_outputs(outputs, dataset_val, output_names, k)
+                create_outputs(outputs, dataset_val, output_names, stat_target, k)
                 outputs = []
         if not cfg.split_outputs:
-            create_outputs(outputs, dataset_val, output_names)
+            create_outputs(outputs, dataset_val, output_names, stat_target)
 
 
 if __name__ == "__main__":

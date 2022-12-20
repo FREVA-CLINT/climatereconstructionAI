@@ -10,11 +10,14 @@ def get_state_dict_on_cpu(obj):
     return state_dict
 
 
-def save_ckpt(ckpt_name, savelist):
-    ckpt_dict = {'labels': []}
+def save_ckpt(ckpt_name, stat_target, savelist):
+    ckpt_dict = {'labels': [], 'stat_target': stat_target}
     for label, iter, model, optimizer in savelist:
         ckpt_dict["labels"].append(label)
-        ckpt_dict[label] = {"n_iter": iter, "model": get_state_dict_on_cpu(model), "optimizer": optimizer.state_dict()}
+        ckpt_dict[label] = {"n_iter": iter, "model": get_state_dict_on_cpu(model),
+                            "optimizer": optimizer.state_dict()}
+
+
     torch.save(ckpt_dict, ckpt_name)
 
 
@@ -23,8 +26,8 @@ def load_ckpt(ckpt_name, device):
     if "labels" not in ckpt_dict.keys():
         label = str(ckpt_dict["n_iter"])
         ckpt_dict["labels"] = [label]
-        ckpt_dict[label] = {"n_iter": ckpt_dict["n_iter"],
-                            "model": ckpt_dict["model"], "optimizer": ckpt_dict["optimizer"]}
+        ckpt_dict[label] = {"n_iter": ckpt_dict["n_iter"], "model": ckpt_dict["model"],
+                            "optimizer": ckpt_dict["optimizer"], "stat_target": ckpt_dict["stat_target"]}
 
     return ckpt_dict
 

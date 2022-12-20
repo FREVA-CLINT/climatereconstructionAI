@@ -100,6 +100,8 @@ def set_common_args():
     arg_parser.add_argument('--data-types', type=str_list, default='tas',
                             help="Comma separated list of variable types, "
                                  "in the same order as data-names and mask-names")
+    arg_parser.add_argument('--target-data-indices', type=int_list, default=[],
+                            help="Indices of the data-names (from 0) to be used as target data")
     arg_parser.add_argument('--device', type=str, default='cuda', help="Device used by PyTorch (cuda or cpu)")
     arg_parser.add_argument('--shuffle-masks', action='store_true', help="Select mask indices randomly")
     arg_parser.add_argument('--prev-next', type=int, default=0, help="")
@@ -151,8 +153,6 @@ def set_train_args(arg_file=None):
                             help="Comma separated list of netCDF files (climate dataset) for validation")
     arg_parser.add_argument('--snapshot-dir', type=str, default='snapshots/',
                             help="Parent directory of the training checkpoints and the snapshot images")
-    arg_parser.add_argument('--target-data-indices', type=int_list, default=[],
-                            help="Indices of the data-names (from 0) to be used as target data")
     arg_parser.add_argument('--resume-iter', type=int, help="Iteration step from which the training will be resumed")
     arg_parser.add_argument('--batch-size', type=int, default=18, help="Batch size")
     arg_parser.add_argument('--n-threads', type=int, default=64, help="Number of threads")
