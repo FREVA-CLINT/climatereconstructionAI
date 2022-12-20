@@ -12,6 +12,7 @@ import numpy as np
 from . import config as cfg
 from .loss.get_loss import get_loss
 from .loss.hole_loss import HoleLoss
+from .loss.valid_loss import ValidLoss
 from .loss.inpainting_loss import InpaintingLoss
 from .model.net import PConvLSTM
 from .utils.evaluation import create_snapshot_image
@@ -108,6 +109,9 @@ def train(arg_file=None):
     if cfg.loss_criterion == 1:
         criterion = HoleLoss().to(cfg.device)
         lambda_dict = cfg.LAMBDA_DICT_HOLE
+    elif cfg.loss_criterion == 3:
+        criterion = ValidLoss().to(cfg.device)
+        lambda_dict = cfg.LAMBDA_DICT_VALID
     else:
         criterion = InpaintingLoss(VGG16FeatureExtractor()).to(cfg.device)
         if cfg.loss_criterion == 0:
