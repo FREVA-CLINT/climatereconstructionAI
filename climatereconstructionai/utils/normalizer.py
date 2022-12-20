@@ -1,6 +1,6 @@
 import numpy as np
 from torchvision import transforms
-
+from .. import config as cfg
 
 def img_normalization(img_data):
     img_std, img_mean, img_tf = [], [], []
@@ -12,18 +12,26 @@ def img_normalization(img_data):
     return img_mean, img_std, img_tf
 
 
-def renormalize(img_data, img_mean, img_std):
-    return img_std * img_data + img_mean
+def renormalize(img_data, img_mean, img_std, cname):
+    if cfg.normalize_data and cname != "mask":
+        return img_std * img_data + img_mean
+    else:
+        return img_data
 
-def bnd_normalization(min_bounds, max_bounds, out_channels, normalize_data, img_mean, img_std):
+def bnd_normalization(img_mean, img_std):
 
-    bounds = np.ones((out_channels, 2)) * np.inf
+    bounds = np.ones((cfg.out_channels, 2)) * np.inf
+    if cfg.target_data_indices == []:
+        idx = list(range(cfg.out_channels))
+    else:
+        idx = cfg.target_data_indices
     k = 0
-    for bound in (min_bounds, max_bounds):
+    for bound in (cfg.min_bounds, cfg.max_bounds):
         bounds[:, k] = bound
         
-        if normalize_data:
-            bounds[:, k] = (bounds[:, k] - img_mean) / img_std
+        if cfg.normalize_data:
+            for i in range(cfg.out_channels):
+                bounds[i, k] = (bounds[i, k] - img_mean[idx[i]]) / img_std[idx[i]]
 
         k += 1
 

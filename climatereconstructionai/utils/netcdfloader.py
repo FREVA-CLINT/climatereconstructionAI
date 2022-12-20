@@ -79,8 +79,8 @@ def load_netcdf(path, data_names, data_types, keep_dss=False):
         dss, data, lengths = zip(*[nc_loadchecker('{}{}'.format(path, data_names[i]), data_types[i], cfg.image_sizes[i],
                                    keep_dss=keep_dss) for i in range(ndata)])
 
-        if cfg.input_data_index is None:
-            assert len(set(lengths)) == 1
+        # if cfg.input_data_index is None:
+        assert len(set(lengths)) == 1
 
         if keep_dss:
             return dss, data, lengths[0]
@@ -120,8 +120,7 @@ class NetCDFLoader(Dataset):
 
         self.img_mean, self.img_std, self.img_tf = img_normalization(self.img_data)
 
-        self.bounds = bnd_normalization(cfg.min_bounds, cfg.max_bounds, cfg.out_channels, cfg.normalize_data, 
-                self.img_mean, self.img_std)
+        self.bounds = bnd_normalization(self.img_mean, self.img_std)
 
     def load_data(self, ind_data, img_indices, mask_indices):
 
@@ -165,33 +164,29 @@ class NetCDFLoader(Dataset):
         images = []
         masks = []
         masked = []
-        for i in range(len(self.data_types)):
+        ndata = len(self.data_types)
+        for i in range(ndata):
 
             image, mask = self.get_single_item(i, index, cfg.shuffle_masks)
-            if i == cfg.input_data_index:
-                masks[0] = masks[0] * mask
-                masked[0] = image * masks[0]
-            else:
+
+            if i in cfg.target_data_indices:
                 images.append(image)
+            else:
+                if cfg.target_data_indices == []:
+                    images.append(image)
                 masks.append(mask)
                 masked.append(image * mask)
 
-        if len(images) == 1:
-            if cfg.prev_next_steps:
-                return masked[0].transpose(0, 1), masks[0].transpose(0, 1), images[0].transpose(0, 1)
-            else:
-                return masked[0], masks[0], images[0]
+        if cfg.prev_next_steps:
+            return torch.cat(masked, dim=0).transpose(0, 1), torch.cat(masks, dim=0).transpose(0, 1),
+            torch.cat(images, dim=0).transpose(0, 1)
+            #return masked[0].transpose(0, 1), masks[0].transpose(0, 1), images[0].transpose(0, 1), torch.cat(
+            #    masked[1:], dim=0).transpose(0, 1), torch.cat(masks[1:], dim=0).transpose(0, 1), torch.cat(
+            #    images[1:], dim=0).transpose(0, 1)
         else:
-            if cfg.prev_next_steps:
-                return torch.cat(masked, dim=0).transpose(0, 1), torch.cat(masks, dim=0).transpose(0, 1),
-                torch.cat(images, dim=0).transpose(0, 1)
-                #return masked[0].transpose(0, 1), masks[0].transpose(0, 1), images[0].transpose(0, 1), torch.cat(
-                #    masked[1:], dim=0).transpose(0, 1), torch.cat(masks[1:], dim=0).transpose(0, 1), torch.cat(
-                #    images[1:], dim=0).transpose(0, 1)
-            else:
-                return torch.cat(masked, dim=1), torch.cat(masks, dim=1), torch.cat(images, dim=1)
-                #return masked[0], masks[0], images[0], torch.cat(masked[1:], dim=1), torch.cat(
-                #    masks[1:], dim=1), torch.cat(images[1:], dim=1)
+            return torch.cat(masked, dim=1), torch.cat(masks, dim=1), torch.cat(images, dim=1)
+            #return masked[0], masks[0], images[0], torch.cat(masked[1:], dim=1), torch.cat(
+            #    masks[1:], dim=1), torch.cat(images[1:], dim=1)
 
     def __len__(self):
         return self.img_length

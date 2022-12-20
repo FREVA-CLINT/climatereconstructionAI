@@ -83,7 +83,8 @@ def train(arg_file=None):
                           rea_img_size=cfg.image_sizes[1],
                           rea_enc_layers=cfg.encoding_layers[1],
                           rea_pool_layers=cfg.pooling_layers[1],
-                          rea_in_channels=(len(cfg.image_sizes) - 1) * (2 * cfg.prev_next_steps + 1),
+                          rea_in_channels=(len(cfg.image_sizes) - 1 - len(cfg.target_data_indices))
+                                          * (2 * cfg.prev_next_steps + 1),
                           recurrent=recurrent,
                           bounds=dataset_train.bounds).to(cfg.device)
     else:

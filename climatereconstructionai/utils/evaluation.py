@@ -25,38 +25,45 @@ def create_snapshot_image(model, dataset, filename):
     with torch.no_grad():
         data_dict["output"] = model(data_dict["image"], data_dict["mask"])
 
-    # select last element of lstm sequence as evaluation element
-    for key in data_dict.keys():
-        data_dict[key] = data_dict[key][:, cfg.lstm_steps, cfg.gt_channels, :, :].to(torch.device('cpu'))
-
     data_dict["infilled"] = data_dict["mask"] * data_dict["image"] + (1 - data_dict["mask"]) * data_dict["output"]
+
     keys = list(data_dict.keys())
+    for key in keys:
+        data_dict[key] = data_dict[key].to(torch.device('cpu'))
 
     # set mask
     data_dict["mask"] = 1 - data_dict["mask"]
     data_dict["image"] = np.ma.masked_array(data_dict["image"], data_dict["mask"])
     data_dict["mask"] = np.ma.masked_array(data_dict["mask"], data_dict["mask"])
 
-    n_rows = len(data_dict)
+    n_rows = sum([data_dict[key].shape[2] for key in keys])
     n_cols = data_dict["image"].shape[0]
-    for c in range(data_dict["output"].shape[1]):
 
-        if cfg.vlim is None:
-            vmin = data_dict["gt"][:, c, :, :].min().item()
-            vmax = data_dict["gt"][:, c, :, :].max().item()
-        else:
-            vmin = cfg.vlim[0]
-            vmax = cfg.vlim[1]
+    # plot and save data
+    fig, axes = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(4 * n_cols, 4 * n_rows))
+    fig.patch.set_facecolor('black')
+    k = 0
+    for key in keys:
+        for c in range(data_dict[key].shape[2]):
 
-        # plot and save data
-        fig, axes = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(20, 20))
-        fig.patch.set_facecolor('black')
-        for i in range(n_rows):
+            if cfg.vlim is None:
+                vmin = data_dict[key][:, :, c, :, :].min().item()
+                vmax = data_dict[key][:, :, c, :, :].max().item()
+            else:
+                vmin = cfg.vlim[0]
+                vmax = cfg.vlim[1]
+
+            axes[k, 0].text(-0.5,0.5, key + " " + str(c), size=24, va="center",
+                            transform=axes[k, 0].transAxes, color="white")
+
             for j in range(n_cols):
-                axes[i, j].axis("off")
-                axes[i, j].imshow(np.squeeze(data_dict[keys[i]][j]), vmin=vmin, vmax=vmax)
-        plt.subplots_adjust(wspace=0.012, hspace=0.012)
-        plt.savefig(filename + '_' + str(c) + '.jpg', bbox_inches='tight', pad_inches=0)
+                axes[k, j].axis("off")
+                axes[k, j].imshow(np.squeeze(data_dict[key][j][:, c, :, :]), vmin=vmin, vmax=vmax)
+
+            k += 1
+
+    plt.subplots_adjust(wspace=0.012, hspace=0.012)
+    plt.savefig(filename + '.jpg', bbox_inches='tight', pad_inches=0)
     plt.clf()
     plt.close('all')
 
@@ -146,9 +153,8 @@ def create_outputs(outputs, dataset, eval_path, suffix=""):
             for i in range(n_out):
                 dss.append(dataset.xr_dss[j][1].copy())
 
-                if cfg.normalize_data and cname != "masks":
-                    outputs[i][cname][:,j,:,:] = renormalize(outputs[i][cname][:,j,:,:],
-                                                    dataset.img_mean[j], dataset.img_std[j])
+                outputs[i][cname][:,j,:,:] = renormalize(outputs[i][cname][:,j,:,:],
+                                                dataset.img_mean[j], dataset.img_std[j], cname)
                 dss[-1][data_type].values = outputs[i][cname].to(torch.device('cpu')).detach().numpy()[:, j, :, :]
 
                 dss[-1] = reformat_dataset(dataset.xr_dss[j][0], dss[-1], data_type)
