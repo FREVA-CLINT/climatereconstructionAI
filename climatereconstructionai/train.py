@@ -23,7 +23,6 @@ from .utils.profiler import load_profiler
 
 
 def train(arg_file=None):
-    
     cfg.set_train_args(arg_file)
 
     print("* Number of GPUs: ", torch.cuda.device_count())
@@ -78,7 +77,7 @@ def train(arg_file=None):
         stat_target = None
     else:
         stat_target = {"mean": [dataset_train.img_mean[i] for i in cfg.target_data_indices],
-                        "std": [dataset_train.img_std[i] for i in cfg.target_data_indices]}
+                       "std": [dataset_train.img_std[i] for i in cfg.target_data_indices]}
 
     # define network model
     if len(cfg.image_sizes) > 1:
@@ -90,8 +89,8 @@ def train(arg_file=None):
                           rea_img_size=cfg.image_sizes[1],
                           rea_enc_layers=cfg.encoding_layers[1],
                           rea_pool_layers=cfg.pooling_layers[1],
-                          rea_in_channels=(len(cfg.image_sizes) - 1 - len(cfg.target_data_indices))
-                                          * (2 * cfg.prev_next_steps + 1),
+                          rea_in_channels=(len(cfg.image_sizes) - 1 - len(cfg.target_data_indices)) *
+                          (2 * cfg.prev_next_steps + 1),
                           recurrent=recurrent,
                           bounds=dataset_train.bounds).to(cfg.device)
     else:
@@ -193,7 +192,7 @@ def train(arg_file=None):
         if n_iter in final_models:
             savelist.append((str(n_iter), n_iter, copy.deepcopy(model), copy.deepcopy(optimizer)))
         prof.step()
-    
+
     prof.stop()
     writer.close()
     save_ckpt('{:s}/ckpt/final.pth'.format(cfg.snapshot_dir), stat_target, savelist)

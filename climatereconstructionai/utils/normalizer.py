@@ -2,6 +2,7 @@ import numpy as np
 from torchvision import transforms
 from .. import config as cfg
 
+
 def img_normalization(img_data):
     img_std, img_mean, img_tf = [], [], []
     for i in range(len(img_data)):
@@ -15,25 +16,25 @@ def img_normalization(img_data):
 def renormalize(img_data, img_mean, img_std):
     return img_std * img_data + img_mean
 
+
 def bnd_normalization(img_mean, img_std, stat_target):
 
     bounds = np.ones((cfg.out_channels, 2)) * np.inf
     if stat_target is None:
         if cfg.target_data_indices == []:
-            mean_val , std_val = img_mean[:cfg.out_channels], img_std[:cfg.out_channels]
+            mean_val, std_val = img_mean[:cfg.out_channels], img_std[:cfg.out_channels]
         else:
             mean_val = [img_mean[i] for i in cfg.target_data_indices]
             std_val = [img_std[i] for i in cfg.target_data_indices]
     else:
-        mean_val , std_val = stat_target["mean"], stat_target["std"]
+        mean_val, std_val = stat_target["mean"], stat_target["std"]
     k = 0
     for bound in (cfg.min_bounds, cfg.max_bounds):
         bounds[:, k] = bound
-        
+
         if cfg.normalize_data:
             bounds[:, k] = (bounds[:, k] - mean_val) / std_val
 
         k += 1
 
     return bounds
-

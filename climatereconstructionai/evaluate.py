@@ -32,9 +32,9 @@ def evaluate(arg_file=None, prog_func=None):
 
         ckpt_dict = load_ckpt("{}/{}".format(cfg.model_dir, cfg.model_names[i_model]), cfg.device)
 
-        try:
+        if "stat_target" in ckpt_dict.keys():
             stat_target = ckpt_dict["stat_target"]
-        except:
+        else:
             stat_target = None
 
         dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.data_names, cfg.mask_dir, cfg.mask_names, "infill",
@@ -49,8 +49,8 @@ def evaluate(arg_file=None, prog_func=None):
                               rea_img_size=cfg.image_sizes[1],
                               rea_enc_layers=cfg.encoding_layers[1],
                               rea_pool_layers=cfg.pooling_layers[1],
-                              rea_in_channels=(len(cfg.image_sizes) - 1 - len(cfg.target_data_indices))
-                                              * (2 * cfg.prev_next_steps + 1),
+                              rea_in_channels=(len(cfg.image_sizes) - 1 - len(cfg.target_data_indices)) *
+                              (2 * cfg.prev_next_steps + 1),
                               recurrent=recurrent,
                               bounds=dataset_val.bounds).to(cfg.device)
         else:

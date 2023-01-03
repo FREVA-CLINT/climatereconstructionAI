@@ -1,16 +1,20 @@
 import torch
 import numpy as np
 
+
 def bnd_pass(output):
     return output
+
 
 def bnd_sigmoid(output, ymin, ymax):
     output = torch.sigmoid(output)
     return output * (ymax - ymin) + ymin
 
+
 def bnd_exp(output, y0, sign=1):
     output = sign * torch.exp(sign * output)
     return output + y0
+
 
 class constrain_bounds():
     def __init__(self, bounds):
@@ -38,4 +42,3 @@ class constrain_bounds():
             output[:, :, i, :, :] = self.binders[i](output[:, :, i, :, :], *self.params[i])
 
         return output
-

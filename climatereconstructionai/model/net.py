@@ -5,7 +5,7 @@ from .attention_module import AttentionEncoderBlock
 from .conv_configs import init_enc_conv_configs, init_dec_conv_configs, \
     init_enc_conv_configs_orig, init_dec_conv_configs_orig
 from .encoder_decoder import EncoderBlock, DecoderBlock
-from .bounds_scaler import constrain_bounds  
+from .bounds_scaler import constrain_bounds
 from .. import config as cfg
 
 
@@ -100,8 +100,10 @@ class PConvLSTM(nn.Module):
         hs_mask = [h_mask]
         recurrent_states = []
 
-        h_attention = input[:, :, 1:, :, :]
-        h_attention_mask = input_mask[:, :, 1:, :, :]
+        attention_input = input[:, :, 1:, :, :]
+        attention_input_mask = input_mask[:, :, 1:, :, :]
+        h_attention = attention_input
+        h_attention_mask = attention_input_mask
         attentions = []
         attentions_mask = []
         attentions_recurrent_states = []

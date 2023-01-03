@@ -17,7 +17,6 @@ def save_ckpt(ckpt_name, stat_target, savelist):
         ckpt_dict[label] = {"n_iter": iter, "model": get_state_dict_on_cpu(model),
                             "optimizer": optimizer.state_dict()}
 
-
     torch.save(ckpt_dict, ckpt_name)
 
 

@@ -1,5 +1,5 @@
 import numpy as np
-from torch import nn, manual_seed
+from torch import nn
 
 
 def weights_init(init_type='gaussian'):

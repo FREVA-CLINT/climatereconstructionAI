@@ -17,6 +17,7 @@ LAMBDA_DICT_VALID = {
     'valid': 1.0
 }
 
+
 def get_format(dataset_name):
     json_data = pkgutil.get_data(__name__, "static/dataset_format.json")
     dataset_format = json.loads(json_data)
@@ -32,11 +33,14 @@ class LoadFromFile(argparse.Action):
 def str_list(arg):
     return arg.split(',')
 
+
 def int_list(arg):
     return list(map(int, arg.split(',')))
 
+
 def float_list(arg):
     return list(map(float, arg.split(',')))
+
 
 def lim_list(arg):
     lim = list(map(float, arg.split(',')))

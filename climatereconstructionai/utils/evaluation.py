@@ -53,7 +53,7 @@ def create_snapshot_image(model, dataset, filename):
                 vmin = cfg.vlim[0]
                 vmax = cfg.vlim[1]
 
-            axes[k, 0].text(-0.5,0.5, key + " " + str(c) +"\n"+str(vmin)+"\n"+str(vmax), size=24, va="center",
+            axes[k, 0].text(-0.5, 0.5, key + " " + str(c) + "\n" + str(vmin) + "\n" + str(vmax), size=24, va="center",
                             transform=axes[k, 0].transAxes, color="white")
 
             for j in range(n_cols):
@@ -114,7 +114,8 @@ def infill(model, dataset):
 
         # get results from trained network
         with torch.no_grad():
-            data_dict["output"].append(model(data_dict["image"][-1].to(cfg.device), data_dict["mask"][-1].to(cfg.device)))
+            data_dict["output"].append(model(data_dict["image"][-1].to(cfg.device),
+                                             data_dict["mask"][-1].to(cfg.device)))
 
         for key in keys[:4]:
             data_dict[key][-1] = data_dict[key][-1][:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
@@ -170,22 +171,24 @@ def create_outputs(outputs, dataset, eval_path, stat_target, suffix=""):
 
                 if cfg.normalize_data and cname != "mask":
                     if cname == "output" and stat_target is not None:
-                        outputs[i][cname][:,j,:,:] = renormalize(outputs[i][cname][:,j,:,:],
-                                                            stat_target["mean"][j], stat_target["std"][j])
+                        outputs[i][cname][:, j, :, :] = renormalize(outputs[i][cname][:, j, :, :],
+                                                                    stat_target["mean"][j], stat_target["std"][j])
                     else:
-                        outputs[i][cname][:,j,:,:] = renormalize(outputs[i][cname][:,j,:,:], mean_val[j], std_val[j])
+                        outputs[i][cname][:, j, :, :] = renormalize(outputs[i][cname][:, j, :, :],
+                                                                    mean_val[j], std_val[j])
 
                 dss[-1][data_type].values = outputs[i][cname].to(torch.device('cpu')).detach().numpy()[:, j, :, :]
 
                 dss[-1] = reformat_dataset(dataset.xr_dss[j][0], dss[-1], data_type)
 
             ds = xr.concat(dss, dim="time", data_vars="minimal").sortby('time')
-            ds.attrs["history"] = "Infilled using CRAI " \
-                                  "(Climate Reconstruction AI: https://github.com/FREVA-CLINT/climatereconstructionAI)\n" \
-                                  + ds.attrs["history"]
+            ds.attrs["history"] = "Infilled using CRAI (Climate Reconstruction AI: " \
+                                  "https://github.com/FREVA-CLINT/climatereconstructionAI)\n" + ds.attrs["history"]
             ds.to_netcdf(output_name + suffix + ".nc")
 
         for i in range(n_out):
             output_name = '{}_{}.{}'.format(eval_path[j], "combined", i + 1)
-            plot_data(dataset.xr_dss[j][1].coords, [outputs[i][pnames[0]][:,j,:,:], outputs[i][pnames[1]][:,j,:,:]],
-                      ["Original", "Reconstructed"], output_name, data_type, cfg.plot_results, *cfg.dataset_format["scale"])
+            plot_data(dataset.xr_dss[j][1].coords,
+                      [outputs[i][pnames[0]][:, j, :, :], outputs[i][pnames[1]][:, j, :, :]],
+                      ["Original", "Reconstructed"], output_name, data_type, cfg.plot_results,
+                      *cfg.dataset_format["scale"])

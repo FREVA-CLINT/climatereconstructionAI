@@ -110,7 +110,7 @@ class NetCDFLoader(Dataset):
             else:
                 data_path = '{:s}/val/'.format(data_root)
                 if not cfg.shuffle_masks:
-                    mask_path = '{:s}/val/'.format(mask_root) 
+                    mask_path = '{:s}/val/'.format(mask_root)
             self.img_data, self.img_length = load_netcdf(data_path, img_names, data_types)
 
         self.mask_data, self.mask_length = load_netcdf(mask_path, mask_names, data_types)
@@ -189,13 +189,8 @@ class NetCDFLoader(Dataset):
             if cfg.prev_next_steps:
                 return torch.cat(masked, dim=0).transpose(0, 1), torch.cat(masks, dim=0).transpose(0, 1),
                 torch.cat(images, dim=0).transpose(0, 1)
-                #return masked[0].transpose(0, 1), masks[0].transpose(0, 1), images[0].transpose(0, 1), torch.cat(
-                #    masked[1:], dim=0).transpose(0, 1), torch.cat(masks[1:], dim=0).transpose(0, 1), torch.cat(
-                #    images[1:], dim=0).transpose(0, 1)
             else:
                 return torch.cat(masked, dim=1), torch.cat(masks, dim=1), torch.cat(images, dim=1)
-                #return masked[0], masks[0], images[0], torch.cat(masked[1:], dim=1), torch.cat(
-                #    masks[1:], dim=1), torch.cat(images[1:], dim=1)
 
     def __len__(self):
         return self.img_length
