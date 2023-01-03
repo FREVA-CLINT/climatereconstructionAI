@@ -6,11 +6,10 @@ from ..utils.weights import weights_init
 
 
 class ConvLSTMBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, image_size, kernel, stride, padding, dilation, groups):
+    def __init__(self, in_channels, out_channels, img_size, kernel, stride, padding, dilation, groups):
         super().__init__()
-        self.in_channels = in_channels
         self.out_channels = out_channels
-        self.image_size = image_size
+        self.img_size = img_size
 
         self.lstm_conv = nn.Conv2d(in_channels + out_channels, 4 * out_channels, kernel, stride, padding, dilation,
                                    groups, True)
@@ -18,9 +17,9 @@ class ConvLSTMBlock(nn.Module):
         if cfg.weights:
             self.lstm_conv.apply(weights_init(cfg.weights))
 
-        self.Wci = nn.Parameter(torch.zeros(1, out_channels, image_size, image_size)).to(cfg.device)
-        self.Wcf = nn.Parameter(torch.zeros(1, out_channels, image_size, image_size)).to(cfg.device)
-        self.Wco = nn.Parameter(torch.zeros(1, out_channels, image_size, image_size)).to(cfg.device)
+        self.Wci = nn.Parameter(torch.zeros(1, out_channels, img_size, img_size)).to(cfg.device)
+        self.Wcf = nn.Parameter(torch.zeros(1, out_channels, img_size, img_size)).to(cfg.device)
+        self.Wco = nn.Parameter(torch.zeros(1, out_channels, img_size, img_size)).to(cfg.device)
 
     def forward(self, inputs, lstm_state=None):
         lstm_steps = inputs.shape[1]
@@ -28,10 +27,10 @@ class ConvLSTMBlock(nn.Module):
 
         if lstm_state is None:
             batch_size = inputs.shape[0]
-            h = torch.zeros((batch_size, self.out_channels, self.image_size,
-                             self.image_size), dtype=torch.float).to(cfg.device)
-            mem_cell = torch.zeros((batch_size, self.out_channels, self.image_size,
-                                    self.image_size), dtype=torch.float).to(cfg.device)
+            h = torch.zeros((batch_size, self.out_channels, self.img_size,
+                             self.img_size), dtype=torch.float).to(cfg.device)
+            mem_cell = torch.zeros((batch_size, self.out_channels, self.img_size,
+                                    self.img_size), dtype=torch.float).to(cfg.device)
         else:
             h, mem_cell = lstm_state
 

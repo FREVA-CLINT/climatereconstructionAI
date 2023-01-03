@@ -15,7 +15,6 @@ from .. import config as cfg
 
 
 def create_snapshot_image(model, dataset, filename):
-
     data_dict = {}
     data_dict["image"], data_dict["mask"], data_dict["gt"] = zip(*[dataset[int(i)] for i in cfg.eval_timesteps])
 
@@ -118,7 +117,7 @@ def infill(model, dataset):
                                              data_dict["mask"][-1].to(cfg.device)))
 
         for key in keys[:4]:
-            data_dict[key][-1] = data_dict[key][-1][:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
+            data_dict[key][-1] = data_dict[key][-1][:, cfg.recurrent_steps, :, :, :].to(torch.device('cpu'))
 
     for key in keys[:4]:
         data_dict[key] = torch.cat(data_dict[key])

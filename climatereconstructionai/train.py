@@ -14,7 +14,7 @@ from .loss.get_loss import get_loss
 from .loss.hole_loss import HoleLoss
 from .loss.valid_loss import ValidLoss
 from .loss.inpainting_loss import InpaintingLoss
-from .model.net import PConvLSTM
+from .model.net import CRAINet
 from .utils.evaluation import create_snapshot_image
 from .utils.featurizer import VGG16FeatureExtractor
 from .utils.io import load_ckpt, load_model, save_ckpt
@@ -47,16 +47,12 @@ def train(arg_file=None):
     writer = SummaryWriter(log_dir=cfg.log_dir)
 
     if cfg.lstm_steps:
-        recurrent = True
         time_steps = cfg.lstm_steps
     elif cfg.gru_steps:
-        recurrent = True
         time_steps = cfg.gru_steps
-    elif cfg.prev_next_steps:
-        recurrent = False
-        time_steps = cfg.prev_next_steps
+    elif cfg.channel_steps:
+        time_steps = cfg.channel_steps
     else:
-        recurrent = False
         time_steps = 0
 
     # create data sets
@@ -81,26 +77,24 @@ def train(arg_file=None):
 
     # define network model
     if len(cfg.image_sizes) > 1:
-        model = PConvLSTM(radar_img_size=cfg.image_sizes[0],
-                          radar_enc_dec_layers=cfg.encoding_layers[0],
-                          radar_pool_layers=cfg.pooling_layers[0],
-                          radar_in_channels=2 * cfg.prev_next_steps + 1,
-                          radar_out_channels=cfg.out_channels,
-                          rea_img_size=cfg.image_sizes[1],
-                          rea_enc_layers=cfg.encoding_layers[1],
-                          rea_pool_layers=cfg.pooling_layers[1],
-                          rea_in_channels=(len(cfg.image_sizes) - 1 - len(cfg.target_data_indices)) *
-                          (2 * cfg.prev_next_steps + 1),
-                          recurrent=recurrent,
-                          bounds=dataset_train.bounds).to(cfg.device)
+        model = CRAINet(img_size=cfg.image_sizes[0],
+                        enc_dec_layers=cfg.encoding_layers[0],
+                        pool_layers=cfg.pooling_layers[0],
+                        in_channels=2 * cfg.channel_steps + 1,
+                        out_channels=cfg.out_channels,
+                        fusion_img_size=cfg.image_sizes[1],
+                        fusion_enc_layers=cfg.encoding_layers[1],
+                        fusion_pool_layers=cfg.pooling_layers[1],
+                        fusion_in_channels=(len(cfg.image_sizes) - 1 - len(cfg.target_data_indices)) *
+                        (2 * cfg.channel_steps + 1),
+                        bounds=dataset_train.bounds).to(cfg.device)
     else:
-        model = PConvLSTM(radar_img_size=cfg.image_sizes[0],
-                          radar_enc_dec_layers=cfg.encoding_layers[0],
-                          radar_pool_layers=cfg.pooling_layers[0],
-                          radar_in_channels=2 * cfg.prev_next_steps + 1,
-                          radar_out_channels=cfg.out_channels,
-                          recurrent=recurrent,
-                          bounds=dataset_train.bounds).to(cfg.device)
+        model = CRAINet(img_size=cfg.image_sizes[0],
+                        enc_dec_layers=cfg.encoding_layers[0],
+                        pool_layers=cfg.pooling_layers[0],
+                        in_channels=2 * cfg.channel_steps + 1,
+                        out_channels=cfg.out_channels,
+                        bounds=dataset_train.bounds).to(cfg.device)
 
     # define learning rate
     if cfg.finetune:
@@ -158,6 +152,7 @@ def train(arg_file=None):
 
         # train model
         model.train()
+
         image, mask, gt = [x.to(cfg.device) for x in next(iterator_train)]
         output = model(image, mask)
 
