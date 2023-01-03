@@ -2,7 +2,7 @@
 --model-dir ../data/
 --model-names 20crtasgn72.pth
 --evaluation-dirs outputs
---img-names tas_hadcrut_187709_189308.nc
+--data-names tas_hadcrut_187709_189308.nc
 --data-types tas
 --device cpu --image-sizes 72
 --n-filters 18

@@ -23,11 +23,11 @@ def save_ckpt(ckpt_name, stat_target, savelist):
 
 def load_ckpt(ckpt_name, device):
     ckpt_dict = torch.load(ckpt_name, map_location=device)
-    if "labels" not in ckpt_dict.keys():
+    keys = ckpt_dict.keys()
+    if "labels" not in keys:
         label = str(ckpt_dict["n_iter"])
         ckpt_dict["labels"] = [label]
-        ckpt_dict[label] = {"n_iter": ckpt_dict["n_iter"], "model": ckpt_dict["model"],
-                            "optimizer": ckpt_dict["optimizer"], "stat_target": ckpt_dict["stat_target"]}
+        ckpt_dict[label] = {key: ckpt_dict[key] for key in keys}
 
     return ckpt_dict
 
