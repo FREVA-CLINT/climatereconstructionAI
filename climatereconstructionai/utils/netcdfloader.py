@@ -180,17 +180,11 @@ class NetCDFLoader(Dataset):
                 masks.append(mask)
                 masked.append(image * mask)
 
-        if len(images) == 1:
-            if cfg.channel_steps:
-                return masked[0].transpose(0, 1), masks[0].transpose(0, 1), images[0].transpose(0, 1)
-            else:
-                return masked[0], masks[0], images[0]
+        if cfg.channel_steps:
+            return torch.cat(masked, dim=0).transpose(0, 1), torch.cat(masks, dim=0)\
+                .transpose(0, 1), torch.cat(images, dim=0).transpose(0, 1)
         else:
-            if cfg.channel_steps:
-                return torch.cat(masked, dim=0).transpose(0, 1), torch.cat(masks, dim=0)\
-                    .transpose(0, 1), torch.cat(images, dim=0).transpose(0, 1)
-            else:
-                return torch.cat(masked, dim=1), torch.cat(masks, dim=1), torch.cat(images, dim=1)
+            return torch.cat(masked, dim=1), torch.cat(masks, dim=1), torch.cat(images, dim=1)
 
     def __len__(self):
         return self.img_length
