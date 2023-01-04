@@ -116,14 +116,6 @@ def infill(model, dataset):
             data_dict["output"].append(model(data_dict["image"][-1].to(cfg.device),
                                              data_dict["mask"][-1].to(cfg.device)))
 
-        # image_part, mask_part, gt_part
-        for i in range(3):
-            data_part[i] = data_part[i][:, cfg.recurrent_steps, :, :, :].to(torch.device('cpu'))
-            # only select first channel
-            data_part[i] = torch.unsqueeze(data_part[i][:, cfg.channel_steps, :, :], dim=1)
-
-        output_part = output_part[:, cfg.recurrent_steps, :, :, :].to(torch.device('cpu'))
-
         for key in keys[:4]:
             data_dict[key][-1] = data_dict[key][-1][:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
 
