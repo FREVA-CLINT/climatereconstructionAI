@@ -16,7 +16,8 @@ def progstat(index, numel):
 
 class CRAINet(nn.Module):
     def __init__(self, img_size=512, enc_dec_layers=4, pool_layers=4, in_channels=1, out_channels=1,
-                 fusion_img_size=None, fusion_enc_layers=None, fusion_pool_layers=None, fusion_in_channels=0, bounds=None):
+                 fusion_img_size=None, fusion_enc_layers=None, fusion_pool_layers=None, fusion_in_channels=0,
+                 bounds=None):
 
         super().__init__()
 
