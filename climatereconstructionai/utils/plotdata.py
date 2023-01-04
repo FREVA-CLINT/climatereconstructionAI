@@ -50,9 +50,8 @@ def plot_data(coords, data, titles, output_name, data_type, time_indices, vlim, 
                 axes[i].yaxis.set_ticks_position("left")
                 axes[i].set_title(titles[i], size=18)
 
-                if i == 0:
-                    cb = plt.colorbar(image, location="bottom", ax=axes, fraction=0.1, pad=0.1)
-                    cb.set_label(get_longname(data_type), size=14)
+            cb = plt.colorbar(image, location="bottom", ax=axes, fraction=0.1, pad=0.1)
+            cb.set_label(get_longname(data_type), size=14)
 
             fig.suptitle(dims["time"][j], size=20)
 

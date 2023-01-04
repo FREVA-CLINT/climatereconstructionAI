@@ -3,12 +3,14 @@
 --mask-dir data/
 --log-dir tests/out/training/logs/
 --snapshot-dir tests/out/training/
---img-names 20cr-1ens.nc
+--data-names 20cr-1ens.nc
 --mask-names hadcrut_missmask_1.nc
 --max-iter 10
 --save-model-interval 5
 --loss-criterion 0
 --eval-timesteps 0,1,2
 --weights kaiming
---random-seed 3
+--loop-random-seed 3
+--cuda-random-seed 3
+--deterministic
 --shuffle-masks

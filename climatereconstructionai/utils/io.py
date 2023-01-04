@@ -10,24 +10,35 @@ def get_state_dict_on_cpu(obj):
     return state_dict
 
 
-def save_ckpt(ckpt_name, models, optimizers, n_iter):
-    ckpt_dict = {'n_iter': n_iter}
-    for prefix, model in models:
-        ckpt_dict[prefix] = get_state_dict_on_cpu(model)
+def save_ckpt(ckpt_name, stat_target, savelist):
+    ckpt_dict = {'labels': [], 'stat_target': stat_target}
+    for label, iter, model, optimizer in savelist:
+        ckpt_dict["labels"].append(label)
+        ckpt_dict[label] = {"n_iter": iter, "model": get_state_dict_on_cpu(model),
+                            "optimizer": optimizer.state_dict()}
 
-    for prefix, optimizer in optimizers:
-        ckpt_dict[prefix] = optimizer.state_dict()
     torch.save(ckpt_dict, ckpt_name)
 
 
-def load_ckpt(ckpt_name, models, device, optimizers=None):
+def load_ckpt(ckpt_name, device):
     ckpt_dict = torch.load(ckpt_name, map_location=device)
-    for prefix, model in models:
-        assert isinstance(model, nn.Module)
-        ckpt_dict[prefix] = {key.replace("module.", ""): value for key, value in ckpt_dict[prefix].items()}
-        model.load_state_dict(ckpt_dict[prefix])
+    keys = ckpt_dict.keys()
+    if "labels" not in keys:
+        label = str(ckpt_dict["n_iter"])
+        ckpt_dict["labels"] = [label]
+        ckpt_dict[label] = {key: ckpt_dict[key] for key in keys}
 
-    if optimizers is not None:
-        for prefix, optimizer in optimizers:
-            optimizer.load_state_dict(ckpt_dict[prefix])
-    return ckpt_dict['n_iter']
+    return ckpt_dict
+
+
+def load_model(ckpt_dict, model, optimizer=None, label=None):
+    assert isinstance(model, nn.Module)
+    if label is None:
+        label = ckpt_dict["labels"][-1]
+
+    ckpt_dict[label]["model"] = \
+        {key.replace("module.", ""): value for key, value in ckpt_dict[label]["model"].items()}
+    model.load_state_dict(ckpt_dict[label]["model"])
+    if optimizer is not None:
+        optimizer.load_state_dict(ckpt_dict[label]["optimizer"])
+    return ckpt_dict[label]["n_iter"]

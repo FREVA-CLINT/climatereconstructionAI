@@ -32,25 +32,21 @@ def get_loss(criterion, lambda_dict, img_mask, loss_mask, output, gt, writer, it
     else:
         loss_func = criterion
 
-    if loss_mask is None:
-        mask = img_mask
-    else:
-        mask = img_mask + loss_mask
-        if not ((mask == 0) | (mask == 1)).all():
-            print("Error! Not all values in mask are zeros or ones!")
-            exit()
+    mask = img_mask[:, cfg.recurrent_steps, cfg.gt_channels, :, :]
+    if loss_mask is not None:
+        mask += loss_mask
+        assert ((mask == 0) | (mask == 1)).all(), "Not all values in mask are zeros or ones!"
 
-    loss_dict = loss_func(mask[:, cfg.recurrent_steps, cfg.gt_channels, :, :],
-                          output[:, cfg.recurrent_steps, :, :, :],
-                          gt[:, cfg.recurrent_steps, cfg.gt_channels, :, :])
+    loss_dict = loss_func(mask, output[:, cfg.recurrent_steps, :, :, :], gt[:, cfg.recurrent_steps, cfg.gt_channels, :, :])
+
     losses = {"total": 0.0}
     for key, factor in lambda_dict.items():
         value = factor * loss_dict[key]
         losses[key] = value
         losses["total"] += value
 
-    if cfg.log_interval and (iter_index + 1) % cfg.log_interval == 0:
+    if cfg.log_interval and iter_index % cfg.log_interval == 0:
         for key in losses.keys():
-            writer.add_scalar('loss_{:s}-{:s}'.format(setname, key), losses[key], iter_index + 1)
+            writer.add_scalar('loss_{:s}-{:s}'.format(setname, key), losses[key], iter_index)
 
     return losses["total"]
