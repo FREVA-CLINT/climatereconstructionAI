@@ -187,8 +187,8 @@ class NetCDFLoader(Dataset):
                 return masked[0], masks[0], images[0]
         else:
             if cfg.channel_steps:
-                return torch.cat(masked, dim=0).transpose(0, 1), torch.cat(masks, dim=0).transpose(0, 1),
-                torch.cat(images, dim=0).transpose(0, 1)
+                return torch.cat(masked, dim=0).transpose(0, 1), torch.cat(masks, dim=0).transpose(0, 1),\
+                       torch.cat(images, dim=0).transpose(0, 1)
             else:
                 return torch.cat(masked, dim=1), torch.cat(masks, dim=1), torch.cat(images, dim=1)
 

@@ -94,14 +94,14 @@ class CRAINet(nn.Module):
 
     def forward(self, input, input_mask):
         # create lists for skip connections
-        h = input[:, :, 0, :, :].unsqueeze(dim=2)
-        h_mask = input_mask[:, :, 0, :, :].unsqueeze(dim=2)
-        hs = [h]
-        hs_mask = [h_mask]
+        # We split the inputs in case we use the attention module with different image dimension
+        h_index = 2 * cfg.channel_steps + 1
+        hs = [input[:, :, :h_index, :, :]]
+        hs_mask = [input_mask[:, :, :h_index, :, :]]
         recurrent_states = []
 
-        fusion_input = input[:, :, 1:, :, :]
-        fusion_input_mask = input_mask[:, :, 1:, :, :]
+        fusion_input = input[:, :, h_index:, :, :]
+        fusion_input_mask = input_mask[:, :, h_index:, :, :]
         h_fusion = fusion_input
         h_fusion_mask = fusion_input_mask
         hs_fusion = []
@@ -110,7 +110,7 @@ class CRAINet(nn.Module):
 
         # forward pass encoding layers
         for i in range(self.net_depth):
-            if h_fusion.size()[1] != 0 and h.shape[3] == h_fusion.shape[3]:
+            if h_fusion.size()[1] != 0 and hs[i].shape[3] == h_fusion.shape[3]:
                 if not cfg.attention:
                     hs[i] = torch.cat([hs[i], h_fusion], dim=2)
                     hs_mask[i] = torch.cat([hs_mask[i], h_fusion_mask], dim=2)
