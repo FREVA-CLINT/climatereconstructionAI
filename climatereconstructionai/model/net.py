@@ -5,6 +5,7 @@ from .attention_module import AttentionEncoderBlock
 from .conv_configs import init_enc_conv_configs, init_dec_conv_configs, \
     init_enc_conv_configs_orig, init_dec_conv_configs_orig
 from .encoder_decoder import EncoderBlock, DecoderBlock
+from .bounds_scaler import constrain_bounds
 from .. import config as cfg
 
 
@@ -15,7 +16,9 @@ def progstat(index, numel):
 
 class CRAINet(nn.Module):
     def __init__(self, img_size=512, enc_dec_layers=4, pool_layers=4, in_channels=1, out_channels=1,
-                 fusion_img_size=None, fusion_enc_layers=None, fusion_pool_layers=None, fusion_in_channels=0):
+                 fusion_img_size=None, fusion_enc_layers=None, fusion_pool_layers=None, fusion_in_channels=0,
+                 bounds=None):
+
         super().__init__()
 
         self.freeze_enc_bn = False
@@ -23,9 +26,9 @@ class CRAINet(nn.Module):
 
         # initialize channel inputs and outputs and image size for encoder and decoder
         if cfg.n_filters is None:
-            enc_conv_configs = init_enc_conv_configs(img_size, enc_dec_layers,
+            enc_conv_configs = init_enc_conv_configs(cfg.conv_factor, img_size, enc_dec_layers,
                                                      pool_layers, in_channels)
-            dec_conv_configs = init_dec_conv_configs(img_size, enc_dec_layers,
+            dec_conv_configs = init_dec_conv_configs(cfg.conv_factor, img_size, enc_dec_layers,
                                                      pool_layers, in_channels,
                                                      out_channels)
         else:
@@ -36,8 +39,9 @@ class CRAINet(nn.Module):
 
         if cfg.attention:
             self.attention_depth = fusion_enc_layers + fusion_pool_layers
-            attention_enc_conv_configs = init_enc_conv_configs(fusion_img_size, fusion_enc_layers,
+            attention_enc_conv_configs = init_enc_conv_configs(cfg.conv_factor, fusion_img_size, fusion_enc_layers,
                                                                fusion_pool_layers, fusion_in_channels)
+
             attention_layers = []
             for i in range(self.attention_depth):
                 if i < fusion_enc_layers:
@@ -86,14 +90,18 @@ class CRAINet(nn.Module):
                 kernel=dec_conv_configs[i]['kernel'], stride=(1, 1), activation=activation, bias=bias))
         self.decoder = nn.ModuleList(decoding_layers)
 
-    def forward(self, input, input_mask, fusion_input, fusion_input_mask):
+        self.binder = constrain_bounds(bounds)
+
+    def forward(self, input, input_mask):
         # create lists for skip connections
-        h = input
-        h_mask = input_mask
-        hs = [h]
-        hs_mask = [h_mask]
+        # We split the inputs in case we use the attention module with different image dimension
+        h_index = 2 * cfg.channel_steps + 1
+        hs = [input[:, :, :h_index, :, :]]
+        hs_mask = [input_mask[:, :, :h_index, :, :]]
         recurrent_states = []
 
+        fusion_input = input[:, :, h_index:, :, :]
+        fusion_input_mask = input_mask[:, :, h_index:, :, :]
         h_fusion = fusion_input
         h_fusion_mask = fusion_input_mask
         hs_fusion = []
@@ -102,7 +110,7 @@ class CRAINet(nn.Module):
 
         # forward pass encoding layers
         for i in range(self.net_depth):
-            if h_fusion.size()[1] != 0 and h.shape[3] == h_fusion.shape[3]:
+            if h_fusion.size()[1] != 0 and hs[i].shape[3] == h_fusion.shape[3]:
                 if not cfg.attention:
                     hs[i] = torch.cat([hs[i], h_fusion], dim=2)
                     hs_mask[i] = torch.cat([hs_mask[i], h_fusion_mask], dim=2)
@@ -174,6 +182,8 @@ class CRAINet(nn.Module):
                                                              h_mask, hs_mask[self.net_depth - i - 1],
                                                              None)
             progstat(i + self.net_depth, 2 * self.net_depth)
+
+        h = self.binder.scale(h)
 
         # return last element of output from last decoding layer
         return h

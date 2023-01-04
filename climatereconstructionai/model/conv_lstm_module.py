@@ -15,7 +15,7 @@ class ConvLSTMBlock(nn.Module):
                                    groups, True)
 
         if cfg.weights:
-            self.lstm_conv.apply(weights_init(cfg.weights, random_seed=cfg.random_seed))
+            self.lstm_conv.apply(weights_init(cfg.weights))
 
         self.Wci = nn.Parameter(torch.zeros(1, out_channels, img_size, img_size)).to(cfg.device)
         self.Wcf = nn.Parameter(torch.zeros(1, out_channels, img_size, img_size)).to(cfg.device)

@@ -1,6 +1,6 @@
-# climatereconstructionAI
+# CRAI (Climate Reconstruction AI)
 
-Software to train climate reconstruction technology (image inpainting with partial convolutions) with numerical model output and to re-fill missing values in observational datasets (e.g., HadCRUT4) using trained models.
+Software to train/evaluate models to reconstruct missing values in climate data (e.g., HadCRUT4) based on a U-Net with partial convolutions.
 
 ## Dependencies
 - python>=3.7
@@ -78,45 +78,79 @@ Once installed, the package can be used as:
 For more information about the arguments:
 ```bash
 crai-train --help
-usage: crai-train [-h] [--data-root-dir DATA_ROOT_DIR] [--mask-dir MASK_DIR] [--log-dir LOG_DIR] [--img-names IMG_NAMES] [--mask-names MASK_NAMES] [--data-types DATA_TYPES] [--device DEVICE] [--prev-next PREV_NEXT] [--lstm-steps LSTM_STEPS]
-                  [--prev-next-steps PREV_NEXT_STEPS] [--encoding-layers ENCODING_LAYERS] [--pooling-layers POOLING_LAYERS] [--image-sizes IMAGE_SIZES] [--weights WEIGHTS] [--attention] [--channel-reduction-rate CHANNEL_REDUCTION_RATE]
-                  [--disable-skip-layers] [--disable-first-last-bn] [--out-channels OUT_CHANNELS] [--snapshot-dir SNAPSHOT_DIR] [--resume-iter RESUME_ITER] [--batch-size BATCH_SIZE] [--n-threads N_THREADS] [--finetune] [--lr LR]
-                  [--lr-finetune LR_FINETUNE] [--max-iter MAX_ITER] [--log-interval LOG_INTERVAL] [--save-snapshot-image] [--save-model-interval SAVE_MODEL_INTERVAL] [--loss-criterion LOSS_CRITERION] [--eval-timesteps EVAL_TIMESTEPS]
-                  [--load-from-file LOAD_FROM_FILE]
+usage: crai-train [-h] [--data-root-dir DATA_ROOT_DIR] [--mask-dir MASK_DIR] [--log-dir LOG_DIR] [--data-names DATA_NAMES] [--mask-names MASK_NAMES]
+                  [--data-types DATA_TYPES] [--target-data-indices TARGET_DATA_INDICES] [--device DEVICE] [--shuffle-masks] [--channel-steps CHANNEL_STEPS]
+                  [--lstm-steps LSTM_STEPS] [--gru-steps GRU_STEPS] [--encoding-layers ENCODING_LAYERS] [--pooling-layers POOLING_LAYERS] [--conv-factor CONV_FACTOR]
+                  [--image-sizes IMAGE_SIZES] [--weights WEIGHTS] [--steady-masks STEADY_MASKS] [--loop-random-seed LOOP_RANDOM_SEED]
+                  [--cuda-random-seed CUDA_RANDOM_SEED] [--deterministic] [--attention] [--channel-reduction-rate CHANNEL_REDUCTION_RATE] [--disable-skip-layers]
+                  [--disable-first-bn] [--masked-bn] [--global-padding] [--normalize-data] [--n-filters N_FILTERS] [--out-channels OUT_CHANNELS]
+                  [--dataset-name DATASET_NAME] [--min-bounds MIN_BOUNDS] [--max-bounds MAX_BOUNDS] [--profile] [--val-names VAL_NAMES] [--snapshot-dir SNAPSHOT_DIR]
+                  [--resume-iter RESUME_ITER] [--batch-size BATCH_SIZE] [--n-threads N_THREADS] [--multi-gpus] [--finetune] [--lr LR] [--lr-finetune LR_FINETUNE]
+                  [--max-iter MAX_ITER] [--log-interval LOG_INTERVAL] [--lr-scheduler-patience LR_SCHEDULER_PATIENCE] [--save-snapshot-image]
+                  [--save-model-interval SAVE_MODEL_INTERVAL] [--n-final-models N_FINAL_MODELS] [--final-models-interval FINAL_MODELS_INTERVAL]
+                  [--loss-criterion LOSS_CRITERION] [--eval-timesteps EVAL_TIMESTEPS] [-f LOAD_FROM_FILE] [--vlim VLIM]
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --data-root-dir DATA_ROOT_DIR
                         Root directory containing the climate datasets
   --mask-dir MASK_DIR   Directory containing the mask datasets
   --log-dir LOG_DIR     Directory where the log files will be stored
-  --img-names IMG_NAMES
-                        Comma separated list of netCDF files (climate dataset)
+  --data-names DATA_NAMES
+                        Comma separated list of netCDF files (climate dataset) for training/infilling
   --mask-names MASK_NAMES
                         Comma separated list of netCDF files (mask dataset). If None, it extracts the masks from the climate dataset
   --data-types DATA_TYPES
-                        Comma separated list of variable types, in the same order as img-names and mask-names
+                        Comma separated list of variable types, in the same order as data-names and mask-names
+  --target-data-indices TARGET_DATA_INDICES
+                        Indices of the data-names (from 0) to be used as target data
   --device DEVICE       Device used by PyTorch (cuda or cpu)
-  --prev-next PREV_NEXT
+  --shuffle-masks       Select mask indices randomly
+  --channel-steps CHANNEL_STEPS
+                        Number of considered sequences for channeled memory (0 = memory module is disabled)
   --lstm-steps LSTM_STEPS
                         Number of considered sequences for lstm (0 = lstm module is disabled)
-  --prev-next-steps PREV_NEXT_STEPS
+  --gru-steps GRU_STEPS
+                        Number of considered sequences for gru (0 = gru module is disabled)
   --encoding-layers ENCODING_LAYERS
                         Number of encoding layers in the CNN
   --pooling-layers POOLING_LAYERS
                         Number of pooling layers in the CNN
+  --conv-factor CONV_FACTOR
+                        Number of channels in the deepest layer
   --image-sizes IMAGE_SIZES
                         Spatial size of the datasets (latxlon must be of shape NxN)
   --weights WEIGHTS     Initialization weight
+  --steady-masks STEADY_MASKS
+                        Comma separated list of netCDF files containing a single mask to be applied to all timesteps. The number of steady-masks must be the same as out-
+                        channels
+  --loop-random-seed LOOP_RANDOM_SEED
+                        Random seed for iteration loop
+  --cuda-random-seed CUDA_RANDOM_SEED
+                        Random seed for CUDA
+  --deterministic       Disable cudnn backends for reproducibility
   --attention           Enable the attention module
   --channel-reduction-rate CHANNEL_REDUCTION_RATE
                         Channel reduction rate for the attention module
   --disable-skip-layers
                         Disable the skip layers
-  --disable-first-last-bn
-                        Disable the batch normalization on the first and last layer
+  --disable-first-bn    Disable the batch normalization on the first layer
+  --masked-bn           Use masked batch normalization instead of standard BN
+  --global-padding      Use a custom padding for global dataset
+  --normalize-data      Normalize the input climate data to 0 mean and 1 std
+  --n-filters N_FILTERS
+                        Number of filters for the first/last layer
   --out-channels OUT_CHANNELS
-                        Number of channels for the output image
+                        Number of channels for the output data
+  --dataset-name DATASET_NAME
+                        Name of the dataset for format checking
+  --min-bounds MIN_BOUNDS
+                        Comma separated list of values defining the permitted lower-bound of output values
+  --max-bounds MAX_BOUNDS
+                        Comma separated list of values defining the permitted upper-bound of output values
+  --profile             Profile code using tensorboard profiler
+  --val-names VAL_NAMES
+                        Comma separated list of netCDF files (climate dataset) for validation
   --snapshot-dir SNAPSHOT_DIR
                         Parent directory of the training checkpoints and the snapshot images
   --resume-iter RESUME_ITER
@@ -125,6 +159,7 @@ optional arguments:
                         Batch size
   --n-threads N_THREADS
                         Number of threads
+  --multi-gpus          Use multiple GPUs, if any
   --finetune            Enable the fine tuning mode (use fine tuning parameterization and disable batch normalization
   --lr LR               Learning rate
   --lr-finetune LR_FINETUNE
@@ -132,76 +167,112 @@ optional arguments:
   --max-iter MAX_ITER   Maximum number of iterations
   --log-interval LOG_INTERVAL
                         Iteration step interval at which a tensorboard summary log should be written
+  --lr-scheduler-patience LR_SCHEDULER_PATIENCE
+                        Patience for the lr scheduler
   --save-snapshot-image
                         Save evaluation images for the iteration steps defined in --log-interval
   --save-model-interval SAVE_MODEL_INTERVAL
                         Iteration step interval at which the model should be saved
+  --n-final-models N_FINAL_MODELS
+                        Number of final models to be saved
+  --final-models-interval FINAL_MODELS_INTERVAL
+                        Iteration step interval at which the final models should be saved
   --loss-criterion LOSS_CRITERION
                         Index defining the loss function (0=original from Liu et al., 1=MAE of the hole region)
   --eval-timesteps EVAL_TIMESTEPS
                         Iteration steps for which an evaluation is performed
-  --load-from-file LOAD_FROM_FILE
+  -f LOAD_FROM_FILE, --load-from-file LOAD_FROM_FILE
                         Load all the arguments from a text file
+  --vlim VLIM           Comma separated list of vmin,vmax values for the color scale of the snapshot images
 ```
 
 ```bash
 crai-evaluate --help
-usage: crai-evaluate [-h] [--data-root-dir DATA_ROOT_DIR] [--mask-dir MASK_DIR] [--log-dir LOG_DIR] [--img-names IMG_NAMES] [--mask-names MASK_NAMES] [--data-types DATA_TYPES] [--device DEVICE] [--prev-next PREV_NEXT] [--lstm-steps LSTM_STEPS]
-                     [--prev-next-steps PREV_NEXT_STEPS] [--encoding-layers ENCODING_LAYERS] [--pooling-layers POOLING_LAYERS] [--image-sizes IMAGE_SIZES] [--weights WEIGHTS] [--attention] [--channel-reduction-rate CHANNEL_REDUCTION_RATE]
-                     [--disable-skip-layers] [--disable-first-last-bn] [--out-channels OUT_CHANNELS] [--model-dir MODEL_DIR] [--model-names MODEL_NAMES] [--dataset-name DATASET_NAME] [--evaluation-dirs EVALUATION_DIRS] [--eval-names EVAL_NAMES]
-                     [--infill {infill,test}] [--create-graph] [--original-network] [--partitions PARTITIONS] [--maxmem MAXMEM] [--load-from-file LOAD_FROM_FILE]
+usage: crai-evaluate [-h] [--data-root-dir DATA_ROOT_DIR] [--mask-dir MASK_DIR] [--log-dir LOG_DIR] [--data-names DATA_NAMES] [--mask-names MASK_NAMES]
+                     [--data-types DATA_TYPES] [--target-data-indices TARGET_DATA_INDICES] [--device DEVICE] [--shuffle-masks] [--channel-steps CHANNEL_STEPS]
+                     [--lstm-steps LSTM_STEPS] [--gru-steps GRU_STEPS] [--encoding-layers ENCODING_LAYERS] [--pooling-layers POOLING_LAYERS] [--conv-factor CONV_FACTOR]
+                     [--image-sizes IMAGE_SIZES] [--weights WEIGHTS] [--steady-masks STEADY_MASKS] [--loop-random-seed LOOP_RANDOM_SEED]
+                     [--cuda-random-seed CUDA_RANDOM_SEED] [--deterministic] [--attention] [--channel-reduction-rate CHANNEL_REDUCTION_RATE] [--disable-skip-layers]
+                     [--disable-first-bn] [--masked-bn] [--global-padding] [--normalize-data] [--n-filters N_FILTERS] [--out-channels OUT_CHANNELS]
+                     [--dataset-name DATASET_NAME] [--min-bounds MIN_BOUNDS] [--max-bounds MAX_BOUNDS] [--profile] [--model-dir MODEL_DIR] [--model-names MODEL_NAMES]
+                     [--evaluation-dirs EVALUATION_DIRS] [--eval-names EVAL_NAMES] [--create-graph] [--plot-results PLOT_RESULTS] [--partitions PARTITIONS]
+                     [--split-outputs] [--maxmem MAXMEM] [-f LOAD_FROM_FILE]
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --data-root-dir DATA_ROOT_DIR
                         Root directory containing the climate datasets
   --mask-dir MASK_DIR   Directory containing the mask datasets
   --log-dir LOG_DIR     Directory where the log files will be stored
-  --img-names IMG_NAMES
-                        Comma separated list of netCDF files (climate dataset)
+  --data-names DATA_NAMES
+                        Comma separated list of netCDF files (climate dataset) for training/infilling
   --mask-names MASK_NAMES
                         Comma separated list of netCDF files (mask dataset). If None, it extracts the masks from the climate dataset
   --data-types DATA_TYPES
-                        Comma separated list of variable types, in the same order as img-names and mask-names
+                        Comma separated list of variable types, in the same order as data-names and mask-names
+  --target-data-indices TARGET_DATA_INDICES
+                        Indices of the data-names (from 0) to be used as target data
   --device DEVICE       Device used by PyTorch (cuda or cpu)
-  --prev-next PREV_NEXT
+  --shuffle-masks       Select mask indices randomly
+  --channel-steps CHANNEL_STEPS
+                        Number of considered sequences for channeled memory (0 = memory module is disabled)
   --lstm-steps LSTM_STEPS
                         Number of considered sequences for lstm (0 = lstm module is disabled)
-  --prev-next-steps PREV_NEXT_STEPS
+  --gru-steps GRU_STEPS
+                        Number of considered sequences for gru (0 = gru module is disabled)
   --encoding-layers ENCODING_LAYERS
                         Number of encoding layers in the CNN
   --pooling-layers POOLING_LAYERS
                         Number of pooling layers in the CNN
+  --conv-factor CONV_FACTOR
+                        Number of channels in the deepest layer
   --image-sizes IMAGE_SIZES
                         Spatial size of the datasets (latxlon must be of shape NxN)
   --weights WEIGHTS     Initialization weight
+  --steady-masks STEADY_MASKS
+                        Comma separated list of netCDF files containing a single mask to be applied to all timesteps. The number of steady-masks must be the same as out-
+                        channels
+  --loop-random-seed LOOP_RANDOM_SEED
+                        Random seed for iteration loop
+  --cuda-random-seed CUDA_RANDOM_SEED
+                        Random seed for CUDA
+  --deterministic       Disable cudnn backends for reproducibility
   --attention           Enable the attention module
   --channel-reduction-rate CHANNEL_REDUCTION_RATE
                         Channel reduction rate for the attention module
   --disable-skip-layers
                         Disable the skip layers
-  --disable-first-last-bn
-                        Disable the batch normalization on the first and last layer
+  --disable-first-bn    Disable the batch normalization on the first layer
+  --masked-bn           Use masked batch normalization instead of standard BN
+  --global-padding      Use a custom padding for global dataset
+  --normalize-data      Normalize the input climate data to 0 mean and 1 std
+  --n-filters N_FILTERS
+                        Number of filters for the first/last layer
   --out-channels OUT_CHANNELS
-                        Number of channels for the output image
+                        Number of channels for the output data
+  --dataset-name DATASET_NAME
+                        Name of the dataset for format checking
+  --min-bounds MIN_BOUNDS
+                        Comma separated list of values defining the permitted lower-bound of output values
+  --max-bounds MAX_BOUNDS
+                        Comma separated list of values defining the permitted upper-bound of output values
+  --profile             Profile code using tensorboard profiler
   --model-dir MODEL_DIR
                         Directory of the trained models
   --model-names MODEL_NAMES
                         Model names
-  --dataset-name DATASET_NAME
-                        Name of the dataset for format checking
   --evaluation-dirs EVALUATION_DIRS
                         Directory where the output files will be stored
   --eval-names EVAL_NAMES
                         Prefix used for the output filenames
-  --infill {infill,test}
-                        Infill the climate dataset ('test' if mask order is irrelevant, 'infill' if mask order is relevant)
   --create-graph        Create a Tensorboard graph of the NN
-  --original-network    Use the original network architecture (from Kadow et al.)
+  --plot-results PLOT_RESULTS
+                        Create plot images of the results for the comma separated list of time indices
   --partitions PARTITIONS
                         Split the climate dataset into several partitions along the time coordinate
+  --split-outputs       Do not merge the outputs when using multiple models
   --maxmem MAXMEM       Maximum available memory in MB (overwrite partitions parameter)
-  --load-from-file LOAD_FROM_FILE
+  -f LOAD_FROM_FILE, --load-from-file LOAD_FROM_FILE
                         Load all the arguments from a text file
 ```
 
@@ -212,10 +283,10 @@ The instructions to run the example are given in the README.md file.
 
 ## License
 
-`climatereconstructionAI` is licensed under the terms of the BSD 3-Clause license.
+`CRAI` is licensed under the terms of the BSD 3-Clause license.
 
 ## Contributions
 
-`climatereconstructionAI` is maintained by the Climate Informatics and Technology group at DKRZ (Deutsches Klimarechenzentrum).
+`CRAI` is maintained by the Climate Informatics and Technology group at DKRZ (Deutsches Klimarechenzentrum).
 - Previous contributing authors: Naoto Inoue, Christopher Kadow, Stephan Seitz
 - Current contributing authors: Johannes Meuer, Étienne Plésiat.

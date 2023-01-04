@@ -3,7 +3,7 @@
 --mask-dir data/
 --log-dir tests/out/training/logs/
 --snapshot-dir tests/out/training/
---img-names 20cr-1ens.nc,20cr-1ens.nc,20cr-1ens.nc
+--data-names 20cr-1ens.nc,20cr-1ens.nc,20cr-1ens.nc
 --data-types tas,tas,tas
 --image-sizes 72,72,72
 --encoding-layers 2,2,2
@@ -13,6 +13,8 @@
 --loss-criterion 0
 --log-interval 1
 --weights kaiming
---random-seed 3
+--loop-random-seed 3
+--cuda-random-seed 3
+--deterministic
 --shuffle-masks
 --attention

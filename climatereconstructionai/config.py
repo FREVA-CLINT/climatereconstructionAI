@@ -13,6 +13,9 @@ LAMBDA_DICT_IMG_INPAINTING2 = {
 LAMBDA_DICT_HOLE = {
     'hole': 1.0
 }
+LAMBDA_DICT_VALID = {
+    'valid': 1.0
+}
 
 
 def get_format(dataset_name):
@@ -33,6 +36,10 @@ def str_list(arg):
 
 def int_list(arg):
     return list(map(int, arg.split(',')))
+
+
+def float_list(arg):
+    return list(map(float, arg.split(',')))
 
 
 def lim_list(arg):
@@ -64,6 +71,9 @@ def global_args(parser, arg_file=None, prog_func=None):
 
     globals()["dataset_format"] = get_format(args.dataset_name)
 
+    if globals()["conv_factor"] is None:
+        globals()["conv_factor"] = max(globals()["image_sizes"])
+
     global skip_layers
     global gt_channels
     global recurrent_steps
@@ -94,16 +104,16 @@ def set_common_args():
                             help="Root directory containing the climate datasets")
     arg_parser.add_argument('--mask-dir', type=str, default='masks/', help="Directory containing the mask datasets")
     arg_parser.add_argument('--log-dir', type=str, default='logs/', help="Directory where the log files will be stored")
-    arg_parser.add_argument('--img-names', type=str_list, default='train.nc',
-                            help="Comma separated list of netCDF files (climate dataset)")
+    arg_parser.add_argument('--data-names', type=str_list, default='train.nc',
+                            help="Comma separated list of netCDF files (climate dataset) for training/infilling")
     arg_parser.add_argument('--mask-names', type=str_list, default=None,
                             help="Comma separated list of netCDF files (mask dataset). "
                                  "If None, it extracts the masks from the climate dataset")
     arg_parser.add_argument('--data-types', type=str_list, default='tas',
                             help="Comma separated list of variable types, "
-                                 "in the same order as img-names and mask-names")
-    arg_parser.add_argument('--img-index', type=int, default=None,
-                            help="Use the image and mask from the specified channel index to create the masked image")
+                                 "in the same order as data-names and mask-names")
+    arg_parser.add_argument('--target-data-indices', type=int_list, default=[],
+                            help="Indices of the data-names (from 0) to be used as target data")
     arg_parser.add_argument('--device', type=str, default='cuda', help="Device used by PyTorch (cuda or cpu)")
     arg_parser.add_argument('--shuffle-masks', action='store_true', help="Select mask indices randomly")
     arg_parser.add_argument('--channel-steps', type=int, default=0,
@@ -115,13 +125,18 @@ def set_common_args():
     arg_parser.add_argument('--encoding-layers', type=int_list, default='3',
                             help="Number of encoding layers in the CNN")
     arg_parser.add_argument('--pooling-layers', type=int_list, default='0', help="Number of pooling layers in the CNN")
+    arg_parser.add_argument('--conv-factor', type=int, default=None, help="Number of channels in the deepest layer")
     arg_parser.add_argument('--image-sizes', type=int_list, default='72',
                             help="Spatial size of the datasets (latxlon must be of shape NxN)")
     arg_parser.add_argument('--weights', type=str, default=None, help="Initialization weight")
-    arg_parser.add_argument('--steady-mask', type=str, default=None,
-                            help="Filename of a netCDF file containing a single mask to be applied to all timesteps")
-    arg_parser.add_argument('--random-seed', type=int, default=None,
-                            help="Random seed for iteration loop and initialization weights")
+    arg_parser.add_argument('--steady-masks', type=str_list, default=None,
+                            help="Comma separated list of netCDF files containing a single mask to be applied "
+                                 "to all timesteps. The number of steady-masks must be the same as out-channels")
+    arg_parser.add_argument('--loop-random-seed', type=int, default=None,
+                            help="Random seed for iteration loop")
+    arg_parser.add_argument('--cuda-random-seed', type=int, default=None,
+                            help="Random seed for CUDA")
+    arg_parser.add_argument('--deterministic', action='store_true', help="Disable cudnn backends for reproducibility")
     arg_parser.add_argument('--attention', action='store_true', help="Enable the attention module")
     arg_parser.add_argument('--channel-reduction-rate', type=int, default=1,
                             help="Channel reduction rate for the attention module")
@@ -131,16 +146,23 @@ def set_common_args():
     arg_parser.add_argument('--masked-bn', action='store_true',
                             help="Use masked batch normalization instead of standard BN")
     arg_parser.add_argument('--global-padding', action='store_true', help="Use a custom padding for global dataset")
-    arg_parser.add_argument('--normalize-images', action='store_true',
-                            help="Normalize the input images to 0 mean and 1 std")
+    arg_parser.add_argument('--normalize-data', action='store_true',
+                            help="Normalize the input climate data to 0 mean and 1 std")
     arg_parser.add_argument('--n-filters', type=int, default=None, help="Number of filters for the first/last layer")
-    arg_parser.add_argument('--out-channels', type=int, default=1, help="Number of channels for the output image")
+    arg_parser.add_argument('--out-channels', type=int, default=1, help="Number of channels for the output data")
     arg_parser.add_argument('--dataset-name', type=str, default=None, help="Name of the dataset for format checking")
+    arg_parser.add_argument('--min-bounds', type=float_list, default="inf",
+                            help="Comma separated list of values defining the permitted lower-bound of output values")
+    arg_parser.add_argument('--max-bounds', type=float_list, default="inf",
+                            help="Comma separated list of values defining the permitted upper-bound of output values")
+    arg_parser.add_argument('--profile', action='store_true', help="Profile code using tensorboard profiler")
     return arg_parser
 
 
 def set_train_args(arg_file=None):
     arg_parser = set_common_args()
+    arg_parser.add_argument('--val-names', type=str_list, default=None,
+                            help="Comma separated list of netCDF files (climate dataset) for validation")
     arg_parser.add_argument('--snapshot-dir', type=str, default='snapshots/',
                             help="Parent directory of the training checkpoints and the snapshot images")
     arg_parser.add_argument('--resume-iter', type=int, help="Iteration step from which the training will be resumed")
@@ -160,6 +182,10 @@ def set_train_args(arg_file=None):
                             help="Save evaluation images for the iteration steps defined in --log-interval")
     arg_parser.add_argument('--save-model-interval', type=int, default=50000,
                             help="Iteration step interval at which the model should be saved")
+    arg_parser.add_argument('--n-final-models', type=int, default=1,
+                            help="Number of final models to be saved")
+    arg_parser.add_argument('--final-models-interval', type=int, default=1000,
+                            help="Iteration step interval at which the final models should be saved")
     arg_parser.add_argument('--loss-criterion', type=int, default=0,
                             help="Index defining the loss function "
                                  "(0=original from Liu et al., 1=MAE of the hole region)")
@@ -170,6 +196,9 @@ def set_train_args(arg_file=None):
     arg_parser.add_argument('--vlim', type=lim_list, default=None,
                             help="Comma separated list of vmin,vmax values for the color scale of the snapshot images")
     global_args(arg_parser, arg_file)
+
+    if globals()["val_names"] is None:
+        globals()["val_names"] = globals()["data_names"].copy()
 
 
 def set_evaluate_args(arg_file=None, prog_func=None):
@@ -185,6 +214,8 @@ def set_evaluate_args(arg_file=None, prog_func=None):
                             help="Create plot images of the results for the comma separated list of time indices")
     arg_parser.add_argument('--partitions', type=int, default=1,
                             help="Split the climate dataset into several partitions along the time coordinate")
+    arg_parser.add_argument('--split-outputs', action='store_true',
+                            help="Do not merge the outputs when using multiple models")
     arg_parser.add_argument('--maxmem', type=int, default=None,
                             help="Maximum available memory in MB (overwrite partitions parameter)")
     arg_parser.add_argument('-f', '--load-from-file', type=str, action=LoadFromFile,
