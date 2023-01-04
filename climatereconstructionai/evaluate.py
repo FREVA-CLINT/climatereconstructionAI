@@ -45,8 +45,8 @@ def evaluate(arg_file=None, prog_func=None):
                             fusion_img_size=cfg.image_sizes[1],
                             fusion_enc_layers=cfg.encoding_layers[1],
                             fusion_pool_layers=cfg.pooling_layers[1],
-                            fusion_in_channels=(len(cfg.image_sizes) - 1 - len(cfg.target_data_indices)) *
-                            (2 * cfg.channel_steps + 1),
+                            fusion_in_channels=(len(cfg.image_sizes) - 1 - len(cfg.target_data_indices)
+                                                ) * (2 * cfg.channel_steps + 1),
                             bounds=dataset_val.bounds).to(cfg.device)
         else:
             model = CRAINet(img_size=cfg.image_sizes[0],
