@@ -21,11 +21,11 @@ def bnd_normalization(img_mean, img_std, stat_target):
 
     bounds = np.ones((cfg.out_channels, 2)) * np.inf
     if stat_target is None:
-        if cfg.target_data_indices == []:
+        if cfg.n_target_data == 0:
             mean_val, std_val = img_mean[:cfg.out_channels], img_std[:cfg.out_channels]
         else:
-            mean_val = [img_mean[i] for i in cfg.target_data_indices]
-            std_val = [img_std[i] for i in cfg.target_data_indices]
+            mean_val = img_mean[-cfg.n_target_data:]
+            std_val = img_std[-cfg.n_target_data:]
     else:
         mean_val, std_val = stat_target["mean"], stat_target["std"]
     k = 0

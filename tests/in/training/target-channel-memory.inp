@@ -18,4 +18,4 @@
 --deterministic
 --shuffle-masks
 --channel-steps 2
---target-data-indices 2
+--n-target-data 1
