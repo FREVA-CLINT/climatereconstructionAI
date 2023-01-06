@@ -139,13 +139,13 @@ def create_outputs(outputs, dataset, eval_path, stat_target, suffix=""):
     if suffix != "":
         suffix = "." + str(suffix)
 
-    if cfg.target_data_indices == []:
+    if cfg.n_target_data == 0:
         mean_val, std_val = dataset.img_mean[:cfg.out_channels], dataset.img_std[:cfg.out_channels]
         cnames = ["gt", "mask", "image", "output", "infilled"]
         pnames = ["image", "infilled"]
     else:
-        mean_val = [dataset.img_mean[i] for i in cfg.target_data_indices]
-        std_val = [dataset.img_std[i] for i in cfg.target_data_indices]
+        mean_val = dataset.img_mean[-cfg.n_target_data:]
+        std_val = dataset.img_std[-cfg.n_target_data:]
         cnames = ["gt", "mask", "output"]
         pnames = ["gt", "output"]
 
@@ -153,11 +153,7 @@ def create_outputs(outputs, dataset, eval_path, stat_target, suffix=""):
 
     for j in range(len(eval_path)):
 
-        if cfg.target_data_indices == []:
-            ind = j
-        else:
-            ind = cfg.target_data_indices[j]
-
+        ind = -cfg.n_target_data + j
         data_type = cfg.data_types[ind]
 
         for cname in cnames:

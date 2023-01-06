@@ -36,7 +36,7 @@ def evaluate(arg_file=None, prog_func=None):
         dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.data_names, cfg.mask_dir, cfg.mask_names, "infill",
                                    cfg.data_types, time_steps, stat_target)
 
-        if len(cfg.image_sizes) > 1:
+        if len(cfg.image_sizes) - cfg.n_target_data > 1:
             model = CRAINet(img_size=cfg.image_sizes[0],
                             enc_dec_layers=cfg.encoding_layers[0],
                             pool_layers=cfg.pooling_layers[0],
@@ -45,7 +45,7 @@ def evaluate(arg_file=None, prog_func=None):
                             fusion_img_size=cfg.image_sizes[1],
                             fusion_enc_layers=cfg.encoding_layers[1],
                             fusion_pool_layers=cfg.pooling_layers[1],
-                            fusion_in_channels=(len(cfg.image_sizes) - 1 - len(cfg.target_data_indices)
+                            fusion_in_channels=(len(cfg.image_sizes) - 1 - cfg.n_target_data
                                                 ) * (2 * cfg.channel_steps + 1),
                             bounds=dataset_val.bounds).to(cfg.device)
         else:

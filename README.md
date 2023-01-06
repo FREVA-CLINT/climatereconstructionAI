@@ -79,7 +79,7 @@ For more information about the arguments:
 ```bash
 crai-train --help
 usage: crai-train [-h] [--data-root-dir DATA_ROOT_DIR] [--mask-dir MASK_DIR] [--log-dir LOG_DIR] [--data-names DATA_NAMES] [--mask-names MASK_NAMES]
-                  [--data-types DATA_TYPES] [--target-data-indices TARGET_DATA_INDICES] [--device DEVICE] [--shuffle-masks] [--channel-steps CHANNEL_STEPS]
+                  [--data-types DATA_TYPES] [--n-target-data N_TARGET] [--device DEVICE] [--shuffle-masks] [--channel-steps CHANNEL_STEPS]
                   [--lstm-steps LSTM_STEPS] [--gru-steps GRU_STEPS] [--encoding-layers ENCODING_LAYERS] [--pooling-layers POOLING_LAYERS] [--conv-factor CONV_FACTOR]
                   [--image-sizes IMAGE_SIZES] [--weights WEIGHTS] [--steady-masks STEADY_MASKS] [--loop-random-seed LOOP_RANDOM_SEED]
                   [--cuda-random-seed CUDA_RANDOM_SEED] [--deterministic] [--attention] [--channel-reduction-rate CHANNEL_REDUCTION_RATE] [--disable-skip-layers]
@@ -102,8 +102,8 @@ options:
                         Comma separated list of netCDF files (mask dataset). If None, it extracts the masks from the climate dataset
   --data-types DATA_TYPES
                         Comma separated list of variable types, in the same order as data-names and mask-names
-  --target-data-indices TARGET_DATA_INDICES
-                        Indices of the data-names (from 0) to be used as target data
+  --n-target-data N_TARGET_DATA
+                        Number of data-names (from last) to be used as target data
   --device DEVICE       Device used by PyTorch (cuda or cpu)
   --shuffle-masks       Select mask indices randomly
   --channel-steps CHANNEL_STEPS
@@ -189,7 +189,7 @@ options:
 ```bash
 crai-evaluate --help
 usage: crai-evaluate [-h] [--data-root-dir DATA_ROOT_DIR] [--mask-dir MASK_DIR] [--log-dir LOG_DIR] [--data-names DATA_NAMES] [--mask-names MASK_NAMES]
-                     [--data-types DATA_TYPES] [--target-data-indices TARGET_DATA_INDICES] [--device DEVICE] [--shuffle-masks] [--channel-steps CHANNEL_STEPS]
+                     [--data-types DATA_TYPES] [--n-target-data N_TARGET_DATA] [--device DEVICE] [--shuffle-masks] [--channel-steps CHANNEL_STEPS]
                      [--lstm-steps LSTM_STEPS] [--gru-steps GRU_STEPS] [--encoding-layers ENCODING_LAYERS] [--pooling-layers POOLING_LAYERS] [--conv-factor CONV_FACTOR]
                      [--image-sizes IMAGE_SIZES] [--weights WEIGHTS] [--steady-masks STEADY_MASKS] [--loop-random-seed LOOP_RANDOM_SEED]
                      [--cuda-random-seed CUDA_RANDOM_SEED] [--deterministic] [--attention] [--channel-reduction-rate CHANNEL_REDUCTION_RATE] [--disable-skip-layers]
@@ -210,8 +210,8 @@ options:
                         Comma separated list of netCDF files (mask dataset). If None, it extracts the masks from the climate dataset
   --data-types DATA_TYPES
                         Comma separated list of variable types, in the same order as data-names and mask-names
-  --target-data-indices TARGET_DATA_INDICES
-                        Indices of the data-names (from 0) to be used as target data
+  --n-target-data N_TARGET_DATA
+                        Number of data-names (from last) to be used as target data
   --device DEVICE       Device used by PyTorch (cuda or cpu)
   --shuffle-masks       Select mask indices randomly
   --channel-steps CHANNEL_STEPS

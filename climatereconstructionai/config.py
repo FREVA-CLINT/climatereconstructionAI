@@ -112,8 +112,8 @@ def set_common_args():
     arg_parser.add_argument('--data-types', type=str_list, default='tas',
                             help="Comma separated list of variable types, "
                                  "in the same order as data-names and mask-names")
-    arg_parser.add_argument('--target-data-indices', type=int_list, default=[],
-                            help="Indices of the data-names (from 0) to be used as target data")
+    arg_parser.add_argument('--n-target-data', type=int, default=0,
+                            help="Number of data-names (from last) to be used as target data")
     arg_parser.add_argument('--device', type=str, default='cuda', help="Device used by PyTorch (cuda or cpu)")
     arg_parser.add_argument('--shuffle-masks', action='store_true', help="Select mask indices randomly")
     arg_parser.add_argument('--channel-steps', type=int, default=0,

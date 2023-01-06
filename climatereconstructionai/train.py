@@ -69,14 +69,14 @@ def train(arg_file=None):
 
     steady_mask = load_steadymask(cfg.mask_dir, cfg.steady_masks, cfg.data_types, cfg.device)
 
-    if cfg.target_data_indices == []:
+    if cfg.n_target_data == 0:
         stat_target = None
     else:
-        stat_target = {"mean": [dataset_train.img_mean[i] for i in cfg.target_data_indices],
-                       "std": [dataset_train.img_std[i] for i in cfg.target_data_indices]}
+        stat_target = {"mean": dataset_train.img_mean[-cfg.n_target_data:],
+                       "std": dataset_train.img_std[-cfg.n_target_data:]}
 
     # define network model
-    if len(cfg.image_sizes) > 1:
+    if len(cfg.image_sizes) - cfg.n_target_data > 1:
         model = CRAINet(img_size=cfg.image_sizes[0],
                         enc_dec_layers=cfg.encoding_layers[0],
                         pool_layers=cfg.pooling_layers[0],
@@ -85,7 +85,7 @@ def train(arg_file=None):
                         fusion_img_size=cfg.image_sizes[1],
                         fusion_enc_layers=cfg.encoding_layers[1],
                         fusion_pool_layers=cfg.pooling_layers[1],
-                        fusion_in_channels=(len(cfg.image_sizes) - 1 - len(cfg.target_data_indices)
+                        fusion_in_channels=(len(cfg.image_sizes) - 1 - cfg.n_target_data
                                             ) * (2 * cfg.channel_steps + 1),
                         bounds=dataset_train.bounds).to(cfg.device)
     else:
