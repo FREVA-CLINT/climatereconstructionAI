@@ -16,4 +16,4 @@
 --cuda-random-seed 3
 --deterministic
 --shuffle-masks
---gru-steps 2
+--gru-steps 2,2

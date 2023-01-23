@@ -12,14 +12,8 @@ def sequence_to_batch(input):
 
 
 def batch_to_sequence(input, batch_size):
-    if cfg.lstm_steps:
-        steps = cfg.lstm_steps
-    elif cfg.gru_steps:
-        steps = cfg.gru_steps
-    else:
-        steps = 0
     return torch.reshape(input,
-                         (batch_size, 2 * steps + 1, input.shape[1], input.shape[2], input.shape[3]))
+                         (batch_size, cfg.n_recurrent_steps, input.shape[1], input.shape[2], input.shape[3]))
 
 
 class EncoderBlock(nn.Module):

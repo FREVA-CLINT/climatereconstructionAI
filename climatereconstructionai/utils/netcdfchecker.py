@@ -45,8 +45,6 @@ def dataset_formatter(ds, data_type, basename):
 
         ds[data_type] = ds[data_type].transpose(*cfg.dataset_format["axes"])
 
-        shape = ds[data_type].shape
-
         step = []
         regrid = False
         for i in range(2):
@@ -61,7 +59,6 @@ def dataset_formatter(ds, data_type, basename):
             if diff > 1e-2:
                 raise ValueError('Incorrect {} extent in {}.\nThe extent should be: {}.'
                                  .format(coordinate, basename, extent))
-
 
         if regrid:
             logging.warning('The spatial coordinates have been interpolated using nearest_s2d in {}.'.format(basename))

@@ -16,5 +16,5 @@
 --cuda-random-seed 3
 --deterministic
 --shuffle-masks
---channel-steps 2
+--channel-steps 2,2
 --attention

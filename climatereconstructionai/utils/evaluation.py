@@ -120,7 +120,7 @@ def infill(model, dataset, eval_path, output_names, stat_target, i_model):
             data_dict["output"] = model(data_dict["image"].to(cfg.device), data_dict["mask"].to(cfg.device))
 
         for key in keys[:4]:
-            data_dict[key] = data_dict[key][:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
+            data_dict[key] = data_dict[key][:, cfg.recurrent_steps, :, :, :].to(torch.device('cpu'))
 
         if steady_mask is not None:
             for key in ('gt', 'image', 'output'):

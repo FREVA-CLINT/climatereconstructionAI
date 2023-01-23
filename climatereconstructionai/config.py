@@ -72,27 +72,42 @@ def global_args(parser, arg_file=None, prog_func=None):
     globals()["dataset_format"] = get_format(args.dataset_name)
 
     global skip_layers
-    global gt_channels
-    global recurrent_steps
 
     if disable_skip_layers:
         skip_layers = 0
     else:
         skip_layers = 1
 
-    gt_channels = []
-    for i in range(out_channels):
-        gt_channels.append((i + 1) * channel_steps + i * (channel_steps + 1))
-
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
+    global recurrent_steps
+    global n_recurrent_steps
+    global time_steps
+    time_steps = [0, 0]
     if lstm_steps:
-        recurrent_steps = lstm_steps
+        recurrent_steps = lstm_steps[0]
+        time_steps = lstm_steps
     elif gru_steps:
-        recurrent_steps = gru_steps
+        recurrent_steps = gru_steps[0]
+        time_steps = gru_steps
     else:
         recurrent_steps = 0
+
+    n_recurrent_steps = sum(time_steps) + 1
+
+    global n_channel_steps
+    global gt_channels
+
+    n_channel_steps = 1
+    gt_channels = [0 for i in range(out_channels)]
+    if channel_steps:
+        time_steps = channel_steps
+        n_channel_steps = sum(channel_steps) + 1
+        for i in range(out_channels):
+            gt_channels[i] = (i + 1) * channel_steps[0] + i * (channel_steps[1] + 1)
+
+    assert len(time_steps) == 2
 
 
 def set_common_args():
@@ -113,12 +128,13 @@ def set_common_args():
                             help="Number of data-names (from last) to be used as target data")
     arg_parser.add_argument('--device', type=str, default='cuda', help="Device used by PyTorch (cuda or cpu)")
     arg_parser.add_argument('--shuffle-masks', action='store_true', help="Select mask indices randomly")
-    arg_parser.add_argument('--channel-steps', type=int, default=0,
-                            help="Number of considered sequences for channeled memory (0 = memory module is disabled)")
-    arg_parser.add_argument('--lstm-steps', type=int, default=0,
-                            help="Number of considered sequences for lstm (0 = lstm module is disabled)")
-    arg_parser.add_argument('--gru-steps', type=int, default=0,
-                            help="Number of considered sequences for gru (0 = gru module is disabled)")
+    arg_parser.add_argument('--channel-steps', type=int_list, default=None,
+                            help="Comma separated number of considered sequences for channeled memory:"
+                                 "past_steps,future_steps")
+    arg_parser.add_argument('--lstm-steps', type=int_list, default=None,
+                            help="Comma separated number of considered sequences for lstm: past_steps,future_steps")
+    arg_parser.add_argument('--gru-steps', type=int_list, default=None,
+                            help="Comma separated number of considered sequences for gru: past_steps,future_steps")
     arg_parser.add_argument('--encoding-layers', type=int_list, default='3',
                             help="Number of encoding layers in the CNN")
     arg_parser.add_argument('--pooling-layers', type=int_list, default='0', help="Number of pooling layers in the CNN")

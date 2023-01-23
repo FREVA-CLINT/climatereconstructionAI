@@ -15,7 +15,7 @@ def progstat(index, numel):
 
 
 class CRAINet(nn.Module):
-    def __init__(self, img_size=(512,512), enc_dec_layers=4, pool_layers=4, in_channels=1, out_channels=1,
+    def __init__(self, img_size=(512, 512), enc_dec_layers=4, pool_layers=4, in_channels=1, out_channels=1,
                  fusion_img_size=None, fusion_enc_layers=None, fusion_pool_layers=None, fusion_in_channels=0,
                  bounds=None):
 
@@ -95,7 +95,7 @@ class CRAINet(nn.Module):
     def forward(self, input, input_mask):
         # create lists for skip connections
         # We split the inputs in case we use the attention module with different image dimension
-        h_index = 2 * cfg.channel_steps + 1
+        h_index = cfg.n_channel_steps
         hs = [input[:, :, :h_index, :, :]]
         hs_mask = [input_mask[:, :, :h_index, :, :]]
         recurrent_states = []

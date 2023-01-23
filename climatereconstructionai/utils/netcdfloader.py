@@ -83,8 +83,8 @@ def load_netcdf(path, data_names, data_types, keep_dss=False):
         ndata = len(data_names)
         assert ndata == len(data_types)
 
-        dss, data, lengths, sizes = zip(*[nc_loadchecker('{}{}'.format(path, data_names[i]), data_types[i])
-                                   for i in range(ndata)])
+        dss, data, lengths, sizes = zip(*[nc_loadchecker('{}{}'.format(path, data_names[i]),
+                                                         data_types[i]) for i in range(ndata)])
 
         assert len(set(lengths)) == 1
 
@@ -102,6 +102,7 @@ class NetCDFLoader(Dataset):
 
         self.data_types = data_types
         self.time_steps = time_steps
+        self.n_time_steps = sum(time_steps) + 1
 
         mask_path = mask_root
         if split == 'infill':
@@ -147,12 +148,12 @@ class NetCDFLoader(Dataset):
 
     def get_single_item(self, ind_data, index, shuffle_masks):
         # define range of lstm or prev-next steps -> adjust, if out of boundaries
-        img_indices = np.array(list(range(index - self.time_steps, index + self.time_steps + 1)))
+        img_indices = np.array(list(range(index - self.time_steps[0], index + self.time_steps[1] + 1)))
         img_indices[img_indices < 0] = 0
         img_indices[img_indices > self.img_length - 1] = self.img_length - 1
         if shuffle_masks:
             mask_indices = []
-            for j in range(2 * self.time_steps + 1):
+            for j in range(self.n_time_steps):
                 mask_indices.append(self.random.randint(0, self.mask_length - 1))
             mask_indices = sorted(mask_indices)
         else:

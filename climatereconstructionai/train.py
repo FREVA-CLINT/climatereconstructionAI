@@ -46,20 +46,11 @@ def train(arg_file=None):
         os.makedirs(cfg.log_dir)
     writer = SummaryWriter(log_dir=cfg.log_dir)
 
-    if cfg.lstm_steps:
-        time_steps = cfg.lstm_steps
-    elif cfg.gru_steps:
-        time_steps = cfg.gru_steps
-    elif cfg.channel_steps:
-        time_steps = cfg.channel_steps
-    else:
-        time_steps = 0
-
     # create data sets
     dataset_train = NetCDFLoader(cfg.data_root_dir, cfg.data_names, cfg.mask_dir, cfg.mask_names, 'train',
-                                 cfg.data_types, time_steps)
+                                 cfg.data_types, cfg.time_steps)
     dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.val_names, cfg.mask_dir, cfg.mask_names, 'val', cfg.data_types,
-                               time_steps)
+                               cfg.time_steps)
     iterator_train = iter(DataLoader(dataset_train, batch_size=cfg.batch_size,
                                      sampler=InfiniteSampler(len(dataset_train)),
                                      num_workers=cfg.n_threads))
@@ -73,7 +64,6 @@ def train(arg_file=None):
     if cfg.conv_factor is None:
         cfg.conv_factor = max(image_sizes[0])
 
-
     if cfg.n_target_data == 0:
         stat_target = None
     else:
@@ -85,19 +75,18 @@ def train(arg_file=None):
         model = CRAINet(img_size=image_sizes[0],
                         enc_dec_layers=cfg.encoding_layers[0],
                         pool_layers=cfg.pooling_layers[0],
-                        in_channels=2 * cfg.channel_steps + 1,
+                        in_channels=cfg.n_channel_steps,
                         out_channels=cfg.out_channels,
                         fusion_img_size=image_sizes[1],
                         fusion_enc_layers=cfg.encoding_layers[1],
                         fusion_pool_layers=cfg.pooling_layers[1],
-                        fusion_in_channels=(len(image_sizes) - 1 - cfg.n_target_data
-                                            ) * (2 * cfg.channel_steps + 1),
+                        fusion_in_channels=(len(image_sizes) - 1 - cfg.n_target_data) * cfg.n_channel_steps,
                         bounds=dataset_train.bounds).to(cfg.device)
     else:
         model = CRAINet(img_size=image_sizes[0],
                         enc_dec_layers=cfg.encoding_layers[0],
                         pool_layers=cfg.pooling_layers[0],
-                        in_channels=2 * cfg.channel_steps + 1,
+                        in_channels=cfg.n_channel_steps,
                         out_channels=cfg.out_channels,
                         bounds=dataset_train.bounds).to(cfg.device)
 
