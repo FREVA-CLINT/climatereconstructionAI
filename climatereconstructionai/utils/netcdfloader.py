@@ -17,9 +17,9 @@ def load_steadymask(path, mask_names, data_types, device):
     else:
         assert len(mask_names) == cfg.out_channels
         if cfg.n_target_data == 0:
-            steady_mask, _ = load_netcdf(path, mask_names, data_types[:cfg.out_channels])
+            steady_mask = load_netcdf(path, mask_names, data_types[:cfg.out_channels])[0]
         else:
-            steady_mask, _ = load_netcdf(path, mask_names, data_types[-cfg.n_target_data:])
+            steady_mask = load_netcdf(path, mask_names, data_types[-cfg.n_target_data:])[0]
         # stack + squeeze ensures that it works with steady masks with one timestep or no timestep
         return torch.stack([torch.from_numpy(np.array(mask)).to(device) for mask in steady_mask]).squeeze()
 
