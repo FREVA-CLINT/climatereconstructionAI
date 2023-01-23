@@ -24,7 +24,7 @@ def reformat_dataset(ds1, ds2, data_type):
     return ds2
 
 
-def dataset_formatter(ds, data_type, image_size, basename):
+def dataset_formatter(ds, data_type, basename):
     if data_type not in list(ds.keys()):
         raise ValueError('Variable name \'{}\' not found in {}.'.format(data_type, basename))
 
@@ -62,11 +62,6 @@ def dataset_formatter(ds, data_type, image_size, basename):
                 raise ValueError('Incorrect {} extent in {}.\nThe extent should be: {}.'
                                  .format(coordinate, basename, extent))
 
-            if shape[i + 1] != image_size:
-                step[i] *= shape[i + 1] / image_size
-                logging.warning(
-                    'The size of {} does not correspond to the image size in {}.'.format(coordinate, basename))
-                regrid = True
 
         if regrid:
             logging.warning('The spatial coordinates have been interpolated using nearest_s2d in {}.'.format(basename))

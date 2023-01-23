@@ -71,9 +71,6 @@ def global_args(parser, arg_file=None, prog_func=None):
 
     globals()["dataset_format"] = get_format(args.dataset_name)
 
-    if globals()["conv_factor"] is None:
-        globals()["conv_factor"] = max(globals()["image_sizes"])
-
     global skip_layers
     global gt_channels
     global recurrent_steps
@@ -126,8 +123,6 @@ def set_common_args():
                             help="Number of encoding layers in the CNN")
     arg_parser.add_argument('--pooling-layers', type=int_list, default='0', help="Number of pooling layers in the CNN")
     arg_parser.add_argument('--conv-factor', type=int, default=None, help="Number of channels in the deepest layer")
-    arg_parser.add_argument('--image-sizes', type=int_list, default='72',
-                            help="Spatial size of the datasets (latxlon must be of shape NxN)")
     arg_parser.add_argument('--weights', type=str, default=None, help="Initialization weight")
     arg_parser.add_argument('--steady-masks', type=str_list, default=None,
                             help="Comma separated list of netCDF files containing a single mask to be applied "

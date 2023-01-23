@@ -43,8 +43,8 @@ class TrajGRUBlock(nn.Module):
         self.activation = activation
         i2h_dilate_ksize_h = 1 + (self.i2h_kernel[0] - 1) * self.i2h_dilation[0]
         i2h_dilate_ksize_w = 1 + (self.i2h_kernel[1] - 1) * self.i2h_dilation[1]
-        self.state_height = (img_size + 2 * self.i2h_padding[0] - i2h_dilate_ksize_h) // self.i2h_stride[0] + 1
-        self.state_width = (img_size + 2 * self.i2h_padding[1] - i2h_dilate_ksize_w) // self.i2h_stride[1] + 1
+        self.state_height = (img_size[0] + 2 * self.i2h_padding[0] - i2h_dilate_ksize_h) // self.i2h_stride[0] + 1
+        self.state_width = (img_size[1] + 2 * self.i2h_padding[1] - i2h_dilate_ksize_w) // self.i2h_stride[1] + 1
         self.L = L
         self.zoneout = zoneout
 

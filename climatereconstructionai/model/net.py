@@ -15,7 +15,7 @@ def progstat(index, numel):
 
 
 class CRAINet(nn.Module):
-    def __init__(self, img_size=512, enc_dec_layers=4, pool_layers=4, in_channels=1, out_channels=1,
+    def __init__(self, img_size=(512,512), enc_dec_layers=4, pool_layers=4, in_channels=1, out_channels=1,
                  fusion_img_size=None, fusion_enc_layers=None, fusion_pool_layers=None, fusion_in_channels=0,
                  bounds=None):
 
@@ -63,7 +63,7 @@ class CRAINet(nn.Module):
 
             self.attention_module = nn.ModuleList(attention_layers)
 
-        elif fusion_img_size:
+        elif fusion_img_size is not None:
             self.channel_fusion_depth = fusion_enc_layers + fusion_pool_layers
             enc_conv_configs[self.net_depth - self.channel_fusion_depth]['in_channels'] += fusion_in_channels
             dec_conv_configs[self.channel_fusion_depth - 1]['skip_channels'] += cfg.skip_layers * fusion_in_channels

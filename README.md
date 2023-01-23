@@ -81,7 +81,7 @@ crai-train --help
 usage: crai-train [-h] [--data-root-dir DATA_ROOT_DIR] [--mask-dir MASK_DIR] [--log-dir LOG_DIR] [--data-names DATA_NAMES] [--mask-names MASK_NAMES]
                   [--data-types DATA_TYPES] [--n-target-data N_TARGET] [--device DEVICE] [--shuffle-masks] [--channel-steps CHANNEL_STEPS]
                   [--lstm-steps LSTM_STEPS] [--gru-steps GRU_STEPS] [--encoding-layers ENCODING_LAYERS] [--pooling-layers POOLING_LAYERS] [--conv-factor CONV_FACTOR]
-                  [--image-sizes IMAGE_SIZES] [--weights WEIGHTS] [--steady-masks STEADY_MASKS] [--loop-random-seed LOOP_RANDOM_SEED]
+                  [--weights WEIGHTS] [--steady-masks STEADY_MASKS] [--loop-random-seed LOOP_RANDOM_SEED]
                   [--cuda-random-seed CUDA_RANDOM_SEED] [--deterministic] [--attention] [--channel-reduction-rate CHANNEL_REDUCTION_RATE] [--disable-skip-layers]
                   [--disable-first-bn] [--masked-bn] [--global-padding] [--normalize-data] [--n-filters N_FILTERS] [--out-channels OUT_CHANNELS]
                   [--dataset-name DATASET_NAME] [--min-bounds MIN_BOUNDS] [--max-bounds MAX_BOUNDS] [--profile] [--val-names VAL_NAMES] [--snapshot-dir SNAPSHOT_DIR]
@@ -118,8 +118,6 @@ options:
                         Number of pooling layers in the CNN
   --conv-factor CONV_FACTOR
                         Number of channels in the deepest layer
-  --image-sizes IMAGE_SIZES
-                        Spatial size of the datasets (latxlon must be of shape NxN)
   --weights WEIGHTS     Initialization weight
   --steady-masks STEADY_MASKS
                         Comma separated list of netCDF files containing a single mask to be applied to all timesteps. The number of steady-masks must be the same as out-
@@ -191,7 +189,7 @@ crai-evaluate --help
 usage: crai-evaluate [-h] [--data-root-dir DATA_ROOT_DIR] [--mask-dir MASK_DIR] [--log-dir LOG_DIR] [--data-names DATA_NAMES] [--mask-names MASK_NAMES]
                      [--data-types DATA_TYPES] [--n-target-data N_TARGET_DATA] [--device DEVICE] [--shuffle-masks] [--channel-steps CHANNEL_STEPS]
                      [--lstm-steps LSTM_STEPS] [--gru-steps GRU_STEPS] [--encoding-layers ENCODING_LAYERS] [--pooling-layers POOLING_LAYERS] [--conv-factor CONV_FACTOR]
-                     [--image-sizes IMAGE_SIZES] [--weights WEIGHTS] [--steady-masks STEADY_MASKS] [--loop-random-seed LOOP_RANDOM_SEED]
+                     [--weights WEIGHTS] [--steady-masks STEADY_MASKS] [--loop-random-seed LOOP_RANDOM_SEED]
                      [--cuda-random-seed CUDA_RANDOM_SEED] [--deterministic] [--attention] [--channel-reduction-rate CHANNEL_REDUCTION_RATE] [--disable-skip-layers]
                      [--disable-first-bn] [--masked-bn] [--global-padding] [--normalize-data] [--n-filters N_FILTERS] [--out-channels OUT_CHANNELS]
                      [--dataset-name DATASET_NAME] [--min-bounds MIN_BOUNDS] [--max-bounds MAX_BOUNDS] [--profile] [--model-dir MODEL_DIR] [--model-names MODEL_NAMES]
@@ -226,8 +224,6 @@ options:
                         Number of pooling layers in the CNN
   --conv-factor CONV_FACTOR
                         Number of channels in the deepest layer
-  --image-sizes IMAGE_SIZES
-                        Spatial size of the datasets (latxlon must be of shape NxN)
   --weights WEIGHTS     Initialization weight
   --steady-masks STEADY_MASKS
                         Comma separated list of netCDF files containing a single mask to be applied to all timesteps. The number of steady-masks must be the same as out-

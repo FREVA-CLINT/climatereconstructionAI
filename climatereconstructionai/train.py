@@ -69,6 +69,11 @@ def train(arg_file=None):
 
     steady_mask = load_steadymask(cfg.mask_dir, cfg.steady_masks, cfg.data_types, cfg.device)
 
+    image_sizes = dataset_train.img_sizes
+    if cfg.conv_factor is None:
+        cfg.conv_factor = max(image_sizes[0])
+
+
     if cfg.n_target_data == 0:
         stat_target = None
     else:
@@ -76,20 +81,20 @@ def train(arg_file=None):
                        "std": dataset_train.img_std[-cfg.n_target_data:]}
 
     # define network model
-    if len(cfg.image_sizes) - cfg.n_target_data > 1:
-        model = CRAINet(img_size=cfg.image_sizes[0],
+    if len(image_sizes) - cfg.n_target_data > 1:
+        model = CRAINet(img_size=image_sizes[0],
                         enc_dec_layers=cfg.encoding_layers[0],
                         pool_layers=cfg.pooling_layers[0],
                         in_channels=2 * cfg.channel_steps + 1,
                         out_channels=cfg.out_channels,
-                        fusion_img_size=cfg.image_sizes[1],
+                        fusion_img_size=image_sizes[1],
                         fusion_enc_layers=cfg.encoding_layers[1],
                         fusion_pool_layers=cfg.pooling_layers[1],
-                        fusion_in_channels=(len(cfg.image_sizes) - 1 - cfg.n_target_data
+                        fusion_in_channels=(len(image_sizes) - 1 - cfg.n_target_data
                                             ) * (2 * cfg.channel_steps + 1),
                         bounds=dataset_train.bounds).to(cfg.device)
     else:
-        model = CRAINet(img_size=cfg.image_sizes[0],
+        model = CRAINet(img_size=image_sizes[0],
                         enc_dec_layers=cfg.encoding_layers[0],
                         pool_layers=cfg.pooling_layers[0],
                         in_channels=2 * cfg.channel_steps + 1,

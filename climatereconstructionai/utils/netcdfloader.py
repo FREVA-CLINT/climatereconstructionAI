@@ -46,7 +46,7 @@ class InfiniteSampler(Sampler):
                 i = 0
 
 
-def nc_loadchecker(filename, data_type, image_size):
+def nc_loadchecker(filename, data_type):
     basename = filename.split("/")[-1]
 
     if not os.path.isfile(filename):
@@ -61,7 +61,7 @@ def nc_loadchecker(filename, data_type, image_size):
             raise ValueError('Impossible to read {}.'
                              '\nPlease, check that it is a netCDF file and it is not corrupted.'.format(basename))
 
-    ds1 = dataset_formatter(ds, data_type, image_size, basename)
+    ds1 = dataset_formatter(ds, data_type, basename)
     ds = ds.drop_vars(data_type)
 
     if cfg.lazy_load:
@@ -73,25 +73,25 @@ def nc_loadchecker(filename, data_type, image_size):
     ds1 = ds1.drop_vars(ds1.keys())
     ds1 = ds1.drop_vars("time")
 
-    return [ds, ds1, dims], data, data.shape[0]
+    return [ds, ds1, dims], data, data.shape[0], data.shape[1:]
 
 
 def load_netcdf(path, data_names, data_types, keep_dss=False):
     if data_names is None:
-        return None, None
+        return None, None, None
     else:
         ndata = len(data_names)
         assert ndata == len(data_types)
 
-        dss, data, lengths = zip(*[nc_loadchecker('{}{}'.format(path, data_names[i]), data_types[i], cfg.image_sizes[i],
-                                   keep_dss=keep_dss) for i in range(ndata)])
+        dss, data, lengths, sizes = zip(*[nc_loadchecker('{}{}'.format(path, data_names[i]), data_types[i])
+                                   for i in range(ndata)])
 
         assert len(set(lengths)) == 1
 
         if keep_dss:
-            return dss, data, lengths[0]
+            return dss, data, lengths[0], sizes
         else:
-            return data, lengths[0]
+            return data, lengths[0], sizes
 
 
 class NetCDFLoader(Dataset):
@@ -106,7 +106,8 @@ class NetCDFLoader(Dataset):
         mask_path = mask_root
         if split == 'infill':
             data_path = '{:s}/test/'.format(data_root)
-            self.xr_dss, self.img_data, self.img_length = load_netcdf(data_path, img_names, data_types, keep_dss=True)
+            self.xr_dss, self.img_data, self.img_length, self.img_sizes = load_netcdf(data_path, img_names, data_types,
+                                                                                      keep_dss=True)
         else:
             if split == 'train':
                 data_path = '{:s}/train/'.format(data_root)
@@ -114,9 +115,9 @@ class NetCDFLoader(Dataset):
                 data_path = '{:s}/val/'.format(data_root)
                 if not cfg.shuffle_masks:
                     mask_path = '{:s}/val/'.format(mask_root)
-            self.img_data, self.img_length = load_netcdf(data_path, img_names, data_types)
+            self.img_data, self.img_length, self.img_sizes = load_netcdf(data_path, img_names, data_types)
 
-        self.mask_data, self.mask_length = load_netcdf(mask_path, mask_names, data_types)
+        self.mask_data, self.mask_length, _ = load_netcdf(mask_path, mask_names, data_types)
 
         if self.mask_data is None:
             self.mask_length = self.img_length
