@@ -12,6 +12,7 @@ from .netcdfloader import load_steadymask
 from .normalizer import renormalize
 from .plotdata import plot_data
 from .. import config as cfg
+from tqdm import tqdm
 
 
 def create_snapshot_image(model, dataset, filename):
@@ -83,10 +84,13 @@ def get_partitions(parameters, length):
     return partitions
 
 
-def infill(model, dataset):
+def infill(model, dataset, eval_path, output_names, stat_target, i_model):
     if not os.path.exists(cfg.evaluation_dirs[0]):
         os.makedirs('{:s}'.format(cfg.evaluation_dirs[0]))
 
+    steady_mask = load_steadymask(cfg.mask_dir, cfg.steady_masks, cfg.data_types, cfg.device)
+    if steady_mask is not None:
+        steady_mask = 1 - steady_mask
     data_dict = {'image': [], 'mask': [], 'gt': [], 'output': [], 'infilled': []}
     keys = list(data_dict.keys())
 
@@ -96,7 +100,7 @@ def infill(model, dataset):
         print("The data will be split in {} partitions...".format(partitions))
 
     n_elements = dataset.__len__() // partitions
-    for split in range(partitions):
+    for split in tqdm(range(partitions)):
         i_start = split * n_elements
         if split == partitions - 1:
             i_end = dataset.__len__()
@@ -104,40 +108,39 @@ def infill(model, dataset):
             i_end = i_start + n_elements
 
         for i in range(3):
-            data_dict[keys[i]].append(torch.stack([dataset[j][i] for j in range(i_start, i_end)]))
+            data_dict[keys[i]] = torch.stack([dataset[j][i] for j in range(i_start, i_end)])
 
         if split == 0 and cfg.create_graph:
             writer = SummaryWriter(log_dir=cfg.log_dir)
-            writer.add_graph(model, [data_dict["image"][-1], data_dict["mask"][-1], data_dict["gt"][-1]])
+            writer.add_graph(model, [data_dict["image"], data_dict["mask"], data_dict["gt"]])
             writer.close()
 
         # get results from trained network
         with torch.no_grad():
-            data_dict["output"].append(model(data_dict["image"][-1].to(cfg.device),
-                                             data_dict["mask"][-1].to(cfg.device)))
+            data_dict["output"] = model(data_dict["image"].to(cfg.device), data_dict["mask"].to(cfg.device))
 
         for key in keys[:4]:
-            data_dict[key][-1] = data_dict[key][-1][:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
+            data_dict[key] = data_dict[key][:, cfg.lstm_steps, :, :, :].to(torch.device('cpu'))
 
-    for key in keys[:4]:
-        data_dict[key] = torch.cat(data_dict[key])
+        if steady_mask is not None:
+            for key in ('gt', 'image', 'output'):
+                data_dict[key] /= steady_mask
 
-    steady_mask = load_steadymask(cfg.mask_dir, cfg.steady_masks, cfg.data_types, cfg.device)
-    if steady_mask is not None:
-        steady_mask = 1 - steady_mask
-        for key in ('gt', 'image', 'output'):
-            data_dict[key] /= steady_mask
+        data_dict["infilled"] = (1 - data_dict["mask"])
+        data_dict["infilled"] *= data_dict["output"]
+        data_dict["infilled"] += data_dict["mask"] * data_dict["image"]
 
-    data_dict["infilled"] = data_dict["mask"] * data_dict["image"] + (1 - data_dict["mask"]) * data_dict["output"]
-    data_dict["image"][np.where(data_dict["mask"] == 0)] = np.nan
+        data_dict["image"] /= data_dict["mask"]
 
-    return data_dict
+        create_outputs(data_dict, dataset, eval_path, output_names, stat_target, i_model, split, i_start, i_end)
+
+    return output_names
 
 
-def create_outputs(outputs, dataset, eval_path, stat_target, suffix=""):
+def create_outputs(data_dict, dataset, eval_path, output_names, stat_target, i_model, split, i_start, i_end):
 
-    if suffix != "":
-        suffix = "." + str(suffix)
+    m_label = "." + str(i_model).zfill(3)
+    suffix = m_label + "-" + str(split + 1).zfill(3)
 
     if cfg.n_target_data == 0:
         mean_val, std_val = dataset.img_mean[:cfg.out_channels], dataset.img_std[:cfg.out_channels]
@@ -149,8 +152,6 @@ def create_outputs(outputs, dataset, eval_path, stat_target, suffix=""):
         cnames = ["gt", "mask", "output"]
         pnames = ["gt", "output"]
 
-    n_out = len(outputs)
-
     for j in range(len(eval_path)):
 
         ind = -cfg.n_target_data + j
@@ -158,32 +159,39 @@ def create_outputs(outputs, dataset, eval_path, stat_target, suffix=""):
 
         for cname in cnames:
 
-            output_name = '{}_{}'.format(eval_path[j], cname)
+            rootname = '{}_{}'.format(eval_path[j], cname)
+            if rootname not in output_names:
+                output_names[rootname] = []
+            output_names[rootname] += [rootname + suffix + ".nc"]
 
-            dss = []
-            for i in range(n_out):
-                dss.append(dataset.xr_dss[ind][1].copy())
+            ds = dataset.xr_dss[ind][1].copy()
 
-                if cfg.normalize_data and cname != "mask":
-                    if cname == "output" and stat_target is not None:
-                        outputs[i][cname][:, j, :, :] = renormalize(outputs[i][cname][:, j, :, :],
-                                                                    stat_target["mean"][j], stat_target["std"][j])
-                    else:
-                        outputs[i][cname][:, j, :, :] = renormalize(outputs[i][cname][:, j, :, :],
-                                                                    mean_val[j], std_val[j])
+            if cfg.normalize_data and cname != "mask":
+                if cname == "output" and stat_target is not None:
+                    data_dict[cname][:, j, :, :] = renormalize(data_dict[cname][:, j, :, :],
+                                                               stat_target["mean"][j], stat_target["std"][j])
+                else:
+                    data_dict[cname][:, j, :, :] = renormalize(data_dict[cname][:, j, :, :],
+                                                               mean_val[j], std_val[j])
 
-                dss[-1][data_type].values = outputs[i][cname].to(torch.device('cpu')).detach().numpy()[:, j, :, :]
+            ds[data_type] = xr.DataArray(data_dict[cname].to(torch.device('cpu')).detach().numpy()[:, j, :, :],
+                                         dims=dataset.xr_dss[ind][2])
+            ds["time"] = dataset.xr_dss[ind][0]["time"].values[i_start: i_end]
 
-                dss[-1] = reformat_dataset(dataset.xr_dss[j][0], dss[-1], data_type)
+            ds = reformat_dataset(dataset.xr_dss[ind][0], ds, data_type)
 
-            ds = xr.concat(dss, dim="time", data_vars="minimal").sortby('time')
+            for var in dataset.xr_dss[ind][0].keys():
+                ds[var] = dataset.xr_dss[ind][0][var].isel(time=slice(i_start, i_end))
+
             ds.attrs["history"] = "Infilled using CRAI (Climate Reconstruction AI: " \
                                   "https://github.com/FREVA-CLINT/climatereconstructionAI)\n" + ds.attrs["history"]
-            ds.to_netcdf(output_name + suffix + ".nc")
+            ds.to_netcdf(output_names[rootname][-1])
 
-        for i in range(n_out):
-            output_name = '{}_{}.{}'.format(eval_path[j], "combined", i + 1)
-            plot_data(dataset.xr_dss[j][1].coords,
-                      [outputs[i][pnames[0]][:, j, :, :], outputs[i][pnames[1]][:, j, :, :]],
-                      ["Original", "Reconstructed"], output_name, data_type, cfg.plot_results,
-                      *cfg.dataset_format["scale"])
+        for time_step in cfg.plot_results:
+            if time_step >= i_start and time_step < i_end:
+                output_name = '{}_{}{}_{}.png'.format(eval_path[j], "combined", m_label, time_step)
+                plot_data(dataset.xr_dss[ind][1].coords,
+                          [data_dict[p][time_step - i_start, j, :, :].squeeze() for p in pnames],
+                          ["Original", "Reconstructed"], output_name, data_type,
+                          str(dataset.xr_dss[ind][0]["time"][time_step].values),
+                          *cfg.dataset_format["scale"])

@@ -21,7 +21,7 @@ def load_steadymask(path, mask_names, data_types, device):
         else:
             steady_mask, _ = load_netcdf(path, mask_names, data_types[-cfg.n_target_data:])
         # stack + squeeze ensures that it works with steady masks with one timestep or no timestep
-        return torch.stack([torch.from_numpy(mask).to(device) for mask in steady_mask]).squeeze()
+        return torch.stack([torch.from_numpy(np.array(mask)).to(device) for mask in steady_mask]).squeeze()
 
 
 class InfiniteSampler(Sampler):
@@ -46,30 +46,34 @@ class InfiniteSampler(Sampler):
                 i = 0
 
 
-def nc_loadchecker(filename, data_type, image_size, keep_dss=False):
+def nc_loadchecker(filename, data_type, image_size):
     basename = filename.split("/")[-1]
 
     if not os.path.isfile(filename):
         print('File {} not found.'.format(filename))
 
     try:
-        # We use load_dataset instead of open_dataset because of lazy transpose
-        ds = xr.load_dataset(filename, decode_times=False)
+        ds = xr.open_dataset(filename)
     except Exception:
-        raise ValueError('Impossible to read {}.'
-                         '\nPlease, check that it is a netCDF file and it is not corrupted.'.format(basename))
+        try:
+            ds = xr.open_dataset(filename, decode_times=False)
+        except Exception:
+            raise ValueError('Impossible to read {}.'
+                             '\nPlease, check that it is a netCDF file and it is not corrupted.'.format(basename))
 
     ds1 = dataset_formatter(ds, data_type, image_size, basename)
+    ds = ds.drop_vars(data_type)
 
-    if keep_dss:
-        dtype = ds[data_type].dtype
-        ds = ds.drop_vars(data_type)
-        ds[data_type] = np.empty(0, dtype=dtype)
-        dss = [ds, ds1]
+    if cfg.lazy_load:
+        data = ds1[data_type]
     else:
-        dss = None
+        data = ds1[data_type].values
 
-    return dss, ds1[data_type].values, ds1[data_type].shape[0]
+    dims = ds1[data_type].dims
+    ds1 = ds1.drop_vars(ds1.keys())
+    ds1 = ds1.drop_vars("time")
+
+    return [ds, ds1, dims], data, data.shape[0]
 
 
 def load_netcdf(path, data_names, data_types, keep_dss=False):
@@ -82,7 +86,6 @@ def load_netcdf(path, data_names, data_types, keep_dss=False):
         dss, data, lengths = zip(*[nc_loadchecker('{}{}'.format(path, data_names[i]), data_types[i], cfg.image_sizes[i],
                                    keep_dss=keep_dss) for i in range(ndata)])
 
-        # if cfg.input_data_index is None:
         assert len(set(lengths)) == 1
 
         if keep_dss:
@@ -129,11 +132,11 @@ class NetCDFLoader(Dataset):
 
         if self.mask_data is None:
             # Get masks from images
-            image = self.img_data[ind_data][mask_indices]
+            image = np.array(self.img_data[ind_data][mask_indices])
             mask = torch.from_numpy((1 - (np.isnan(image))).astype(image.dtype))
         else:
-            mask = torch.from_numpy(self.mask_data[ind_data][mask_indices])
-        image = self.img_data[ind_data][img_indices]
+            mask = torch.from_numpy(np.array(self.mask_data[ind_data][mask_indices]))
+        image = np.array(self.img_data[ind_data][img_indices])
         image = torch.from_numpy(np.nan_to_num(image))
 
         if cfg.normalize_data:

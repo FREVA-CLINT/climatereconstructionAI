@@ -1,10 +1,17 @@
 import os
 
 from .model.net import CRAINet
-from .utils.evaluation import infill, create_outputs
+from .utils.evaluation import infill
 from .utils.io import load_ckpt, load_model
 from .utils.netcdfloader import NetCDFLoader
+import xarray as xr
 from . import config as cfg
+
+
+def store_encoding(ds):
+    global encoding
+    encoding = ds['time'].encoding
+    return ds
 
 
 def evaluate(arg_file=None, prog_func=None):
@@ -15,6 +22,9 @@ def evaluate(arg_file=None, prog_func=None):
 
     n_models = len(cfg.model_names)
 
+    eval_path = ["{}/{}".format(cfg.evaluation_dirs[0], name) for name in cfg.eval_names]
+    output_names = {}
+    count = 0
     for i_model in range(n_models):
 
         if cfg.lstm_steps:
@@ -56,18 +66,25 @@ def evaluate(arg_file=None, prog_func=None):
                             out_channels=cfg.out_channels,
                             bounds=dataset_val.bounds).to(cfg.device)
 
-        output_names = ["{}/{}".format(cfg.evaluation_dirs[0], name) for name in cfg.eval_names]
-        outputs = []
         for k in range(len(ckpt_dict["labels"])):
+            count += 1
             label = ckpt_dict["labels"][k]
             load_model(ckpt_dict, model, label=label)
             model.eval()
-            outputs.append(infill(model, dataset_val))
-            if cfg.split_outputs:
-                create_outputs(outputs, dataset_val, output_names, stat_target, k)
-                outputs = []
-        if not cfg.split_outputs:
-            create_outputs(outputs, dataset_val, output_names, stat_target)
+            infill(model, dataset_val, eval_path, output_names, stat_target, count)
+
+    for name in output_names:
+        if len(output_names[name]) == 1:
+            os.rename(output_names[name][0], name + ".nc")
+        else:
+            if not cfg.split_outputs:
+                ds = xr.open_mfdataset(output_names[name], preprocess=store_encoding, autoclose=True, combine='nested',
+                                       data_vars='minimal', concat_dim="time", chunks={})
+                ds['time'].encoding = encoding
+                ds['time'].encoding['original_shape'] = len(ds["time"])
+                ds.to_netcdf(name + ".nc")
+                for output_name in output_names[name]:
+                    os.remove(output_name)
 
 
 if __name__ == "__main__":

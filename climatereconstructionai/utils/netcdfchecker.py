@@ -21,10 +21,6 @@ def reformat_dataset(ds1, ds2, data_type):
             ds2 = xe.Regridder(ds2, ds1, "nearest_s2d")(ds2, keep_attrs=True)
             del ds2.attrs["regrid_method"]
 
-        dtype = ds1[data_type].dtype
-        if dtype != ds2[data_type].dtype:
-            ds2[data_type] = ds2[data_type].astype(dtype=dtype)
-
     return ds2
 
 

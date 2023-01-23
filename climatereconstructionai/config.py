@@ -145,6 +145,7 @@ def set_common_args():
                             help="Disable the batch normalization on the first layer")
     arg_parser.add_argument('--masked-bn', action='store_true',
                             help="Use masked batch normalization instead of standard BN")
+    arg_parser.add_argument('--lazy-load', action='store_true', help="Use lazy loading for large datasets")
     arg_parser.add_argument('--global-padding', action='store_true', help="Use a custom padding for global dataset")
     arg_parser.add_argument('--normalize-data', action='store_true',
                             help="Normalize the input climate data to 0 mean and 1 std")
@@ -167,7 +168,7 @@ def set_train_args(arg_file=None):
                             help="Parent directory of the training checkpoints and the snapshot images")
     arg_parser.add_argument('--resume-iter', type=int, help="Iteration step from which the training will be resumed")
     arg_parser.add_argument('--batch-size', type=int, default=18, help="Batch size")
-    arg_parser.add_argument('--n-threads', type=int, default=64, help="Number of threads")
+    arg_parser.add_argument('--n-threads', type=int, default=64, help="Number of workers used in the data loader")
     arg_parser.add_argument('--multi-gpus', action='store_true', help="Use multiple GPUs, if any")
     arg_parser.add_argument('--finetune', action='store_true',
                             help="Enable the fine tuning mode (use fine tuning parameterization "
@@ -210,14 +211,14 @@ def set_evaluate_args(arg_file=None, prog_func=None):
     arg_parser.add_argument('--eval-names', type=str_list, default='output',
                             help="Prefix used for the output filenames")
     arg_parser.add_argument('--create-graph', action='store_true', help="Create a Tensorboard graph of the NN")
-    arg_parser.add_argument('--plot-results', type=int_list, default=None,
+    arg_parser.add_argument('--plot-results', type=int_list, default=[],
                             help="Create plot images of the results for the comma separated list of time indices")
     arg_parser.add_argument('--partitions', type=int, default=1,
                             help="Split the climate dataset into several partitions along the time coordinate")
-    arg_parser.add_argument('--split-outputs', action='store_true',
-                            help="Do not merge the outputs when using multiple models")
     arg_parser.add_argument('--maxmem', type=int, default=None,
                             help="Maximum available memory in MB (overwrite partitions parameter)")
+    arg_parser.add_argument('--split-outputs', action='store_true',
+                            help="Do not merge the outputs when using multiple models and/or partitions")
     arg_parser.add_argument('-f', '--load-from-file', type=str, action=LoadFromFile,
                             help="Load all the arguments from a text file")
     global_args(arg_parser, arg_file, prog_func)
