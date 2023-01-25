@@ -17,9 +17,9 @@ class ConvLSTMBlock(nn.Module):
         if cfg.weights:
             self.lstm_conv.apply(weights_init(cfg.weights))
 
-        self.Wci = nn.Parameter(torch.zeros(1, out_channels, *img_size)).to(cfg.device)
-        self.Wcf = nn.Parameter(torch.zeros(1, out_channels, *img_size)).to(cfg.device)
-        self.Wco = nn.Parameter(torch.zeros(1, out_channels, *img_size)).to(cfg.device)
+        self.Wci = nn.Parameter(torch.zeros(1, out_channels, *img_size))
+        self.Wcf = nn.Parameter(torch.zeros(1, out_channels, *img_size))
+        self.Wco = nn.Parameter(torch.zeros(1, out_channels, *img_size))
 
     def forward(self, inputs, lstm_state=None):
         lstm_steps = inputs.shape[1]
