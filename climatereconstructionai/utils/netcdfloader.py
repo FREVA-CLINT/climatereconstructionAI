@@ -37,13 +37,26 @@ class InfiniteSampler(Sampler):
 
     def loop(self):
         i = 0
-        order = np.random.permutation(self.num_samples)
+        n_samples = self.num_samples - sum(cfg.time_steps)
+        order = np.random.permutation(n_samples) + cfg.time_steps[0]
         while True:
             yield order[i]
             i += 1
-            if i >= self.num_samples:
-                order = np.random.permutation(self.num_samples)
+            if i >= n_samples:
+                order = np.random.permutation(n_samples) + cfg.time_steps[0]
                 i = 0
+
+
+class FiniteSampler(Sampler):
+    def __init__(self, num_samples, data_source=None):
+        super().__init__(data_source)
+        self.num_samples = num_samples
+
+    def __iter__(self):
+        return iter(range(cfg.time_steps[0], self.num_samples - cfg.time_steps[1]))
+
+    def __len__(self):
+        return self.num_samples
 
 
 def nc_loadchecker(filename, data_type):
@@ -95,7 +108,7 @@ def load_netcdf(path, data_names, data_types, keep_dss=False):
 
 
 class NetCDFLoader(Dataset):
-    def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, time_steps, stat_target=None):
+    def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, time_steps, train_stats=None):
         super(NetCDFLoader, self).__init__()
 
         self.random = random.Random(cfg.loop_random_seed)
@@ -128,7 +141,7 @@ class NetCDFLoader(Dataset):
 
         self.img_mean, self.img_std, self.img_tf = img_normalization(self.img_data)
 
-        self.bounds = bnd_normalization(self.img_mean, self.img_std, stat_target)
+        self.bounds = bnd_normalization(self.img_mean, self.img_std, train_stats)
 
     def load_data(self, ind_data, img_indices, mask_indices):
 
@@ -187,9 +200,9 @@ class NetCDFLoader(Dataset):
 
         if cfg.channel_steps:
             return torch.cat(masked, dim=0).transpose(0, 1), torch.cat(masks, dim=0)\
-                .transpose(0, 1), torch.cat(images, dim=0).transpose(0, 1)
+                .transpose(0, 1), torch.cat(images, dim=0).transpose(0, 1), index
         else:
-            return torch.cat(masked, dim=1), torch.cat(masks, dim=1), torch.cat(images, dim=1)
+            return torch.cat(masked, dim=1), torch.cat(masks, dim=1), torch.cat(images, dim=1), index
 
     def __len__(self):
         return self.img_length

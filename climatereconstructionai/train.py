@@ -64,11 +64,7 @@ def train(arg_file=None):
     if cfg.conv_factor is None:
         cfg.conv_factor = max(image_sizes[0])
 
-    if cfg.n_target_data == 0:
-        stat_target = None
-    else:
-        stat_target = {"mean": dataset_train.img_mean[-cfg.n_target_data:],
-                       "std": dataset_train.img_std[-cfg.n_target_data:]}
+    train_stats = {"mean": dataset_train.img_mean, "std": dataset_train.img_std}
 
     # define network model
     if len(image_sizes) - cfg.n_target_data > 1:
@@ -146,7 +142,7 @@ def train(arg_file=None):
 
         # train model
         model.train()
-        image, mask, gt = [x.to(cfg.device) for x in next(iterator_train)]
+        image, mask, gt = [x.to(cfg.device) for x in next(iterator_train)[:3]]
         output = model(image, mask)
 
         train_loss = get_loss(criterion, lambda_dict, mask, steady_mask, output, gt, writer, n_iter, "train")
@@ -158,7 +154,7 @@ def train(arg_file=None):
         if cfg.log_interval and n_iter % cfg.log_interval == 0:
 
             model.eval()
-            image, mask, gt = [x.to(cfg.device) for x in next(iterator_val)]
+            image, mask, gt = [x.to(cfg.device) for x in next(iterator_val)[:3]]
             with torch.no_grad():
                 output = model(image, mask)
             val_loss = get_loss(criterion, lambda_dict, mask, steady_mask, output, gt, writer, n_iter, "val")
@@ -169,12 +165,12 @@ def train(arg_file=None):
                 lr_scheduler.step(val_loss)
 
             # create snapshot image
-            if cfg.save_snapshot_image:
+            if cfg.eval_timesteps:
                 model.eval()
                 create_snapshot_image(model, dataset_val, '{:s}/images/iter_{:d}'.format(cfg.snapshot_dir, n_iter))
 
         if n_iter % cfg.save_model_interval == 0:
-            save_ckpt('{:s}/ckpt/{:d}.pth'.format(cfg.snapshot_dir, n_iter), stat_target,
+            save_ckpt('{:s}/ckpt/{:d}.pth'.format(cfg.snapshot_dir, n_iter), train_stats,
                       [(str(n_iter), n_iter, model, optimizer)])
 
         if n_iter in final_models:
@@ -183,7 +179,7 @@ def train(arg_file=None):
 
     prof.stop()
     writer.close()
-    save_ckpt('{:s}/ckpt/final.pth'.format(cfg.snapshot_dir), stat_target, savelist)
+    save_ckpt('{:s}/ckpt/final.pth'.format(cfg.snapshot_dir), train_stats, savelist)
 
 
 if __name__ == "__main__":

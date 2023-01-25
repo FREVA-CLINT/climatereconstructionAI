@@ -1,9 +1,10 @@
 import os
 
 from .model.net import CRAINet
-from .utils.evaluation import infill
+from .utils.evaluation import infill, get_batch_size
 from .utils.io import load_ckpt, load_model
-from .utils.netcdfloader import NetCDFLoader
+from torch.utils.data import DataLoader
+from .utils.netcdfloader import NetCDFLoader, FiniteSampler
 import xarray as xr
 from . import config as cfg
 
@@ -29,13 +30,18 @@ def evaluate(arg_file=None, prog_func=None):
 
         ckpt_dict = load_ckpt("{}/{}".format(cfg.model_dir, cfg.model_names[i_model]), cfg.device)
 
-        if "stat_target" in ckpt_dict.keys():
-            stat_target = ckpt_dict["stat_target"]
+        if cfg.use_train_stats:
+            data_stats = ckpt_dict["train_stats"]
         else:
-            stat_target = None
+            data_stats = None
 
         dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.data_names, cfg.mask_dir, cfg.mask_names, "infill",
-                                   cfg.data_types, cfg.time_steps, stat_target)
+                                   cfg.data_types, cfg.time_steps, data_stats)
+
+        n_samples = dataset_val.img_length
+
+        if data_stats is None:
+            data_stats = {"mean": dataset_val.img_mean, "std": dataset_val.img_std}
 
         image_sizes = dataset_val.img_sizes
         if cfg.conv_factor is None:
@@ -65,7 +71,10 @@ def evaluate(arg_file=None, prog_func=None):
             label = ckpt_dict["labels"][k]
             load_model(ckpt_dict, model, label=label)
             model.eval()
-            infill(model, dataset_val, eval_path, output_names, stat_target, count)
+            batch_size = get_batch_size(model.parameters(), n_samples, image_sizes)
+            iterator_val = iter(DataLoader(dataset_val, batch_size=batch_size,
+                                           sampler=FiniteSampler(len(dataset_val)), num_workers=0))
+            infill(model, iterator_val, n_samples, eval_path, output_names, data_stats, dataset_val.xr_dss, count)
 
     for name in output_names:
         if len(output_names[name]) == 1:

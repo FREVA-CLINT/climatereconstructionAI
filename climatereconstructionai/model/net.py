@@ -163,11 +163,11 @@ class CRAINet(nn.Module):
                     recurrent_state_h = torch.cat([recurrent_state_h, recurrent_fusion_state_h], dim=1)
                     recurrent_states[i + (self.net_depth - self.attention_depth)] = recurrent_state_h
 
-        # reverse all hidden states
-        if cfg.recurrent_steps:
-            for i in range(self.net_depth):
-                hs[i] = torch.flip(hs[i], (1,))
-                hs_mask[i] = torch.flip(hs_mask[i], (1,))
+        # # reverse all hidden states
+        # if cfg.recurrent_steps:
+        #     for i in range(self.net_depth):
+        #         hs[i] = torch.flip(hs[i], (1,))
+        #         hs_mask[i] = torch.flip(hs_mask[i], (1,))
 
         h, h_mask = hs[self.net_depth], hs_mask[self.net_depth]
 
