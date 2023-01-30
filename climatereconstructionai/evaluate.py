@@ -74,7 +74,7 @@ def evaluate(arg_file=None, prog_func=None):
             batch_size = get_batch_size(model.parameters(), n_samples, image_sizes)
             iterator_val = iter(DataLoader(dataset_val, batch_size=batch_size,
                                            sampler=FiniteSampler(len(dataset_val)), num_workers=0))
-            infill(model, iterator_val, n_samples, eval_path, output_names, data_stats, dataset_val.xr_dss, count)
+            infill(model, iterator_val, eval_path, output_names, data_stats, dataset_val.xr_dss, count)
 
     for name in output_names:
         if len(output_names[name]) == 1:

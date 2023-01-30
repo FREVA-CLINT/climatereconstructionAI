@@ -92,7 +92,7 @@ def get_batch_size(parameters, n_samples, image_sizes):
     return int(np.ceil(n_samples / partitions))
 
 
-def infill(model, dataset, n_samples, eval_path, output_names, data_stats, xr_dss, i_model):
+def infill(model, dataset, eval_path, output_names, data_stats, xr_dss, i_model):
     if not os.path.exists(cfg.evaluation_dirs[0]):
         os.makedirs('{:s}'.format(cfg.evaluation_dirs[0]))
 
@@ -100,7 +100,6 @@ def infill(model, dataset, n_samples, eval_path, output_names, data_stats, xr_ds
     if steady_mask is not None:
         steady_mask = 1 - steady_mask
     data_dict = {'image': [], 'mask': [], 'gt': [], 'output': [], 'infilled': []}
-    keys = list(data_dict.keys())
 
     for split in tqdm(range(dataset.__len__())):
 
@@ -115,11 +114,14 @@ def infill(model, dataset, n_samples, eval_path, output_names, data_stats, xr_ds
         with torch.no_grad():
             data_dict["output"] = model(data_dict["image"].to(cfg.device), data_dict["mask"].to(cfg.device))
 
-        for key in keys[:4]:
+        for key in ('image', 'mask', 'gt', 'output'):
             data_dict[key] = data_dict[key][:, cfg.recurrent_steps, :, :, :].to(torch.device('cpu'))
 
+        for key in ('image', 'mask', 'gt'):
+            data_dict[key] = data_dict[key][:, cfg.gt_channels, :, :]
+
         if steady_mask is not None:
-            for key in ('gt', 'image', 'output'):
+            for key in ('image', 'gt', 'output'):
                 data_dict[key] /= steady_mask
 
         data_dict["infilled"] = (1 - data_dict["mask"])
@@ -128,12 +130,12 @@ def infill(model, dataset, n_samples, eval_path, output_names, data_stats, xr_ds
 
         data_dict["image"] /= data_dict["mask"]
 
-        create_outputs(data_dict, dataset, eval_path, output_names, data_stats, xr_dss, i_model, split, index)
+        create_outputs(data_dict, eval_path, output_names, data_stats, xr_dss, i_model, split, index)
 
     return output_names
 
 
-def create_outputs(data_dict, dataset, eval_path, output_names, data_stats, xr_dss, i_model, split, index):
+def create_outputs(data_dict, eval_path, output_names, data_stats, xr_dss, i_model, split, index):
 
     m_label = "." + str(i_model).zfill(3)
     suffix = m_label + "-" + str(split + 1).zfill(3)
@@ -142,13 +144,13 @@ def create_outputs(data_dict, dataset, eval_path, output_names, data_stats, xr_d
         cnames = ["gt", "mask", "image", "output", "infilled"]
         pnames = ["image", "infilled"]
     else:
-        cnames = ["gt", "mask", "output"]
+        cnames = ["gt", "output"]
         pnames = ["gt", "output"]
 
     for j in range(len(eval_path)):
 
-        ind = -cfg.n_target_data + j
-        data_type = cfg.data_types[ind]
+        i_data = -cfg.n_target_data + j
+        data_type = cfg.data_types[i_data]
 
         for cname in cnames:
 
@@ -157,20 +159,20 @@ def create_outputs(data_dict, dataset, eval_path, output_names, data_stats, xr_d
                 output_names[rootname] = []
             output_names[rootname] += [rootname + suffix + ".nc"]
 
-            ds = xr_dss[ind][1].copy()
+            ds = xr_dss[i_data][1].copy()
 
             if cfg.normalize_data and cname != "mask":
-                data_dict[cname][:, j, :, :] = renormalize(data_dict[cname][:, j, :, :], data_stats["mean"][ind],
-                                                           data_stats["std"][ind])
+                data_dict[cname][:, j, :, :] = renormalize(data_dict[cname][:, j, :, :],
+                                                           data_stats["mean"][i_data], data_stats["std"][i_data])
 
             ds[data_type] = xr.DataArray(data_dict[cname].to(torch.device('cpu')).detach().numpy()[:, j, :, :],
-                                         dims=xr_dss[ind][2])
-            ds["time"] = xr_dss[ind][0]["time"].values[index]
+                                         dims=xr_dss[i_data][2])
+            ds["time"] = xr_dss[i_data][0]["time"].values[index]
 
-            ds = reformat_dataset(xr_dss[ind][0], ds, data_type)
+            ds = reformat_dataset(xr_dss[i_data][0], ds, data_type)
 
-            for var in xr_dss[ind][0].keys():
-                ds[var] = xr_dss[ind][0][var].isel(time=index)
+            for var in xr_dss[i_data][0].keys():
+                ds[var] = xr_dss[i_data][0][var].isel(time=index)
 
             ds.attrs["history"] = "Infilled using CRAI (Climate Reconstruction AI: " \
                                   "https://github.com/FREVA-CLINT/climatereconstructionAI)\n" + ds.attrs["history"]
@@ -179,8 +181,8 @@ def create_outputs(data_dict, dataset, eval_path, output_names, data_stats, xr_d
         for time_step in cfg.plot_results:
             if time_step in index:
                 output_name = '{}_{}{}_{}.png'.format(eval_path[j], "combined", m_label, time_step)
-                plot_data(xr_dss[ind][1].coords,
+                plot_data(xr_dss[i_data][1].coords,
                           [data_dict[p][time_step - index[0], j, :, :].squeeze() for p in pnames],
                           ["Original", "Reconstructed"], output_name, data_type,
-                          str(xr_dss[ind][0]["time"][time_step].values),
+                          str(xr_dss[i_data][0]["time"][time_step].values),
                           *cfg.dataset_format["scale"])
