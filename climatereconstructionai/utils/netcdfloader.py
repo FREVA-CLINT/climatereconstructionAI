@@ -83,10 +83,10 @@ def nc_loadchecker(filename, data_type):
         data = ds1[data_type].values
 
     dims = ds1[data_type].dims
-    ds1 = ds1.drop_vars(ds1.keys())
-    ds1 = ds1.drop_vars("time")
+    coords = {key: ds1[data_type].coords[key] for key in ds1[data_type].coords if key != "time"}
+    ds1 = ds1.drop_vars(ds.keys())
 
-    return [ds, ds1, dims], data, data.shape[0], data.shape[1:]
+    return [ds, ds1, dims, coords], data, data.shape[0], data.shape[1:]
 
 
 def load_netcdf(path, data_names, data_types, keep_dss=False):
