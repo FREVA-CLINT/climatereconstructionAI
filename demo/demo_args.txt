@@ -4,11 +4,10 @@
 --evaluation-dirs outputs
 --data-names tas_hadcrut_187709_189308.nc
 --data-types tas
---device cpu --image-sizes 72
+--device cpu
 --n-filters 18
 --out-channels 1
---lstm-steps 0
---prev-next-steps 0
 --eval-names demo
 --dataset-name hadcrut-mod
 --plot-result 0
+--global-padding

@@ -137,8 +137,8 @@ def infill(model, dataset, eval_path, output_names, data_stats, xr_dss, i_model)
 
 def create_outputs(data_dict, eval_path, output_names, data_stats, xr_dss, i_model, split, index):
 
-    m_label = "." + str(i_model).zfill(3)
-    suffix = m_label + "-" + str(split + 1).zfill(3)
+    m_label = "." + str(i_model)
+    suffix = m_label + "-" + str(split + 1)
 
     if cfg.n_target_data == 0:
         cnames = ["gt", "mask", "image", "output", "infilled"]

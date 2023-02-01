@@ -87,7 +87,6 @@ def nc_loadchecker(filename, data_type):
     ds1 = ds1.drop_vars(ds.keys())
     ds1 = ds1.drop_dims("time")
 
-
     return [ds, ds1, dims, coords], data, data.shape[0], data.shape[1:]
 
 
