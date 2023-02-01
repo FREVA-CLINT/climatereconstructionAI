@@ -10,7 +10,7 @@ reqs = [str(ir.req) for ir in parse_requirements(here / 'requirements.txt')]
 
 setup(
     name='climatereconstructionAI',
-    version='0.1.0',
+    version='1.1.0',
     description='A climate data infilling software using partial convolutions',
     long_description=long_description,
     url='https://github.com/FREVA-CLINT/climatereconstructionAI',
@@ -35,7 +35,7 @@ setup(
     keywords='climate, artificial intelligence, infilling, missing values, partial convolution, NetCDF',
     package_dir={'': 'src'},
     packages=find_packages(where='src'),
-    python_requires='>=3.7, <4',
+    python_requires='>=3.10, <4',
     include_package_data=True,
     install_requires=reqs,
 )

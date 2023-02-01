@@ -3,15 +3,15 @@
 Software to train/evaluate models to reconstruct missing values in climate data (e.g., HadCRUT4) based on a U-Net with partial convolutions.
 
 ## Dependencies
-- python>=3.7
-- pytorch>=1.8.0
-- tqdm>=4.59.0
-- torchvision>=0.2.1
-- numpy>=1.20.1
-- matplotlib>=3.4.3
-- tensorboardX>=2.4.0
-- tensorboard>=2.8.0
-- xarray>=0.20.2
+- pytorch>=1.11.0
+- tqdm>=4.64.0
+- torchvision>=0.12.0
+- numpy>=1.21.6
+- matplotlib>=3.5.1
+- tensorboardX>=2.5
+- tensorboard>=2.9.0
+- xarray>=2022.3.0
+- dask>=2022.7.0
 - netcdf4>=1.5.8
 - setuptools==59.5.0
 - xesmf>=0.6.2
@@ -26,6 +26,8 @@ To activate the environment, use:
 ```bash
 conda activate crai
 ```
+
+`environment-cuda.yml` should be used when working with GPUs using CUDA.
 
 ## Installation
 
