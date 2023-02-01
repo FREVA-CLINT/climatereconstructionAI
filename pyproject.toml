@@ -26,12 +26,13 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-pytorch = ">=1.11.0"
+python = ">= 3.10"
+torch = ">=1.11.0"
 tqdm = ">=4.64.0"
 torchvision = ">=0.12.0"
 numpy = ">=1.21.6"
 matplotlib = ">=3.5.1"
-tensorboardX = ">=2.5""
+tensorboardX = ">=2.5"
 tensorboard = ">=2.9.0"
 xarray = ">=2022.3.0"
 dask = ">=2022.7.0"
