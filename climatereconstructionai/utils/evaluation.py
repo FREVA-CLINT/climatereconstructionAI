@@ -159,7 +159,7 @@ def create_outputs(data_dict, eval_path, output_names, data_stats, xr_dss, i_mod
                 output_names[rootname] = []
             output_names[rootname] += [rootname + suffix + ".nc"]
 
-            ds = xr_dss[i_data][1].isel(time=index)
+            ds = xr_dss[i_data][1].copy()
 
             if cfg.normalize_data and cname != "mask":
                 data_dict[cname][:, j, :, :] = renormalize(data_dict[cname][:, j, :, :],
@@ -167,6 +167,7 @@ def create_outputs(data_dict, eval_path, output_names, data_stats, xr_dss, i_mod
 
             ds[data_type] = xr.DataArray(data_dict[cname].to(torch.device('cpu')).detach().numpy()[:, j, :, :],
                                          dims=xr_dss[i_data][2], coords=xr_dss[i_data][3])
+            ds["time"] = xr_dss[i_data][0]["time"].values[index]
 
             ds = reformat_dataset(xr_dss[i_data][0], ds, data_type)
 
