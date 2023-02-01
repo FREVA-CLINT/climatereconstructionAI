@@ -62,9 +62,11 @@ def create_snapshot_image(model, dataset, filename):
             k += 1
 
     plt.subplots_adjust(wspace=0.012, hspace=0.012)
-    plt.savefig(filename + '.jpg', bbox_inches='tight', pad_inches=0)
-    plt.clf()
-    plt.close('all')
+    #plt.savefig(filename + '.jpg', bbox_inches='tight', pad_inches=0)
+    #plt.clf()
+    #plt.close('all')
+    return fig
+
 
 
 def get_partitions(parameters, length):
@@ -178,7 +180,7 @@ def create_outputs(outputs, dataset, eval_path, stat_target, suffix=""):
 
             ds = xr.concat(dss, dim="time", data_vars="minimal").sortby('time')
             ds.attrs["history"] = "Infilled using CRAI (Climate Reconstruction AI: " \
-                                  "https://github.com/FREVA-CLINT/climatereconstructionAI)\n" + ds.attrs["history"]
+                                 "https://github.com/FREVA-CLINT/climatereconstructionAI)\n" + ds.attrs["history"]
             ds.to_netcdf(output_name + suffix + ".nc")
 
         for i in range(n_out):

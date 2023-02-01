@@ -1,5 +1,13 @@
 import torch
 
+from .hole_loss import HoleLoss
+#from hole_loss import HoleLoss
+from .valid_loss import ValidLoss
+from .var_loss import VarLoss
+from .fft_loss import FTLoss
+from .inpainting_loss import InpaintingLoss
+
+from ..utils.featurizer import VGG16FeatureExtractor
 from .. import config as cfg
 
 
@@ -26,7 +34,15 @@ class CriterionParallel(torch.nn.Module):
         return multi_dict
 
 
-def get_loss(criterion, lambda_dict, img_mask, loss_mask, output, gt, writer, iter_index, setname):
+def get_loss(img_mask, loss_mask, output, gt, writer, iter_index, setname):
+
+    if cfg.lambda_dict['prc']>0 or cfg.lambda_dict['style']>0:
+        criterion = InpaintingLoss(VGG16FeatureExtractor()).to(cfg.device)
+    elif cfg.lambda_dict['hole']>0:
+        criterion = HoleLoss().to(cfg.device)
+    elif cfg.lambda_dict['valid']>0:
+        criterion = ValidLoss().to(cfg.device)
+
     if cfg.multi_gpus:
         loss_func = CriterionParallel(criterion)
     else:
@@ -41,8 +57,8 @@ def get_loss(criterion, lambda_dict, img_mask, loss_mask, output, gt, writer, it
                           gt[:, cfg.recurrent_steps, cfg.gt_channels, :, :])
 
     losses = {"total": 0.0}
-    for key, factor in lambda_dict.items():
-        value = factor * loss_dict[key]
+    for key, loss in loss_dict.items():
+        value = loss * cfg.lambda_dict[key]
         losses[key] = value
         losses["total"] += value
 

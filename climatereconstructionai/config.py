@@ -4,20 +4,6 @@ import os
 import os.path
 import pkgutil
 
-LAMBDA_DICT_IMG_INPAINTING = {
-    'hole': 6.0, 'tv': 0.1, 'valid': 1.0, 'prc': 0.05, 'style': 120.0
-}
-LAMBDA_DICT_IMG_INPAINTING2 = {
-    'hole': 0.0, 'tv': 0.1, 'valid': 7.0, 'prc': 0.05, 'style': 120.0
-}
-LAMBDA_DICT_HOLE = {
-    'hole': 1.0
-}
-LAMBDA_DICT_VALID = {
-    'valid': 1.0
-}
-
-
 def get_format(dataset_name):
     json_data = pkgutil.get_data(__name__, "static/dataset_format.json")
     dataset_format = json.loads(json_data)
@@ -46,6 +32,37 @@ def lim_list(arg):
     lim = list(map(float, arg.split(',')))
     assert len(lim) == 2
     return lim
+
+def key_value_list(arg):
+    args = arg.split(',')
+    keys = [arg for arg in args if not str.isnumeric(arg[0])]
+    values = [float(arg) for arg in args if str.isnumeric(arg[0])]
+    return dict(zip(keys, values))
+
+def set_lambdas():
+    valid, hole, tv, prc, style  = [0.,0.,0.,0.,0.]
+    if loss_criterion==0:
+        #inpainting_loss
+        valid, hole, tv, prc, style  = [1., 6., 0.1, 0.05, 120.]
+    elif loss_criterion==1:
+        hole=1
+    elif loss_criterion==2:
+        #inpainting_loss2
+        valid, hole, tv, prc, style  = [7., 0., 0.1, 0.05, 120.]
+    elif loss_criterion==3:
+        valid=1
+    
+    global lambda_dict
+    lambda_dict = {
+        'valid': valid,
+        'hole': hole,
+        'tv': tv,
+        'prc': prc,
+        'style':style
+    }
+    if lambda_loss is not None:
+        lambda_dict.update(lambda_loss)
+
 
 
 def global_args(parser, arg_file=None, prog_func=None):
@@ -96,6 +113,8 @@ def global_args(parser, arg_file=None, prog_func=None):
         recurrent_steps = gru_steps
     else:
         recurrent_steps = 0
+
+    set_lambdas()
 
 
 def set_common_args():
@@ -195,10 +214,15 @@ def set_train_args(arg_file=None):
                             help="Load all the arguments from a text file")
     arg_parser.add_argument('--vlim', type=lim_list, default=None,
                             help="Comma separated list of vmin,vmax values for the color scale of the snapshot images")
+    arg_parser.add_argument('--lambda-loss', type=key_value_list, default=None,
+                            help="Comma separated list of lambda factors (key) followed by its value."
+                             "Overrides the loss_criterion pre-setting")                               
     global_args(arg_parser, arg_file)
 
     if globals()["val_names"] is None:
         globals()["val_names"] = globals()["data_names"].copy()
+    
+    return arg_parser
 
 
 def set_evaluate_args(arg_file=None, prog_func=None):

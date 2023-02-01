@@ -1,4 +1,5 @@
 import os
+import datetime
 
 import torch
 import torch.multiprocessing
@@ -11,19 +12,17 @@ import numpy as np
 
 from . import config as cfg
 from .loss.get_loss import get_loss
-from .loss.hole_loss import HoleLoss
-from .loss.valid_loss import ValidLoss
-from .loss.inpainting_loss import InpaintingLoss
 from .model.net import CRAINet
+
 from .utils.evaluation import create_snapshot_image
-from .utils.featurizer import VGG16FeatureExtractor
 from .utils.io import load_ckpt, load_model, save_ckpt
 from .utils.netcdfloader import NetCDFLoader, InfiniteSampler, load_steadymask
 from .utils.profiler import load_profiler
+from .utils.io import read_input_file_as_dict, get_parameters_as_dict, get_hparams
 
 
 def train(arg_file=None):
-    cfg.set_train_args(arg_file)
+    arg_parser = cfg.set_train_args(arg_file)
 
     print("* Number of GPUs: ", torch.cuda.device_count())
     torch.multiprocessing.set_sharing_strategy('file_system')
@@ -42,9 +41,24 @@ def train(arg_file=None):
         if not os.path.exists(outdir):
             os.makedirs(outdir)
 
+    log_dir = (
+        f'Img-{cfg.image_sizes[0]}_Nenc-{cfg.encoding_layers[0]}' +
+        f'_Npool-{cfg.pooling_layers[0]}_Fconv-{cfg.conv_factor}_Fconv-{cfg.conv_factor}' +
+        f'_LSTM-{cfg.lstm_steps}_Ch-{cfg.channel_steps}_Att-{int(cfg.attention)}'
+    )
+    now = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    cfg.log_dir = os.path.join(cfg.log_dir,log_dir)
+    
     if not os.path.exists(cfg.log_dir):
         os.makedirs(cfg.log_dir)
+        
     writer = SummaryWriter(log_dir=cfg.log_dir)
+
+    input_dict = read_input_file_as_dict(arg_file)
+    parameters = get_parameters_as_dict(input_dict, arg_parser)
+
+    [writer.add_text(key,str(parameters[key])) for key in parameters.keys()]
+    
 
     if cfg.lstm_steps:
         time_steps = cfg.lstm_steps
@@ -62,10 +76,10 @@ def train(arg_file=None):
                                time_steps)
     iterator_train = iter(DataLoader(dataset_train, batch_size=cfg.batch_size,
                                      sampler=InfiniteSampler(len(dataset_train)),
-                                     num_workers=cfg.n_threads))
+                                     num_workers=cfg.n_threads, multiprocessing_context='fork'))
     iterator_val = iter(DataLoader(dataset_val, batch_size=cfg.batch_size,
                                    sampler=InfiniteSampler(len(dataset_val)),
-                                   num_workers=cfg.n_threads))
+                                   num_workers=cfg.n_threads, multiprocessing_context='fork'))
 
     steady_mask = load_steadymask(cfg.mask_dir, cfg.steady_masks, cfg.data_types, cfg.device)
 
@@ -105,20 +119,6 @@ def train(arg_file=None):
 
     # define optimizer and loss functions
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
-    if cfg.loss_criterion == 1:
-        criterion = HoleLoss().to(cfg.device)
-        lambda_dict = cfg.LAMBDA_DICT_HOLE
-    elif cfg.loss_criterion == 3:
-        criterion = ValidLoss().to(cfg.device)
-        lambda_dict = cfg.LAMBDA_DICT_VALID
-    else:
-        criterion = InpaintingLoss(VGG16FeatureExtractor()).to(cfg.device)
-        if cfg.loss_criterion == 0:
-            lambda_dict = cfg.LAMBDA_DICT_IMG_INPAINTING
-        elif cfg.loss_criterion == 2:
-            lambda_dict = cfg.LAMBDA_DICT_IMG_INPAINTING2
-        else:
-            raise ValueError("Unknown loss_criterion value.")
 
     if cfg.lr_scheduler_patience is not None:
         lr_scheduler = ReduceLROnPlateau(optimizer, 'min', patience=cfg.lr_scheduler_patience)
@@ -155,7 +155,7 @@ def train(arg_file=None):
         image, mask, gt = [x.to(cfg.device) for x in next(iterator_train)]
         output = model(image, mask)
 
-        train_loss = get_loss(criterion, lambda_dict, mask, steady_mask, output, gt, writer, n_iter, "train")
+        train_loss = get_loss(mask, steady_mask, output, gt, writer, n_iter, "train")
 
         optimizer.zero_grad()
         train_loss.backward()
@@ -167,18 +167,24 @@ def train(arg_file=None):
             image, mask, gt = [x.to(cfg.device) for x in next(iterator_val)]
             with torch.no_grad():
                 output = model(image, mask)
-            val_loss = get_loss(criterion, lambda_dict, mask, steady_mask, output, gt, writer, n_iter, "val")
+            val_loss = get_loss(mask, steady_mask, output, gt, writer, n_iter, "val")
 
-            writer.add_scalar('lr', lr_val, n_iter)
-
+  
             if cfg.lr_scheduler_patience is not None:
                 lr_scheduler.step(val_loss)
 
             # create snapshot image
             if cfg.save_snapshot_image:
                 model.eval()
-                create_snapshot_image(model, dataset_val, '{:s}/images/iter_{:d}'.format(cfg.snapshot_dir, n_iter))
+                fig = create_snapshot_image(model, dataset_val, '{:s}/images/iter_{:d}'.format(cfg.snapshot_dir, n_iter))
 
+                writer.add_figure(now, fig, global_step=n_iter)
+   
+                metric_dict = {'val_loss': val_loss}
+                hparams = get_hparams(parameters)
+                hparams.update(cfg.lambda_dict)
+                writer.add_hparams(hparams, metric_dict, name=now, global_step=n_iter)
+                
         if n_iter % cfg.save_model_interval == 0:
             save_ckpt('{:s}/ckpt/{:d}.pth'.format(cfg.snapshot_dir, n_iter), stat_target,
                       [(str(n_iter), n_iter, model, optimizer)])
