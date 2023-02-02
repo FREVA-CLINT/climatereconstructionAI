@@ -62,7 +62,7 @@ def create_snapshot_image(model, dataset, filename):
 
             for j in range(n_cols):
                 axes[k, j].axis("off")
-                axes[k, j].imshow(np.squeeze(data_dict[key][j][:, c, :, :]), vmin=vmin, vmax=vmax)
+                axes[k, j].imshow(np.squeeze(data_dict[key][j][cfg.recurrent_steps, c, :, :]), vmin=vmin, vmax=vmax)
 
             k += 1
 
