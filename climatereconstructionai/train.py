@@ -46,20 +46,11 @@ def train(arg_file=None):
         os.makedirs(cfg.log_dir)
     writer = SummaryWriter(log_dir=cfg.log_dir)
 
-    if cfg.lstm_steps:
-        time_steps = cfg.lstm_steps
-    elif cfg.gru_steps:
-        time_steps = cfg.gru_steps
-    elif cfg.channel_steps:
-        time_steps = cfg.channel_steps
-    else:
-        time_steps = 0
-
     # create data sets
     dataset_train = NetCDFLoader(cfg.data_root_dir, cfg.data_names, cfg.mask_dir, cfg.mask_names, 'train',
-                                 cfg.data_types, time_steps)
+                                 cfg.data_types, cfg.time_steps)
     dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.val_names, cfg.mask_dir, cfg.mask_names, 'val', cfg.data_types,
-                               time_steps)
+                               cfg.time_steps)
     iterator_train = iter(DataLoader(dataset_train, batch_size=cfg.batch_size,
                                      sampler=InfiniteSampler(len(dataset_train)),
                                      num_workers=cfg.n_threads))
@@ -69,30 +60,29 @@ def train(arg_file=None):
 
     steady_mask = load_steadymask(cfg.mask_dir, cfg.steady_masks, cfg.data_types, cfg.device)
 
-    if cfg.n_target_data == 0:
-        stat_target = None
-    else:
-        stat_target = {"mean": dataset_train.img_mean[-cfg.n_target_data:],
-                       "std": dataset_train.img_std[-cfg.n_target_data:]}
+    image_sizes = dataset_train.img_sizes
+    if cfg.conv_factor is None:
+        cfg.conv_factor = max(image_sizes[0])
+
+    train_stats = {"mean": dataset_train.img_mean, "std": dataset_train.img_std}
 
     # define network model
-    if len(cfg.image_sizes) - cfg.n_target_data > 1:
-        model = CRAINet(img_size=cfg.image_sizes[0],
+    if len(image_sizes) - cfg.n_target_data > 1:
+        model = CRAINet(img_size=image_sizes[0],
                         enc_dec_layers=cfg.encoding_layers[0],
                         pool_layers=cfg.pooling_layers[0],
-                        in_channels=2 * cfg.channel_steps + 1,
+                        in_channels=cfg.n_channel_steps,
                         out_channels=cfg.out_channels,
-                        fusion_img_size=cfg.image_sizes[1],
+                        fusion_img_size=image_sizes[1],
                         fusion_enc_layers=cfg.encoding_layers[1],
                         fusion_pool_layers=cfg.pooling_layers[1],
-                        fusion_in_channels=(len(cfg.image_sizes) - 1 - cfg.n_target_data
-                                            ) * (2 * cfg.channel_steps + 1),
+                        fusion_in_channels=(len(image_sizes) - 1 - cfg.n_target_data) * cfg.n_channel_steps,
                         bounds=dataset_train.bounds).to(cfg.device)
     else:
-        model = CRAINet(img_size=cfg.image_sizes[0],
+        model = CRAINet(img_size=image_sizes[0],
                         enc_dec_layers=cfg.encoding_layers[0],
                         pool_layers=cfg.pooling_layers[0],
-                        in_channels=2 * cfg.channel_steps + 1,
+                        in_channels=cfg.n_channel_steps,
                         out_channels=cfg.out_channels,
                         bounds=dataset_train.bounds).to(cfg.device)
 
@@ -152,7 +142,7 @@ def train(arg_file=None):
 
         # train model
         model.train()
-        image, mask, gt = [x.to(cfg.device) for x in next(iterator_train)]
+        image, mask, gt = [x.to(cfg.device) for x in next(iterator_train)[:3]]
         output = model(image, mask)
 
         train_loss = get_loss(criterion, lambda_dict, mask, steady_mask, output, gt, writer, n_iter, "train")
@@ -164,7 +154,7 @@ def train(arg_file=None):
         if cfg.log_interval and n_iter % cfg.log_interval == 0:
 
             model.eval()
-            image, mask, gt = [x.to(cfg.device) for x in next(iterator_val)]
+            image, mask, gt = [x.to(cfg.device) for x in next(iterator_val)[:3]]
             with torch.no_grad():
                 output = model(image, mask)
             val_loss = get_loss(criterion, lambda_dict, mask, steady_mask, output, gt, writer, n_iter, "val")
@@ -175,12 +165,12 @@ def train(arg_file=None):
                 lr_scheduler.step(val_loss)
 
             # create snapshot image
-            if cfg.save_snapshot_image:
+            if cfg.eval_timesteps:
                 model.eval()
                 create_snapshot_image(model, dataset_val, '{:s}/images/iter_{:d}'.format(cfg.snapshot_dir, n_iter))
 
         if n_iter % cfg.save_model_interval == 0:
-            save_ckpt('{:s}/ckpt/{:d}.pth'.format(cfg.snapshot_dir, n_iter), stat_target,
+            save_ckpt('{:s}/ckpt/{:d}.pth'.format(cfg.snapshot_dir, n_iter), train_stats,
                       [(str(n_iter), n_iter, model, optimizer)])
 
         if n_iter in final_models:
@@ -189,7 +179,7 @@ def train(arg_file=None):
 
     prof.stop()
     writer.close()
-    save_ckpt('{:s}/ckpt/final.pth'.format(cfg.snapshot_dir), stat_target, savelist)
+    save_ckpt('{:s}/ckpt/final.pth'.format(cfg.snapshot_dir), train_stats, savelist)
 
 
 if __name__ == "__main__":

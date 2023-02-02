@@ -21,14 +21,10 @@ def reformat_dataset(ds1, ds2, data_type):
             ds2 = xe.Regridder(ds2, ds1, "nearest_s2d")(ds2, keep_attrs=True)
             del ds2.attrs["regrid_method"]
 
-        dtype = ds1[data_type].dtype
-        if dtype != ds2[data_type].dtype:
-            ds2[data_type] = ds2[data_type].astype(dtype=dtype)
-
     return ds2
 
 
-def dataset_formatter(ds, data_type, image_size, basename):
+def dataset_formatter(ds, data_type, basename):
     if data_type not in list(ds.keys()):
         raise ValueError('Variable name \'{}\' not found in {}.'.format(data_type, basename))
 
@@ -49,8 +45,6 @@ def dataset_formatter(ds, data_type, image_size, basename):
 
         ds[data_type] = ds[data_type].transpose(*cfg.dataset_format["axes"])
 
-        shape = ds[data_type].shape
-
         step = []
         regrid = False
         for i in range(2):
@@ -65,12 +59,6 @@ def dataset_formatter(ds, data_type, image_size, basename):
             if diff > 1e-2:
                 raise ValueError('Incorrect {} extent in {}.\nThe extent should be: {}.'
                                  .format(coordinate, basename, extent))
-
-            if shape[i + 1] != image_size:
-                step[i] *= shape[i + 1] / image_size
-                logging.warning(
-                    'The size of {} does not correspond to the image size in {}.'.format(coordinate, basename))
-                regrid = True
 
         if regrid:
             logging.warning('The spatial coordinates have been interpolated using nearest_s2d in {}.'.format(basename))

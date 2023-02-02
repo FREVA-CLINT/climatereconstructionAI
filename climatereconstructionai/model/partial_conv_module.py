@@ -8,8 +8,8 @@ from ..utils.weights import weights_init
 
 
 def bound_pad(input, padding):
-    input = F.pad(input, (0, 0, padding[2], 0), "constant", float(input[:, :, 0, :].mean()))
-    input = F.pad(input, (0, 0, 0, padding[3]), "constant", float(input[:, :, -1, :].mean()))
+    input = F.pad(input, (0, 0, padding[2], 0), "constant", 0.)
+    input = F.pad(input, (0, 0, 0, padding[3]), "constant", 0.)
     input = F.pad(input, (padding[0], padding[1], 0, 0), mode="circular")
 
     return input

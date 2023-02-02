@@ -71,31 +71,43 @@ def global_args(parser, arg_file=None, prog_func=None):
 
     globals()["dataset_format"] = get_format(args.dataset_name)
 
-    if globals()["conv_factor"] is None:
-        globals()["conv_factor"] = max(globals()["image_sizes"])
-
     global skip_layers
-    global gt_channels
-    global recurrent_steps
 
     if disable_skip_layers:
         skip_layers = 0
     else:
         skip_layers = 1
 
-    gt_channels = []
-    for i in range(out_channels):
-        gt_channels.append((i + 1) * channel_steps + i * (channel_steps + 1))
-
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
+    global recurrent_steps
+    global n_recurrent_steps
+    global time_steps
+    time_steps = [0, 0]
     if lstm_steps:
-        recurrent_steps = lstm_steps
+        recurrent_steps = lstm_steps[0]
+        time_steps = lstm_steps
     elif gru_steps:
-        recurrent_steps = gru_steps
+        recurrent_steps = gru_steps[0]
+        time_steps = gru_steps
     else:
         recurrent_steps = 0
+
+    n_recurrent_steps = sum(time_steps) + 1
+
+    global n_channel_steps
+    global gt_channels
+
+    n_channel_steps = 1
+    gt_channels = [0 for i in range(out_channels)]
+    if channel_steps:
+        time_steps = channel_steps
+        n_channel_steps = sum(channel_steps) + 1
+        for i in range(out_channels):
+            gt_channels[i] = (i + 1) * channel_steps[0] + i * (channel_steps[1] + 1)
+
+    assert len(time_steps) == 2
 
 
 def set_common_args():
@@ -116,18 +128,17 @@ def set_common_args():
                             help="Number of data-names (from last) to be used as target data")
     arg_parser.add_argument('--device', type=str, default='cuda', help="Device used by PyTorch (cuda or cpu)")
     arg_parser.add_argument('--shuffle-masks', action='store_true', help="Select mask indices randomly")
-    arg_parser.add_argument('--channel-steps', type=int, default=0,
-                            help="Number of considered sequences for channeled memory (0 = memory module is disabled)")
-    arg_parser.add_argument('--lstm-steps', type=int, default=0,
-                            help="Number of considered sequences for lstm (0 = lstm module is disabled)")
-    arg_parser.add_argument('--gru-steps', type=int, default=0,
-                            help="Number of considered sequences for gru (0 = gru module is disabled)")
+    arg_parser.add_argument('--channel-steps', type=int_list, default=None,
+                            help="Comma separated number of considered sequences for channeled memory:"
+                                 "past_steps,future_steps")
+    arg_parser.add_argument('--lstm-steps', type=int_list, default=None,
+                            help="Comma separated number of considered sequences for lstm: past_steps,future_steps")
+    arg_parser.add_argument('--gru-steps', type=int_list, default=None,
+                            help="Comma separated number of considered sequences for gru: past_steps,future_steps")
     arg_parser.add_argument('--encoding-layers', type=int_list, default='3',
                             help="Number of encoding layers in the CNN")
     arg_parser.add_argument('--pooling-layers', type=int_list, default='0', help="Number of pooling layers in the CNN")
     arg_parser.add_argument('--conv-factor', type=int, default=None, help="Number of channels in the deepest layer")
-    arg_parser.add_argument('--image-sizes', type=int_list, default='72',
-                            help="Spatial size of the datasets (latxlon must be of shape NxN)")
     arg_parser.add_argument('--weights', type=str, default=None, help="Initialization weight")
     arg_parser.add_argument('--steady-masks', type=str_list, default=None,
                             help="Comma separated list of netCDF files containing a single mask to be applied "
@@ -145,6 +156,7 @@ def set_common_args():
                             help="Disable the batch normalization on the first layer")
     arg_parser.add_argument('--masked-bn', action='store_true',
                             help="Use masked batch normalization instead of standard BN")
+    arg_parser.add_argument('--lazy-load', action='store_true', help="Use lazy loading for large datasets")
     arg_parser.add_argument('--global-padding', action='store_true', help="Use a custom padding for global dataset")
     arg_parser.add_argument('--normalize-data', action='store_true',
                             help="Normalize the input climate data to 0 mean and 1 std")
@@ -167,7 +179,7 @@ def set_train_args(arg_file=None):
                             help="Parent directory of the training checkpoints and the snapshot images")
     arg_parser.add_argument('--resume-iter', type=int, help="Iteration step from which the training will be resumed")
     arg_parser.add_argument('--batch-size', type=int, default=18, help="Batch size")
-    arg_parser.add_argument('--n-threads', type=int, default=64, help="Number of threads")
+    arg_parser.add_argument('--n-threads', type=int, default=64, help="Number of workers used in the data loader")
     arg_parser.add_argument('--multi-gpus', action='store_true', help="Use multiple GPUs, if any")
     arg_parser.add_argument('--finetune', action='store_true',
                             help="Enable the fine tuning mode (use fine tuning parameterization "
@@ -178,8 +190,6 @@ def set_train_args(arg_file=None):
     arg_parser.add_argument('--log-interval', type=int, default=None,
                             help="Iteration step interval at which a tensorboard summary log should be written")
     arg_parser.add_argument('--lr-scheduler-patience', type=int, default=None, help="Patience for the lr scheduler")
-    arg_parser.add_argument('--save-snapshot-image', action='store_true',
-                            help="Save evaluation images for the iteration steps defined in --log-interval")
     arg_parser.add_argument('--save-model-interval', type=int, default=50000,
                             help="Iteration step interval at which the model should be saved")
     arg_parser.add_argument('--n-final-models', type=int, default=1,
@@ -189,8 +199,8 @@ def set_train_args(arg_file=None):
     arg_parser.add_argument('--loss-criterion', type=int, default=0,
                             help="Index defining the loss function "
                                  "(0=original from Liu et al., 1=MAE of the hole region)")
-    arg_parser.add_argument('--eval-timesteps', type=int_list, default="0,1,2,3,4",
-                            help="Iteration steps for which an evaluation is performed")
+    arg_parser.add_argument('--eval-timesteps', type=int_list, default=None,
+                            help="Sample indices for which a snapshot is created at each iter defined by log-interval")
     arg_parser.add_argument('-f', '--load-from-file', type=str, action=LoadFromFile,
                             help="Load all the arguments from a text file")
     arg_parser.add_argument('--vlim', type=lim_list, default=None,
@@ -209,15 +219,17 @@ def set_evaluate_args(arg_file=None, prog_func=None):
                             help="Directory where the output files will be stored")
     arg_parser.add_argument('--eval-names', type=str_list, default='output',
                             help="Prefix used for the output filenames")
+    arg_parser.add_argument('--use-train-stats', action='store_true',
+                            help="Use mean and std from training data for normalization")
     arg_parser.add_argument('--create-graph', action='store_true', help="Create a Tensorboard graph of the NN")
-    arg_parser.add_argument('--plot-results', type=int_list, default=None,
+    arg_parser.add_argument('--plot-results', type=int_list, default=[],
                             help="Create plot images of the results for the comma separated list of time indices")
     arg_parser.add_argument('--partitions', type=int, default=1,
                             help="Split the climate dataset into several partitions along the time coordinate")
-    arg_parser.add_argument('--split-outputs', action='store_true',
-                            help="Do not merge the outputs when using multiple models")
     arg_parser.add_argument('--maxmem', type=int, default=None,
                             help="Maximum available memory in MB (overwrite partitions parameter)")
+    arg_parser.add_argument('--split-outputs', action='store_true',
+                            help="Do not merge the outputs when using multiple models and/or partitions")
     arg_parser.add_argument('-f', '--load-from-file', type=str, action=LoadFromFile,
                             help="Load all the arguments from a text file")
     global_args(arg_parser, arg_file, prog_func)

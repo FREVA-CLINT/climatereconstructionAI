@@ -15,7 +15,7 @@ def progstat(index, numel):
 
 
 class CRAINet(nn.Module):
-    def __init__(self, img_size=512, enc_dec_layers=4, pool_layers=4, in_channels=1, out_channels=1,
+    def __init__(self, img_size=(512, 512), enc_dec_layers=4, pool_layers=4, in_channels=1, out_channels=1,
                  fusion_img_size=None, fusion_enc_layers=None, fusion_pool_layers=None, fusion_in_channels=0,
                  bounds=None):
 
@@ -63,7 +63,7 @@ class CRAINet(nn.Module):
 
             self.attention_module = nn.ModuleList(attention_layers)
 
-        elif fusion_img_size:
+        elif fusion_img_size is not None:
             self.channel_fusion_depth = fusion_enc_layers + fusion_pool_layers
             enc_conv_configs[self.net_depth - self.channel_fusion_depth]['in_channels'] += fusion_in_channels
             dec_conv_configs[self.channel_fusion_depth - 1]['skip_channels'] += cfg.skip_layers * fusion_in_channels
@@ -95,7 +95,7 @@ class CRAINet(nn.Module):
     def forward(self, input, input_mask):
         # create lists for skip connections
         # We split the inputs in case we use the attention module with different image dimension
-        h_index = 2 * cfg.channel_steps + 1
+        h_index = cfg.n_channel_steps
         hs = [input[:, :, :h_index, :, :]]
         hs_mask = [input_mask[:, :, :h_index, :, :]]
         recurrent_states = []
@@ -163,11 +163,11 @@ class CRAINet(nn.Module):
                     recurrent_state_h = torch.cat([recurrent_state_h, recurrent_fusion_state_h], dim=1)
                     recurrent_states[i + (self.net_depth - self.attention_depth)] = recurrent_state_h
 
-        # reverse all hidden states
-        if cfg.recurrent_steps:
-            for i in range(self.net_depth):
-                hs[i] = torch.flip(hs[i], (1,))
-                hs_mask[i] = torch.flip(hs_mask[i], (1,))
+        # # reverse all hidden states
+        # if cfg.recurrent_steps:
+        #     for i in range(self.net_depth):
+        #         hs[i] = torch.flip(hs[i], (1,))
+        #         hs_mask[i] = torch.flip(hs_mask[i], (1,))
 
         h, h_mask = hs[self.net_depth], hs_mask[self.net_depth]
 
