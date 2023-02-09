@@ -9,11 +9,6 @@ from .bounds_scaler import constrain_bounds
 from .. import config as cfg
 
 
-def progstat(index, numel):
-    if cfg.progress_fwd is not None:
-        cfg.progress_fwd('Infilling...', int(100 * (index + 1) / numel))
-
-
 class CRAINet(nn.Module):
     def __init__(self, img_size=(512, 512), enc_dec_layers=4, pool_layers=4, in_channels=1, out_channels=1,
                  fusion_img_size=None, fusion_enc_layers=None, fusion_pool_layers=None, fusion_in_channels=0,
@@ -136,8 +131,6 @@ class CRAINet(nn.Module):
             recurrent_states.append(recurrent_state)
             hs_mask.append(h_mask)
 
-            progstat(i, 2 * self.net_depth)
-
         # concat attentions
         if cfg.attention:
             hs[self.net_depth - self.attention_depth] = torch.cat(
@@ -181,7 +174,6 @@ class CRAINet(nn.Module):
                 h, h_mask, recurrent_state = self.decoder[i](h, hs[self.net_depth - i - 1],
                                                              h_mask, hs_mask[self.net_depth - i - 1],
                                                              None)
-            progstat(i + self.net_depth, 2 * self.net_depth)
 
         h = self.binder.scale(h)
 
