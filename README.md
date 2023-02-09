@@ -44,12 +44,12 @@ The software can be used to:
 
 ### Input data
 The directory containing the climate datasets should have the following sub-directories:
-- `data_large` and `val_large` for training
-- `test_large` for evaluation
+- `data` and `val` for training
+- `test` for evaluation
 
 The climate datasets should be in netCDF format and placed in the corresponding sub-directories.
 
-The missing values can be defined separately as masks. These masks should be in netCDF format and have the same dimension as the climate dataset.
+The missing values can be defined separately as masks containing zeros (for the missing values) and ones (for the valid values). These masks should be in netCDF format and have the same dimension as the climate dataset. For the training, it is possible to shuffle the sequence of masks by using the "shuffle-masks" option.
 
 A PyTorch model is required for the evaluation.
 
@@ -79,15 +79,16 @@ Once installed, the package can be used as:
 
 For more information about the arguments:
 ```bash
-usage: crai-train [-h] [--data-root-dir DATA_ROOT_DIR] [--mask-dir MASK_DIR] [--log-dir LOG_DIR] [--data-names DATA_NAMES] [--mask-names MASK_NAMES] [--data-types DATA_TYPES]
-                  [--n-target-data N_TARGET_DATA] [--device DEVICE] [--shuffle-masks] [--channel-steps CHANNEL_STEPS] [--lstm-steps LSTM_STEPS] [--gru-steps GRU_STEPS] [--encoding-layers ENCODING_LAYERS]
-                  [--pooling-layers POOLING_LAYERS] [--conv-factor CONV_FACTOR] [--weights WEIGHTS] [--steady-masks STEADY_MASKS] [--loop-random-seed LOOP_RANDOM_SEED]
-                  [--cuda-random-seed CUDA_RANDOM_SEED] [--deterministic] [--attention] [--channel-reduction-rate CHANNEL_REDUCTION_RATE] [--disable-skip-layers] [--disable-first-bn] [--masked-bn]
-                  [--lazy-load] [--global-padding] [--normalize-data] [--n-filters N_FILTERS] [--out-channels OUT_CHANNELS] [--dataset-name DATASET_NAME] [--min-bounds MIN_BOUNDS]
-                  [--max-bounds MAX_BOUNDS] [--profile] [--val-names VAL_NAMES] [--snapshot-dir SNAPSHOT_DIR] [--resume-iter RESUME_ITER] [--batch-size BATCH_SIZE] [--n-threads N_THREADS] [--multi-gpus]
-                  [--finetune] [--lr LR] [--lr-finetune LR_FINETUNE] [--max-iter MAX_ITER] [--log-interval LOG_INTERVAL] [--lr-scheduler-patience LR_SCHEDULER_PATIENCE]
-                  [--save-model-interval SAVE_MODEL_INTERVAL] [--n-final-models N_FINAL_MODELS] [--final-models-interval FINAL_MODELS_INTERVAL] [--loss-criterion LOSS_CRITERION]
-                  [--eval-timesteps EVAL_TIMESTEPS] [-f LOAD_FROM_FILE] [--vlim VLIM]
+usage: crai-train [-h] [--data-root-dir DATA_ROOT_DIR] [--mask-dir MASK_DIR] [--log-dir LOG_DIR] [--data-names DATA_NAMES] [--mask-names MASK_NAMES]
+                  [--data-types DATA_TYPES] [--n-target-data N_TARGET_DATA] [--device DEVICE] [--shuffle-masks] [--channel-steps CHANNEL_STEPS] [--lstm-steps LSTM_STEPS]
+                  [--gru-steps GRU_STEPS] [--encoding-layers ENCODING_LAYERS] [--pooling-layers POOLING_LAYERS] [--conv-factor CONV_FACTOR] [--weights WEIGHTS]
+                  [--steady-masks STEADY_MASKS] [--loop-random-seed LOOP_RANDOM_SEED] [--cuda-random-seed CUDA_RANDOM_SEED] [--deterministic] [--attention]
+                  [--channel-reduction-rate CHANNEL_REDUCTION_RATE] [--disable-skip-layers] [--disable-first-bn] [--masked-bn] [--lazy-load] [--global-padding]
+                  [--normalize-data] [--n-filters N_FILTERS] [--out-channels OUT_CHANNELS] [--dataset-name DATASET_NAME] [--min-bounds MIN_BOUNDS]
+                  [--max-bounds MAX_BOUNDS] [--profile] [--val-names VAL_NAMES] [--snapshot-dir SNAPSHOT_DIR] [--resume-iter RESUME_ITER] [--batch-size BATCH_SIZE]
+                  [--n-threads N_THREADS] [--multi-gpus] [--finetune] [--lr LR] [--lr-finetune LR_FINETUNE] [--max-iter MAX_ITER] [--log-interval LOG_INTERVAL]
+                  [--lr-scheduler-patience LR_SCHEDULER_PATIENCE] [--save-model-interval SAVE_MODEL_INTERVAL] [--n-final-models N_FINAL_MODELS]
+                  [--final-models-interval FINAL_MODELS_INTERVAL] [--loss-criterion LOSS_CRITERION] [--eval-timesteps EVAL_TIMESTEPS] [-f LOAD_FROM_FILE] [--vlim VLIM]
 
 options:
   -h, --help            show this help message and exit
@@ -182,13 +183,15 @@ options:
 ```
 
 ```bash
-usage: crai-evaluate [-h] [--data-root-dir DATA_ROOT_DIR] [--mask-dir MASK_DIR] [--log-dir LOG_DIR] [--data-names DATA_NAMES] [--mask-names MASK_NAMES] [--data-types DATA_TYPES]
-                     [--n-target-data N_TARGET_DATA] [--device DEVICE] [--shuffle-masks] [--channel-steps CHANNEL_STEPS] [--lstm-steps LSTM_STEPS] [--gru-steps GRU_STEPS]
-                     [--encoding-layers ENCODING_LAYERS] [--pooling-layers POOLING_LAYERS] [--conv-factor CONV_FACTOR] [--weights WEIGHTS] [--steady-masks STEADY_MASKS]
-                     [--loop-random-seed LOOP_RANDOM_SEED] [--cuda-random-seed CUDA_RANDOM_SEED] [--deterministic] [--attention] [--channel-reduction-rate CHANNEL_REDUCTION_RATE] [--disable-skip-layers]
-                     [--disable-first-bn] [--masked-bn] [--lazy-load] [--global-padding] [--normalize-data] [--n-filters N_FILTERS] [--out-channels OUT_CHANNELS] [--dataset-name DATASET_NAME]
-                     [--min-bounds MIN_BOUNDS] [--max-bounds MAX_BOUNDS] [--profile] [--model-dir MODEL_DIR] [--model-names MODEL_NAMES] [--evaluation-dirs EVALUATION_DIRS] [--eval-names EVAL_NAMES]
-                     [--use-train-stats] [--create-graph] [--plot-results PLOT_RESULTS] [--partitions PARTITIONS] [--maxmem MAXMEM] [--split-outputs] [-f LOAD_FROM_FILE]
+usage: crai-evaluate [-h] [--data-root-dir DATA_ROOT_DIR] [--mask-dir MASK_DIR] [--log-dir LOG_DIR] [--data-names DATA_NAMES] [--mask-names MASK_NAMES]
+                     [--data-types DATA_TYPES] [--n-target-data N_TARGET_DATA] [--device DEVICE] [--shuffle-masks] [--channel-steps CHANNEL_STEPS]
+                     [--lstm-steps LSTM_STEPS] [--gru-steps GRU_STEPS] [--encoding-layers ENCODING_LAYERS] [--pooling-layers POOLING_LAYERS] [--conv-factor CONV_FACTOR]
+                     [--weights WEIGHTS] [--steady-masks STEADY_MASKS] [--loop-random-seed LOOP_RANDOM_SEED] [--cuda-random-seed CUDA_RANDOM_SEED] [--deterministic]
+                     [--attention] [--channel-reduction-rate CHANNEL_REDUCTION_RATE] [--disable-skip-layers] [--disable-first-bn] [--masked-bn] [--lazy-load]
+                     [--global-padding] [--normalize-data] [--n-filters N_FILTERS] [--out-channels OUT_CHANNELS] [--dataset-name DATASET_NAME] [--min-bounds MIN_BOUNDS]
+                     [--max-bounds MAX_BOUNDS] [--profile] [--model-dir MODEL_DIR] [--model-names MODEL_NAMES] [--evaluation-dirs EVALUATION_DIRS]
+                     [--eval-names EVAL_NAMES] [--use-train-stats] [--create-graph] [--plot-results PLOT_RESULTS] [--partitions PARTITIONS] [--maxmem MAXMEM]
+                     [--split-outputs] [-f LOAD_FROM_FILE]
 
 options:
   -h, --help            show this help message and exit
