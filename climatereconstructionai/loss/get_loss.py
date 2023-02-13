@@ -33,6 +33,9 @@ def get_loss(criterion, lambda_dict, img_mask, loss_mask, output, gt, writer, it
         loss_func = criterion
 
     mask = img_mask[:, cfg.recurrent_steps, cfg.gt_channels, :, :]
+    if cfg.n_target_data != 0:
+        mask = torch.ones_like(mask)
+
     if loss_mask is not None:
         mask += loss_mask
         assert ((mask == 0) | (mask == 1)).all(), "Not all values in mask are zeros or ones!"

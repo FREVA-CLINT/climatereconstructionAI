@@ -60,6 +60,12 @@ def dataset_formatter(ds, data_type, basename):
                 raise ValueError('Incorrect {} extent in {}.\nThe extent should be: {}.'
                                  .format(coordinate, basename, extent))
 
+            if step[i] != cfg.dataset_format["step"][i]:
+                step[i] = cfg.dataset_format["step"][i]
+                logging.warning(
+                    'The {} step does not match the targeted dataset in {}.'.format(coordinate, basename))
+                regrid = True
+
         if regrid:
             logging.warning('The spatial coordinates have been interpolated using nearest_s2d in {}.'.format(basename))
             grid = xr.Dataset({cfg.dataset_format["axes"][1]: ([cfg.dataset_format["axes"][1]],
