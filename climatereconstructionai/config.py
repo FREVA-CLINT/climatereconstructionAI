@@ -40,30 +40,34 @@ def key_value_list(arg):
     return dict(zip(keys, values))
 
 def set_lambdas():
-    valid, hole, tv, prc, style  = [0.,0.,0.,0.,0.]
-    if loss_criterion==0:
-        #inpainting_loss
-        valid, hole, tv, prc, style  = [1., 6., 0.1, 0.05, 120.]
-    elif loss_criterion==1:
-        hole=1
-    elif loss_criterion==2:
-        #inpainting_loss2
-        valid, hole, tv, prc, style  = [7., 0., 0.1, 0.05, 120.]
-    elif loss_criterion==3:
-        valid=1
-    
+
     global lambda_dict
-    lambda_dict = {
-        'valid': valid,
-        'hole': hole,
-        'tv': tv,
-        'prc': prc,
-        'style':style
-    }
+
+    lambda_dict = {}
+
+    if loss_criterion==0:
+        lambda_dict['valid'] = 1.
+        lambda_dict['hole'] = 6.
+        lambda_dict['tv'] = .1
+        lambda_dict['prc'] = .05
+        lambda_dict['style'] = 120.
+
+    elif loss_criterion==1:
+        lambda_dict['hole'] = 1.
+
+    elif loss_criterion==2:
+        lambda_dict['valid'] = 7.
+        lambda_dict['hole'] = 0.
+        lambda_dict['tv'] = .1
+        lambda_dict['prc'] = .05
+        lambda_dict['style'] = 120.
+    elif loss_criterion==3:
+        lambda_dict['valid'] = 1.
+
+
     if lambda_loss is not None:
         lambda_dict.update(lambda_loss)
-
-
+    
 
 def global_args(parser, arg_file=None, prog_func=None):
     import torch
@@ -94,7 +98,7 @@ def global_args(parser, arg_file=None, prog_func=None):
     global skip_layers
     global gt_channels
     global recurrent_steps
-
+    
     if disable_skip_layers:
         skip_layers = 0
     else:
@@ -114,7 +118,7 @@ def global_args(parser, arg_file=None, prog_func=None):
     else:
         recurrent_steps = 0
 
-    set_lambdas()
+    
 
 
 def set_common_args():
@@ -175,6 +179,7 @@ def set_common_args():
     arg_parser.add_argument('--max-bounds', type=float_list, default="inf",
                             help="Comma separated list of values defining the permitted upper-bound of output values")
     arg_parser.add_argument('--profile', action='store_true', help="Profile code using tensorboard profiler")
+    arg_parser.add_argument('--writer-mode', type=str, default='model_config', help="tensorboard writer mode")
     return arg_parser
 
 
@@ -216,11 +221,17 @@ def set_train_args(arg_file=None):
                             help="Comma separated list of vmin,vmax values for the color scale of the snapshot images")
     arg_parser.add_argument('--lambda-loss', type=key_value_list, default=None,
                             help="Comma separated list of lambda factors (key) followed by its value."
-                             "Overrides the loss_criterion pre-setting")                               
+                             "Overrides the loss_criterion pre-setting")
+    arg_parser.add_argument('--train-metrics', type=str_list, default=None,
+                            help="Comma separated list of metrics that are evaluated on the train dataset at log-interval")
+    arg_parser.add_argument('--val-metrics', type=str_list, default=None,
+                            help="Comma separated list of metrics that are evaluated on the val dataset at log-interval")
     global_args(arg_parser, arg_file)
 
     if globals()["val_names"] is None:
         globals()["val_names"] = globals()["data_names"].copy()
+    
+    set_lambdas()
     
     return arg_parser
 

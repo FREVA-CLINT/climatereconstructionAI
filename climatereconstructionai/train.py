@@ -3,7 +3,7 @@ import datetime
 
 import torch
 import torch.multiprocessing
-from tensorboardX import SummaryWriter
+
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -12,19 +12,23 @@ import numpy as np
 
 from . import config as cfg
 from .loss.get_loss import get_loss
+from .metrics.get_metrics import get_metrics
 from .model.net import CRAINet
 
 from .utils.evaluation import create_snapshot_image
 from .utils.io import load_ckpt, load_model, save_ckpt
 from .utils.netcdfloader import NetCDFLoader, InfiniteSampler, load_steadymask
 from .utils.profiler import load_profiler
-from .utils.io import read_input_file_as_dict, get_parameters_as_dict, get_hparams
+from .utils.io import read_input_file_as_dict, get_parameters_as_dict
+from .utils import twriter 
 
 
 def train(arg_file=None):
+    
     arg_parser = cfg.set_train_args(arg_file)
-
+  
     print("* Number of GPUs: ", torch.cuda.device_count())
+
     torch.multiprocessing.set_sharing_strategy('file_system')
 
     np.random.seed(cfg.loop_random_seed)
@@ -41,24 +45,9 @@ def train(arg_file=None):
         if not os.path.exists(outdir):
             os.makedirs(outdir)
 
-    log_dir = (
-        f'Img-{cfg.image_sizes[0]}_Nenc-{cfg.encoding_layers[0]}' +
-        f'_Npool-{cfg.pooling_layers[0]}_Fconv-{cfg.conv_factor}_Fconv-{cfg.conv_factor}' +
-        f'_LSTM-{cfg.lstm_steps}_Ch-{cfg.channel_steps}_Att-{int(cfg.attention)}'
-    )
-    now = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    cfg.log_dir = os.path.join(cfg.log_dir,log_dir)
-    
-    if not os.path.exists(cfg.log_dir):
-        os.makedirs(cfg.log_dir)
-        
-    writer = SummaryWriter(log_dir=cfg.log_dir)
+    writer = twriter.writer()         
 
-    input_dict = read_input_file_as_dict(arg_file)
-    parameters = get_parameters_as_dict(input_dict, arg_parser)
-
-    [writer.add_text(key,str(parameters[key])) for key in parameters.keys()]
-    
+    writer.set_hparams(get_parameters_as_dict(read_input_file_as_dict(arg_file), arg_parser))
 
     if cfg.lstm_steps:
         time_steps = cfg.lstm_steps
@@ -155,35 +144,39 @@ def train(arg_file=None):
         image, mask, gt = [x.to(cfg.device) for x in next(iterator_train)]
         output = model(image, mask)
 
-        train_loss = get_loss(mask, steady_mask, output, gt, writer, n_iter, "train")
+        train_loss = get_loss(mask, steady_mask, output, gt)
 
         optimizer.zero_grad()
-        train_loss.backward()
+        train_loss['total'].backward()
         optimizer.step()
 
         if cfg.log_interval and n_iter % cfg.log_interval == 0:
+            
+            writer.update_scalars(train_loss, n_iter, 'train')
+            if cfg.train_metrics is not None:
+                metric_dict = get_metrics(mask, steady_mask, output, gt, 'train')
+                writer.update_hparams(metric_dict, n_iter)
 
             model.eval()
+
             image, mask, gt = [x.to(cfg.device) for x in next(iterator_val)]
+
             with torch.no_grad():
                 output = model(image, mask)
-            val_loss = get_loss(mask, steady_mask, output, gt, writer, n_iter, "val")
+            
+            val_loss = get_loss(mask, steady_mask, output, gt)
+            writer.update_scalars(val_loss, n_iter, 'val')
 
-  
             if cfg.lr_scheduler_patience is not None:
                 lr_scheduler.step(val_loss)
 
-            # create snapshot image
             if cfg.save_snapshot_image:
-                model.eval()
                 fig = create_snapshot_image(model, dataset_val, '{:s}/images/iter_{:d}'.format(cfg.snapshot_dir, n_iter))
-
-                writer.add_figure(now, fig, global_step=n_iter)
-   
-                metric_dict = {'val_loss': val_loss}
-                hparams = get_hparams(parameters)
-                hparams.update(cfg.lambda_dict)
-                writer.add_hparams(hparams, metric_dict, name=now, global_step=n_iter)
+                writer.add_figure(fig, n_iter)
+           
+            if cfg.val_metrics is not None:
+                metric_dict = get_metrics(mask, steady_mask, output, gt, 'val')
+                writer.update_hparams(metric_dict, n_iter)
                 
         if n_iter % cfg.save_model_interval == 0:
             save_ckpt('{:s}/ckpt/{:d}.pth'.format(cfg.snapshot_dir, n_iter), stat_target,
@@ -194,7 +187,9 @@ def train(arg_file=None):
         prof.step()
 
     prof.stop()
+
     writer.close()
+
     save_ckpt('{:s}/ckpt/final.pth'.format(cfg.snapshot_dir), stat_target, savelist)
 
 

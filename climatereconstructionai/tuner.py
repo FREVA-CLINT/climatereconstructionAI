@@ -17,9 +17,9 @@ def dict_to_key_value_list(key_value_dict):
         key_value_list.append(value)
     return key_value_list
 
-def iterate_tuning(parameters, tuning):
+def iterate_tuning(parameters, tuning, auto_dir=''):
 
-    if 'lambda_loss' in parameters:
+    if 'lambda_loss' in parameters and parameters['lambda_loss'] is not None:
         lambda_dict = key_value_list_to_dict(parameters['lambda_loss'].split(','))
     else:
         lambda_dict = {}
@@ -28,8 +28,9 @@ def iterate_tuning(parameters, tuning):
 
     keys, values = zip(*tuning.items())
     permutations_dicts = [dict(zip(keys, v)) for v in itertools.product(*values)]
-    print(f'starting tuning for {len(permutations_dicts)} permutations')
+    print(f'Creating {len(permutations_dicts)}.inp files in {auto_dir}')
 
+    run_files = []
     for permutation in permutations_dicts:
         for key, value in permutation.items():
             if 'lambda' in key:
@@ -44,28 +45,47 @@ def iterate_tuning(parameters, tuning):
                 lambda_loss_str+=str(val) + ','
             parameters['lambda_loss'] = lambda_loss_str[:-1]
 
-        tmp_file_name = f'temp{run_id}.inp'
+        run_file_name = f'run_{run_id}.inp'
+        auto_sub_dir = os.path.join(auto_dir, f'run_{run_id}')
+        
+        if not os.path.isdir(auto_sub_dir):
+            os.makedirs(auto_sub_dir)
+        
+        parameters['snapshot_dir'] = auto_sub_dir
 
-        io.write_parameters_as_inp(parameters,tmp_file_name)
-        train(tmp_file_name)
-        print(f'iteration {run_id} of {len(permutations_dicts)} done')
+        #if mode is tuning
+        parameters['writer_mode'] = 'snapshot_subdir'
+
+        run_file_path = os.path.join(auto_sub_dir, run_file_name)
+        io.write_parameters_as_inp(parameters, run_file_path)
+
+        run_files.append(run_file_path)
         run_id+=1
+    
+    run_files_path = os.path.join(auto_dir, 'inp_files_tuning.txt')
+    with open(run_files_path,'w') as f:
+        [f.write(line + '\n')  for line in run_files]
+        f.close()
 
 
 
 if __name__ == "__main__":
-    src_input_file = '/Users/maxwitte/work/crai_sr/inputs/sr_dyamond.inp'
-    ap = cfg.set_train_args(src_input_file)
- 
-    input_dict = io.read_input_file_as_dict(src_input_file)
+
+    auto_dir = '/Users/maxwitte/work/crai_sr/auto'
+    src_input_train_file = '/Users/maxwitte/work/crai_sr/inputs/sr_dyamond.inp'
+
+
+    ap = cfg.set_train_args(src_input_train_file)
+    input_dict = io.read_input_file_as_dict(src_input_train_file)
     parameters = io.get_parameters_as_dict(input_dict, arg_parser=ap)
 
     tuning = {
-        'encoding_layers': [4],
-        'pooling_layers': [4],
-        'conv_factor': [64],
-        'lambda_style': [0.]
+        'loss_criterion': [3],
+        'lambda_style': [0,10,100],
+        'lambda_prc': [0,0.05],
+        'lambda_tv': [0,0.1],
+        'conv_factor': [16]
     }
 
-    iterate_tuning(parameters, tuning)
+    iterate_tuning(parameters, tuning, auto_dir=auto_dir)
     

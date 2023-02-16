@@ -1,14 +1,48 @@
 import torch
 
 from .hole_loss import HoleLoss
-#from hole_loss import HoleLoss
 from .valid_loss import ValidLoss
-from .var_loss import VarLoss
-from .fft_loss import FTLoss
-from .inpainting_loss import InpaintingLoss
-
+from .feature_loss import FeatureLoss
+from .total_variation_loss import TotalVariationLoss
 from ..utils.featurizer import VGG16FeatureExtractor
 from .. import config as cfg
+
+
+class loss_criterion(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+  
+        self.criterions = torch.nn.ModuleDict()
+        
+        for loss, lambda_ in cfg.lambda_dict.items():
+            if lambda_ > 0:
+                if loss == 'style' or loss == 'prc':
+                    criterion = FeatureLoss(VGG16FeatureExtractor()).to(cfg.device)
+                elif loss == 'valid':
+                    criterion = ValidLoss().to(cfg.device)
+                elif loss == 'hole':
+                    criterion = HoleLoss().to(cfg.device)
+                elif loss == 'tv':
+                    criterion = TotalVariationLoss().to(cfg.device)
+                
+                if not criterion in self.criterions.values():
+                    self.criterions[loss] = criterion
+
+    def forward(self, mask, output, gt):
+        
+        loss_dict = {}
+        for _, criterion in self.criterions.items():
+            loss_dict.update(criterion(mask, output, gt))
+
+        loss_dict["total"] = 0
+        for loss, lambda_value in cfg.lambda_dict.items():
+            if lambda_value>0:
+                loss_w_lambda = loss_dict[loss]*lambda_value
+                loss_dict["total"] += loss_w_lambda
+                loss_dict[loss] = loss_w_lambda.item()
+        
+        return loss_dict
+
 
 
 class ModularizedFunction(torch.nn.Module):
@@ -34,21 +68,15 @@ class CriterionParallel(torch.nn.Module):
         return multi_dict
 
 
-def get_loss(img_mask, loss_mask, output, gt, writer, iter_index, setname):
-
-    if cfg.lambda_dict['prc']>0 or cfg.lambda_dict['style']>0:
-        criterion = InpaintingLoss(VGG16FeatureExtractor()).to(cfg.device)
-    elif cfg.lambda_dict['hole']>0:
-        criterion = HoleLoss().to(cfg.device)
-    elif cfg.lambda_dict['valid']>0:
-        criterion = ValidLoss().to(cfg.device)
+def get_loss(img_mask, loss_mask, output, gt):
 
     if cfg.multi_gpus:
-        loss_func = CriterionParallel(criterion)
+        loss_func = CriterionParallel(loss_criterion())
     else:
-        loss_func = criterion
+        loss_func = loss_criterion()
 
     mask = img_mask[:, cfg.recurrent_steps, cfg.gt_channels, :, :]
+
     if loss_mask is not None:
         mask += loss_mask
         assert ((mask == 0) | (mask == 1)).all(), "Not all values in mask are zeros or ones!"
@@ -56,14 +84,4 @@ def get_loss(img_mask, loss_mask, output, gt, writer, iter_index, setname):
     loss_dict = loss_func(mask, output[:, cfg.recurrent_steps, :, :, :],
                           gt[:, cfg.recurrent_steps, cfg.gt_channels, :, :])
 
-    losses = {"total": 0.0}
-    for key, loss in loss_dict.items():
-        value = loss * cfg.lambda_dict[key]
-        losses[key] = value
-        losses["total"] += value
-
-    if cfg.log_interval and iter_index % cfg.log_interval == 0:
-        for key in losses.keys():
-            writer.add_scalar('loss_{:s}-{:s}'.format(setname, key), losses[key], iter_index)
-
-    return losses["total"]
+    return loss_dict
