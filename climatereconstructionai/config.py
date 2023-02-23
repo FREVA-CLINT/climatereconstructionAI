@@ -13,6 +13,8 @@ def get_format(dataset_name):
 
 class LoadFromFile(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
+        global input_file
+        input_file=values
         parser.parse_args(open(values).read().split(), namespace)
 
 
@@ -64,14 +66,13 @@ def set_lambdas():
     elif loss_criterion==3:
         lambda_dict['valid'] = 1.
 
-
     if lambda_loss is not None:
         lambda_dict.update(lambda_loss)
     
 
 def global_args(parser, arg_file=None, prog_func=None):
     import torch
-
+    
     if arg_file is None:
         import sys
         argv = sys.argv[1:]
@@ -117,6 +118,15 @@ def global_args(parser, arg_file=None, prog_func=None):
         recurrent_steps = gru_steps
     else:
         recurrent_steps = 0
+
+    global early_stopping_dict
+
+    early_stopping_dict = {
+            'relative': True,
+            'min_delta': early_stopping_delta,
+            'patience': 5
+        } 
+
 
     
 
@@ -226,6 +236,29 @@ def set_train_args(arg_file=None):
                             help="Comma separated list of metrics that are evaluated on the train dataset at log-interval")
     arg_parser.add_argument('--val-metrics', type=str_list, default=None,
                             help="Comma separated list of metrics that are evaluated on the val dataset at log-interval")
+    arg_parser.add_argument('--test-metrics', type=str_list, default=None,
+                            help="Comma separated list of metrics that are evaluated on the test dataset at the end of the training")
+    arg_parser.add_argument('--plot-distributions', action='store_true', default=None,
+                            help="if value and error distributions should be plotted in tensorboard")
+    arg_parser.add_argument('--plot-maps', action='store_true', default=None,
+                            help="if value and error maps should be plotted in tensorboard")
+    arg_parser.add_argument('--plot-plots', action='store_true', default=None,
+                            help="if plots should be plotted in tensorboard")
+    arg_parser.add_argument('--early-stopping', action='store_true', default=None,
+                            help="if early stopping should be used")
+    arg_parser.add_argument('--early-stopping-delta', type=float, default=1e-3,
+                            help="Mean relative delta of the val loss at which the training should stop")
+    arg_parser.add_argument('--test-names', type=str_list, default=None,
+                            help="Comma separated list of netCDF files (climate dataset) for testing")
+    arg_parser.add_argument('--n-iters-val', type=int, default=1,
+                            help="Number of iterations for validation")
+    arg_parser.add_argument('--val-interval', type=int, default=500,
+                            help="(Global) Interval at which the model is validated")
+    arg_parser.add_argument('--log-val-interval', type=int, default=5,
+                            help="(Validation) Interval at which the metrics are computed")
+    arg_parser.add_argument('--pretrained-model', type=str, default=None,
+                            help="Path of the pretrained model to use")                           
+
     global_args(arg_parser, arg_file)
 
     if globals()["val_names"] is None:

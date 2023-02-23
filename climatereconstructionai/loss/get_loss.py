@@ -7,6 +7,27 @@ from .total_variation_loss import TotalVariationLoss
 from ..utils.featurizer import VGG16FeatureExtractor
 from .. import config as cfg
 
+class ModularizedFunction(torch.nn.Module):
+    def __init__(self, forward_op):
+        super().__init__()
+        self.forward_op = forward_op
+
+    def forward(self, *args, **kwargs):
+        return self.forward_op(*args, **kwargs)
+
+
+class CriterionParallel(torch.nn.Module):
+    def __init__(self, criterion):
+        super().__init__()
+        if not isinstance(criterion, torch.nn.Module):
+            criterion = ModularizedFunction(criterion)
+        self.criterion = torch.nn.DataParallel(criterion)
+
+    def forward(self, *args, **kwargs):
+        multi_dict = self.criterion(*args, **kwargs)
+        for key in multi_dict.keys():
+            multi_dict[key] = multi_dict[key].mean()
+        return multi_dict
 
 class loss_criterion(torch.nn.Module):
     def __init__(self):
@@ -45,43 +66,25 @@ class loss_criterion(torch.nn.Module):
 
 
 
-class ModularizedFunction(torch.nn.Module):
-    def __init__(self, forward_op):
+
+class LossComputation():
+    def __init__(self):
         super().__init__()
-        self.forward_op = forward_op
-
-    def forward(self, *args, **kwargs):
-        return self.forward_op(*args, **kwargs)
-
-
-class CriterionParallel(torch.nn.Module):
-    def __init__(self, criterion):
-        super().__init__()
-        if not isinstance(criterion, torch.nn.Module):
-            criterion = ModularizedFunction(criterion)
-        self.criterion = torch.nn.DataParallel(criterion)
-
-    def forward(self, *args, **kwargs):
-        multi_dict = self.criterion(*args, **kwargs)
-        for key in multi_dict.keys():
-            multi_dict[key] = multi_dict[key].mean()
-        return multi_dict
+        if cfg.multi_gpus:
+            self.criterion = CriterionParallel(loss_criterion())
+        else:
+            self.criterion = loss_criterion()
 
 
-def get_loss(img_mask, loss_mask, output, gt):
+    def get_loss(self, img_mask, loss_mask, output, gt):
 
-    if cfg.multi_gpus:
-        loss_func = CriterionParallel(loss_criterion())
-    else:
-        loss_func = loss_criterion()
+        mask = img_mask[:, cfg.recurrent_steps, cfg.gt_channels, :, :]
 
-    mask = img_mask[:, cfg.recurrent_steps, cfg.gt_channels, :, :]
+        if loss_mask is not None:
+            mask += loss_mask
+            assert ((mask == 0) | (mask == 1)).all(), "Not all values in mask are zeros or ones!"
 
-    if loss_mask is not None:
-        mask += loss_mask
-        assert ((mask == 0) | (mask == 1)).all(), "Not all values in mask are zeros or ones!"
+        loss_dict = self.criterion(mask, output[:, cfg.recurrent_steps, :, :, :],
+                            gt[:, cfg.recurrent_steps, cfg.gt_channels, :, :])
 
-    loss_dict = loss_func(mask, output[:, cfg.recurrent_steps, :, :, :],
-                          gt[:, cfg.recurrent_steps, cfg.gt_channels, :, :])
-
-    return loss_dict
+        return loss_dict

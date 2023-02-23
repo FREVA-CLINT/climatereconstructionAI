@@ -29,7 +29,7 @@ class writer():
             os.makedirs(cfg.log_dir)
 
         if cfg.writer_mode=='snapshot_subdir':
-            self.suffix = datetime.now().strftime("%Y%m%d-%H:%M:%S")
+            self.suffix = os.path.basename(cfg.snapshot_dir)
         else:
             paths = [int(path) for path in os.listdir(cfg.log_dir) if str.isnumeric(path)]
             self.suffix = '0' if len(paths)==0 else str(max(paths)+1)
@@ -43,9 +43,18 @@ class writer():
         self.writer = SummaryWriter(cfg.log_dir, filename_suffix=self.suffix)
 
         self.writer.add_custom_scalars(layout)
+        
+        metric_names = []
+        if cfg.val_metrics is not None:
+            metric_names += [f'metric/val/{metric}' for metric in cfg.val_metrics]
+        if cfg.train_metrics is not None:
+            metric_names += [f'metric/train/{metric}' for metric in cfg.train_metrics]
+        if cfg.test_metrics is not None:
+            metric_names += [f'metric/test/{metric}' for metric in cfg.test_metrics]
 
         self.metrics = {}
-
+        if len(metric_names)>0:
+            self.metrics = dict(zip(metric_names,[0]*len(metric_names)))
 
     def set_hparams(self,parameters):
         [self.writer.add_text(key,str(parameters[key])) for key in parameters.keys()]
@@ -62,13 +71,23 @@ class writer():
             self.writer.add_scalar('{:s}/{:s}'.format(scalar, setname), scalar_value, iter_index)
 
     def update_hparams(self, metrics, iter_index):
-        #metric_dict = {'val_loss': val_loss}
-        #hparams = get_hparams(parameters)
-        #hparams.update(cfg.lambda_dict)
-        self.writer.add_hparams(self.hparams, metrics, name=self.suffix, global_step=iter_index)
+        self.metrics.update(metrics)
+        self.writer.add_hparams(self.hparams, self.metrics, name=self.suffix, global_step=iter_index)
 
-    def add_figure(self, fig, iter_index):
-        self.writer.add_figure(self.suffix, fig, global_step=iter_index)
+    def add_figure(self, fig, iter_index, name_tag=None):
+        if name_tag is None:
+            name_tag=self.suffix
+        self.writer.add_figure(name_tag, fig, global_step=iter_index)
+
+    def add_distribution(self, values, iter_index, name_tag=None):
+        if name_tag is None:
+            name_tag=self.suffix
+        self.writer.add_histogram(name_tag, values, global_step=iter_index)
+
+    def add_distributions(self, value_list, iter_index, name):
+        #entries in value_list correspond to channels
+        for ch, values in enumerate(value_list):
+            self.add_distribution(values, iter_index, name_tag=f'{name}_channel{ch}')
 
     def close(self):
         self.writer.close()
