@@ -4,6 +4,7 @@ import torch
 from ..loss.hole_loss import HoleLoss
 from ..loss.valid_loss import ValidLoss
 from ..loss.feature_loss import FeatureLoss
+from ..loss.var_loss import VarLoss
 from ..loss.total_variation_loss import TotalVariationLoss
 
 from ..utils.featurizer import VGG16FeatureExtractor
@@ -19,6 +20,7 @@ def get_metrics(img_mask, loss_mask, output, gt, setname):
         'valid': {},
         'hole': {},
         'tv':{},
+        'var':{},
         'feature': {
             'outputs': ['style','prc']
             },
@@ -72,6 +74,12 @@ def get_metrics(img_mask, loss_mask, output, gt, setname):
             metric_output = val_loss(mask, output[:, cfg.recurrent_steps, :, :, :],
                             gt[:, cfg.recurrent_steps, cfg.gt_channels, :, :])
             metric_dict[f'metric/{setname}/tv']=metric_output['tv']
+
+        elif 'var' in metric:
+            var_loss = VarLoss().to(cfg.device)
+            metric_output = var_loss(mask, output[:, cfg.recurrent_steps, :, :, :],
+                            gt[:, cfg.recurrent_steps, cfg.gt_channels, :, :])
+            metric_dict[f'metric/{setname}/var']=metric_output['var']
 
         elif 'feature' in metric:
             feat_loss = FeatureLoss(VGG16FeatureExtractor()).to(cfg.device)
