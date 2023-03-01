@@ -97,6 +97,8 @@ def get_hparams(parameters_dict):
     for key, value in parameters_dict.items():
         if not isinstance(value, str):
             hparams_dict[key] = value
+        elif key=='pretrained_model':
+            hparams_dict['pretrained'] = True
     return hparams_dict
 
 

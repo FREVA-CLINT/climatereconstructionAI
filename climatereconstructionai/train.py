@@ -214,7 +214,7 @@ def train(arg_file=None):
                     writer.add_figure(fig, n_iter, name_tag='map/val/values')
 
             if cfg.lr_scheduler_patience is not None:
-                lr_scheduler.step(val_loss)
+                lr_scheduler.step(val_loss['total'])
         
             n_iter_val+=1
             

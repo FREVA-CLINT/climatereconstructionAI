@@ -342,7 +342,7 @@ def create_error_map(mask, steady_mask, output, gt, num_samples=3, operation="AE
                 cm = 'coolwarm'
                 
             vmin,vmax=torch.quantile(values,torch.tensor([0.05,0.95], device=values.device))
-            cp = axs[ch,sample_num].matshow(values, cmap=cm, vmin=vmin, vmax=vmax)  
+            cp = axs[ch,sample_num].matshow(values.cpu(), cmap=cm, vmin=vmin, vmax=vmax)  
             axs[ch,sample_num].set_xticks([])
             axs[ch,sample_num].set_yticks([]) 
             axs[ch,sample_num].set_title(f'sample {sample_num}') 
@@ -373,8 +373,8 @@ def create_map(mask, steady_mask, output, gt, num_samples=3, domain="valid"):
         
         vmin,vmax=torch.quantile(target,torch.tensor([0.05,0.95],device=target.device))
 
-        cp1=axs[0,sample_num].matshow(target, cmap='viridis', vmin=vmin,vmax=vmax)
-        cp2=axs[1,sample_num].matshow(pred, cmap='viridis', vmin=vmin,vmax=vmax)
+        cp1=axs[0,sample_num].matshow(target.cpu(), cmap='viridis', vmin=vmin,vmax=vmax)
+        cp2=axs[1,sample_num].matshow(pred.cpu(), cmap='viridis', vmin=vmin,vmax=vmax)
             
         plt.colorbar(cp1,ax=axs[0, sample_num])
         plt.colorbar(cp2,ax=axs[1, sample_num])
