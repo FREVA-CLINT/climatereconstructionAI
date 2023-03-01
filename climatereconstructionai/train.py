@@ -105,8 +105,8 @@ def train(arg_file=None):
     else:
         lr = cfg.lr
 
-    if cfg.early_stopping:
-        early_stop = early_stopping.early_stopping(cfg.early_stopping_dict)
+    
+    early_stop = early_stopping.early_stopping(cfg.early_stopping_dict)
 
     loss_comp = get_loss.LossComputation()
 
@@ -176,7 +176,7 @@ def train(arg_file=None):
                     output = model(image, mask)
                 val_losses.append(list(loss_comp.get_loss(mask, steady_mask, output, gt).values()))
 
-            val_loss = np.array(val_losses).mean(axis=0)
+            val_loss = torch.tensor(val_losses).mean(dim=0)
             val_loss = dict(zip(train_loss.keys(),val_loss))
 
             early_stop.update(val_loss['total'].item() , n_iter, model_save=model)
@@ -230,18 +230,18 @@ def train(arg_file=None):
         if cfg.early_stopping and early_stop.terminate:
             metric_dict = {'iterations': n_iter, 'iterations_best_model': early_stop.global_iter_best}
             writer.update_hparams(metric_dict, n_iter)
-            save_ckpt('{:s}/ckpt/best.pth'.format(cfg.snapshot_dir, early_stop.global_iter_best), stat_target,
-                      [(str(n_iter), n_iter, early_stop.best_model, optimizer)])
-            model = early_stop.best_model
             prof.stop()
             break
         
     prof.stop()
-    
+
+    model = early_stop.best_model
+    save_ckpt('{:s}/ckpt/best.pth'.format(cfg.snapshot_dir, early_stop.global_iter_best), stat_target,
+                      [(str(n_iter), n_iter, early_stop.best_model, optimizer)])
 
     if cfg.test_names:
         model.eval()
-        dataset_test = NetCDFLoader(cfg.data_root_dir, cfg.test_names, cfg.mask_dir, cfg.mask_names, 'test', cfg.data_types,
+        dataset_test = NetCDFLoader(cfg.data_root_dir, cfg.test_names, cfg.mask_dir, cfg.mask_names, 'infill', cfg.data_types,
                                 time_steps)
         batch_size_eval = 100
         iterator_test = iter(DataLoader(dataset_test, batch_size=batch_size_eval,

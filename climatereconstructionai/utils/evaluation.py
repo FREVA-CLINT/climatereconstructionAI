@@ -238,7 +238,7 @@ def calculate_error_distributions(mask, steady_mask, output, gt, operation="AE",
         target = targets[ch]
 
         if operation=="AE":
-            values = np.sqrt((pred-target)**2)
+            values = torch.sqrt((pred-target)**2)
         elif operation=="E":
             values = pred-target
         elif operation=="RAE":
@@ -260,8 +260,8 @@ def create_error_dist_plot(mask, steady_mask, output, gt, operation='E', domain=
 
     for ch in range(len(preds)):
 
-        pred = preds[ch]
-        target = targets[ch]
+        pred = preds[ch].cpu()
+        target = targets[ch].cpu()
 
         if operation=="AE":
             errors_ch = np.sqrt((pred-target)**2)
@@ -271,6 +271,7 @@ def create_error_dist_plot(mask, steady_mask, output, gt, operation='E', domain=
             errors_ch = (pred-target).abs()/(target+1e-9)
         elif operation=="RE":
             errors_ch = (pred-target)/(target+1e-9)
+
         m = (errors_ch).mean()
         s = (errors_ch).std()
         xlims = [target.min()-0.5*(target).diff().abs().mean(), target.max()+0.5*(target).diff().abs().mean()]
@@ -293,10 +294,10 @@ def create_correlation_plot(mask, steady_mask, output, gt, domain="valid",num_sa
     for ch in range(len(preds)):
         target_data = targets[ch]
         pred_data = preds[ch]
-        R = np.corrcoef(target_data, pred_data)[0,1]
+        R = torch.corrcoef(torch.vstack((target_data, pred_data)))[0,1]
 
-        axs[0,ch].scatter(target_data, pred_data, color='red', alpha=0.5)
-        axs[0,ch].plot(target_data, target_data, color='black')
+        axs[0,ch].scatter(target_data.cpu(), pred_data.cpu(), color='red', alpha=0.5)
+        axs[0,ch].plot(target_data.cpu(), target_data.cpu(), color='black')
         axs[0,ch].grid()
         axs[0,ch].set_xlabel('target values')
         axs[0,ch].set_ylabel('predicted values')
@@ -340,7 +341,7 @@ def create_error_map(mask, steady_mask, output, gt, num_samples=3, operation="AE
                 values = (pred-target)/(target+1e-9)
                 cm = 'coolwarm'
                 
-            vmin,vmax=np.quantile(values,[0.05,0.95])
+            vmin,vmax=torch.quantile(values,torch.tensor([0.05,0.95], device=values.device))
             cp = axs[ch,sample_num].matshow(values, cmap=cm, vmin=vmin, vmax=vmax)  
             axs[ch,sample_num].set_xticks([])
             axs[ch,sample_num].set_yticks([]) 
@@ -366,11 +367,11 @@ def create_map(mask, steady_mask, output, gt, num_samples=3, domain="valid"):
 
     for sample_num in range(num_samples):
 
-        target = np.squeeze(gt_ch[samples[sample_num]].squeeze())
-        pred = np.squeeze(output_ch[samples[sample_num]].squeeze())
-        mask_p = np.squeeze(mask_ch[samples[sample_num]].squeeze())
+        target = gt_ch[samples[sample_num]].squeeze()
+        pred = output_ch[samples[sample_num]].squeeze()
+        mask_p = mask_ch[samples[sample_num]].squeeze()
         
-        vmin,vmax=np.quantile(target,[0.05,0.95])
+        vmin,vmax=torch.quantile(target,torch.tensor([0.05,0.95],device=target.device))
 
         cp1=axs[0,sample_num].matshow(target, cmap='viridis', vmin=vmin,vmax=vmax)
         cp2=axs[1,sample_num].matshow(pred, cmap='viridis', vmin=vmin,vmax=vmax)

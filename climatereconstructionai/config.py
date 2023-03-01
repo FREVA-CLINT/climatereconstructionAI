@@ -119,13 +119,7 @@ def global_args(parser, arg_file=None, prog_func=None):
     else:
         recurrent_steps = 0
 
-    global early_stopping_dict
 
-    early_stopping_dict = {
-            'relative': True,
-            'min_delta': early_stopping_delta,
-            'patience': 5
-        } 
 
 
     
@@ -265,6 +259,14 @@ def set_train_args(arg_file=None):
         globals()["val_names"] = globals()["data_names"].copy()
     
     set_lambdas()
+
+    global early_stopping_dict
+
+    early_stopping_dict = {
+            'relative': True,
+            'min_delta': early_stopping_delta,
+            'patience': 5
+        } 
     
     return arg_parser
 

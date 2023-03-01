@@ -17,14 +17,14 @@ def dict_to_key_value_list(key_value_dict):
         key_value_list.append(value)
     return key_value_list
 
-def iterate_tuning(parameters, tuning, auto_dir=''):
+def generate_inputs(parameters, tuning, auto_dir='', run_id_start=0):
 
     if 'lambda_loss' in parameters and parameters['lambda_loss'] is not None:
         lambda_dict = key_value_list_to_dict(parameters['lambda_loss'].split(','))
     else:
         lambda_dict = {}
     
-    run_id = 0
+    run_id = run_id_start
 
     keys, values = zip(*tuning.items())
     permutations_dicts = [dict(zip(keys, v)) for v in itertools.product(*values)]
@@ -73,7 +73,7 @@ if __name__ == "__main__":
 
     auto_dir = '/Users/maxwitte/work/crai_sr/auto'
     src_input_train_file = '/Users/maxwitte/work/crai_sr/inputs/sr_dyamond.inp'
-
+    run_id_start = 0
 
     ap = cfg.set_train_args(src_input_train_file)
     input_dict = io.read_input_file_as_dict(src_input_train_file)
@@ -87,5 +87,5 @@ if __name__ == "__main__":
         'conv_factor': [16]
     }
 
-    iterate_tuning(parameters, tuning, auto_dir=auto_dir)
+    generate_inputs(parameters, tuning, auto_dir=auto_dir, run_id_start=run_id_start)
     
