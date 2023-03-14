@@ -253,7 +253,9 @@ def set_train_args(arg_file=None):
     arg_parser.add_argument('--pretrained-model', type=str, default=None,
                             help="Path of the pretrained model to use")
     arg_parser.add_argument('--apply-transform', action='store_true', default=False,
-                            help="if training data should be randomly transformed")                        
+                            help="if training data should be randomly transformed")          
+    arg_parser.add_argument('--n-iters-val-metrics', type=int, default=10,
+                            help="Number of iterations for calculating the validation metrics")               
 
     global_args(arg_parser, arg_file)
 
@@ -267,7 +269,7 @@ def set_train_args(arg_file=None):
     early_stopping_dict = {
             'relative': True,
             'min_delta': early_stopping_delta,
-            'patience': 5
+            'patience': 10
         } 
     
     return arg_parser

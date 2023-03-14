@@ -190,8 +190,18 @@ def train(arg_file=None):
                     fig = evaluation.create_snapshot_image(model, dataset_val, '{:s}/images/iter_{:d}'.format(cfg.snapshot_dir, n_iter))
                     writer.add_figure(fig, n_iter, 'snapshot')
             
+                
                 if cfg.val_metrics is not None and cfg.input_file is not None:
-                    metric_dict = get_metrics(mask, steady_mask, output, gt, 'val')
+                    val_metrics = []
+                    for _ in range(cfg.n_iters_val_metrics): 
+                        image, mask, gt = [x.to(cfg.device) for x in next(iterator_val)]
+                        with torch.no_grad():
+                            output = model(image, mask)
+                        metric_dict = get_metrics(mask, steady_mask, output, gt, 'val')
+                        val_metrics.append(list(metric_dict.values()))
+                    val_metrics = torch.tensor(val_metrics).mean(dim=0)
+
+                    metric_dict = dict(zip(metric_dict.keys(),val_metrics))
                     writer.update_hparams(metric_dict, n_iter)
 
                 if cfg.plot_plots:
