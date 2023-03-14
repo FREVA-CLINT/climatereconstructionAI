@@ -5,11 +5,32 @@ import numpy as np
 import torch
 import xarray as xr
 from torch.utils.data import Dataset, Sampler
+import torchvision.transforms as T
 
 from .netcdfchecker import dataset_formatter
 from .normalizer import img_normalization, bnd_normalization
 from .. import config as cfg
 
+
+class RandomTransform(torch.nn.Module):
+    def __init__(self, transforms):
+        super().__init__()
+        #self.t = random.choice([identity, random.choice(transforms)])
+        self.t = random.choice(transforms)              
+    def __call__(self, img):
+        return self.t(img)
+
+def identity(image):
+    return image
+
+def rot90(image):
+    return T.functional.rotate(image, 90)
+
+def rot270(image):
+    return T.functional.rotate(image, 270)
+
+def rot180(image):
+    return T.functional.rotate(image, 180)
 
 def load_steadymask(path, mask_names, data_types, device):
     if mask_names is None:
@@ -92,13 +113,14 @@ def load_netcdf(path, data_names, data_types, keep_dss=False):
 
 
 class NetCDFLoader(Dataset):
-    def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, time_steps, stat_target=None):
+    def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, time_steps, stat_target=None, apply_transform=False):
         super(NetCDFLoader, self).__init__()
 
         self.random = random.Random(cfg.loop_random_seed)
 
         self.data_types = data_types
         self.time_steps = time_steps
+        self.apply_transform = apply_transform
 
         mask_path = mask_root
         if split == 'infill':
@@ -168,9 +190,25 @@ class NetCDFLoader(Dataset):
         masks = []
         masked = []
         ndata = len(self.data_types)
+
+        
+        if self.apply_transform:
+            transform = RandomTransform([
+                    T.functional.vflip,
+                    T.functional.hflip,
+                    rot180,
+                    rot270,
+                    rot90,
+                    identity
+                ])
+
         for i in range(ndata):
 
             image, mask = self.get_single_item(i, index, cfg.shuffle_masks)
+
+            if self.apply_transform:
+                image=transform(image)
+                mask=transform(mask)
 
             if i >= ndata - cfg.n_target_data:
                 images.append(image)

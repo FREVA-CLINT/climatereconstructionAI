@@ -86,9 +86,9 @@ def get_partitions(parameters, length):
     return partitions
 
 
-def infill(model, dataset):
-    if not os.path.exists(cfg.evaluation_dirs[0]):
-        os.makedirs('{:s}'.format(cfg.evaluation_dirs[0]))
+def infill(model, dataset, evaluation_dir):
+    if not os.path.exists(evaluation_dir):
+        os.makedirs('{:s}'.format(evaluation_dir))
 
     data_dict = {'image': [], 'mask': [], 'gt': [], 'output': [], 'infilled': []}
     keys = list(data_dict.keys())

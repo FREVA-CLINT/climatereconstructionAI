@@ -251,7 +251,9 @@ def set_train_args(arg_file=None):
     arg_parser.add_argument('--log-val-interval', type=int, default=5,
                             help="(Validation) Interval at which the metrics are computed")
     arg_parser.add_argument('--pretrained-model', type=str, default=None,
-                            help="Path of the pretrained model to use")                           
+                            help="Path of the pretrained model to use")
+    arg_parser.add_argument('--apply-transform', action='store_true', default=False,
+                            help="if training data should be randomly transformed")                        
 
     global_args(arg_parser, arg_file)
 

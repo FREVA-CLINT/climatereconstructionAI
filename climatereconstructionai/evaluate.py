@@ -56,13 +56,13 @@ def evaluate(arg_file=None, prog_func=None):
                             out_channels=cfg.out_channels,
                             bounds=dataset_val.bounds).to(cfg.device)
 
-        output_names = ["{}/{}".format(cfg.evaluation_dirs[0], name) for name in cfg.eval_names]
+        output_names = ["{}/{}".format(cfg.evaluation_dirs[i_model], name) for name in cfg.eval_names]
         outputs = []
         for k in range(len(ckpt_dict["labels"])):
             label = ckpt_dict["labels"][k]
             load_model(ckpt_dict, model, label=label)
             model.eval()
-            outputs.append(infill(model, dataset_val))
+            outputs.append(infill(model, dataset_val,evaluation_dir=cfg.evaluation_dirs[i_model]))
             if cfg.split_outputs:
                 create_outputs(outputs, dataset_val, output_names, stat_target, k)
                 outputs = []
