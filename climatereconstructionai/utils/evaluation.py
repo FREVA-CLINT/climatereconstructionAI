@@ -63,11 +63,9 @@ def create_snapshot_image(model, dataset, filename):
             k += 1
 
     plt.subplots_adjust(wspace=0.012, hspace=0.012)
-    #plt.savefig(filename + '.jpg', bbox_inches='tight', pad_inches=0)
-    #plt.clf()
-    #plt.close('all')
-    return fig
-
+    plt.savefig(filename + '.jpg', bbox_inches='tight', pad_inches=0)
+    plt.clf()
+    plt.close('all')
 
 
 def get_partitions(parameters, length):

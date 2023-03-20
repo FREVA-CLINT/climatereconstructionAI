@@ -1,8 +1,9 @@
 import numpy as np
 import copy
+from .. import config as cfg
 
 class early_stopping():
-    def __init__(self, settings_dict) -> None:
+    def __init__(self) -> None:
         
         self.lowest_loss = 1e10
         self.global_iter_best = 0
@@ -11,12 +12,12 @@ class early_stopping():
         self.value_index = 0
         self.pat_index = 0
         
-        self.criterion_diff = settings_dict['min_delta']
+        self.criterion_diff = cfg.early_stopping_delta
 
-        self.relative = settings_dict['relative']
-        self.min_delta = settings_dict['min_delta']
+        self.relative = True
+        self.min_delta = cfg.early_stopping_delta
 
-        self.patience = settings_dict['patience']
+        self.patience = cfg.early_stopping_patience
 
         self.patience_ar = np.zeros((self.patience,))
 

@@ -10,11 +10,18 @@ def get_format(dataset_name):
 
     return dataset_format[str(dataset_name)]
 
+def get_passed_arguments(argv, arg_parser):
+    passed_arguments = {}
+
+    args = vars(arg_parser.parse_args(argv))
+    for action in vars(arg_parser)['_actions']:
+        option_str = action.option_strings[-1]
+        if option_str in argv:
+            passed_arguments[action.dest]=args[action.dest]
+    return passed_arguments
 
 class LoadFromFile(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
-        global input_file
-        input_file=values
         parser.parse_args(open(values).read().split(), namespace)
 
 
@@ -46,7 +53,7 @@ def set_lambdas():
     global lambda_dict
 
     lambda_dict = {}
-
+    lambda_dict['ft'] = 0 
     if loss_criterion==0:
         lambda_dict['valid'] = 1.
         lambda_dict['hole'] = 6.
@@ -77,12 +84,21 @@ def global_args(parser, arg_file=None, prog_func=None):
         import sys
         argv = sys.argv[1:]
     else:
-        argv = ["--load-from-file", arg_file]
+        argv = open(arg_file).read().split()
 
     global progress_fwd
     progress_fwd = prog_func
 
     args = parser.parse_args(argv)
+
+    global passed_args
+    passed_args = get_passed_arguments(argv, parser)
+
+    global early_stopping
+    if ('early_stopping_delta' in passed_args.keys()) or ('early_stopping_patience' in passed_args.keys()):
+        early_stopping=True
+    else:
+        early_stopping=False
 
     args_dict = vars(args)
     for arg in args_dict:
@@ -226,36 +242,24 @@ def set_train_args(arg_file=None):
     arg_parser.add_argument('--lambda-loss', type=key_value_list, default=None,
                             help="Comma separated list of lambda factors (key) followed by its value."
                              "Overrides the loss_criterion pre-setting")
-    arg_parser.add_argument('--train-metrics', type=str_list, default=None,
-                            help="Comma separated list of metrics that are evaluated on the train dataset at log-interval")
     arg_parser.add_argument('--val-metrics', type=str_list, default=None,
                             help="Comma separated list of metrics that are evaluated on the val dataset at log-interval")
-    arg_parser.add_argument('--test-metrics', type=str_list, default=None,
-                            help="Comma separated list of metrics that are evaluated on the test dataset at the end of the training")
     arg_parser.add_argument('--plot-distributions', action='store_true', default=None,
                             help="if value and error distributions should be plotted in tensorboard")
     arg_parser.add_argument('--plot-maps', action='store_true', default=None,
                             help="if value and error maps should be plotted in tensorboard")
     arg_parser.add_argument('--plot-plots', action='store_true', default=None,
                             help="if plots should be plotted in tensorboard")
-    arg_parser.add_argument('--early-stopping', action='store_true', default=None,
-                            help="if early stopping should be used")
-    arg_parser.add_argument('--early-stopping-delta', type=float, default=1e-3,
+    arg_parser.add_argument('--early-stopping-delta', type=float, default=1e-5,
                             help="Mean relative delta of the val loss at which the training should stop")
-    arg_parser.add_argument('--test-names', type=str_list, default=None,
-                            help="Comma separated list of netCDF files (climate dataset) for testing")
+    arg_parser.add_argument('--early-stopping-patience', type=int, default=10,
+                            help="Number of validation iterations for the termination criterion to apply")
     arg_parser.add_argument('--n-iters-val', type=int, default=1,
                             help="Number of iterations for validation")
-    arg_parser.add_argument('--val-interval', type=int, default=500,
-                            help="(Global) Interval at which the model is validated")
-    arg_parser.add_argument('--log-val-interval', type=int, default=5,
-                            help="(Validation) Interval at which the metrics are computed")
     arg_parser.add_argument('--pretrained-model', type=str, default=None,
                             help="Path of the pretrained model to use")
     arg_parser.add_argument('--apply-transform', action='store_true', default=False,
-                            help="if training data should be randomly transformed")          
-    arg_parser.add_argument('--n-iters-val-metrics', type=int, default=10,
-                            help="Number of iterations for calculating the validation metrics")               
+                            help="if training data should be randomly transformed")             
 
     global_args(arg_parser, arg_file)
 
@@ -263,17 +267,6 @@ def set_train_args(arg_file=None):
         globals()["val_names"] = globals()["data_names"].copy()
     
     set_lambdas()
-
-    global early_stopping_dict
-
-    early_stopping_dict = {
-            'relative': True,
-            'min_delta': early_stopping_delta,
-            'patience': 10
-        } 
-    
-    return arg_parser
-
 
 def set_evaluate_args(arg_file=None, prog_func=None):
     arg_parser = set_common_args()
