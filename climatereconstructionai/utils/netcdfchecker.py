@@ -2,13 +2,13 @@ import logging
 
 import numpy as np
 import xarray as xr
-import xesmf as xe
 
 from .. import config as cfg
 
-
 def reformat_dataset(ds1, ds2, data_type):
     if cfg.dataset_name is not None:
+        import xesmf as xe
+
         ds2[data_type] = ds2[data_type].transpose(*cfg.dataset_format["dimensions"])
 
         regrid = False
@@ -29,6 +29,7 @@ def dataset_formatter(ds, data_type, basename):
         raise ValueError('Variable name \'{}\' not found in {}.'.format(data_type, basename))
 
     if cfg.dataset_name is not None:
+        import xesmf as xe
 
         ds_dims = list(ds[data_type].dims)
         ndims = len(cfg.dataset_format["dimensions"])
