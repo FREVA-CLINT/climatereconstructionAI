@@ -16,6 +16,7 @@ from tqdm import tqdm
 
 plt.rcParams.update({'font.size': 16})
 
+
 def create_snapshot_image(model, dataset, filename):
     data_dict = {}
     data_dict["image"], data_dict["mask"], data_dict["gt"], index = zip(*[dataset[int(i)] for i in cfg.eval_timesteps])

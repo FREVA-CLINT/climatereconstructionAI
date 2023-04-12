@@ -5,32 +5,11 @@ import numpy as np
 import torch
 import xarray as xr
 from torch.utils.data import Dataset, Sampler
-import torchvision.transforms as T
 
 from .netcdfchecker import dataset_formatter
 from .normalizer import img_normalization, bnd_normalization
 from .. import config as cfg
 
-
-class RandomTransform(torch.nn.Module):
-    def __init__(self, transforms):
-        super().__init__()
-        #self.t = random.choice([identity, random.choice(transforms)])
-        self.t = random.choice(transforms)              
-    def __call__(self, img):
-        return self.t(img)
-
-def identity(image):
-    return image
-
-def rot90(image):
-    return T.functional.rotate(image, 90)
-
-def rot270(image):
-    return T.functional.rotate(image, 270)
-
-def rot180(image):
-    return T.functional.rotate(image, 180)
 
 def load_steadymask(path, mask_names, data_types, device):
     if mask_names is None:
@@ -224,7 +203,7 @@ class NetCDFLoader(Dataset):
                 masked.append(image * mask)
 
         if cfg.channel_steps:
-            return torch.cat(masked, dim=0).transpose(0, 1), torch.cat(masks, dim=0)\
+            return torch.cat(masked, dim=0).transpose(0, 1), torch.cat(masks, dim=0) \
                 .transpose(0, 1), torch.cat(images, dim=0).transpose(0, 1), index
         else:
             return torch.cat(masked, dim=1), torch.cat(masks, dim=1), torch.cat(images, dim=1), index

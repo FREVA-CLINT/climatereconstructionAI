@@ -5,6 +5,7 @@ import xarray as xr
 
 from .. import config as cfg
 
+
 def reformat_dataset(ds1, ds2, data_type):
     if cfg.dataset_name is not None:
         import xesmf as xe

@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+
 def get_state_dict_on_cpu(obj):
     cpu_device = torch.device('cpu')
     state_dict = obj.state_dict()
@@ -42,4 +43,3 @@ def load_model(ckpt_dict, model, optimizer=None, label=None):
     if optimizer is not None:
         optimizer.load_state_dict(ckpt_dict[label]["optimizer"])
     return ckpt_dict[label]["n_iter"]
-

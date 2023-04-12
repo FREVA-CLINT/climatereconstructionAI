@@ -1,30 +1,27 @@
+import copy
 import os
 
+import numpy as np
 import torch
 import torch.multiprocessing
-
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-import copy
-import numpy as np
 
 from . import config as cfg
 from .loss import get_loss
 from .metrics.get_metrics import get_metrics
 from .model.net import CRAINet
-
+from .utils import twriter, early_stopping
+from .utils.evaluation import create_snapshot_image
 from .utils.io import load_ckpt, load_model, save_ckpt
 from .utils.netcdfloader import NetCDFLoader, InfiniteSampler, load_steadymask
 from .utils.profiler import load_profiler
-from .utils import twriter, early_stopping
-from .utils.evaluation import create_snapshot_image
 
 
 def train(arg_file=None):
-    
     cfg.set_train_args(arg_file)
-    
+
     print("* Number of GPUs: ", torch.cuda.device_count())
 
     torch.multiprocessing.set_sharing_strategy('file_system')
@@ -113,7 +110,7 @@ def train(arg_file=None):
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
         print('Starting from iter ', start_iter)
- 
+
     prof = load_profiler(start_iter)
 
     if cfg.multi_gpus:
@@ -144,29 +141,29 @@ def train(arg_file=None):
 
         if (cfg.log_interval and n_iter % cfg.log_interval == 0):
             writer.update_scalars(train_loss, n_iter, 'train')
-         
+
             model.eval()
             val_losses = []
-            for _ in range(cfg.n_iters_val): 
+            for _ in range(cfg.n_iters_val):
                 image, mask, gt = [x.to(cfg.device) for x in next(iterator_val)[:3]]
                 with torch.no_grad():
                     output = model(image, mask)
                 val_losses.append(list(loss_comp.get_loss(mask, steady_mask, output, gt).values()))
 
             val_loss = torch.tensor(val_losses).mean(dim=0)
-            val_loss = dict(zip(train_loss.keys(),val_loss))
+            val_loss = dict(zip(train_loss.keys(), val_loss))
 
-            early_stop.update(val_loss['total'].item() , n_iter, model_save=model)
-            
+            early_stop.update(val_loss['total'].item(), n_iter, model_save=model)
+
             writer.update_scalars(val_loss, n_iter, 'val')
 
             if cfg.early_stopping:
-                writer.update_scalar('val', 'loss_gradient', early_stop.criterion_diff , n_iter)
-                                       
+                writer.update_scalar('val', 'loss_gradient', early_stop.criterion_diff, n_iter)
+
             if cfg.eval_timesteps:
                 model.eval()
                 create_snapshot_image(model, dataset_val, '{:s}/images/iter_{:d}'.format(cfg.snapshot_dir, n_iter))
-           
+
             if cfg.lr_scheduler_patience is not None:
                 lr_scheduler.step(val_loss['total'])
 
@@ -183,18 +180,18 @@ def train(arg_file=None):
             prof.stop()
             model = early_stop.best_model
             break
-        
+
     prof.stop()
 
-    save_ckpt('{:s}/ckpt/best.pth'.format(cfg.snapshot_dir, early_stop.global_iter_best), train_stats,
-                      [(str(n_iter), n_iter, early_stop.best_model, optimizer)])
+    save_ckpt('{:s}/ckpt/best.pth'.format(cfg.snapshot_dir), train_stats,
+              [(str(n_iter), n_iter, early_stop.best_model, optimizer)])
 
     save_ckpt('{:s}/ckpt/final.pth'.format(cfg.snapshot_dir), train_stats, savelist)
 
     # run final validation over n_iters_val
     if cfg.val_metrics is not None:
         val_metrics = []
-        for _ in range(cfg.n_iters_val): 
+        for _ in range(cfg.n_iters_val):
             image, mask, gt = [x.to(cfg.device) for x in next(iterator_val)[:3]]
             with torch.no_grad():
                 output = model(image, mask)
@@ -202,7 +199,7 @@ def train(arg_file=None):
             val_metrics.append(list(metric_dict.values()))
         val_metrics = torch.tensor(val_metrics).mean(dim=0)
 
-        metric_dict = dict(zip(metric_dict.keys(),val_metrics))
+        metric_dict = dict(zip(metric_dict.keys(), val_metrics))
         if cfg.early_stopping:
             metric_dict.update({'iterations': n_iter, 'iterations_best_model': early_stop.global_iter_best})
         writer.update_hparams(metric_dict, n_iter)
@@ -210,6 +207,7 @@ def train(arg_file=None):
     writer.add_visualizations(mask, steady_mask, output, gt, n_iter, 'val')
 
     writer.close()
+
 
 if __name__ == "__main__":
     train()

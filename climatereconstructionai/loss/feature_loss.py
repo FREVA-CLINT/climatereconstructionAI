@@ -34,8 +34,8 @@ class FeatureLoss(nn.Module):
                 loss_dict['prc'] += self.l1(feat_output[i], feat_gt[i])
                 loss_dict['prc'] += self.l1(feat_output_comp[i], feat_gt[i])
                 loss_dict['style'] += self.l1(gram_matrix(feat_output[i]),
-                                                gram_matrix(feat_gt[i]))
+                                              gram_matrix(feat_gt[i]))
                 loss_dict['style'] += self.l1(gram_matrix(feat_output_comp[i]),
-                                                gram_matrix(feat_gt[i]))
+                                              gram_matrix(feat_gt[i]))
 
         return loss_dict

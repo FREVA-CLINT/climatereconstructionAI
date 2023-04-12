@@ -1,6 +1,8 @@
 import torch
 from torch import nn
+
 from .utils import total_variation_loss
+
 
 class TotalVariationLoss(nn.Module):
     def __init__(self):
@@ -18,4 +20,3 @@ class TotalVariationLoss(nn.Module):
             output_comp_ch = torch.unsqueeze(output_comp[:, channel, :, :], dim=1)
             loss_dict['tv'] += total_variation_loss(output_comp_ch)
         return loss_dict
-       

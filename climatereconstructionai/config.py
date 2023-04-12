@@ -4,22 +4,25 @@ import os
 import os.path
 import pkgutil
 
+
 def get_format(dataset_name):
     json_data = pkgutil.get_data(__name__, "static/dataset_format.json")
     dataset_format = json.loads(json_data)
 
     return dataset_format[str(dataset_name)]
 
+
 def get_passed_arguments(argv, arg_parser):
     passed_arguments = {}
-    if argv[0]=='--load-from-file' or  argv[0]=='-f':
+    if argv[0] == '--load-from-file' or argv[0] == '-f':
         argv = open(argv[1]).read().split()
     args = vars(arg_parser.parse_args(argv))
     for action in vars(arg_parser)['_actions']:
         option_str = action.option_strings[-1]
         if option_str in argv:
-            passed_arguments[action.dest]=args[action.dest]
+            passed_arguments[action.dest] = args[action.dest]
     return passed_arguments
+
 
 class LoadFromFile(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
@@ -43,44 +46,45 @@ def lim_list(arg):
     assert len(lim) == 2
     return lim
 
+
 def key_value_list(arg):
     args = arg.split(',')
     keys = [arg for arg in args if not str.isnumeric(arg[0])]
     values = [float(arg) for arg in args if str.isnumeric(arg[0])]
     return dict(zip(keys, values))
 
-def set_lambdas():
 
+def set_lambdas():
     global lambda_dict
 
     lambda_dict = {}
-    lambda_dict['ft'] = 0 
-    if loss_criterion==0:
+    lambda_dict['ft'] = 0
+    if loss_criterion == 0:
         lambda_dict['valid'] = 1.
         lambda_dict['hole'] = 6.
         lambda_dict['tv'] = .1
         lambda_dict['prc'] = .05
         lambda_dict['style'] = 120.
 
-    elif loss_criterion==1:
+    elif loss_criterion == 1:
         lambda_dict['hole'] = 1.
 
-    elif loss_criterion==2:
+    elif loss_criterion == 2:
         lambda_dict['valid'] = 7.
         lambda_dict['hole'] = 0.
         lambda_dict['tv'] = .1
         lambda_dict['prc'] = .05
         lambda_dict['style'] = 120.
-    elif loss_criterion==3:
+    elif loss_criterion == 3:
         lambda_dict['valid'] = 1.
 
     if lambda_loss is not None:
         lambda_dict.update(lambda_loss)
-    
+
 
 def global_args(parser, arg_file=None, prog_func=None):
     import torch
-    
+
     if arg_file is None:
         import sys
         argv = sys.argv[1:]
@@ -97,9 +101,9 @@ def global_args(parser, arg_file=None, prog_func=None):
 
     global early_stopping
     if ('early_stopping_delta' in passed_args.keys()) or ('early_stopping_patience' in passed_args.keys()):
-        early_stopping=True
+        early_stopping = True
     else:
-        early_stopping=False
+        early_stopping = False
 
     args_dict = vars(args)
     for arg in args_dict:
@@ -147,6 +151,7 @@ def global_args(parser, arg_file=None, prog_func=None):
             gt_channels[i] = (i + 1) * channel_steps[0] + i * (channel_steps[1] + 1)
 
     assert len(time_steps) == 2
+
 
 def set_common_args():
     arg_parser = argparse.ArgumentParser()
@@ -245,11 +250,13 @@ def set_train_args(arg_file=None):
                             help="Comma separated list of vmin,vmax values for the color scale of the snapshot images")
     arg_parser.add_argument('--lambda-loss', type=key_value_list, default=None,
                             help="Comma separated list of lambda factors (key) followed by their corresponding values."
-                             "Overrides the loss_criterion pre-setting")
+                                 "Overrides the loss_criterion pre-setting")
     arg_parser.add_argument('--val-metrics', type=str_list, default=None,
-                            help="Comma separated list of metrics that are evaluated on the val dataset at log-interval")
+                            help="Comma separated list of metrics that are evaluated on the validation dataset "
+                                 "at each log-interval iteration")
     arg_parser.add_argument('--tensor-plots', type=str_list, default="",
-                            help="Comma separated list of 2D plots to be added to tensorboard (error, distribution, correlation)")
+                            help="Comma separated list of 2D plots to be added to tensorboard "
+                                 "(error, distribution, correlation)")
     arg_parser.add_argument('--early-stopping-delta', type=float, default=1e-5,
                             help="Mean relative delta of the val loss used for the termination criterion")
     arg_parser.add_argument('--early-stopping-patience', type=int, default=10,
@@ -261,8 +268,9 @@ def set_train_args(arg_file=None):
 
     if globals()["val_names"] is None:
         globals()["val_names"] = globals()["data_names"].copy()
-    
+
     set_lambdas()
+
 
 def set_evaluate_args(arg_file=None, prog_func=None):
     arg_parser = set_common_args()
