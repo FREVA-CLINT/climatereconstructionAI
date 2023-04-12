@@ -80,16 +80,16 @@ Once installed, the package can be used as:
 
 For more information about the arguments:
 ```bash
-usage: crai-train [-h] [--data-root-dir DATA_ROOT_DIR] [--mask-dir MASK_DIR] [--log-dir LOG_DIR] [--data-names DATA_NAMES] [--mask-names MASK_NAMES]
-                  [--data-types DATA_TYPES] [--n-target-data N_TARGET_DATA] [--device DEVICE] [--shuffle-masks] [--channel-steps CHANNEL_STEPS] [--lstm-steps LSTM_STEPS]
-                  [--gru-steps GRU_STEPS] [--encoding-layers ENCODING_LAYERS] [--pooling-layers POOLING_LAYERS] [--conv-factor CONV_FACTOR] [--weights WEIGHTS]
-                  [--steady-masks STEADY_MASKS] [--loop-random-seed LOOP_RANDOM_SEED] [--cuda-random-seed CUDA_RANDOM_SEED] [--deterministic] [--attention]
-                  [--channel-reduction-rate CHANNEL_REDUCTION_RATE] [--disable-skip-layers] [--disable-first-bn] [--masked-bn] [--lazy-load] [--global-padding]
-                  [--normalize-data] [--n-filters N_FILTERS] [--out-channels OUT_CHANNELS] [--dataset-name DATASET_NAME] [--min-bounds MIN_BOUNDS]
-                  [--max-bounds MAX_BOUNDS] [--profile] [--val-names VAL_NAMES] [--snapshot-dir SNAPSHOT_DIR] [--resume-iter RESUME_ITER] [--batch-size BATCH_SIZE]
+usage: crai-train [-h] [--data-root-dir DATA_ROOT_DIR] [--mask-dir MASK_DIR] [--log-dir LOG_DIR] [--data-names DATA_NAMES] [--mask-names MASK_NAMES] [--data-types DATA_TYPES]
+                  [--n-target-data N_TARGET_DATA] [--device DEVICE] [--shuffle-masks] [--channel-steps CHANNEL_STEPS] [--lstm-steps LSTM_STEPS] [--gru-steps GRU_STEPS]
+                  [--encoding-layers ENCODING_LAYERS] [--pooling-layers POOLING_LAYERS] [--conv-factor CONV_FACTOR] [--weights WEIGHTS] [--steady-masks STEADY_MASKS]
+                  [--loop-random-seed LOOP_RANDOM_SEED] [--cuda-random-seed CUDA_RANDOM_SEED] [--deterministic] [--attention] [--channel-reduction-rate CHANNEL_REDUCTION_RATE] [--disable-skip-layers]
+                  [--disable-first-bn] [--masked-bn] [--lazy-load] [--global-padding] [--normalize-data] [--n-filters N_FILTERS] [--out-channels OUT_CHANNELS] [--dataset-name DATASET_NAME]
+                  [--min-bounds MIN_BOUNDS] [--max-bounds MAX_BOUNDS] [--profile] [--val-names VAL_NAMES] [--snapshot-dir SNAPSHOT_DIR] [--resume-iter RESUME_ITER] [--batch-size BATCH_SIZE]
                   [--n-threads N_THREADS] [--multi-gpus] [--finetune] [--lr LR] [--lr-finetune LR_FINETUNE] [--max-iter MAX_ITER] [--log-interval LOG_INTERVAL]
-                  [--lr-scheduler-patience LR_SCHEDULER_PATIENCE] [--save-model-interval SAVE_MODEL_INTERVAL] [--n-final-models N_FINAL_MODELS]
-                  [--final-models-interval FINAL_MODELS_INTERVAL] [--loss-criterion LOSS_CRITERION] [--eval-timesteps EVAL_TIMESTEPS] [-f LOAD_FROM_FILE] [--vlim VLIM]
+                  [--lr-scheduler-patience LR_SCHEDULER_PATIENCE] [--save-model-interval SAVE_MODEL_INTERVAL] [--n-final-models N_FINAL_MODELS] [--final-models-interval FINAL_MODELS_INTERVAL]
+                  [--loss-criterion LOSS_CRITERION] [--eval-timesteps EVAL_TIMESTEPS] [-f LOAD_FROM_FILE] [--vlim VLIM] [--lambda-loss LAMBDA_LOSS] [--val-metrics VAL_METRICS]
+                  [--tensor-plots TENSOR_PLOTS] [--early-stopping-delta EARLY_STOPPING_DELTA] [--early-stopping-patience EARLY_STOPPING_PATIENCE] [--n-iters-val N_ITERS_VAL]
 
 options:
   -h, --help            show this help message and exit
@@ -181,18 +181,28 @@ options:
   -f LOAD_FROM_FILE, --load-from-file LOAD_FROM_FILE
                         Load all the arguments from a text file
   --vlim VLIM           Comma separated list of vmin,vmax values for the color scale of the snapshot images
+  --lambda-loss LAMBDA_LOSS
+                        Comma separated list of lambda factors (key) followed by their corresponding values.Overrides the loss_criterion pre-setting
+  --val-metrics VAL_METRICS
+                        Comma separated list of metrics that are evaluated on the val dataset at log-interval
+  --tensor-plots TENSOR_PLOTS
+                        Comma separated list of 2D plots to be added to tensorboard (error, distribution, correlation)
+  --early-stopping-delta EARLY_STOPPING_DELTA
+                        Mean relative delta of the val loss used for the termination criterion
+  --early-stopping-patience EARLY_STOPPING_PATIENCE
+                        Number of log-interval iterations used for the termination criterion
+  --n-iters-val N_ITERS_VAL
+                        Number of batch iterations used to average the validation loss
 ```
 
 ```bash
-usage: crai-evaluate [-h] [--data-root-dir DATA_ROOT_DIR] [--mask-dir MASK_DIR] [--log-dir LOG_DIR] [--data-names DATA_NAMES] [--mask-names MASK_NAMES]
-                     [--data-types DATA_TYPES] [--n-target-data N_TARGET_DATA] [--device DEVICE] [--shuffle-masks] [--channel-steps CHANNEL_STEPS]
-                     [--lstm-steps LSTM_STEPS] [--gru-steps GRU_STEPS] [--encoding-layers ENCODING_LAYERS] [--pooling-layers POOLING_LAYERS] [--conv-factor CONV_FACTOR]
-                     [--weights WEIGHTS] [--steady-masks STEADY_MASKS] [--loop-random-seed LOOP_RANDOM_SEED] [--cuda-random-seed CUDA_RANDOM_SEED] [--deterministic]
-                     [--attention] [--channel-reduction-rate CHANNEL_REDUCTION_RATE] [--disable-skip-layers] [--disable-first-bn] [--masked-bn] [--lazy-load]
-                     [--global-padding] [--normalize-data] [--n-filters N_FILTERS] [--out-channels OUT_CHANNELS] [--dataset-name DATASET_NAME] [--min-bounds MIN_BOUNDS]
-                     [--max-bounds MAX_BOUNDS] [--profile] [--model-dir MODEL_DIR] [--model-names MODEL_NAMES] [--evaluation-dirs EVALUATION_DIRS]
-                     [--eval-names EVAL_NAMES] [--use-train-stats] [--create-graph] [--plot-results PLOT_RESULTS] [--partitions PARTITIONS] [--maxmem MAXMEM]
-                     [--split-outputs] [-f LOAD_FROM_FILE]
+usage: crai-evaluate [-h] [--data-root-dir DATA_ROOT_DIR] [--mask-dir MASK_DIR] [--log-dir LOG_DIR] [--data-names DATA_NAMES] [--mask-names MASK_NAMES] [--data-types DATA_TYPES]
+                     [--n-target-data N_TARGET_DATA] [--device DEVICE] [--shuffle-masks] [--channel-steps CHANNEL_STEPS] [--lstm-steps LSTM_STEPS] [--gru-steps GRU_STEPS]
+                     [--encoding-layers ENCODING_LAYERS] [--pooling-layers POOLING_LAYERS] [--conv-factor CONV_FACTOR] [--weights WEIGHTS] [--steady-masks STEADY_MASKS]
+                     [--loop-random-seed LOOP_RANDOM_SEED] [--cuda-random-seed CUDA_RANDOM_SEED] [--deterministic] [--attention] [--channel-reduction-rate CHANNEL_REDUCTION_RATE] [--disable-skip-layers]
+                     [--disable-first-bn] [--masked-bn] [--lazy-load] [--global-padding] [--normalize-data] [--n-filters N_FILTERS] [--out-channels OUT_CHANNELS] [--dataset-name DATASET_NAME]
+                     [--min-bounds MIN_BOUNDS] [--max-bounds MAX_BOUNDS] [--profile] [--model-dir MODEL_DIR] [--model-names MODEL_NAMES] [--evaluation-dirs EVALUATION_DIRS] [--eval-names EVAL_NAMES]
+                     [--use-train-stats] [--create-graph] [--plot-results PLOT_RESULTS] [--partitions PARTITIONS] [--maxmem MAXMEM] [--split-outputs] [-f LOAD_FROM_FILE]
 
 options:
   -h, --help            show this help message and exit
@@ -284,4 +294,4 @@ The instructions to run the example are given in the README.md file.
 
 `CRAI` is maintained by the Climate Informatics and Technology group at DKRZ (Deutsches Klimarechenzentrum).
 - Previous contributing authors: Naoto Inoue, Christopher Kadow, Stephan Seitz
-- Current contributing authors: Johannes Meuer, Étienne Plésiat.
+- Current contributing authors: Johannes Meuer, Maximilian Witte, Étienne Plésiat.
