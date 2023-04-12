@@ -5,7 +5,6 @@
 --snapshot-dir tests/out/training/
 --data-names 20cr-1ens.nc
 --data-types tas
---image-sizes 72
 --encoding-layers 2
 --pooling-layers 1
 --mask-names hadcrut_missmask_1.nc
@@ -17,6 +16,4 @@
 --cuda-random-seed 3
 --deterministic
 --shuffle-masks
---channel-steps 2
---lstm-steps 0
---gru-steps 0
+--channel-steps 3,1

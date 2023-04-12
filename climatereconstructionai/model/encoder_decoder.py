@@ -12,14 +12,8 @@ def sequence_to_batch(input):
 
 
 def batch_to_sequence(input, batch_size):
-    if cfg.lstm_steps:
-        steps = cfg.lstm_steps
-    elif cfg.gru_steps:
-        steps = cfg.gru_steps
-    else:
-        steps = 0
     return torch.reshape(input,
-                         (batch_size, 2 * steps + 1, input.shape[1], input.shape[2], input.shape[3]))
+                         (batch_size, cfg.n_recurrent_steps, input.shape[1], input.shape[2], input.shape[3]))
 
 
 class EncoderBlock(nn.Module):
@@ -31,10 +25,10 @@ class EncoderBlock(nn.Module):
 
         if cfg.lstm_steps:
             self.recurrent_conv = ConvLSTMBlock(conv_config['out_channels'], conv_config['out_channels'],
-                                                conv_config['img_size'] // 2, kernel, (1, 1), padding, (1, 1), groups)
+                                                conv_config['rec_size'], kernel, (1, 1), padding, (1, 1), groups)
         elif cfg.gru_steps:
             self.recurrent_conv = TrajGRUBlock(conv_config['out_channels'], conv_config['out_channels'],
-                                               conv_config['img_size'] // 2)
+                                               conv_config['rec_size'])
 
     def forward(self, input, mask, recurrent_state=None):
         batch_size = input.shape[0]
@@ -64,10 +58,10 @@ class DecoderBlock(nn.Module):
                                        activation, conv_config['bn'])
         if cfg.lstm_steps:
             self.recurrent_conv = ConvLSTMBlock(conv_config['in_channels'], conv_config['in_channels'],
-                                                conv_config['img_size'] // 2, kernel, (1, 1), padding, (1, 1), groups)
+                                                conv_config['rec_size'], kernel, (1, 1), padding, (1, 1), groups)
         elif cfg.gru_steps:
             self.recurrent_conv = TrajGRUBlock(conv_config['in_channels'], conv_config['in_channels'],
-                                               conv_config['img_size'] // 2)
+                                               conv_config['rec_size'])
 
     def forward(self, input, skip_input, mask, skip_mask, recurrent_state=None):
         # apply LSTM convolution

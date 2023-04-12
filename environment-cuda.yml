@@ -5,6 +5,7 @@ channels:
   - defaults
 dependencies:
   - pytorch>=1.11.0
+  - cudatoolkit>=11.7
   - tqdm>=4.64.0
   - torchvision>=0.12.0
   - torchmetrics>=0.11.2

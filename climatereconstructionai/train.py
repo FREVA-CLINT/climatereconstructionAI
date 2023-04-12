@@ -17,7 +17,8 @@ from .model.net import CRAINet
 from .utils.io import load_ckpt, load_model, save_ckpt
 from .utils.netcdfloader import NetCDFLoader, InfiniteSampler, load_steadymask
 from .utils.profiler import load_profiler
-from .utils import twriter, early_stopping, evaluation
+from .utils import twriter, early_stopping
+from .utils.evaluation import create_snapshot_image
 
 
 def train(arg_file=None):
@@ -46,20 +47,12 @@ def train(arg_file=None):
 
     writer.set_hparams(cfg.passed_args)
 
-    if cfg.lstm_steps:
-        time_steps = cfg.lstm_steps
-    elif cfg.gru_steps:
-        time_steps = cfg.gru_steps
-    elif cfg.channel_steps:
-        time_steps = cfg.channel_steps
-    else:
-        time_steps = 0
-
     # create data sets
     dataset_train = NetCDFLoader(cfg.data_root_dir, cfg.data_names, cfg.mask_dir, cfg.mask_names, 'train',
-                                 cfg.data_types, time_steps, apply_transform=cfg.apply_transform)
+                                 cfg.data_types, cfg.time_steps)
+
     dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.val_names, cfg.mask_dir, cfg.mask_names, 'val', cfg.data_types,
-                               time_steps)
+                               cfg.time_steps)
     iterator_train = iter(DataLoader(dataset_train, batch_size=cfg.batch_size,
                                      sampler=InfiniteSampler(len(dataset_train)),
                                      num_workers=cfg.n_threads, multiprocessing_context='fork'))
@@ -69,30 +62,29 @@ def train(arg_file=None):
 
     steady_mask = load_steadymask(cfg.mask_dir, cfg.steady_masks, cfg.data_types, cfg.device)
 
-    if cfg.n_target_data == 0:
-        stat_target = None
-    else:
-        stat_target = {"mean": dataset_train.img_mean[-cfg.n_target_data:],
-                       "std": dataset_train.img_std[-cfg.n_target_data:]}
+    image_sizes = dataset_train.img_sizes
+    if cfg.conv_factor is None:
+        cfg.conv_factor = max(image_sizes[0])
+
+    train_stats = {"mean": dataset_train.img_mean, "std": dataset_train.img_std}
 
     # define network model
-    if len(cfg.image_sizes) - cfg.n_target_data > 1:
-        model = CRAINet(img_size=cfg.image_sizes[0],
+    if len(image_sizes) - cfg.n_target_data > 1:
+        model = CRAINet(img_size=image_sizes[0],
                         enc_dec_layers=cfg.encoding_layers[0],
                         pool_layers=cfg.pooling_layers[0],
-                        in_channels=2 * cfg.channel_steps + 1,
+                        in_channels=cfg.n_channel_steps,
                         out_channels=cfg.out_channels,
-                        fusion_img_size=cfg.image_sizes[1],
+                        fusion_img_size=image_sizes[1],
                         fusion_enc_layers=cfg.encoding_layers[1],
                         fusion_pool_layers=cfg.pooling_layers[1],
-                        fusion_in_channels=(len(cfg.image_sizes) - 1 - cfg.n_target_data
-                                            ) * (2 * cfg.channel_steps + 1),
+                        fusion_in_channels=(len(image_sizes) - 1 - cfg.n_target_data) * cfg.n_channel_steps,
                         bounds=dataset_train.bounds).to(cfg.device)
     else:
-        model = CRAINet(img_size=cfg.image_sizes[0],
+        model = CRAINet(img_size=image_sizes[0],
                         enc_dec_layers=cfg.encoding_layers[0],
                         pool_layers=cfg.pooling_layers[0],
-                        in_channels=2 * cfg.channel_steps + 1,
+                        in_channels=cfg.n_channel_steps,
                         out_channels=cfg.out_channels,
                         bounds=dataset_train.bounds).to(cfg.device)
 
@@ -103,9 +95,7 @@ def train(arg_file=None):
     else:
         lr = cfg.lr
 
-    
     early_stop = early_stopping.early_stopping()
-
     loss_comp = get_loss.LossComputation()
 
     # define optimizer and loss functions
@@ -123,10 +113,6 @@ def train(arg_file=None):
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
         print('Starting from iter ', start_iter)
-    
-    elif cfg.pretrained_model:
-        ckpt_dict = load_ckpt(cfg.pretrained_model, cfg.device)
-        load_model(ckpt_dict, model, optimizer)
  
     prof = load_profiler(start_iter)
 
@@ -147,7 +133,7 @@ def train(arg_file=None):
 
         # train model
         model.train()
-        image, mask, gt = [x.to(cfg.device) for x in next(iterator_train)]
+        image, mask, gt = [x.to(cfg.device) for x in next(iterator_train)[:3]]
         output = model(image, mask)
 
         train_loss = loss_comp.get_loss(mask, steady_mask, output, gt)
@@ -162,7 +148,7 @@ def train(arg_file=None):
             model.eval()
             val_losses = []
             for _ in range(cfg.n_iters_val): 
-                image, mask, gt = [x.to(cfg.device) for x in next(iterator_val)]
+                image, mask, gt = [x.to(cfg.device) for x in next(iterator_val)[:3]]
                 with torch.no_grad():
                     output = model(image, mask)
                 val_losses.append(list(loss_comp.get_loss(mask, steady_mask, output, gt).values()))
@@ -177,15 +163,15 @@ def train(arg_file=None):
             if cfg.early_stopping:
                 writer.update_scalar('val', 'loss_gradient', early_stop.criterion_diff , n_iter)
                                        
-            if cfg.save_snapshot_image:
-                fig = evaluation.create_snapshot_image(model, dataset_val, '{:s}/images/iter_{:d}'.format(cfg.snapshot_dir, n_iter))
+            if cfg.eval_timesteps:
+                model.eval()
+                create_snapshot_image(model, dataset_val, '{:s}/images/iter_{:d}'.format(cfg.snapshot_dir, n_iter))
            
             if cfg.lr_scheduler_patience is not None:
                 lr_scheduler.step(val_loss['total'])
-        
-            
+
         if n_iter % cfg.save_model_interval == 0:
-            save_ckpt('{:s}/ckpt/{:d}.pth'.format(cfg.snapshot_dir, n_iter), stat_target,
+            save_ckpt('{:s}/ckpt/{:d}.pth'.format(cfg.snapshot_dir, n_iter), train_stats,
                       [(str(n_iter), n_iter, model, optimizer)])
 
         if n_iter in final_models:
@@ -200,16 +186,16 @@ def train(arg_file=None):
         
     prof.stop()
 
-    save_ckpt('{:s}/ckpt/best.pth'.format(cfg.snapshot_dir, early_stop.global_iter_best), stat_target,
+    save_ckpt('{:s}/ckpt/best.pth'.format(cfg.snapshot_dir, early_stop.global_iter_best), train_stats,
                       [(str(n_iter), n_iter, early_stop.best_model, optimizer)])
 
-    save_ckpt('{:s}/ckpt/final.pth'.format(cfg.snapshot_dir), stat_target, savelist)
+    save_ckpt('{:s}/ckpt/final.pth'.format(cfg.snapshot_dir), train_stats, savelist)
 
     # run final validation over n_iters_val
     if cfg.val_metrics is not None:
         val_metrics = []
         for _ in range(cfg.n_iters_val): 
-            image, mask, gt = [x.to(cfg.device) for x in next(iterator_val)]
+            image, mask, gt = [x.to(cfg.device) for x in next(iterator_val)[:3]]
             with torch.no_grad():
                 output = model(image, mask)
             metric_dict = get_metrics(mask, steady_mask, output, gt, 'val')

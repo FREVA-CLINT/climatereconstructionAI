@@ -68,8 +68,6 @@ class loss_criterion(torch.nn.Module):
         return loss_dict
 
 
-
-
 class LossComputation():
     def __init__(self):
         super().__init__()
@@ -82,6 +80,9 @@ class LossComputation():
     def get_loss(self, img_mask, loss_mask, output, gt):
 
         mask = img_mask[:, cfg.recurrent_steps, cfg.gt_channels, :, :]
+
+        if cfg.n_target_data != 0:
+            mask = torch.ones_like(mask)
 
         if loss_mask is not None:
             mask += loss_mask

@@ -3,15 +3,16 @@
 Software to train/evaluate models to reconstruct missing values in climate data (e.g., HadCRUT4) based on a U-Net with partial convolutions.
 
 ## Dependencies
-- python>=3.7
-- pytorch>=1.8.0
-- tqdm>=4.59.0
-- torchvision>=0.2.1
-- numpy>=1.20.1
-- matplotlib>=3.4.3
-- tensorboardX>=2.4.0
-- tensorboard>=2.8.0
-- xarray>=0.20.2
+- pytorch>=1.11.0
+- tqdm>=4.64.0
+- torchvision>=0.12.0
+- torchmetrics>=0.11.2
+- numpy>=1.21.6
+- matplotlib>=3.5.1
+- tensorboardX>=2.5
+- tensorboard>=2.9.0
+- xarray>=2022.3.0
+- dask>=2022.7.0
 - netcdf4>=1.5.8
 - setuptools==59.5.0
 - xesmf>=0.6.2
@@ -26,6 +27,8 @@ To activate the environment, use:
 ```bash
 conda activate crai
 ```
+
+`environment-cuda.yml` should be used when working with GPUs using CUDA.
 
 ## Installation
 
@@ -42,12 +45,12 @@ The software can be used to:
 
 ### Input data
 The directory containing the climate datasets should have the following sub-directories:
-- `data_large` and `val_large` for training
-- `test_large` for evaluation
+- `data` and `val` for training
+- `test` for evaluation
 
 The climate datasets should be in netCDF format and placed in the corresponding sub-directories.
 
-The missing values can be defined separately as masks. These masks should be in netCDF format and have the same dimension as the climate dataset.
+The missing values can be defined separately as masks containing zeros (for the missing values) and ones (for the valid values). These masks should be in netCDF format and have the same dimension as the climate dataset. For the training, it is possible to shuffle the sequence of masks by using the "shuffle-masks" option.
 
 A PyTorch model is required for the evaluation.
 
@@ -77,18 +80,16 @@ Once installed, the package can be used as:
 
 For more information about the arguments:
 ```bash
-crai-train --help
 usage: crai-train [-h] [--data-root-dir DATA_ROOT_DIR] [--mask-dir MASK_DIR] [--log-dir LOG_DIR] [--data-names DATA_NAMES] [--mask-names MASK_NAMES]
-                  [--data-types DATA_TYPES] [--n-target-data N_TARGET] [--device DEVICE] [--shuffle-masks] [--channel-steps CHANNEL_STEPS]
-                  [--lstm-steps LSTM_STEPS] [--gru-steps GRU_STEPS] [--encoding-layers ENCODING_LAYERS] [--pooling-layers POOLING_LAYERS] [--conv-factor CONV_FACTOR]
-                  [--image-sizes IMAGE_SIZES] [--weights WEIGHTS] [--steady-masks STEADY_MASKS] [--loop-random-seed LOOP_RANDOM_SEED]
-                  [--cuda-random-seed CUDA_RANDOM_SEED] [--deterministic] [--attention] [--channel-reduction-rate CHANNEL_REDUCTION_RATE] [--disable-skip-layers]
-                  [--disable-first-bn] [--masked-bn] [--global-padding] [--normalize-data] [--n-filters N_FILTERS] [--out-channels OUT_CHANNELS]
-                  [--dataset-name DATASET_NAME] [--min-bounds MIN_BOUNDS] [--max-bounds MAX_BOUNDS] [--profile] [--val-names VAL_NAMES] [--snapshot-dir SNAPSHOT_DIR]
-                  [--resume-iter RESUME_ITER] [--batch-size BATCH_SIZE] [--n-threads N_THREADS] [--multi-gpus] [--finetune] [--lr LR] [--lr-finetune LR_FINETUNE]
-                  [--max-iter MAX_ITER] [--log-interval LOG_INTERVAL] [--lr-scheduler-patience LR_SCHEDULER_PATIENCE] [--save-snapshot-image]
-                  [--save-model-interval SAVE_MODEL_INTERVAL] [--n-final-models N_FINAL_MODELS] [--final-models-interval FINAL_MODELS_INTERVAL]
-                  [--loss-criterion LOSS_CRITERION] [--eval-timesteps EVAL_TIMESTEPS] [-f LOAD_FROM_FILE] [--vlim VLIM]
+                  [--data-types DATA_TYPES] [--n-target-data N_TARGET_DATA] [--device DEVICE] [--shuffle-masks] [--channel-steps CHANNEL_STEPS] [--lstm-steps LSTM_STEPS]
+                  [--gru-steps GRU_STEPS] [--encoding-layers ENCODING_LAYERS] [--pooling-layers POOLING_LAYERS] [--conv-factor CONV_FACTOR] [--weights WEIGHTS]
+                  [--steady-masks STEADY_MASKS] [--loop-random-seed LOOP_RANDOM_SEED] [--cuda-random-seed CUDA_RANDOM_SEED] [--deterministic] [--attention]
+                  [--channel-reduction-rate CHANNEL_REDUCTION_RATE] [--disable-skip-layers] [--disable-first-bn] [--masked-bn] [--lazy-load] [--global-padding]
+                  [--normalize-data] [--n-filters N_FILTERS] [--out-channels OUT_CHANNELS] [--dataset-name DATASET_NAME] [--min-bounds MIN_BOUNDS]
+                  [--max-bounds MAX_BOUNDS] [--profile] [--val-names VAL_NAMES] [--snapshot-dir SNAPSHOT_DIR] [--resume-iter RESUME_ITER] [--batch-size BATCH_SIZE]
+                  [--n-threads N_THREADS] [--multi-gpus] [--finetune] [--lr LR] [--lr-finetune LR_FINETUNE] [--max-iter MAX_ITER] [--log-interval LOG_INTERVAL]
+                  [--lr-scheduler-patience LR_SCHEDULER_PATIENCE] [--save-model-interval SAVE_MODEL_INTERVAL] [--n-final-models N_FINAL_MODELS]
+                  [--final-models-interval FINAL_MODELS_INTERVAL] [--loss-criterion LOSS_CRITERION] [--eval-timesteps EVAL_TIMESTEPS] [-f LOAD_FROM_FILE] [--vlim VLIM]
 
 options:
   -h, --help            show this help message and exit
@@ -107,23 +108,20 @@ options:
   --device DEVICE       Device used by PyTorch (cuda or cpu)
   --shuffle-masks       Select mask indices randomly
   --channel-steps CHANNEL_STEPS
-                        Number of considered sequences for channeled memory (0 = memory module is disabled)
+                        Comma separated number of considered sequences for channeled memory:past_steps,future_steps
   --lstm-steps LSTM_STEPS
-                        Number of considered sequences for lstm (0 = lstm module is disabled)
+                        Comma separated number of considered sequences for lstm: past_steps,future_steps
   --gru-steps GRU_STEPS
-                        Number of considered sequences for gru (0 = gru module is disabled)
+                        Comma separated number of considered sequences for gru: past_steps,future_steps
   --encoding-layers ENCODING_LAYERS
                         Number of encoding layers in the CNN
   --pooling-layers POOLING_LAYERS
                         Number of pooling layers in the CNN
   --conv-factor CONV_FACTOR
                         Number of channels in the deepest layer
-  --image-sizes IMAGE_SIZES
-                        Spatial size of the datasets (latxlon must be of shape NxN)
   --weights WEIGHTS     Initialization weight
   --steady-masks STEADY_MASKS
-                        Comma separated list of netCDF files containing a single mask to be applied to all timesteps. The number of steady-masks must be the same as out-
-                        channels
+                        Comma separated list of netCDF files containing a single mask to be applied to all timesteps. The number of steady-masks must be the same as out-channels
   --loop-random-seed LOOP_RANDOM_SEED
                         Random seed for iteration loop
   --cuda-random-seed CUDA_RANDOM_SEED
@@ -136,6 +134,7 @@ options:
                         Disable the skip layers
   --disable-first-bn    Disable the batch normalization on the first layer
   --masked-bn           Use masked batch normalization instead of standard BN
+  --lazy-load           Use lazy loading for large datasets
   --global-padding      Use a custom padding for global dataset
   --normalize-data      Normalize the input climate data to 0 mean and 1 std
   --n-filters N_FILTERS
@@ -158,7 +157,7 @@ options:
   --batch-size BATCH_SIZE
                         Batch size
   --n-threads N_THREADS
-                        Number of threads
+                        Number of workers used in the data loader
   --multi-gpus          Use multiple GPUs, if any
   --finetune            Enable the fine tuning mode (use fine tuning parameterization and disable batch normalization
   --lr LR               Learning rate
@@ -169,8 +168,6 @@ options:
                         Iteration step interval at which a tensorboard summary log should be written
   --lr-scheduler-patience LR_SCHEDULER_PATIENCE
                         Patience for the lr scheduler
-  --save-snapshot-image
-                        Save evaluation images for the iteration steps defined in --log-interval
   --save-model-interval SAVE_MODEL_INTERVAL
                         Iteration step interval at which the model should be saved
   --n-final-models N_FINAL_MODELS
@@ -180,23 +177,22 @@ options:
   --loss-criterion LOSS_CRITERION
                         Index defining the loss function (0=original from Liu et al., 1=MAE of the hole region)
   --eval-timesteps EVAL_TIMESTEPS
-                        Iteration steps for which an evaluation is performed
+                        Sample indices for which a snapshot is created at each iter defined by log-interval
   -f LOAD_FROM_FILE, --load-from-file LOAD_FROM_FILE
                         Load all the arguments from a text file
   --vlim VLIM           Comma separated list of vmin,vmax values for the color scale of the snapshot images
 ```
 
 ```bash
-crai-evaluate --help
 usage: crai-evaluate [-h] [--data-root-dir DATA_ROOT_DIR] [--mask-dir MASK_DIR] [--log-dir LOG_DIR] [--data-names DATA_NAMES] [--mask-names MASK_NAMES]
                      [--data-types DATA_TYPES] [--n-target-data N_TARGET_DATA] [--device DEVICE] [--shuffle-masks] [--channel-steps CHANNEL_STEPS]
                      [--lstm-steps LSTM_STEPS] [--gru-steps GRU_STEPS] [--encoding-layers ENCODING_LAYERS] [--pooling-layers POOLING_LAYERS] [--conv-factor CONV_FACTOR]
-                     [--image-sizes IMAGE_SIZES] [--weights WEIGHTS] [--steady-masks STEADY_MASKS] [--loop-random-seed LOOP_RANDOM_SEED]
-                     [--cuda-random-seed CUDA_RANDOM_SEED] [--deterministic] [--attention] [--channel-reduction-rate CHANNEL_REDUCTION_RATE] [--disable-skip-layers]
-                     [--disable-first-bn] [--masked-bn] [--global-padding] [--normalize-data] [--n-filters N_FILTERS] [--out-channels OUT_CHANNELS]
-                     [--dataset-name DATASET_NAME] [--min-bounds MIN_BOUNDS] [--max-bounds MAX_BOUNDS] [--profile] [--model-dir MODEL_DIR] [--model-names MODEL_NAMES]
-                     [--evaluation-dirs EVALUATION_DIRS] [--eval-names EVAL_NAMES] [--create-graph] [--plot-results PLOT_RESULTS] [--partitions PARTITIONS]
-                     [--split-outputs] [--maxmem MAXMEM] [-f LOAD_FROM_FILE]
+                     [--weights WEIGHTS] [--steady-masks STEADY_MASKS] [--loop-random-seed LOOP_RANDOM_SEED] [--cuda-random-seed CUDA_RANDOM_SEED] [--deterministic]
+                     [--attention] [--channel-reduction-rate CHANNEL_REDUCTION_RATE] [--disable-skip-layers] [--disable-first-bn] [--masked-bn] [--lazy-load]
+                     [--global-padding] [--normalize-data] [--n-filters N_FILTERS] [--out-channels OUT_CHANNELS] [--dataset-name DATASET_NAME] [--min-bounds MIN_BOUNDS]
+                     [--max-bounds MAX_BOUNDS] [--profile] [--model-dir MODEL_DIR] [--model-names MODEL_NAMES] [--evaluation-dirs EVALUATION_DIRS]
+                     [--eval-names EVAL_NAMES] [--use-train-stats] [--create-graph] [--plot-results PLOT_RESULTS] [--partitions PARTITIONS] [--maxmem MAXMEM]
+                     [--split-outputs] [-f LOAD_FROM_FILE]
 
 options:
   -h, --help            show this help message and exit
@@ -215,23 +211,20 @@ options:
   --device DEVICE       Device used by PyTorch (cuda or cpu)
   --shuffle-masks       Select mask indices randomly
   --channel-steps CHANNEL_STEPS
-                        Number of considered sequences for channeled memory (0 = memory module is disabled)
+                        Comma separated number of considered sequences for channeled memory:past_steps,future_steps
   --lstm-steps LSTM_STEPS
-                        Number of considered sequences for lstm (0 = lstm module is disabled)
+                        Comma separated number of considered sequences for lstm: past_steps,future_steps
   --gru-steps GRU_STEPS
-                        Number of considered sequences for gru (0 = gru module is disabled)
+                        Comma separated number of considered sequences for gru: past_steps,future_steps
   --encoding-layers ENCODING_LAYERS
                         Number of encoding layers in the CNN
   --pooling-layers POOLING_LAYERS
                         Number of pooling layers in the CNN
   --conv-factor CONV_FACTOR
                         Number of channels in the deepest layer
-  --image-sizes IMAGE_SIZES
-                        Spatial size of the datasets (latxlon must be of shape NxN)
   --weights WEIGHTS     Initialization weight
   --steady-masks STEADY_MASKS
-                        Comma separated list of netCDF files containing a single mask to be applied to all timesteps. The number of steady-masks must be the same as out-
-                        channels
+                        Comma separated list of netCDF files containing a single mask to be applied to all timesteps. The number of steady-masks must be the same as out-channels
   --loop-random-seed LOOP_RANDOM_SEED
                         Random seed for iteration loop
   --cuda-random-seed CUDA_RANDOM_SEED
@@ -244,6 +237,7 @@ options:
                         Disable the skip layers
   --disable-first-bn    Disable the batch normalization on the first layer
   --masked-bn           Use masked batch normalization instead of standard BN
+  --lazy-load           Use lazy loading for large datasets
   --global-padding      Use a custom padding for global dataset
   --normalize-data      Normalize the input climate data to 0 mean and 1 std
   --n-filters N_FILTERS
@@ -265,13 +259,14 @@ options:
                         Directory where the output files will be stored
   --eval-names EVAL_NAMES
                         Prefix used for the output filenames
+  --use-train-stats     Use mean and std from training data for normalization
   --create-graph        Create a Tensorboard graph of the NN
   --plot-results PLOT_RESULTS
                         Create plot images of the results for the comma separated list of time indices
   --partitions PARTITIONS
                         Split the climate dataset into several partitions along the time coordinate
-  --split-outputs       Do not merge the outputs when using multiple models
   --maxmem MAXMEM       Maximum available memory in MB (overwrite partitions parameter)
+  --split-outputs       Do not merge the outputs when using multiple models and/or partitions
   -f LOAD_FROM_FILE, --load-from-file LOAD_FROM_FILE
                         Load all the arguments from a text file
 ```

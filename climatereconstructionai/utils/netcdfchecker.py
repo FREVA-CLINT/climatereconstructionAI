@@ -2,13 +2,13 @@ import logging
 
 import numpy as np
 import xarray as xr
-import xesmf as xe
 
 from .. import config as cfg
 
-
 def reformat_dataset(ds1, ds2, data_type):
     if cfg.dataset_name is not None:
+        import xesmf as xe
+
         ds2[data_type] = ds2[data_type].transpose(*cfg.dataset_format["dimensions"])
 
         regrid = False
@@ -21,18 +21,15 @@ def reformat_dataset(ds1, ds2, data_type):
             ds2 = xe.Regridder(ds2, ds1, "nearest_s2d")(ds2, keep_attrs=True)
             del ds2.attrs["regrid_method"]
 
-        dtype = ds1[data_type].dtype
-        if dtype != ds2[data_type].dtype:
-            ds2[data_type] = ds2[data_type].astype(dtype=dtype)
-
     return ds2
 
 
-def dataset_formatter(ds, data_type, image_size, basename):
+def dataset_formatter(ds, data_type, basename):
     if data_type not in list(ds.keys()):
         raise ValueError('Variable name \'{}\' not found in {}.'.format(data_type, basename))
 
     if cfg.dataset_name is not None:
+        import xesmf as xe
 
         ds_dims = list(ds[data_type].dims)
         ndims = len(cfg.dataset_format["dimensions"])
@@ -49,8 +46,6 @@ def dataset_formatter(ds, data_type, image_size, basename):
 
         ds[data_type] = ds[data_type].transpose(*cfg.dataset_format["axes"])
 
-        shape = ds[data_type].shape
-
         step = []
         regrid = False
         for i in range(2):
@@ -66,10 +61,10 @@ def dataset_formatter(ds, data_type, image_size, basename):
                 raise ValueError('Incorrect {} extent in {}.\nThe extent should be: {}.'
                                  .format(coordinate, basename, extent))
 
-            if shape[i + 1] != image_size:
-                step[i] *= shape[i + 1] / image_size
+            if step[i] != cfg.dataset_format["step"][i]:
+                step[i] = cfg.dataset_format["step"][i]
                 logging.warning(
-                    'The size of {} does not correspond to the image size in {}.'.format(coordinate, basename))
+                    'The {} step does not match the targeted dataset in {}.'.format(coordinate, basename))
                 regrid = True
 
         if regrid:
