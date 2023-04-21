@@ -43,6 +43,8 @@ def get_metrics(img_mask, loss_mask, output, gt, setname):
 
     if loss_mask is not None:
         mask += loss_mask
+        mask[mask<0] = 0
+        mask[mask>1] = 1
         assert ((mask == 0) | (mask == 1)).all(), "Not all values in mask are zeros or ones!"
 
     metric_dict = {}
