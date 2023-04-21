@@ -12,16 +12,11 @@ def get_format(dataset_name):
     return dataset_format[str(dataset_name)]
 
 
-def get_passed_arguments(argv, arg_parser):
-    passed_arguments = {}
-    if argv[0] == '--load-from-file' or argv[0] == '-f':
-        argv = open(argv[1]).read().split()
-    args = vars(arg_parser.parse_args(argv))
-    for action in vars(arg_parser)['_actions']:
-        option_str = action.option_strings[-1]
-        if option_str in argv:
-            passed_arguments[action.dest] = args[action.dest]
-    return passed_arguments
+def get_passed_arguments(args, parser):
+    sentinel = object()
+    ns = argparse.Namespace(**{key:sentinel for key in vars(args)})
+    parser.parse_args(namespace=ns)
+    return {key:val for key, val in vars(ns).items() if val is not sentinel}
 
 
 class LoadFromFile(argparse.Action):
@@ -97,7 +92,7 @@ def global_args(parser, arg_file=None, prog_func=None):
     args = parser.parse_args(argv)
 
     global passed_args
-    passed_args = get_passed_arguments(argv, parser)
+    passed_args = get_passed_arguments(args, parser)
 
     global early_stopping
     if ('early_stopping_delta' in passed_args.keys()) or ('early_stopping_patience' in passed_args.keys()):
