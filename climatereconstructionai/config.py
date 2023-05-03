@@ -91,15 +91,6 @@ def global_args(parser, arg_file=None, prog_func=None):
 
     args = parser.parse_args(argv)
 
-    global passed_args
-    passed_args = get_passed_arguments(args, parser)
-
-    global early_stopping
-    if ('early_stopping_delta' in passed_args.keys()) or ('early_stopping_patience' in passed_args.keys()):
-        early_stopping = True
-    else:
-        early_stopping = False
-
     args_dict = vars(args)
     for arg in args_dict:
         globals()[arg] = args_dict[arg]
@@ -146,6 +137,8 @@ def global_args(parser, arg_file=None, prog_func=None):
             gt_channels[i] = (i + 1) * channel_steps[0] + i * (channel_steps[1] + 1)
 
     assert len(time_steps) == 2
+
+    return args
 
 
 def set_common_args():
@@ -259,7 +252,16 @@ def set_train_args(arg_file=None):
     arg_parser.add_argument('--n-iters-val', type=int, default=1,
                             help="Number of batch iterations used to average the validation loss")
 
-    global_args(arg_parser, arg_file)
+    args = global_args(arg_parser, arg_file)
+
+    global passed_args
+    passed_args = get_passed_arguments(args, arg_parser)
+
+    global early_stopping
+    if ('early_stopping_delta' in passed_args.keys()) or ('early_stopping_patience' in passed_args.keys()):
+        early_stopping = True
+    else:
+        early_stopping = False
 
     if globals()["val_names"] is None:
         globals()["val_names"] = globals()["data_names"].copy()

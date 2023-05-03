@@ -135,7 +135,8 @@ def infill(model, dataset, eval_path, output_names, data_stats, xr_dss, i_model)
         create_outputs(data_dict, eval_path, output_names, data_stats, xr_dss, i_model, split, index)
 
         if cfg.progress_fwd is not None:
-            cfg.progress_fwd('Infilling...', int(100 * (split + 1) / dataset.__len__()))
+            cfg.progress_fwd[0]('Infilling...',
+                                int(cfg.progress_fwd[2] * (cfg.progress_fwd[1] + (split + 1) / dataset.__len__())))
 
     return output_names
 
