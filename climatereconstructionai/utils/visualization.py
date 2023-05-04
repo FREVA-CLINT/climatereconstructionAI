@@ -6,8 +6,8 @@ import torch
 def calculate_distributions(mask, steady_mask, output, gt, domain="valid", num_samples=1000):
     if steady_mask is not None:
         mask += steady_mask
-        mask[mask<0] = 0
-        mask[mask>1] = 1
+        mask[mask < 0] = 0
+        mask[mask > 1] = 1
         assert ((mask == 0) | (mask == 1)).all(), "Not all values in mask are zeros or ones!"
 
     value_list_pred = []
@@ -41,8 +41,8 @@ def calculate_error_distributions(mask, steady_mask, output, gt, operation="AE",
 
     if steady_mask is not None:
         mask += steady_mask
-        mask[mask<0] = 0
-        mask[mask>1] = 1
+        mask[mask < 0] = 0
+        mask[mask > 1] = 1
         assert ((mask == 0) | (mask == 1)).all(), "Not all values in mask are zeros or ones!"
 
     value_list = []
@@ -120,8 +120,8 @@ def create_correlation_plot(mask, steady_mask, output, gt, domain="valid", num_s
 def create_error_map(mask, steady_mask, output, gt, num_samples=3, operation="AE", domain="valid"):
     if steady_mask is not None:
         mask += steady_mask
-        mask[mask<0] = 0
-        mask[mask>1] = 1
+        mask[mask < 0] = 0
+        mask[mask > 1] = 1
         assert ((mask == 0) | (mask == 1)).all(), "Not all values in mask are zeros or ones!"
 
     num_channels = output.shape[2]
@@ -164,8 +164,8 @@ def create_error_map(mask, steady_mask, output, gt, num_samples=3, operation="AE
 def create_map(mask, steady_mask, output, gt, num_samples=3):
     if steady_mask is not None:
         mask += steady_mask
-        mask[mask<0] = 0
-        mask[mask>1] = 1
+        mask[mask < 0] = 0
+        mask[mask > 1] = 1
         assert ((mask == 0) | (mask == 1)).all(), "Not all values in mask are zeros or ones!"
 
     samples = torch.randint(output.shape[0], (num_samples,))

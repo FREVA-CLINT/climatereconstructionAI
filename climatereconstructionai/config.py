@@ -14,9 +14,9 @@ def get_format(dataset_name):
 
 def get_passed_arguments(args, parser):
     sentinel = object()
-    ns = argparse.Namespace(**{key:sentinel for key in vars(args)})
+    ns = argparse.Namespace(**{key: sentinel for key in vars(args)})
     parser.parse_args(namespace=ns)
-    return {key:val for key, val in vars(ns).items() if val is not sentinel}
+    return {key: val for key, val in vars(ns).items() if val is not sentinel}
 
 
 class LoadFromFile(argparse.Action):
