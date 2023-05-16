@@ -1,6 +1,7 @@
 pytorch>=1.11.0
 tqdm>=4.64.0
 torchvision>=0.12.0
+torchmetrics>=0.11.2
 numpy>=1.21.6
 matplotlib>=3.5.1
 tensorboardX>=2.5

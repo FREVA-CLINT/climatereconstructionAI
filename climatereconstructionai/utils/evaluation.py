@@ -14,6 +14,8 @@ from .plotdata import plot_data
 from .. import config as cfg
 from tqdm import tqdm
 
+plt.rcParams.update({'font.size': 16})
+
 
 def create_snapshot_image(model, dataset, filename):
     data_dict = {}
@@ -133,7 +135,8 @@ def infill(model, dataset, eval_path, output_names, data_stats, xr_dss, i_model)
         create_outputs(data_dict, eval_path, output_names, data_stats, xr_dss, i_model, split, index)
 
         if cfg.progress_fwd is not None:
-            cfg.progress_fwd('Infilling...', int(100 * (split + 1) / dataset.__len__()))
+            cfg.progress_fwd[0]('Infilling...',
+                                int(cfg.progress_fwd[2] * (cfg.progress_fwd[1] + (split + 1) / dataset.__len__())))
 
     return output_names
 

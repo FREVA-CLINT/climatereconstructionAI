@@ -110,12 +110,14 @@ def load_netcdf(path, data_names, data_types, keep_dss=False):
 
 class NetCDFLoader(Dataset):
     def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, time_steps, train_stats=None):
+
         super(NetCDFLoader, self).__init__()
 
         self.random = random.Random(cfg.loop_random_seed)
 
         self.data_types = data_types
         self.time_steps = time_steps
+
         self.n_time_steps = sum(time_steps) + 1
 
         mask_path = mask_root
@@ -140,7 +142,7 @@ class NetCDFLoader(Dataset):
             if not cfg.shuffle_masks:
                 assert self.img_length == self.mask_length
 
-        self.img_mean, self.img_std, self.img_tf = img_normalization(self.img_data)
+        self.img_mean, self.img_std, self.img_znorm = img_normalization(self.img_data)
 
         self.bounds = bnd_normalization(self.img_mean, self.img_std, train_stats)
 
@@ -156,7 +158,7 @@ class NetCDFLoader(Dataset):
         image = torch.from_numpy(np.nan_to_num(image))
 
         if cfg.normalize_data:
-            image = self.img_tf[ind_data](image)
+            image = self.img_znorm[ind_data](image)
 
         return image, mask
 
@@ -187,6 +189,7 @@ class NetCDFLoader(Dataset):
         masks = []
         masked = []
         ndata = len(self.data_types)
+
         for i in range(ndata):
 
             image, mask = self.get_single_item(i, index, cfg.shuffle_masks)
@@ -200,7 +203,7 @@ class NetCDFLoader(Dataset):
                 masked.append(image * mask)
 
         if cfg.channel_steps:
-            return torch.cat(masked, dim=0).transpose(0, 1), torch.cat(masks, dim=0)\
+            return torch.cat(masked, dim=0).transpose(0, 1), torch.cat(masks, dim=0) \
                 .transpose(0, 1), torch.cat(images, dim=0).transpose(0, 1), index
         else:
             return torch.cat(masked, dim=1), torch.cat(masks, dim=1), torch.cat(images, dim=1), index

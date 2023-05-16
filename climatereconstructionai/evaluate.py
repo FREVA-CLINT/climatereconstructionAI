@@ -41,6 +41,8 @@ def evaluate(arg_file=None, prog_func=None):
         n_samples = dataset_val.img_length
 
         if data_stats is None:
+            if cfg.normalize_data:
+                print("* Warning! Using mean and std from current data.")
             data_stats = {"mean": dataset_val.img_mean, "std": dataset_val.img_std}
 
         image_sizes = dataset_val.img_sizes
