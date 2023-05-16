@@ -53,7 +53,7 @@ def set_lambdas():
     global lambda_dict
 
     lambda_dict = {}
-    lambda_dict['ft'] = 0
+
     if loss_criterion == 0:
         lambda_dict['valid'] = 1.
         lambda_dict['hole'] = 6.

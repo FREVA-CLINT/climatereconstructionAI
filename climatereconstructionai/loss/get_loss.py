@@ -4,7 +4,6 @@ from .feature_loss import FeatureLoss
 from .hole_loss import HoleLoss
 from .total_variation_loss import TotalVariationLoss
 from .valid_loss import ValidLoss
-from .var_loss import VarLoss
 from .. import config as cfg
 from ..utils.featurizer import VGG16FeatureExtractor
 
@@ -48,8 +47,6 @@ class loss_criterion(torch.nn.Module):
                     criterion = HoleLoss().to(cfg.device)
                 elif loss == 'tv':
                     criterion = TotalVariationLoss().to(cfg.device)
-                elif loss == 'var':
-                    criterion = VarLoss().to(cfg.device)
 
                 if criterion not in self.criterions.values():
                     self.criterions[loss] = criterion

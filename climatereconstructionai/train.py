@@ -52,10 +52,10 @@ def train(arg_file=None):
                                cfg.time_steps)
     iterator_train = iter(DataLoader(dataset_train, batch_size=cfg.batch_size,
                                      sampler=InfiniteSampler(len(dataset_train)),
-                                     num_workers=cfg.n_threads, multiprocessing_context='fork'))
+                                     num_workers=cfg.n_threads))
     iterator_val = iter(DataLoader(dataset_val, batch_size=cfg.batch_size,
                                    sampler=InfiniteSampler(len(dataset_val)),
-                                   num_workers=cfg.n_threads, multiprocessing_context='fork'))
+                                   num_workers=cfg.n_threads))
 
     steady_mask = load_steadymask(cfg.mask_dir, cfg.steady_masks, cfg.data_types, cfg.device)
 
