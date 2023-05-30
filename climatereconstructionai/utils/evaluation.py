@@ -99,8 +99,7 @@ def infill(model, dataset, eval_path, output_names, data_stats, xr_dss, i_model)
         os.makedirs('{:s}'.format(cfg.evaluation_dirs[0]))
 
     steady_mask = load_steadymask(cfg.mask_dir, cfg.steady_masks, cfg.data_types, cfg.device)
-    if steady_mask is not None:
-        steady_mask = 1 - steady_mask
+
     data_dict = {'image': [], 'mask': [], 'gt': [], 'output': [], 'infilled': []}
 
     for split in tqdm(range(dataset.__len__())):
@@ -124,7 +123,7 @@ def infill(model, dataset, eval_path, output_names, data_stats, xr_dss, i_model)
 
         if steady_mask is not None:
             for key in ('image', 'gt', 'output'):
-                data_dict[key] /= steady_mask
+                data_dict[key][:, :, steady_mask.type(torch.bool)] = np.nan
 
         data_dict["infilled"] = (1 - data_dict["mask"])
         data_dict["infilled"] *= data_dict["output"]
