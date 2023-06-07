@@ -15,13 +15,13 @@ def get_format(dataset_name):
 def get_passed_arguments(args, parser):
     sentinel = object()
     ns = argparse.Namespace(**{key: sentinel for key in vars(args)})
-    parser.parse_args(namespace=ns)
+    parser.parse_known_args(namespace=ns)
     return {key: val for key, val in vars(ns).items() if val is not sentinel}
 
 
 class LoadFromFile(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
-        parser.parse_args(open(values).read().split(), namespace)
+        parser.parse_known_args(open(values).read().split(), namespace)
 
 
 def str_list(arg):
@@ -88,8 +88,7 @@ def global_args(parser, arg_file=None, prog_func=None):
 
     global progress_fwd
     progress_fwd = prog_func
-
-    args = parser.parse_args(argv)
+    args, unknown = parser.parse_known_args(argv)
 
     args_dict = vars(args)
     for arg in args_dict:
