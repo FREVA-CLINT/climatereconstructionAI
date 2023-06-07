@@ -15,6 +15,7 @@ def store_encoding(ds):
     encoding = ds['time'].encoding
     return ds
 
+
 def evaluate(arg_file=None, prog_func=None):
     cfg.set_evaluate_args(arg_file, prog_func)
 
@@ -77,7 +78,6 @@ def evaluate(arg_file=None, prog_func=None):
             iterator_val = iter(DataLoader(dataset_val, batch_size=batch_size,
                                            sampler=FiniteSampler(len(dataset_val)), num_workers=0))
             infill(model, iterator_val, eval_path, output_names, data_stats, dataset_val.xr_dss, count)
-
 
     for name in output_names:
         if len(output_names[name]) == 1:
