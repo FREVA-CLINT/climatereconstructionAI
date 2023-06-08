@@ -11,6 +11,7 @@ from . import config as cfg
 
 def store_encoding(ds):
     global encoding
+    ds = ds.assign_coords({"member": 0})
     encoding = ds['time'].encoding
     return ds
 
@@ -84,9 +85,12 @@ def evaluate(arg_file=None, prog_func=None):
         else:
             if not cfg.split_outputs:
                 ds = xr.open_mfdataset(output_names[name], preprocess=store_encoding, autoclose=True, combine='nested',
-                                       data_vars='minimal', concat_dim="time", chunks={})
+                                       data_vars='minimal', concat_dim="member", chunks={})
+
+                ds["member"] = range(1, len(output_names[name]) + 1)
                 ds['time'].encoding = encoding
                 ds['time'].encoding['original_shape'] = len(ds["time"])
+                ds = ds.transpose("time", ...).reset_coords(drop=True)
                 ds.to_netcdf(name + ".nc")
                 for output_name in output_names[name]:
                     os.remove(output_name)
