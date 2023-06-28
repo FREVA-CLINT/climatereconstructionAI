@@ -9,28 +9,46 @@ from .bounds_scaler import constrain_bounds
 from .. import config as cfg
 
 
+class GaussActivation(nn.Module):
+    def __init__(self, activation_mu=nn.Identity()):
+        super().__init__() 
+        self.activation_mu = activation_mu
+        self.activation_std = nn.Softplus()
+
+    def forward(self, input):
+        mu = self.activation_mu(input[:,[0]])
+        std = self.activation_std(input[:,[1]])
+        
+        return torch.concat((mu,std),1)
+
 class CRAINet(nn.Module):
-    def __init__(self, img_size=(512, 512), enc_dec_layers=4, pool_layers=4, in_channels=1, out_channels=1,
+    def __init__(self, img_size_source, img_size_target, enc_dec_layers=4, pool_layers=4, in_channels=1, out_channels=1,
                  fusion_img_size=None, fusion_enc_layers=None, fusion_pool_layers=None, fusion_in_channels=0,
                  bounds=None):
 
         super().__init__()
 
+        self.bounds = bounds
         self.freeze_enc_bn = False
         self.net_depth = enc_dec_layers + pool_layers
 
         # initialize channel inputs and outputs and image size for encoder and decoder
         if cfg.n_filters is None:
-            enc_conv_configs = init_enc_conv_configs(cfg.conv_factor, img_size, enc_dec_layers,
+            enc_conv_configs = init_enc_conv_configs(cfg.conv_factor, img_size_target, enc_dec_layers,
                                                      pool_layers, in_channels)
-            dec_conv_configs = init_dec_conv_configs(cfg.conv_factor, img_size, enc_dec_layers,
+            dec_conv_configs = init_dec_conv_configs(cfg.conv_factor, img_size_target, enc_dec_layers,
                                                      pool_layers, in_channels,
-                                                     out_channels)
+                                                     out_channels+cfg.use_gnlll_loss, cfg.skip_layers)
         else:
-            enc_conv_configs = init_enc_conv_configs_orig(img_size, enc_dec_layers,
+            enc_conv_configs = init_enc_conv_configs_orig(img_size_target, enc_dec_layers,
                                                           out_channels, cfg.n_filters)
-            dec_conv_configs = init_dec_conv_configs_orig(img_size, enc_dec_layers,
+            dec_conv_configs = init_dec_conv_configs_orig(img_size_target, enc_dec_layers,
                                                           out_channels, cfg.n_filters)
+
+        if ((torch.tensor(img_size_target)-torch.tensor(img_size_source))>0).any():
+            self.upsample = nn.Upsample(size=(img_size_target), mode=cfg.upsampling_mode)
+        else:
+            self.upsample = nn.Identity()
 
         if cfg.attention:
             self.attention_depth = fusion_enc_layers + fusion_pool_layers
@@ -77,20 +95,35 @@ class CRAINet(nn.Module):
             if i == self.net_depth - 1:
                 activation = None
                 bias = True
+                if hasattr(cfg, 'lambda_dict'):
+                    if 'gauss' in cfg.lambda_dict:
+                        if cfg.lambda_dict['gauss']>0:
+                            activation = GaussActivation()
+                            bias = True
             else:
                 activation = nn.LeakyReLU()
                 bias = False
             decoding_layers.append(DecoderBlock(
                 conv_config=dec_conv_configs[i],
-                kernel=dec_conv_configs[i]['kernel'], stride=(1, 1), activation=activation, bias=bias))
+                kernel=dec_conv_configs[i]['kernel'], stride=(1, 1), activation=activation, bias=bias, skip_layers=cfg.skip_layers))
         self.decoder = nn.ModuleList(decoding_layers)
 
-        self.binder = constrain_bounds(bounds)
+        if bounds is not None:
+            self.binder = constrain_bounds(bounds)
+        else:
+            self.binder = None
 
     def forward(self, input, input_mask):
         # create lists for skip connections
         # We split the inputs in case we use the attention module with different image dimension
         h_index = cfg.n_channel_steps
+        
+        input = self.upsample(input[:,0]).unsqueeze(dim=1)
+        input_mask = self.upsample(input_mask[:,0]).unsqueeze(dim=1)
+
+        if cfg.predict_residual:
+            input_base = input.clone()
+
         hs = [input[:, :, :h_index, :, :]]
         hs_mask = [input_mask[:, :, :h_index, :, :]]
         recurrent_states = []
@@ -174,11 +207,18 @@ class CRAINet(nn.Module):
                 h, h_mask, recurrent_state = self.decoder[i](h, hs[self.net_depth - i - 1],
                                                              h_mask, hs_mask[self.net_depth - i - 1],
                                                              None)
+        if cfg.predict_residual:
+            if cfg.use_gnlll_loss:
+                h[:,:,0] = h[:,:,0]+input_base[:,:,0]
+            else:
+                h+=input_base
+ 
 
-        h = self.binder.scale(h)
-
+        if self.bounds is not None:
+            h = self.binder.scale(h)
+        
         # return last element of output from last decoding layer
-        return h
+        return h, input_mask
 
     def train(self, mode=True):
         super().train(mode)

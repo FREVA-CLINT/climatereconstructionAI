@@ -16,7 +16,7 @@ def bound_pad(input, padding):
 
 
 class PConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel, stride, padding, dilation, groups, bias, activation, bn):
+    def __init__(self, in_channels, out_channels, kernel, stride, padding, dilation, groups, bias, activation, bn, dropout=0):
         super().__init__()
 
         self.padding = 2 * padding
@@ -32,13 +32,16 @@ class PConvBlock(nn.Module):
             self.input_conv.apply(weights_init(cfg.weights))
         torch.nn.init.constant_(self.mask_conv.weight, 1.0)
 
-        if activation:
-            self.activation = activation
+        self.activation = activation if activation else nn.Identity()
+
         if bn:
             if cfg.masked_bn:
                 self.bn = MaskedBatchNorm2d(out_channels)
             else:
                 self.bn = nn.BatchNorm2d(out_channels)
+                
+            
+        self.dropout = nn.Dropout(dropout) if dropout>0 else nn.Identity()
 
         # exclude mask gradients from backpropagation
         for param in self.mask_conv.parameters():
@@ -73,7 +76,7 @@ class PConvBlock(nn.Module):
             else:
                 output = self.bn(output)
 
-        if hasattr(self, 'activation'):
-            output = self.activation(output)
+        output = self.activation(output)
+        output = self.dropout(output)
 
         return output, new_mask

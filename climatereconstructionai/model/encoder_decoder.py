@@ -21,7 +21,7 @@ class EncoderBlock(nn.Module):
         super().__init__()
         padding = kernel[0] // 2, kernel[1] // 2
         self.partial_conv = PConvBlock(conv_config['in_channels'], conv_config['out_channels'], kernel,
-                                       stride, padding, dilation, groups, False, activation, conv_config['bn'])
+                                       stride, padding, dilation, groups, False, activation, conv_config['bn'], dropout=cfg.dropout)
 
         if cfg.lstm_steps:
             self.recurrent_conv = ConvLSTMBlock(conv_config['out_channels'], conv_config['out_channels'],
@@ -50,12 +50,14 @@ class EncoderBlock(nn.Module):
 
 
 class DecoderBlock(nn.Module):
-    def __init__(self, conv_config, kernel, stride, activation, dilation=(1, 1), groups=1, bias=False):
+    def __init__(self, conv_config, kernel, stride, activation, dilation=(1, 1), groups=1, bias=False, skip_layers=True, up_factor=None):
         super().__init__()
         padding = kernel[0] // 2, kernel[1] // 2
+        self.skip_layers=skip_layers
+
         self.partial_conv = PConvBlock(conv_config['in_channels'] + conv_config['skip_channels'],
                                        conv_config['out_channels'], kernel, stride, padding, dilation, groups, bias,
-                                       activation, conv_config['bn'])
+                                       activation, conv_config['bn'],dropout=cfg.dropout)
         if cfg.lstm_steps:
             self.recurrent_conv = ConvLSTMBlock(conv_config['in_channels'], conv_config['in_channels'],
                                                 conv_config['rec_size'], kernel, (1, 1), padding, (1, 1), groups)
@@ -80,7 +82,7 @@ class DecoderBlock(nn.Module):
         h = m(input)
         h_mask = m(mask)
 
-        if cfg.skip_layers:
+        if self.skip_layers:
             # skip layers: pass results from encoding layers to decoding layers
             h = torch.cat([h, skip_input], dim=1)
             h_mask = torch.cat([h_mask, skip_mask], dim=1)

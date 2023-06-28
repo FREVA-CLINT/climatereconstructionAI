@@ -7,10 +7,13 @@ class ValidLoss(nn.Module):
         super().__init__()
         self.l1 = nn.L1Loss()
 
-    def forward(self, mask, output, gt):
+    def forward(self, data_dict):
         loss_dict = {
             'valid': 0.0
         }
+        output = data_dict['output']
+        gt = data_dict['gt']
+        mask = data_dict['mask']
 
         # calculate loss for all channels
         for channel in range(output.shape[1]):

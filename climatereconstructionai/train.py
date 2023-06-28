@@ -46,10 +46,13 @@ def train(arg_file=None):
 
     # create data sets
     dataset_train = NetCDFLoader(cfg.data_root_dir, cfg.data_names, cfg.mask_dir, cfg.mask_names, 'train',
-                                 cfg.data_types, cfg.time_steps)
-
+                                 cfg.data_types, cfg.time_steps,
+                                 apply_transform=cfg.apply_transform,
+                                 apply_img_norm=cfg.apply_img_norm)
+    
     dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.val_names, cfg.mask_dir, cfg.mask_names, 'val', cfg.data_types,
-                               cfg.time_steps)
+                               cfg.time_steps, apply_img_norm=cfg.apply_img_norm)
+    
     iterator_train = iter(DataLoader(dataset_train, batch_size=cfg.batch_size,
                                      sampler=InfiniteSampler(len(dataset_train)),
                                      num_workers=cfg.n_threads))
@@ -67,18 +70,20 @@ def train(arg_file=None):
 
     # define network model
     if len(image_sizes) - cfg.n_target_data > 1:
-        model = CRAINet(img_size=image_sizes[0],
+        model = CRAINet(img_size_source=image_sizes[0],
+                        img_size_target=image_sizes[1],
                         enc_dec_layers=cfg.encoding_layers[0],
                         pool_layers=cfg.pooling_layers[0],
-                        in_channels=cfg.n_channel_steps,
+                        in_channels=2 * cfg.channel_steps + 1,
                         out_channels=cfg.out_channels,
-                        fusion_img_size=image_sizes[1],
+                        fusion_img_size=cfg.image_sizes[1],
                         fusion_enc_layers=cfg.encoding_layers[1],
                         fusion_pool_layers=cfg.pooling_layers[1],
                         fusion_in_channels=(len(image_sizes) - 1 - cfg.n_target_data) * cfg.n_channel_steps,
                         bounds=dataset_train.bounds).to(cfg.device)
     else:
-        model = CRAINet(img_size=image_sizes[0],
+        model = CRAINet(img_size_source=image_sizes[0],
+                        img_size_target=image_sizes[1],
                         enc_dec_layers=cfg.encoding_layers[0],
                         pool_layers=cfg.pooling_layers[0],
                         in_channels=cfg.n_channel_steps,
@@ -93,7 +98,7 @@ def train(arg_file=None):
         lr = cfg.lr
 
     early_stop = early_stopping.early_stopping()
-    loss_comp = get_loss.LossComputation()
+    loss_comp = get_loss.LossComputation(cfg.lambda_dict)
 
     # define optimizer and loss functions
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
@@ -131,9 +136,9 @@ def train(arg_file=None):
         # train model
         model.train()
         image, mask, gt = [x.to(cfg.device) for x in next(iterator_train)[:3]]
-        output = model(image, mask)
+        output, mask = model(image, mask)
 
-        train_loss = loss_comp.get_loss(mask, steady_mask, output, gt)
+        train_loss = loss_comp(mask, steady_mask, output, gt)
 
         optimizer.zero_grad()
         train_loss['total'].backward()
@@ -147,8 +152,8 @@ def train(arg_file=None):
             for _ in range(cfg.n_iters_val):
                 image, mask, gt = [x.to(cfg.device) for x in next(iterator_val)[:3]]
                 with torch.no_grad():
-                    output = model(image, mask)
-                val_losses.append(list(loss_comp.get_loss(mask, steady_mask, output, gt).values()))
+                    output, mask = model(image, mask)
+                val_losses.append(list(loss_comp(mask, steady_mask, output, gt).values()))
 
             val_loss = torch.tensor(val_losses).mean(dim=0)
             val_loss = dict(zip(train_loss.keys(), val_loss))
@@ -194,7 +199,7 @@ def train(arg_file=None):
         for _ in range(cfg.n_iters_val):
             image, mask, gt = [x.to(cfg.device) for x in next(iterator_val)[:3]]
             with torch.no_grad():
-                output = model(image, mask)
+                output, mask = model(image, mask)
             metric_dict = get_metrics(mask, steady_mask, output, gt, 'val')
             val_metrics.append(list(metric_dict.values()))
         val_metrics = torch.tensor(val_metrics).mean(dim=0)
@@ -204,7 +209,7 @@ def train(arg_file=None):
             metric_dict.update({'iterations': n_iter, 'iterations_best_model': early_stop.global_iter_best})
         writer.update_hparams(metric_dict, n_iter)
 
-    writer.add_visualizations(mask, steady_mask, output, gt, n_iter, 'val')
+    writer.add_visualizations(mask, steady_mask, output, gt, image, n_iter, 'val')
 
     writer.close()
 

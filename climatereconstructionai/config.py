@@ -3,7 +3,7 @@ import json
 import os
 import os.path
 import pkgutil
-
+import sys
 
 def get_format(dataset_name):
     json_data = pkgutil.get_data(__name__, "static/dataset_format.json")
@@ -12,11 +12,16 @@ def get_format(dataset_name):
     return dataset_format[str(dataset_name)]
 
 
-def get_passed_arguments(args, parser):
-    sentinel = object()
-    ns = argparse.Namespace(**{key: sentinel for key in vars(args)})
-    parser.parse_known_args(namespace=ns)
-    return {key: val for key, val in vars(ns).items() if val is not sentinel}
+def get_passed_arguments(argv, arg_parser):
+    passed_arguments = {}
+    if argv[0]=='--load-from-file' or  argv[0]=='-f':
+        argv = open(argv[1]).read().split()
+    args = vars(arg_parser.parse_args(argv))
+    for action in vars(arg_parser)['_actions']:
+        option_str = action.option_strings[-1]
+        if option_str in argv:
+            passed_arguments[action.dest]=args[action.dest]
+    return passed_arguments
 
 
 class LoadFromFile(argparse.Action):
@@ -75,6 +80,12 @@ def set_lambdas():
 
     if lambda_loss is not None:
         lambda_dict.update(lambda_loss)
+
+    global use_gnlll_loss
+    if ('gauss' in lambda_dict.keys()) and (lambda_dict['gauss']>0):
+        use_gnlll_loss=True
+    else:
+        use_gnlll_loss=False
 
 
 def global_args(parser, arg_file=None, prog_func=None):
@@ -137,7 +148,17 @@ def global_args(parser, arg_file=None, prog_func=None):
 
     assert len(time_steps) == 2
 
-    return args
+    upsample_modes = {
+        0:'nearest',
+        1: 'bilinear',
+        2: 'bicubic',
+        3: 'trilinear',
+        4: 'learned'}
+
+    global upsampling_mode
+    upsampling_mode = upsample_modes[upsample_mode]
+
+    return argv
 
 
 def set_common_args():
@@ -198,6 +219,21 @@ def set_common_args():
     arg_parser.add_argument('--max-bounds', type=float_list, default="inf",
                             help="Comma separated list of values defining the permitted upper-bound of output values")
     arg_parser.add_argument('--profile', action='store_true', help="Profile code using tensorboard profiler")
+    arg_parser.add_argument('--writer-mode', type=str, default='model_config', help="tensorboard writer mode")  
+    arg_parser.add_argument('--apply-img-norm', action='store_true', default=False,
+                            help="if each image should be normed")
+    arg_parser.add_argument('--diffusion-settings-path', type=str, default=None,
+                            help="path to the json storing the options for the diffusion model")
+    arg_parser.add_argument('--dropout', type=float, default=.0,
+                        help="if dropout should be used")
+    arg_parser.add_argument('--upsample-mode', type=int, default=0,
+                        help="0: nearest, 1: bilinear, 2: bicubic, 3: trilinear, 4: learned")
+    arg_parser.add_argument('--upsample-dataloader', action='store_true', default=False,
+                            help="if the data should be upsampled in the the loader")
+    arg_parser.add_argument('--predict-residual', action='store_true', default=False,
+                            help="if the residual should be predicted")
+    arg_parser.add_argument('--kernel-size-start', type=int, default=7,
+                        help="kernel_size in the first encoding layer")
     return arg_parser
 
 
@@ -250,11 +286,14 @@ def set_train_args(arg_file=None):
                             help="Number of log-interval iterations used for the termination criterion")
     arg_parser.add_argument('--n-iters-val', type=int, default=1,
                             help="Number of batch iterations used to average the validation loss")
+    arg_parser.add_argument('--apply-transform', action='store_true', default=False,
+                            help="if training data should be randomly transformed")
+    
 
-    args = global_args(arg_parser, arg_file)
+    argv = global_args(arg_parser, arg_file)
 
     global passed_args
-    passed_args = get_passed_arguments(args, arg_parser)
+    passed_args = get_passed_arguments(argv, arg_parser)
 
     global early_stopping
     if ('early_stopping_delta' in passed_args.keys()) or ('early_stopping_patience' in passed_args.keys()):
