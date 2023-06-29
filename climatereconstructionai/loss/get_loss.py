@@ -67,42 +67,41 @@ class loss_criterion(torch.nn.Module):
     def __init__(self, lambda_dict):
         super().__init__()
 
-        self.criterions = torch.nn.ModuleDict()
+        self.criterions = []
         self.tensors = ['output', 'gt', 'mask']
-        
+        style_added = False
+
         for loss, lambda_ in lambda_dict.items():
             if lambda_ > 0:
-                if loss == 'style' or loss == 'prc':
-                    criterion = FeatureLoss(VGG16FeatureExtractor()).to(cfg.device)
+                if (loss == 'style' or loss == 'prc') and not style_added:
+                    self.criterions.append(FeatureLoss(VGG16FeatureExtractor()).to(cfg.device))
                     self.tensors.append('comp')
+                    style_added = True
 
                 elif loss == 'valid':
-                    criterion = ValidLoss().to(cfg.device)
+                    self.criterions.append(ValidLoss().to(cfg.device))
                     self.tensors.append('valid')
 
                 elif loss == 'hole':
-                    criterion = HoleLoss().to(cfg.device)
+                    self.criterions.append(HoleLoss().to(cfg.device))
                     self.tensors.append('hole')
 
                 elif loss == 'tv':
-                    criterion = TotalVariationLoss().to(cfg.device)
+                    self.criterions.append(TotalVariationLoss().to(cfg.device))
                     if 'comp' not in self.tensors:
                         self.tensors.append('comp')
 
                 elif loss == 'gauss':
-                    criterion = GaussLoss().to(cfg.device)
+                    self.criterions.append(GaussLoss().to(cfg.device))
                     self.tensors.append('gauss')
                 
-                if not criterion in self.criterions.values():
-                    self.criterions[loss] = criterion
-
 
     def forward(self, img_mask, loss_mask, output, gt):
         
         data_dict = prepare_data_dict(img_mask, loss_mask, output, gt, self.tensors)
 
         loss_dict = {}
-        for _, criterion in self.criterions.items():
+        for criterion in self.criterions:
             loss_dict.update(criterion(data_dict))
 
         loss_dict["total"] = 0
