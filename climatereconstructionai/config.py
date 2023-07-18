@@ -193,7 +193,7 @@ def set_common_args():
     arg_parser.add_argument('--n-filters', type=int, default=None, help="Number of filters for the first/last layer")
     arg_parser.add_argument('--out-channels', type=int, default=1, help="Number of channels for the output data")
     arg_parser.add_argument('--dataset-name', type=str, default=None, help="Name of the dataset for format checking")
-    arg_parser.add_argument('--min-bounds', type=float_list, default="inf",
+    arg_parser.add_argument('--min-bounds', type=float_list, default="-inf",
                             help="Comma separated list of values defining the permitted lower-bound of output values")
     arg_parser.add_argument('--max-bounds', type=float_list, default="inf",
                             help="Comma separated list of values defining the permitted upper-bound of output values")
