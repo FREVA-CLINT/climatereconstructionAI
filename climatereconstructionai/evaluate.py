@@ -11,7 +11,6 @@ from . import config as cfg
 
 def store_encoding(ds):
     global encoding
-    ds = ds.assign_coords({"member": 0})
     encoding = ds['time'].encoding
     return ds
 
@@ -80,20 +79,29 @@ def evaluate(arg_file=None, prog_func=None):
             infill(model, iterator_val, eval_path, output_names, data_stats, dataset_val.xr_dss, count)
 
     for name in output_names:
-        if len(output_names[name]) == 1:
-            os.rename(output_names[name][0], name + ".nc")
+        if len(output_names[name]) == 1 and len(output_names[name][1]) == 1:
+            os.rename(output_names[name][1][0], name + ".nc")
         else:
             if not cfg.split_outputs:
-                ds = xr.open_mfdataset(output_names[name], preprocess=store_encoding, autoclose=True, combine='nested',
-                                       data_vars='minimal', concat_dim="member", chunks={})
+                dss = []
+                for i_model in output_names[name]:
+                    dss.append(xr.open_mfdataset(output_names[name][i_model], preprocess=store_encoding, autoclose=True,
+                                                combine='nested', data_vars='minimal', concat_dim="time", chunks={}))
+                    dss[-1] = dss[-1].assign_coords({"member": i_model})
 
-                ds["member"] = range(1, len(output_names[name]) + 1)
+                if len(dss) == 1:
+                    ds = dss[-1].drop("member")
+                else:
+                    ds = xr.concat(dss, dim="member")
+
                 ds['time'].encoding = encoding
                 ds['time'].encoding['original_shape'] = len(ds["time"])
                 ds = ds.transpose("time", ...).reset_coords(drop=True)
                 ds.to_netcdf(name + ".nc")
-                for output_name in output_names[name]:
-                    os.remove(output_name)
+
+                for i_model in output_names[name]:
+                    for output_name in output_names[name][i_model]:
+                        os.remove(output_name)
 
 
 if __name__ == "__main__":

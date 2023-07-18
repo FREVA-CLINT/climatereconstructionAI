@@ -161,8 +161,12 @@ def create_outputs(data_dict, eval_path, output_names, data_stats, xr_dss, i_mod
 
             rootname = '{}_{}'.format(eval_path[j], cname)
             if rootname not in output_names:
-                output_names[rootname] = []
-            output_names[rootname] += [rootname + suffix + ".nc"]
+                output_names[rootname] = {}
+
+            if i_model not in output_names[rootname]:
+                output_names[rootname][i_model] = []
+
+            output_names[rootname][i_model] += [rootname + suffix + ".nc"]
 
             ds = xr_dss[i_data][1].copy()
 
@@ -184,7 +188,7 @@ def create_outputs(data_dict, eval_path, output_names, data_stats, xr_dss, i_mod
 
             ds.attrs["history"] = "Infilled using CRAI (Climate Reconstruction AI: " \
                                   "https://github.com/FREVA-CLINT/climatereconstructionAI)\n" + ds.attrs["history"]
-            ds.to_netcdf(output_names[rootname][-1])
+            ds.to_netcdf(output_names[rootname][i_model][-1])
 
         for time_step in cfg.plot_results:
             if time_step in index:
