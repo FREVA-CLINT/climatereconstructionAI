@@ -234,6 +234,7 @@ def set_common_args():
                             help="if the residual should be predicted")
     arg_parser.add_argument('--kernel-size-start', type=int, default=7,
                         help="kernel_size in the first encoding layer")
+    arg_parser.add_argument('--transformer-settings', type=str, default='', help="path to transformer settings")
     return arg_parser
 
 

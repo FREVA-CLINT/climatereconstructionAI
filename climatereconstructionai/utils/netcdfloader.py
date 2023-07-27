@@ -148,7 +148,7 @@ def load_netcdf(path, data_names, data_types, keep_dss=False):
 
 
 class NetCDFLoader(Dataset):
-    def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, time_steps, train_stats=None, apply_transform=False, apply_img_norm=False, apply_img_diff=False):
+    def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, time_steps, train_stats=None, apply_transform=False, apply_img_norm=False, apply_img_diff=False, keep_dss=True):
         super(NetCDFLoader, self).__init__()
 
         self.random = random.Random(cfg.loop_random_seed)
@@ -172,12 +172,13 @@ class NetCDFLoader(Dataset):
                 data_path = '{:s}/val/'.format(data_root)
                 if not cfg.shuffle_masks:
                     mask_path = '{:s}/val/'.format(mask_root)
-            self.img_data, self.img_length, self.img_sizes = load_netcdf(data_path, img_names, data_types)
-
+            self.xr_dss, self.img_data, self.img_length, self.img_sizes = load_netcdf(data_path, img_names, data_types, keep_dss=keep_dss)
+  
+ 
         img_sizes = np.array([img_data.shape[-2:] for img_data in self.img_data])
         target_size = img_sizes.max(axis=0)
- 
-        self.mask_data, self.mask_length, _ = load_netcdf(mask_path, mask_names, data_types)
+
+        self.mask_data, self.mask_length, _ = load_netcdf(mask_path, mask_names, data_types, keep_dss=False)
 
         if self.mask_data is None:
             self.mask_length = self.img_length
