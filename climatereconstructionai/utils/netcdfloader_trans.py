@@ -223,6 +223,9 @@ class NetCDFLoader(Dataset):
         if self.flatten:
             data_source = data_source.flatten().unsqueeze(dim=1)
             data_target = data_target.flatten().unsqueeze(dim=1)
+        else:
+            data_source = data_source.view(-1,1)
+            data_target = data_target.view(-1,1)
 
 
         if self.region_generator is not None:

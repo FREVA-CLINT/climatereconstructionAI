@@ -9,18 +9,13 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from . import config as cfg
-from .loss import get_loss
-from .metrics.get_metrics import get_metrics
-from .model.net import CRAINet
-from .model.net_grid import net_grid 
+
 from .utils import twriter, early_stopping
 from .utils.evaluation import create_snapshot_image
 from .utils.io import load_ckpt, load_model, save_ckpt
 from .utils.netcdfloader_trans import NetCDFLoader, InfiniteSampler
 
 import climatereconstructionai.model.transformer_net as nt
-import climatereconstructionai.utils.grid_utils as gu
-
 
 
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
@@ -41,7 +36,7 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
         return lr_factor
 
 
-def train(arg_file=None):
+def train_transformer(arg_file=None):
     cfg.set_train_args(arg_file)
 
     with open(cfg.transformer_settings,'r') as file:
@@ -223,4 +218,4 @@ def train(arg_file=None):
 
 
 if __name__ == "__main__":
-    train()
+    train_transformer()
