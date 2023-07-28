@@ -127,7 +127,7 @@ class RelPositionEmbedder_phys_log(nn.Module):
         dist_log = dist_log * torch.tensor(self.n_pos_emb/2)
 
         dist_log[sgn<0] = dist_log[sgn < 0] + (self.n_pos_emb/2 - 1)
-        dist_log[sgn>0] = (self.n_pos_emb/2 - 1) - dist_log[sgn > 0]
+        dist_log[sgn>=0] = (self.n_pos_emb/2 - 1) - dist_log[sgn >= 0]
 
         embeddings = self.embeddings_table[dist_log.long()]
         #embeddings=dist_log

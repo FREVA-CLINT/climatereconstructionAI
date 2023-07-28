@@ -12,7 +12,7 @@ from . import config as cfg
 from .loss import get_loss
 from .metrics.get_metrics import get_metrics
 from .model.net import CRAINet
-from .model.net_grid import net_grid 
+
 from .utils import twriter, early_stopping
 from .utils.evaluation import create_snapshot_image
 from .utils.io import load_ckpt, load_model, save_ckpt
