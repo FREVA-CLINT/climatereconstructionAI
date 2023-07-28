@@ -174,12 +174,12 @@ def train_transformer(arg_file=None):
             output, debug_dict = model(source.to(cfg.device), dataset_val.coord_dict)
 
             if True:
-                torch.save(debug_dict,'debug_dict.pt')
-                torch.save(dataset_val.coord_dict,'coord_dict.pt')
-                torch.save(output, 'output.pt')
-                torch.save(target, 'target.pt')
-                np.savetxt('losses_val.txt',np.array(val_losses_save))
-                np.savetxt('losses_train.txt',np.array(train_losses_save))
+                torch.save(debug_dict, os.path.join(cfg.snapshot_dir,'debug_dict.pt'))
+                torch.save(dataset_val.coord_dict,os.path.join(cfg.snapshot_dir,'coord_dict.pt'))
+                torch.save(output, os.path.join(cfg.snapshot_dir,'output.pt'))
+                torch.save(target, os.path.join(cfg.snapshot_dir,'target.pt'))
+                np.savetxt(os.path.join(cfg.snapshot_dir,'losses_val.txt'),np.array(val_losses_save))
+                np.savetxt(os.path.join(cfg.snapshot_dir,'losses_train.txt'),np.array(train_losses_save))
 
             val_loss = torch.tensor(val_losses).mean(dim=0)
             val_loss = dict(zip(train_loss.keys(), val_loss))
