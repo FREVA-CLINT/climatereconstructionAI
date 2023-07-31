@@ -367,7 +367,7 @@ class interpolator(nn.Module):
 
         out_tensor = torch.zeros(b,t,1)
         for sample_idx, x_ in enumerate(x):
-            LinInter = inter.LinearNDInterpolator(list(zip(coord_source[0].squeeze(), coord_source[1].squeeze())), x_)
-            out_tensor[sample_idx] = torch.tensor(LinInter(coord_target[0], coord_target[1]))
+            LinInter = inter.LinearNDInterpolator(list(zip(coord_source[0].squeeze().cpu(), coord_source[1].squeeze().cpu())), x_.cpu())
+            out_tensor[sample_idx] = torch.tensor(LinInter(coord_target[0].cpu(), coord_target[1].cpu()))
 
         return out_tensor.to(self.device)
