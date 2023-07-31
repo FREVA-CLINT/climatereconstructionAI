@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import scipy.interpolate as inter
+
 radius_earth = 6371
 
 
@@ -43,7 +45,8 @@ def scaled_dot_product_rpe_swin(q, k, v, b, logit_scale=None):
     else:
         attn = torch.matmul(q, k.transpose(-2, -1))
         attn = (attn)/torch.sqrt(torch.tensor(d_z))
-
+    
+   # b,n,s,s = attn.shape
     attn =  attn + b
 
     attn = F.softmax(attn, dim=-1)
@@ -87,7 +90,7 @@ class PositionEmbedder_phys_log(nn.Module):
         self.embeddings_table = nn.Parameter(torch.Tensor(n_pos_emb + 1, n_heads))
         nn.init.xavier_uniform_(self.embeddings_table)
 
-    def forward(self, d_mat):
+    def forward(self, d_mat, return_emb_idx=False):
         
         d_mat_pos = (d_mat-self.min_pos_phys) / (self.max_pos_phys - self.min_pos_phys)
     
@@ -96,7 +99,10 @@ class PositionEmbedder_phys_log(nn.Module):
         
         embeddings = self.embeddings_table[d_mat_clipped.long()]
 
-        return embeddings,d_mat_clipped.long()
+        if return_emb_idx:
+            return embeddings, d_mat_clipped.long()
+        else:
+            return embeddings
 
 
 class RelPositionEmbedder_phys_log(nn.Module):
@@ -113,7 +119,7 @@ class RelPositionEmbedder_phys_log(nn.Module):
         self.embeddings_table = nn.Parameter(torch.Tensor(n_pos_emb + 1, n_heads))
         nn.init.xavier_uniform_(self.embeddings_table)
 
-    def forward(self, d_mat):
+    def forward(self, d_mat, return_emb_idx=False):
        
         sgn = torch.sign(d_mat)
 
@@ -131,7 +137,11 @@ class RelPositionEmbedder_phys_log(nn.Module):
 
         embeddings = self.embeddings_table[dist_log.long()]
         #embeddings=dist_log
-        return embeddings, dist_log.long()
+
+        if return_emb_idx:
+            return embeddings, dist_log.long()
+        else:
+            return embeddings
 
 class RelativePositionEmbedder_polar(nn.Module):
     def __init__(self, settings, rot_emb_table=None, distance_emb_table=None):
@@ -207,17 +217,26 @@ class RelativePositionEmbedder_cart(nn.Module):
             self.emb_table_lat = emb_table_lat
 
 
-    def forward(self, d_mat_lon, d_mat_lat):
+    def forward(self, d_mat_lon, d_mat_lat, return_emb_idx=False):
         
-        a_lon, idx_lon = self.emb_table_lon(d_mat_lon)
-        a_lat, idx_lat = self.emb_table_lat(d_mat_lat)
+        a_lon = self.emb_table_lon(d_mat_lon, return_emb_idx=return_emb_idx)
+        a_lat = self.emb_table_lat(d_mat_lat, return_emb_idx=return_emb_idx)
+
+        if return_emb_idx:
+            idx_lon = a_lon[1]
+            a_lon = a_lon[0]
+            idx_lat = a_lat[1]
+            a_lat = a_lat[0]
 
         if self.use_mlp:
-           rpe = self.rpe_mlp(torch.concat((a_lon, a_lat),dim=2))
+           rpe = self.rpe_mlp(torch.concat((a_lon, a_lat),dim=-1).squeeze())
         else:
             rpe = (a_lon + a_lat)
 
-        return rpe, (idx_lon,idx_lat)
+        if return_emb_idx:
+            return rpe, (idx_lon,idx_lat)
+        else:
+            return rpe
   
 
 class SelfAttentionRPPEBlock(nn.Module):
@@ -260,7 +279,7 @@ class MultiHeadAttentionBlock(nn.Module):
         else:
             self.logit_scale = None
 
-    def forward(self, q, k, v, rel_coords):
+    def forward(self, q, k, v, rel_coords, return_debug=False):
         # batch, sequence length, embedding dimension
         b, t, e = q.shape
         b, s, e = k.shape
@@ -270,22 +289,29 @@ class MultiHeadAttentionBlock(nn.Module):
         k = k.reshape(b, s, self.n_heads, self.head_dim).permute(0,2,1,3)
         v = v.reshape(b, s, self.n_heads, self.head_dim).permute(0,2,1,3)
 
-        rel_pos_bias, rel_pos_bias_idx = self.RPE_phys(rel_coords[0], rel_coords[1])
+        if return_debug:
+            rel_pos_bias, rel_pos_bias_idx = self.RPE_phys(rel_coords[0], rel_coords[1], return_emb_idx=return_debug)
 
-        if len(rel_pos_bias.shape)>3:
-            rel_pos_bias = rel_pos_bias.permute(0,-1,1,2)
         else:
-            rel_pos_bias = rel_pos_bias.permute(-1,0,1)
+            rel_pos_bias = self.RPE_phys(rel_coords[0], rel_coords[1])
 
-        values, att = scaled_dot_product_rpe_swin(q, k, v, rel_pos_bias, self.logit_scale)
+        rel_pos_bias = rel_pos_bias.view(-1,self.n_heads,s,s)
+
+        if return_debug:
+            values, att = scaled_dot_product_rpe_swin(q, k, v, rel_pos_bias, self.logit_scale)
+        else:
+            values = scaled_dot_product_rpe_swin(q, k, v, rel_pos_bias, self.logit_scale)[0]
            
         values = values.permute(0,2,1,3)
         values = values.reshape(b, t, self.head_dim*self.n_heads)
 
         x = self.output_projection(values)
 
-        return x , att, rel_pos_bias, rel_pos_bias_idx
-
+        if return_debug:
+            return x , att, rel_pos_bias, rel_pos_bias_idx
+        else:
+            return x    
+        
     
 class nearest_proj_layer(nn.Module):
     def __init__(self, inter_dim):
@@ -306,3 +332,42 @@ class nearest_proj_layer(nn.Module):
             x_nearest = x.view(b,-1)[:,indices.view(-1)].view(b,t,self.inter_dim)
 
         return torch.matmul(x_nearest, self.simple_proj)
+
+
+class nn_layer(nn.Module):
+    def __init__(self, nh):
+        super().__init__()
+
+        self.nh = nh
+
+    def forward(self, x, d_lon, d_lat):
+        b,s,e = x.shape
+        d_mat = (d_lon**2 + d_lat**2).sqrt()
+        t = d_mat.shape[-2] 
+
+        indices_dist = d_mat.topk(self.nh, largest=False).indices
+        indices_dlon = d_lon.abs().topk(self.nh, largest=False).indices
+        indices_dlat = d_lat.abs().topk(self.nh, largest=False).indices
+
+        x_nearest = x.view(b,-1)[:,indices_dist.view(-1)].view(b,t,self.nh,1)
+
+        return x_nearest, indices_dist, indices_dlon, indices_dlat
+    
+
+class interpolator(nn.Module):
+    def __init__(self,device):
+        super().__init__()
+
+        self.device = device
+
+    def forward(self, x, coord_source, coord_target):
+        
+        b,s,e = x.shape
+        e,t = coord_target[0].shape 
+
+        out_tensor = torch.zeros(b,t,1)
+        for sample_idx, x_ in enumerate(x):
+            LinInter = inter.LinearNDInterpolator(list(zip(coord_source[0].squeeze(), coord_source[1].squeeze())), x_)
+            out_tensor[sample_idx] = torch.tensor(LinInter(coord_target[0], coord_target[1]))
+
+        return out_tensor.to(self.device)

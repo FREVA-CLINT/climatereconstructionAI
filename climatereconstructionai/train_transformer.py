@@ -15,7 +15,7 @@ from .utils.evaluation import create_snapshot_image
 from .utils.io import load_ckpt, load_model, save_ckpt
 from .utils.netcdfloader_trans import NetCDFLoader, InfiniteSampler
 
-import climatereconstructionai.model.transformer_net as nt
+import climatereconstructionai.model.transformer_net_2 as nt
 
 
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
@@ -140,7 +140,7 @@ def train_transformer(arg_file=None):
                 dataset_train.generate_region()
         source, target =  next(iterator_train)
 
-        output = model(source.to(cfg.device), dataset_train.coord_dict)[0]
+        output = model(source.to(cfg.device), dataset_train.coord_dict)
 
         optimizer.zero_grad()
         loss = loss_fcn(output.view(cfg.batch_size,-1), target.view(cfg.batch_size,-1).to(cfg.device))
@@ -164,14 +164,14 @@ def train_transformer(arg_file=None):
             for _ in range(cfg.n_iters_val):
                 source, target =  next(iterator_val)
                 with torch.no_grad():
-                    output = model(source.to(cfg.device), dataset_val.coord_dict)[0]
+                    output = model(source.to(cfg.device), dataset_val.coord_dict)
                     loss = loss_fcn(output.view(cfg.batch_size,-1), target.view(cfg.batch_size,-1).to(cfg.device))
-                    val_loss = {'total': loss, 'valid': loss}
+                    val_loss = {'total': loss.item(), 'valid': loss.item()}
 
                 val_losses.append(list(val_loss.values()))
 
-            val_losses_save.append(val_loss['total'].item())
-            output, debug_dict = model(source.to(cfg.device), dataset_val.coord_dict)
+            val_losses_save.append(val_loss['total'])
+            output, debug_dict = model(source.to(cfg.device), dataset_val.coord_dict, return_debug=True)
 
             if True:
                 torch.save(debug_dict, os.path.join(cfg.snapshot_dir,'debug_dict.pt'))
@@ -184,7 +184,7 @@ def train_transformer(arg_file=None):
             val_loss = torch.tensor(val_losses).mean(dim=0)
             val_loss = dict(zip(train_loss.keys(), val_loss))
 
-            early_stop.update(val_loss['total'].item(), n_iter, model_save=model)
+            early_stop.update(val_loss['total'], n_iter, model_save=model)
 
             writer.update_scalars(val_loss, n_iter, 'val')
 
