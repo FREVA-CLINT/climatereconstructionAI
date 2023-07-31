@@ -58,13 +58,13 @@ def scaled_dot_product_rpe_swin(q, k, v, b, logit_scale=None):
 
 class PositionEmbedder_phys(nn.Module):
 
-    def __init__(self, min_pos_phys, max_pos_phys, n_pos_emb, n_heads=10):
+    def __init__(self, min_pos_phys, max_pos_phys, n_pos_emb, n_heads=10,device='cpu'):
         super().__init__()
         self.max_pos_phys = max_pos_phys
         self.min_pos_phys = min_pos_phys
         self.n_pos_emb = n_pos_emb
         
-        self.embeddings_table = nn.Parameter(torch.Tensor(n_pos_emb + 1, n_heads))
+        self.embeddings_table = nn.Parameter(torch.Tensor(n_pos_emb + 1, n_heads)).to(device)
         nn.init.xavier_uniform_(self.embeddings_table)
 
 
@@ -81,13 +81,13 @@ class PositionEmbedder_phys(nn.Module):
 
 class PositionEmbedder_phys_log(nn.Module):
 
-    def __init__(self, min_pos_phys, max_pos_phys, n_pos_emb, n_heads=10):
+    def __init__(self, min_pos_phys, max_pos_phys, n_pos_emb, n_heads=10, device='cpu'):
         super().__init__()
         self.max_pos_phys = max_pos_phys
         self.min_pos_phys = min_pos_phys
         self.n_pos_emb = n_pos_emb
 
-        self.embeddings_table = nn.Parameter(torch.Tensor(n_pos_emb + 1, n_heads))
+        self.embeddings_table = nn.Parameter(torch.Tensor(n_pos_emb + 1, n_heads)).to(device)
         nn.init.xavier_uniform_(self.embeddings_table)
 
     def forward(self, d_mat, return_emb_idx=False):
@@ -107,16 +107,16 @@ class PositionEmbedder_phys_log(nn.Module):
 
 class RelPositionEmbedder_phys_log(nn.Module):
 
-    def __init__(self, min_dist_phys, max_dist_phys, n_pos_emb, n_heads=10):
+    def __init__(self, min_dist_phys, max_dist_phys, n_pos_emb, n_heads=10, device='cpu'):
         super().__init__()
         self.max_pos_phys = max_dist_phys
         self.min_pos_phys = min_dist_phys
         self.n_pos_emb = n_pos_emb
 
-        self.rng_dist_log = torch.tensor([min_dist_phys, max_dist_phys]).log()
+        self.rng_dist_log = torch.tensor([min_dist_phys, max_dist_phys]).log().to(device)
         self.phys_log_scale = torch.logspace(self.rng_dist_log[0], self.rng_dist_log[1], (n_pos_emb)//2+1, base=torch.e)
  
-        self.embeddings_table = nn.Parameter(torch.Tensor(n_pos_emb + 1, n_heads))
+        self.embeddings_table = nn.Parameter(torch.Tensor(n_pos_emb + 1, n_heads)).to(device)
         nn.init.xavier_uniform_(self.embeddings_table)
 
     def forward(self, d_mat, return_emb_idx=False):
@@ -187,7 +187,7 @@ class RelativePositionEmbedder_polar(nn.Module):
         return rpe.permute(2,0,1), (idx_d,idx_phi)
 
 class RelativePositionEmbedder_cart(nn.Module):
-    def __init__(self, settings, emb_table_lon=None, emb_table_lat=None):
+    def __init__(self, settings, emb_table_lon=None, emb_table_lat=None, device='cpu'):
         super().__init__()
 
         max_dist=settings['max_dist']
@@ -207,12 +207,12 @@ class RelativePositionEmbedder_cart(nn.Module):
             self.rpe_mlp = nn.Identity()
 
         if emb_table_lon is None:
-            self.emb_table_lon = RelPositionEmbedder_phys_log(min_dist/radius_earth, max_dist/radius_earth, n_dist, n_heads=n_heads_pos)
+            self.emb_table_lon = RelPositionEmbedder_phys_log(min_dist/radius_earth, max_dist/radius_earth, n_dist, n_heads=n_heads_pos,device=device)
         else:
             self.emb_table_lon = emb_table_lon
         
         if emb_table_lat is None:
-            self.emb_table_lat = RelPositionEmbedder_phys_log(min_dist/radius_earth, max_dist/radius_earth, n_dist, n_heads=n_heads_pos)
+            self.emb_table_lat = RelPositionEmbedder_phys_log(min_dist/radius_earth, max_dist/radius_earth, n_dist, n_heads=n_heads_pos,device=device)
         else:
             self.emb_table_lat = emb_table_lat
 

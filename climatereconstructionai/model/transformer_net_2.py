@@ -104,7 +104,7 @@ class CRTransNet(nn.Module):
             emb_class = helpers.RelativePositionEmbedder_cart
 
         model_settings['embeddings']['rel']['emb_dim'] = n_heads
-        self.RPE_phys = emb_class(model_settings['embeddings']['rel'])
+        self.RPE_phys = emb_class(model_settings['embeddings']['rel'], device=cfg.device)
 
         self.input_net = Input_Net(
            nh=nh)
