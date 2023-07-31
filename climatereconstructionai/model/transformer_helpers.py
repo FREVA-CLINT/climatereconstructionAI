@@ -295,7 +295,10 @@ class MultiHeadAttentionBlock(nn.Module):
         else:
             rel_pos_bias = self.RPE_phys(rel_coords[0], rel_coords[1])
 
-        rel_pos_bias = rel_pos_bias.view(-1,self.n_heads,s,s)
+        if len(rel_pos_bias.shape)>3:
+            rel_pos_bias = rel_pos_bias.permute(0,3,1,2)
+        else:
+            rel_pos_bias = rel_pos_bias.permute(-1,0,1)
 
         if return_debug:
             values, att = scaled_dot_product_rpe_swin(q, k, v, rel_pos_bias, self.logit_scale)
