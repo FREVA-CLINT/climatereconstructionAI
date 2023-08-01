@@ -32,15 +32,19 @@ class Input_Net(nn.Module):
 
 
 class CRTransNetBlock(nn.Module):
-    def __init__(self, input_dim, model_dim, ff_dim, RPE_phys, n_heads=10, dropout=0.1, is_final_layer=False, logit_scale=True):
+    def __init__(self, input_dim, model_dim, ff_dim, RPE_phys, output_dim=None, n_heads=10, dropout=0.1, is_final_layer=False, logit_scale=True):
         super().__init__()
 
         self.is_final_layer = is_final_layer
 
+        if output_dim is None:
+            output_dim = input_dim
+       
+        self.input_dim = input_dim
+
         self.q = nn.Linear(input_dim, model_dim)
         self.k = nn.Linear(input_dim, model_dim)
         self.v = nn.Linear(input_dim, model_dim)
-
 
         self.att_layer = helpers.MultiHeadAttentionBlock(
             model_dim, input_dim, RPE_phys, n_heads, logit_scale=logit_scale
@@ -50,20 +54,29 @@ class CRTransNetBlock(nn.Module):
             nn.Linear(input_dim, ff_dim),
             nn.Dropout(dropout),
             nn.ReLU(inplace=True),
-            nn.Linear(ff_dim, input_dim),
+            nn.Linear(ff_dim, output_dim),
             nn.ReLU(inplace=True)
         )
 
-        if is_final_layer:
-            self.norm1 = nn.Identity()
-            self.norm2 = nn.Identity()
+        if input_dim>1:
+            self.norm1 = nn.LayerNorm(output_dim)
+            self.dropout1 = nn.Dropout(dropout)
         else:
-            self.norm1 = nn.LayerNorm(input_dim)
-            self.norm2 = nn.LayerNorm(input_dim)
+            self.norm2 = nn.Identity()
+            self.dropout1 = nn.Identity()
 
-        self.dropout = nn.Dropout(dropout)
+        self.norm1 = nn.Identity()
+        if output_dim>1:
+            self.norm2 = nn.LayerNorm(output_dim)
+            self.dropout2 = nn.Dropout(dropout)
+        else:
+            self.norm2 = nn.Identity()
+            self.dropout2 = nn.Identity()
 
-    def forward(self, x, rel_coords, return_debug=False):
+        self.diff = True if input_dim==output_dim else False
+            
+
+    def forward(self, x, rel_coords, xv=None, return_debug=False):
         
         q = self.q(x)
         k = self.k(x)
@@ -74,14 +87,15 @@ class CRTransNetBlock(nn.Module):
         else:
             att_out = self.att_layer(q, k, v, rel_coords, return_debug=return_debug)[0]
 
-        x = x + self.dropout(att_out)
+        x = x + self.dropout1(att_out)
         x = self.norm1(x)
 
-        if self.is_final_layer:
-            x = x + self.mlp_layer(x)  
+        if self.diff:
+            x = x + self.dropout2(self.mlp_layer(x))
         else:
-           x = x + self.dropout(self.mlp_layer(x))
-           x = self.norm2(x)
+            x = self.dropout2(self.mlp_layer(x))
+
+        x = self.norm2(x)
 
         if return_debug:
             return x, att, rel_emb
@@ -107,9 +121,8 @@ class CRTransNet(nn.Module):
         self.RPE_phys = emb_class(model_settings['embeddings']['rel'], device=cfg.device)
 
         self.input_net = Input_Net(
-           nh=nh)
+           nh=nh, input_dropout=model_settings['input_dropout'])
 
-        
         self.LocalBlocks = nn.ModuleList()
 
         for _ in range(model_settings['local']['n_layers']):
@@ -120,16 +133,9 @@ class CRTransNet(nn.Module):
                 ff_dim=model_settings['local']['ff_dim'],
                 n_heads=n_heads,
                 dropout=dropout,
-                is_final_layer=True,
                 logit_scale=model_settings['logit_scale'])
             
             self.LocalBlocks.append(LocalBlock)
-
-        
-        if self.pass_source:
-            input_dim_grid=nh
-        else:
-            input_dim_grid = 1
 
         if not model_settings['share_rel_emb']:
             self.RPE_phys_hr = emb_class(model_settings['embeddings']['rel'], device=cfg.device)
@@ -138,14 +144,18 @@ class CRTransNet(nn.Module):
 
         self.GridBlocks = nn.ModuleList()
         for k in range(model_settings['grid']['n_layers']):
+            if k==model_settings['grid']['n_layers']-1:
+                output_dim = 1
+            else:
+                output_dim = nh
             GridBlock = CRTransNetBlock(
-                    input_dim=input_dim_grid,
+                    input_dim=nh,
+                    output_dim=output_dim,
                     model_dim=model_settings['grid']['model_dim'],
                     RPE_phys=self.RPE_phys_hr,
                     ff_dim=model_settings['grid']['ff_dim'],
                     n_heads=n_heads,
                     dropout=dropout,
-                    is_final_layer=False,
                     logit_scale=model_settings['logit_scale'])
             self.GridBlocks.append(GridBlock)
 
@@ -158,14 +168,8 @@ class CRTransNet(nn.Module):
                     ff_dim=model_settings['grid']['ff_dim'],
                     n_heads=n_heads,
                     dropout=dropout,
-                    is_final_layer=True,
                     logit_scale=model_settings['logit_scale'])
-            self.GridBlocks_out.append(GridBlock_out)
-
-        self.mlp_out = nn.Sequential(nn.Linear(nh,1),nn.ReLU(inplace=True))
-
-
-        
+            self.GridBlocks_out.append(GridBlock_out)       
 
     def forward(self, x, coord_dict, return_debug=False):
         b,s,e = x.shape
@@ -192,14 +196,10 @@ class CRTransNet(nn.Module):
                 x, att, rel_emb =  block(x, [d_lon, d_lat], return_debug=return_debug)
                 atts.append(att)
                 rel_embs.append(rel_emb)
-
             else:
                 x =  block(x, [d_lon, d_lat], return_debug=return_debug)
 
         x = x.reshape(b,t,nh)
-
-        if not self.pass_source:
-            x = x_inter + self.mlp_out(x)
         
         d_lon = coord_dict['rel']['target'][0]
         d_lat = coord_dict['rel']['target'][1]
@@ -211,9 +211,8 @@ class CRTransNet(nn.Module):
                 rel_embs.append(rel_emb)
             else:
                 x =  block(x, [d_lon, d_lat], return_debug=return_debug)
-
-        if self.pass_source:
-            x = x_inter + self.mlp_out(x)
+        
+        x = x_inter + x
 
         for block in self.GridBlocks_out:
             if return_debug:
