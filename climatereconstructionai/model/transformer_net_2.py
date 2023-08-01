@@ -70,21 +70,21 @@ class CRTransNetBlock(nn.Module):
         v = self.v(x)
 
         if return_debug:
-            att_out, att, rel_emb, b_emb = self.att_layer(q, k, v, rel_coords, return_debug=return_debug)
+            att_out, att, rel_emb = self.att_layer(q, k, v, rel_coords, return_debug=return_debug)
         else:
             att_out = self.att_layer(q, k, v, rel_coords, return_debug=return_debug)[0]
 
         x = x + self.dropout(att_out)
         x = self.norm1(x)
 
-       # if self.is_final_layer:
-        x = x + self.mlp_layer(x)  
-        #else:
-        #    x = x + self.dropout(self.mlp_layer(x))
-        #x = self.norm2(x)
+        if self.is_final_layer:
+            x = x + self.mlp_layer(x)  
+        else:
+           x = x + self.dropout(self.mlp_layer(x))
+           x = self.norm2(x)
 
         if return_debug:
-            return x, att, rel_emb, b_emb
+            return x, att, rel_emb
         else:
             return x
 
@@ -98,10 +98,10 @@ class CRTransNet(nn.Module):
         nh = model_settings['local']['nh']
         self.pass_source = model_settings['pass_source']
 
-        if model_settings['embeddings']['rel']['polar']:
-            emb_class = helpers.RelativePositionEmbedder_polar
+        if model_settings['embeddings']['rel']['use_mlp']:
+            emb_class = helpers.RelativePositionEmbedder_mlp
         else:
-            emb_class = helpers.RelativePositionEmbedder_cart
+            emb_class = helpers.RelativePositionEmbedder_par
 
         model_settings['embeddings']['rel']['emb_dim'] = n_heads
         self.RPE_phys = emb_class(model_settings['embeddings']['rel'], device=cfg.device)
@@ -131,21 +131,40 @@ class CRTransNet(nn.Module):
         else:
             input_dim_grid = 1
 
+        if not model_settings['share_rel_emb']:
+            self.RPE_phys_hr = emb_class(model_settings['embeddings']['rel'], device=cfg.device)
+        else:
+            self.RPE_phys_hr = self.RPE_phys
+
         self.GridBlocks = nn.ModuleList()
-        for _ in range(model_settings['grid']['n_layers']):
+        for k in range(model_settings['grid']['n_layers']):
             GridBlock = CRTransNetBlock(
                     input_dim=input_dim_grid,
                     model_dim=model_settings['grid']['model_dim'],
-                    RPE_phys=self.RPE_phys,
+                    RPE_phys=self.RPE_phys_hr,
                     ff_dim=model_settings['grid']['ff_dim'],
                     n_heads=n_heads,
                     dropout=dropout,
                     is_final_layer=False,
                     logit_scale=model_settings['logit_scale'])
             self.GridBlocks.append(GridBlock)
-        
+
+        self.GridBlocks_out = nn.ModuleList()
+        for _ in range(model_settings['grid_out']['n_layers']):
+            GridBlock_out = CRTransNetBlock(
+                    input_dim=1,
+                    model_dim=model_settings['grid']['model_dim'],
+                    RPE_phys=self.RPE_phys_hr,
+                    ff_dim=model_settings['grid']['ff_dim'],
+                    n_heads=n_heads,
+                    dropout=dropout,
+                    is_final_layer=True,
+                    logit_scale=model_settings['logit_scale'])
+            self.GridBlocks_out.append(GridBlock_out)
 
         self.mlp_out = nn.Sequential(nn.Linear(nh,1),nn.ReLU(inplace=True))
+
+
         
 
     def forward(self, x, coord_dict, return_debug=False):
@@ -161,18 +180,23 @@ class CRTransNet(nn.Module):
 
         b,t,nh,e = x.shape
 
-        x = x.view(-1,nh,e)
+        x = x.reshape(b*t,nh,e)
         d_lon = d_lon.repeat(b,1,1)
         d_lat = d_lat.repeat(b,1,1)
 
+        rel_embs = []
+        atts = []
 
         for block in self.LocalBlocks:
             if return_debug:
-                x, att, rel_emb, b_emb =  block(x, [d_lon, d_lat], return_debug=return_debug)
+                x, att, rel_emb =  block(x, [d_lon, d_lat], return_debug=return_debug)
+                atts.append(att)
+                rel_embs.append(rel_emb)
+
             else:
                 x =  block(x, [d_lon, d_lat], return_debug=return_debug)
 
-        x = x.view(b,t,nh)
+        x = x.reshape(b,t,nh)
 
         if not self.pass_source:
             x = x_inter + self.mlp_out(x)
@@ -182,21 +206,27 @@ class CRTransNet(nn.Module):
 
         for block in self.GridBlocks:
             if return_debug:
-                x, att, rel_emb, b_emb =  block(x, [d_lon, d_lat], return_debug=return_debug)
+                x, att, rel_emb =  block(x, [d_lon, d_lat], return_debug=return_debug)
+                atts.append(att)
+                rel_embs.append(rel_emb)
             else:
                 x =  block(x, [d_lon, d_lat], return_debug=return_debug)
 
         if self.pass_source:
             x = x_inter + self.mlp_out(x)
 
-        if return_debug:
-            debug_dict = {'RPE_emb_table': {'lat':self.RPE_phys.emb_table_lon.embeddings_table,'lon':self.RPE_phys.emb_table_lat.embeddings_table},
-                    'att_mixed': att,
-                    'rel_emb':rel_emb,
-                    'b_emb': b_emb
-                    }
-            return x, debug_dict
+        for block in self.GridBlocks_out:
+            if return_debug:
+                x, att, rel_emb =  block(x, [d_lon, d_lat], return_debug=return_debug)
+                atts.append(att)
+                rel_embs.append(rel_emb)
 
+            else:
+                x =  block(x, [d_lon, d_lat], return_debug=return_debug)
+
+        if return_debug:
+            debug_dict = {'atts': atts, 'rel_embs':rel_embs}
+            return x, debug_dict
         else:
             return x
     

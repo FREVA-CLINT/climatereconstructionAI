@@ -16,25 +16,7 @@ from .utils.io import load_ckpt, load_model, save_ckpt
 from .utils.netcdfloader_trans import NetCDFLoader, InfiniteSampler
 
 import climatereconstructionai.model.transformer_net_2 as nt
-
-
-class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
-
-    def __init__(self, optimizer, warmup, max_iters):
-        self.warmup = warmup
-        self.max_num_iters = max_iters
-        super().__init__(optimizer)
-
-    def get_lr(self):
-        lr_factor = self.get_lr_factor(epoch=self.last_epoch)
-        return [base_lr * lr_factor for base_lr in self.base_lrs]
-
-    def get_lr_factor(self, epoch):
-        lr_factor = 0.5 * (1 + np.cos(np.pi * epoch / self.max_num_iters))
-        if epoch <= self.warmup:
-            lr_factor *= epoch * 1.0 / self.warmup
-        return lr_factor
-
+    
 
 def train_transformer(arg_file=None):
     cfg.set_train_args(arg_file)
@@ -102,9 +84,9 @@ def train_transformer(arg_file=None):
 
     early_stop = early_stopping.early_stopping()
     
-  
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=settings['optimization']['lr'],weight_decay=0.05)
-    lr_scheduler = CosineWarmupScheduler(optimizer=optimizer, warmup=settings['optimization']['warmup_iters'], max_iters=settings['optimization']['max_iters_warmup'])
+
+    lr_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1/settings['optimization']["T_warmup"], end_factor=1, total_iters=settings['optimization']["T_warmup"])
 
     start_iter = 0
     if cfg.resume_iter:

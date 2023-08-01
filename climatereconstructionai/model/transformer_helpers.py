@@ -143,76 +143,48 @@ class RelPositionEmbedder_phys_log(nn.Module):
         else:
             return embeddings
 
-class RelativePositionEmbedder_polar(nn.Module):
-    def __init__(self, settings, rot_emb_table=None, distance_emb_table=None):
+
+class RelativePositionEmbedder_mlp(nn.Module):
+    def __init__(self, settings, emb_table_lon=None, emb_table_lat=None, device='cpu'):
         super().__init__()
-
-        max_dist=settings['max_dist']
-        n_dist=settings['n_dist']
-        n_phi=settings['n_phi']
-        use_mlp=settings['use_mlp']
+ 
         emb_dim=settings['emb_dim']
+        self.rpe_mlp = nn.Sequential(nn.Linear(2, settings['mlp_hidden_dim'], bias=True), nn.ReLU(inplace=True), nn.Linear(settings['mlp_hidden_dim'], emb_dim), nn.Sigmoid())
+       
 
-        self.use_mlp = use_mlp
-        self.n_heads = emb_dim
-
-        if use_mlp:
-            n_heads_pos = 1
-            self.rpe_mlp = nn.Sequential(nn.Linear(2, settings['mlp_hidden_dim'], bias=True), nn.ReLU(inplace=True), nn.Linear(settings['mlp_hidden_dim'], emb_dim))
-        else:
-            n_heads_pos = emb_dim
-            self.rpe_mlp = nn.Identity()
-
-        if distance_emb_table is None:
-            self.distance_emb_table = PositionEmbedder_phys_log(0, max_dist/radius_earth, n_dist, n_heads=n_heads_pos)
-        else:
-            self.distance_emb_table = distance_emb_table
+    def forward(self, d_mat_lon, d_mat_lat):
         
-        if rot_emb_table is None:
-            self.rot_emb_table = PositionEmbedder_phys(-torch.pi, torch.pi, n_phi, n_heads=n_heads_pos)
-        else:
-            self.rot_emb_table = rot_emb_table
+        d_mat_lon = conv_coordinates(d_mat_lon).float()
+        d_mat_lat = conv_coordinates(d_mat_lat).float()
+                      
+        rpe = self.rpe_mlp(torch.concat((d_mat_lon.unsqueeze(dim=-1), d_mat_lat.unsqueeze(dim=-1)),dim=-1).squeeze())
+    
+        return rpe
+  
+def conv_coordinates(coords):
+    sign = torch.sign(coords)
+    coords_log_m = torch.log10(1000.*6371.*(coords.abs()))
+    coords_log_m = torch.clamp(coords_log_m, min=0)
+    return sign * coords_log_m
 
-
-    def forward(self, d_mat, phi_mat):
-        
-        a_d,idx_d  = self.distance_emb_table(d_mat)
-        a_phi,idx_phi = self.rot_emb_table(phi_mat)
-
-        if self.use_mlp:
-            rpe = self.rpe_mlp(torch.concat((a_d, a_phi),dim=3))
-        else:
-            rpe = (a_d + a_phi)
-
-        return rpe.permute(2,0,1), (idx_d,idx_phi)
-
-class RelativePositionEmbedder_cart(nn.Module):
+class RelativePositionEmbedder_par(nn.Module):
     def __init__(self, settings, emb_table_lon=None, emb_table_lat=None, device='cpu'):
         super().__init__()
 
         max_dist=settings['max_dist']
         n_dist=settings['n_dist']
-        use_mlp=settings['use_mlp']
         emb_dim=settings['emb_dim']
         min_dist=settings['min_dist']
         
-        self.use_mlp = use_mlp
         self.n_heads = emb_dim
 
-        if use_mlp:
-            n_heads_pos = 1
-            self.rpe_mlp = nn.Sequential(nn.Linear(2, settings['mlp_hidden_dim'], bias=True), nn.ReLU(inplace=True), nn.Linear(settings['mlp_hidden_dim'], emb_dim))
-        else:
-            n_heads_pos = emb_dim
-            self.rpe_mlp = nn.Identity()
-
         if emb_table_lon is None:
-            self.emb_table_lon = RelPositionEmbedder_phys_log(min_dist/radius_earth, max_dist/radius_earth, n_dist, n_heads=n_heads_pos,device=device)
+            self.emb_table_lon = RelPositionEmbedder_phys_log(min_dist/radius_earth, max_dist/radius_earth, n_dist, n_heads=emb_dim,device=device)
         else:
             self.emb_table_lon = emb_table_lon
         
         if emb_table_lat is None:
-            self.emb_table_lat = RelPositionEmbedder_phys_log(min_dist/radius_earth, max_dist/radius_earth, n_dist, n_heads=n_heads_pos,device=device)
+            self.emb_table_lat = RelPositionEmbedder_phys_log(min_dist/radius_earth, max_dist/radius_earth, n_dist, n_heads=emb_dim,device=device)
         else:
             self.emb_table_lat = emb_table_lat
 
@@ -221,23 +193,20 @@ class RelativePositionEmbedder_cart(nn.Module):
         
         a_lon = self.emb_table_lon(d_mat_lon, return_emb_idx=return_emb_idx)
         a_lat = self.emb_table_lat(d_mat_lat, return_emb_idx=return_emb_idx)
-
+   
         if return_emb_idx:
             idx_lon = a_lon[1]
             a_lon = a_lon[0]
             idx_lat = a_lat[1]
             a_lat = a_lat[0]
 
-        if self.use_mlp:
-           rpe = self.rpe_mlp(torch.concat((a_lon, a_lat),dim=-1).squeeze())
-        else:
-            rpe = (a_lon + a_lat)
+        rpe = a_lon + a_lat
 
         if return_emb_idx:
             return rpe, (idx_lon,idx_lat)
         else:
             return rpe
-  
+
 
 class SelfAttentionRPPEBlock(nn.Module):
     def __init__(self, input_dim, embed_dim, output_dim):
@@ -289,11 +258,7 @@ class MultiHeadAttentionBlock(nn.Module):
         k = k.reshape(b, s, self.n_heads, self.head_dim).permute(0,2,1,3)
         v = v.reshape(b, s, self.n_heads, self.head_dim).permute(0,2,1,3)
 
-        if return_debug:
-            rel_pos_bias, rel_pos_bias_idx = self.RPE_phys(rel_coords[0], rel_coords[1], return_emb_idx=return_debug)
-
-        else:
-            rel_pos_bias = self.RPE_phys(rel_coords[0], rel_coords[1])
+        rel_pos_bias = self.RPE_phys(rel_coords[0], rel_coords[1])
 
         if len(rel_pos_bias.shape)>3:
             rel_pos_bias = rel_pos_bias.permute(0,3,1,2)
@@ -311,7 +276,7 @@ class MultiHeadAttentionBlock(nn.Module):
         x = self.output_projection(values)
 
         if return_debug:
-            return x , att, rel_pos_bias, rel_pos_bias_idx
+            return x , att, rel_pos_bias
         else:
             return x    
         
