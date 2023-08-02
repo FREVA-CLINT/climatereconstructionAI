@@ -31,6 +31,33 @@ class Input_Net(nn.Module):
         return x_nearest, x_inter, indices_dist, indices_lon, indices_lat
 
 
+class feature_net(nn.Module):
+    def __init__(self, in_feat, out_feat, k_size, dropout=0):
+        super().__init__()
+
+        self.in_feat=in_feat
+        self.out_feat=out_feat
+        self.norm_in = nn.LayerNorm(k_size)
+        self.norm_out = nn.LayerNorm(out_feat)
+
+        self.conv1 = nn.Sequential(nn.Conv1d(in_feat, out_feat, kernel_size=k_size, bias=False))
+        
+        self.dropout = nn.Dropout(dropout) if dropout >0 else nn.Identity()
+        
+    def forward(self, x):
+        bs,nh,e = x.shape
+
+        x = x - x.transpose(-1,-2)
+        x = self.norm_in(x)
+        x = x.reshape(bs*nh,1,nh)
+
+        x = self.conv1(x)
+
+        x = x.reshape(bs,nh,self.out_feat)
+        x = self.norm_out(x)
+
+        return x
+
 class CRTransNetBlock(nn.Module):
     def __init__(self, input_dim, model_dim, ff_dim, RPE_phys, output_dim=None, n_heads=10, dropout=0.1, is_final_layer=False, logit_scale=True):
         super().__init__()
@@ -123,15 +150,16 @@ class CRTransNet(nn.Module):
         self.input_net = Input_Net(
            nh=nh, input_dropout=model_settings['input_dropout'])
 
-        self.LocalBlocks = nn.ModuleList()
+        self.feat_net = feature_net(1, out_feat=model_settings['local']['model_dim'], k_size=nh)
 
+        self.LocalBlocks = nn.ModuleList()
         for k in range(model_settings['local']['n_layers']):
             if k==model_settings['local']['n_layers']-1:
                 output_dim = 1
             else:
-                output_dim = nh
+                output_dim = model_settings['local']['model_dim']
             LocalBlock = CRTransNetBlock(
-                input_dim=nh,
+                input_dim=model_settings['local']['model_dim'],
                 output_dim=output_dim,
                 model_dim=model_settings['local']['model_dim'],
                 RPE_phys=self.RPE_phys,
@@ -146,6 +174,11 @@ class CRTransNet(nn.Module):
             self.RPE_phys_hr = emb_class(model_settings['embeddings']['rel'], device=cfg.device)
         else:
             self.RPE_phys_hr = self.RPE_phys
+
+        if model_settings['grid']['n_layers']==0:
+            self.out_mlp = nn.Sequential(nn.Linear(nh,1),nn.ReLU(inplace=True))
+        else:
+            self.out_mlp = nn.Identity()
 
         self.GridBlocks = nn.ModuleList()
         for k in range(model_settings['grid']['n_layers']):
@@ -181,7 +214,6 @@ class CRTransNet(nn.Module):
         
         x, x_inter, indices_dist, _ ,_ = self.input_net(x, coord_dict)
 
-        x = x - x.transpose(-1,-2)
 
         d_lon = coord_dict['abs']['source'][0].view(-1)[indices_dist].unsqueeze(dim=-1)
         d_lat = coord_dict['abs']['source'][1].view(-1)[indices_dist].unsqueeze(dim=-1)
@@ -191,9 +223,12 @@ class CRTransNet(nn.Module):
 
         b,t,nh,e = x.shape
 
+        
         x = x.reshape(b*t,nh,e)
         d_lon = d_lon.repeat(b, 1, 1)
         d_lat = d_lat.repeat(b, 1, 1)
+
+        x = self.feat_net(x)
 
         rel_embs = []
         atts = []
@@ -207,6 +242,8 @@ class CRTransNet(nn.Module):
                 x =  block(x, [d_lon, d_lat], return_debug=return_debug)
 
         x = x.reshape(b, t, nh)
+        
+        x = self.out_mlp(x)
         
         d_lon = coord_dict['rel']['target'][0]
         d_lat = coord_dict['rel']['target'][1]

@@ -250,9 +250,9 @@ class MultiHeadAttentionBlock(nn.Module):
 
     def forward(self, q, k, v, rel_coords, return_debug=False):
         # batch, sequence length, embedding dimension
-        b, t, e = q.shape
-        b, s, e = k.shape
-        b, s, e = v.shape
+        b, t = q.shape[0], q.shape[1] 
+        b, s = k.shape[0], k.shape[1] 
+        b, s = v.shape[0], v.shape[1] 
 
         q = q.reshape(b, t, self.n_heads, self.head_dim).permute(0,2,1,3)
         k = k.reshape(b, s, self.n_heads, self.head_dim).permute(0,2,1,3)
