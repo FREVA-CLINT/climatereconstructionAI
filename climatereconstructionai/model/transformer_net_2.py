@@ -125,9 +125,14 @@ class CRTransNet(nn.Module):
 
         self.LocalBlocks = nn.ModuleList()
 
-        for _ in range(model_settings['local']['n_layers']):
+        for k in range(model_settings['local']['n_layers']):
+            if k==model_settings['local']['n_layers']-1:
+                output_dim = 1
+            else:
+                output_dim = nh
             LocalBlock = CRTransNetBlock(
-                input_dim=1,
+                input_dim=nh,
+                output_dim=output_dim,
                 model_dim=model_settings['local']['model_dim'],
                 RPE_phys=self.RPE_phys,
                 ff_dim=model_settings['local']['ff_dim'],
@@ -176,6 +181,8 @@ class CRTransNet(nn.Module):
         
         x, x_inter, indices_dist, _ ,_ = self.input_net(x, coord_dict)
 
+        x = x - x.transpose(-1,-2)
+
         d_lon = coord_dict['abs']['source'][0].view(-1)[indices_dist].unsqueeze(dim=-1)
         d_lat = coord_dict['abs']['source'][1].view(-1)[indices_dist].unsqueeze(dim=-1)
 
@@ -185,8 +192,8 @@ class CRTransNet(nn.Module):
         b,t,nh,e = x.shape
 
         x = x.reshape(b*t,nh,e)
-        d_lon = d_lon.repeat(b,1,1)
-        d_lat = d_lat.repeat(b,1,1)
+        d_lon = d_lon.repeat(b, 1, 1)
+        d_lat = d_lat.repeat(b, 1, 1)
 
         rel_embs = []
         atts = []
@@ -199,7 +206,7 @@ class CRTransNet(nn.Module):
             else:
                 x =  block(x, [d_lon, d_lat], return_debug=return_debug)
 
-        x = x.reshape(b,t,nh)
+        x = x.reshape(b, t, nh)
         
         d_lon = coord_dict['rel']['target'][0]
         d_lat = coord_dict['rel']['target'][1]
