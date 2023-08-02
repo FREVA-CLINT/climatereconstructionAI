@@ -64,7 +64,7 @@ class PositionEmbedder_phys(nn.Module):
         self.min_pos_phys = min_pos_phys
         self.n_pos_emb = n_pos_emb
         
-        self.embeddings_table = nn.Parameter(torch.Tensor(n_pos_emb + 1, n_heads)).to(device)
+        self.embeddings_table = nn.Parameter(torch.Tensor(n_pos_emb + 1, n_heads))
         nn.init.xavier_uniform_(self.embeddings_table)
 
 
@@ -87,7 +87,7 @@ class PositionEmbedder_phys_log(nn.Module):
         self.min_pos_phys = min_pos_phys
         self.n_pos_emb = n_pos_emb
 
-        self.embeddings_table = nn.Parameter(torch.Tensor(n_pos_emb + 1, n_heads)).to(device)
+        self.embeddings_table = nn.Parameter(torch.Tensor(n_pos_emb + 1, n_heads))
         nn.init.xavier_uniform_(self.embeddings_table)
 
     def forward(self, d_mat, return_emb_idx=False):
@@ -116,7 +116,7 @@ class RelPositionEmbedder_phys_log(nn.Module):
         self.rng_dist_log = torch.tensor([min_dist_phys, max_dist_phys]).log().to(device)
         self.phys_log_scale = torch.logspace(self.rng_dist_log[0], self.rng_dist_log[1], (n_pos_emb)//2+1, base=torch.e)
  
-        self.embeddings_table = nn.Parameter(torch.Tensor(n_pos_emb + 1, n_heads)).to(device)
+        self.embeddings_table = nn.Parameter(torch.Tensor(n_pos_emb + 1, n_heads))
         nn.init.xavier_uniform_(self.embeddings_table)
 
     def forward(self, d_mat, return_emb_idx=False):
