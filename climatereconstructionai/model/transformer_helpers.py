@@ -154,8 +154,8 @@ class RelativePositionEmbedder_mlp(nn.Module):
 
     def forward(self, d_mat_lon, d_mat_lat):
         
-        d_mat_lon = conv_coordinates(d_mat_lon)
-        d_mat_lat = conv_coordinates(d_mat_lat)
+        d_mat_lon = conv_coordinates_inv(d_mat_lon)
+        d_mat_lat = conv_coordinates_inv(d_mat_lat)
                       
         rpe = self.rpe_mlp(torch.concat((d_mat_lon.unsqueeze(dim=-1), d_mat_lat.unsqueeze(dim=-1)),dim=-1).squeeze())
     
@@ -166,6 +166,11 @@ def conv_coordinates(coords):
     coords_log_m = torch.log10(1000.*6371.*(coords.abs()))
     coords_log_m = torch.clamp(coords_log_m, min=0)
     return sign * coords_log_m
+
+def conv_coordinates_inv(coords, epsilon=1e-10):
+    sign = torch.sign(coords)
+    coords = sign*torch.log10(1/(coords.abs()+epsilon))   
+    return sign * coords
 
 class RelativePositionEmbedder_par(nn.Module):
     def __init__(self, settings, emb_table_lon=None, emb_table_lat=None, device='cpu'):
@@ -360,3 +365,41 @@ class interpolator_iwd(nn.Module):
         x = (x*dist_abs).sum(dim=2)
 
         return x
+    
+
+def knn(x, k):
+    inner = -2*torch.matmul(x.transpose(2, 1), x)
+    xx = torch.sum(x**2, dim=1, keepdim=True)
+    pairwise_distance = -xx - inner - xx.transpose(2, 1)
+ 
+    idx = pairwise_distance.topk(k=k, dim=-1)[1]   # (batch_size, num_points, k)
+    return idx
+
+
+def get_graph_feature(x, k=20, idx=None, dim9=False):
+    batch_size = x.size(0)
+    num_points = x.size(2)
+    x = x.view(batch_size, -1, num_points)
+    if idx is None:
+        if dim9 == False:
+            idx = knn(x, k=k)   # (batch_size, num_points, k)
+        else:
+            idx = knn(x[:, 6:], k=k)
+    device = torch.device('cuda')
+
+    idx_base = torch.arange(0, batch_size, device=device).view(-1, 1, 1)*num_points
+
+    idx = idx + idx_base
+
+    idx = idx.view(-1)
+ 
+    _, num_dims, _ = x.size()
+
+    x = x.transpose(2, 1).contiguous()   # (batch_size, num_points, num_dims)  -> (batch_size*num_points, num_dims) #   batch_size * num_points * k + range(0, batch_size*num_points)
+    feature = x.view(batch_size*num_points, -1)[idx, :]
+    feature = feature.view(batch_size, num_points, k, num_dims) 
+    x = x.view(batch_size, num_points, 1, num_dims).repeat(1, 1, k, 1)
+    
+    feature = torch.cat((feature-x, x), dim=3).permute(0, 3, 1, 2).contiguous()
+  
+    return feature

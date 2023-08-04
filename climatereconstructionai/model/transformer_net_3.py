@@ -165,8 +165,7 @@ class MSABlock(nn.Module):
             nn.Linear(input_dim, ff_dim),
             nn.Dropout(dropout),
             nn.ReLU(inplace=True),
-            nn.Linear(ff_dim, output_dim),
-            nn.ReLU(inplace=True)
+            nn.Linear(ff_dim, output_dim)
         )
 
         if input_dim>1:
@@ -241,7 +240,7 @@ class CRTransNet(nn.Module):
 
         self.nn_Block_source = nn_Block(nh_s, RPE_phys, dropout=dropout, n_heads=n_heads, n_feat_net=1, n_msa=2)
 
-        
+        self.activation_out = nn.ReLU()
         
         self.nn_Blocks_target = nn.ModuleList()
 
@@ -275,6 +274,7 @@ class CRTransNet(nn.Module):
             else:
                 x = x + Block_target(x, coord_dict['rel']['target'], coord_dict['abs']['target'], coord_dict['rel']['target'])
 
+        x = self.activation_out(x)
         if return_debug:
             debug_dict = {'atts': atts, 'rel_embs':rel_embs, 'x_inter':x_interpolated}
             #debug_dict = {'x_inter':x_interpolated}
