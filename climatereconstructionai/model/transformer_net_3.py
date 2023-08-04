@@ -224,7 +224,9 @@ class CRTransNet(nn.Module):
        
         dropout = model_settings['dropout']
         n_heads = model_settings['grid']['n_heads']
-        nh_s = model_settings['local']['nh']
+        nh_s = model_settings['local']['nh_source']
+        n_t = model_settings['local']['nh_target']
+        n_tb = model_settings['grid']['n_layers']
        
         if model_settings['embeddings']['rel']['use_mlp']:
             emb_class = helpers.RelativePositionEmbedder_mlp
@@ -239,8 +241,8 @@ class CRTransNet(nn.Module):
 
         self.nn_Block_source = nn_Block(nh_s, RPE_phys, dropout=dropout, n_heads=n_heads, n_feat_net=1, n_msa=2)
 
-        n_t = 32
-        n_tb = 4
+        
+        
         self.nn_Blocks_target = nn.ModuleList()
 
         for _ in range(n_tb):
