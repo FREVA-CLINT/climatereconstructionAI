@@ -206,12 +206,12 @@ class NetCDFLoader(Dataset):
         _, _, d_lons_t, d_lats_t = self.PosCalc(coord_dict['hr']['lons'], coord_dict['hr']['lats'], (coord_dict['seeds'][0]), (coord_dict['seeds'][1]))
 
          
-        rel_coords = {'source': [d_lon_lr_lr.to(cfg.device), d_lat_lr_lr.to(cfg.device)],
-                    'target': [d_lon_hr_hr.to(cfg.device), d_lat_hr_hr.to(cfg.device)],
-                    'target-source': [d_lon_lr_hr.to(cfg.device), d_lat_lr_hr.to(cfg.device)]}
+        rel_coords = {'source': [d_lon_lr_lr.float().to(cfg.device), d_lat_lr_lr.float().to(cfg.device)],
+                    'target': [d_lon_hr_hr.float().to(cfg.device), d_lat_hr_hr.float().to(cfg.device)],
+                    'target-source': [d_lon_lr_hr.float().to(cfg.device), d_lat_lr_hr.float().to(cfg.device)]}
         
-        abs_coords = {'source': [d_lons_s.to(cfg.device), d_lats_s.to(cfg.device)],
-                    'target': [d_lons_t.to(cfg.device), d_lats_t.to(cfg.device)]}
+        abs_coords = {'source': [d_lons_s.float().to(cfg.device), d_lats_s.float().to(cfg.device)],
+                    'target': [d_lons_t.float().to(cfg.device), d_lats_t.float().to(cfg.device)]}
         
         return {'rel': rel_coords, 'abs': abs_coords}
     

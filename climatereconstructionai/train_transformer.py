@@ -15,7 +15,7 @@ from .utils.evaluation import create_snapshot_image
 from .utils.io import load_ckpt, load_model, save_ckpt
 from .utils.netcdfloader_trans import NetCDFLoader, InfiniteSampler
 
-import climatereconstructionai.model.transformer_net_2 as nt
+import climatereconstructionai.model.transformer_net_3 as nt
     
 
 def train_transformer(arg_file=None):
@@ -62,13 +62,13 @@ def train_transformer(arg_file=None):
     iterator_train = iter(DataLoader(dataset_train, batch_size=cfg.batch_size,
                                      sampler=InfiniteSampler(len(dataset_train)),
                                      num_workers=cfg.n_threads, 
-                                     pin_memory=True if cfg.device != 'cpu' else False,
+                                     pin_memory=True if cfg.device == 'cuda' else False,
                                      pin_memory_device=cfg.device))
 
     iterator_val = iter(DataLoader(dataset_val, batch_size=cfg.batch_size,
                                    sampler=InfiniteSampler(len(dataset_val)),
                                    num_workers=cfg.n_threads,
-                                   pin_memory=True if cfg.device != 'cpu' else False,
+                                   pin_memory=True if cfg.device == 'cuda' else False,
                                    pin_memory_device=cfg.device))
 
     model = nt.CRTransNet(settings['model']).to(cfg.device)
@@ -160,6 +160,7 @@ def train_transformer(arg_file=None):
                 torch.save(dataset_val.coord_dict,os.path.join(cfg.snapshot_dir,'coord_dict.pt'))
                 torch.save(output, os.path.join(cfg.snapshot_dir,'output.pt'))
                 torch.save(target, os.path.join(cfg.snapshot_dir,'target.pt'))
+                torch.save(source, os.path.join(cfg.snapshot_dir,'source.pt'))
                 np.savetxt(os.path.join(cfg.snapshot_dir,'losses_val.txt'),np.array(val_losses_save))
                 np.savetxt(os.path.join(cfg.snapshot_dir,'losses_train.txt'),np.array(train_losses_save))
 

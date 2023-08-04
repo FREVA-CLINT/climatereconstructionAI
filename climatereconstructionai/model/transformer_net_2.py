@@ -14,7 +14,7 @@ class Input_Net(nn.Module):
 
         self.input_dropout = nn.Dropout(input_dropout)
 
-        self.interpolator = helpers.interpolator(cfg.device)
+        self.interpolator = helpers.interpolator_iwd(nh)
 
         self.nn_layer = helpers.nn_layer(nh)
 
@@ -22,11 +22,10 @@ class Input_Net(nn.Module):
         
         x = self.input_dropout(x)
 
-        b,t,e = x.shape
-        
+       
         x_nearest, indices_dist, indices_lon, indices_lat = self.nn_layer(x, coord_dict['rel']['target-source'][0], coord_dict['rel']['target-source'][1])
 
-        x_inter = self.interpolator(x, coord_dict['abs']['source'], coord_dict['abs']['target'])
+        x_inter = self.interpolator(x, coord_dict['rel']['target-source'])
 
         return x_nearest, x_inter, indices_dist, indices_lon, indices_lat
 
@@ -152,6 +151,9 @@ class CRTransNet(nn.Module):
 
         self.feat_net = feature_net(1, out_feat=model_settings['local']['model_dim'], k_size=nh)
 
+
+
+
         self.LocalBlocks = nn.ModuleList()
         for k in range(model_settings['local']['n_layers']):
             if k==model_settings['local']['n_layers']-1:
@@ -222,7 +224,6 @@ class CRTransNet(nn.Module):
         d_lat = d_lat - d_lat.transpose(1,-1)
 
         b,t,nh,e = x.shape
-
         
         x = x.reshape(b*t,nh,e)
         d_lon = d_lon.repeat(b, 1, 1)
@@ -268,7 +269,7 @@ class CRTransNet(nn.Module):
                 x =  block(x, [d_lon, d_lat], return_debug=return_debug)
 
         if return_debug:
-            debug_dict = {'atts': atts, 'rel_embs':rel_embs}
+            debug_dict = {'atts': atts, 'rel_embs':rel_embs, 'x_inter':x_inter}
             return x, debug_dict
         else:
             return x

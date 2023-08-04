@@ -149,13 +149,13 @@ class RelativePositionEmbedder_mlp(nn.Module):
         super().__init__()
  
         emb_dim=settings['emb_dim']
-        self.rpe_mlp = nn.Sequential(nn.Linear(2, settings['mlp_hidden_dim'], bias=True), nn.ReLU(inplace=True), nn.Linear(settings['mlp_hidden_dim'], emb_dim), nn.Sigmoid())
+        self.rpe_mlp = nn.Sequential(nn.Linear(2, settings['mlp_hidden_dim'], bias=False), nn.LeakyReLU(inplace=True, negative_slope=0.2), nn.Linear(settings['mlp_hidden_dim'], emb_dim, bias=False), nn.LeakyReLU(inplace=True, negative_slope=0.2))
        
 
     def forward(self, d_mat_lon, d_mat_lat):
         
-        d_mat_lon = conv_coordinates(d_mat_lon).float()
-        d_mat_lat = conv_coordinates(d_mat_lat).float()
+        d_mat_lon = conv_coordinates(d_mat_lon)
+        d_mat_lat = conv_coordinates(d_mat_lat)
                       
         rpe = self.rpe_mlp(torch.concat((d_mat_lon.unsqueeze(dim=-1), d_mat_lat.unsqueeze(dim=-1)),dim=-1).squeeze())
     
@@ -319,7 +319,7 @@ class nn_layer(nn.Module):
 
         x_nearest = x.view(b,-1)[:,indices_dist.view(-1)].view(b,t,self.nh,1)
 
-        return x_nearest, indices_dist, indices_dlon, indices_dlat
+        return x_nearest.float(), indices_dist, indices_dlon, indices_dlat
     
 
 class interpolator(nn.Module):
@@ -339,3 +339,24 @@ class interpolator(nn.Module):
             out_tensor[sample_idx] = torch.tensor(LinInter(coord_target[0].cpu(), coord_target[1].cpu()))
 
         return out_tensor.to(self.device)
+
+
+
+class interpolator_iwd(nn.Module):
+    def __init__(self, nh):
+        super().__init__()
+        self.nh = nh
+
+    def forward(self, x, coords_rel):
+
+        coords_dist = (coords_rel[0]**2 + coords_rel[1]**2).sqrt()
+        dist_abs, indices = torch.topk(coords_dist, self.nh, dim=1, largest=False)
+
+        dist_abs = 1/dist_abs**2
+        dist_abs = (dist_abs/dist_abs.sum(dim=1).view(-1,1)).unsqueeze(dim=2)
+
+        x = x[:,indices]
+
+        x = (x*dist_abs).sum(dim=2)
+
+        return x
