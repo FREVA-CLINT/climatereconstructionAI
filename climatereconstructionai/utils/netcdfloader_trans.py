@@ -33,26 +33,25 @@ class InfiniteSampler(Sampler):
                 order = np.random.permutation(n_samples) + cfg.time_steps[0]
                 i = 0
 
-
-class img_norm(torch.nn.Module):
-    def __init__(self):
+class ds_norm(torch.nn.Module):
+    def __init__(self, moments=tuple()):
         super().__init__()
-        self.moments = tuple()
-        
-    def __call__(self, img):
-        img_norm, moments = norm_img_mm(img, moments=self.moments)
         self.moments = moments
-        return img_norm
-    
-def norm_img_mm(image, min_max_output=(0,1), moments=tuple(), epsilon=1e-15):
-    if len(moments)==0:
-        img_norm = (image-image.min())/(epsilon + image.max()-image.min())
-        moments = (image.min(), image.max())
-    else:
-        img_norm = (image-moments[0])/(epsilon + moments[1]-moments[0])
+        
+    def __call__(self, data):
+        data_norm, self.moments = norm_mm(data, moments=self.moments)
+        return data_norm
 
-    img_norm = img_norm * (min_max_output[1] - min_max_output[0]) + min_max_output[0]
-    return img_norm, moments
+
+def norm_mm(data, min_max_output=(0,1), moments=tuple(), epsilon=1e-15):
+    if len(moments)==0:
+        #moments = (data.min(), data.max())
+        moments = (np.quantile(data, 0.1), np.quantile(data, 0.9))
+
+    data_norm = (data-moments[0])/(epsilon + moments[1]-moments[0])
+
+    data_norm = data_norm * (min_max_output[1] - min_max_output[0]) + min_max_output[0]
+    return data_norm, moments
 
 
 class FiniteSampler(Sampler):
@@ -115,7 +114,7 @@ def load_netcdf(path, data_names, data_types, keep_dss=False):
 
 
 class NetCDFLoader(Dataset):
-    def __init__(self, data_root, img_names_source, img_names_target, split, data_types, coord_names, random_region=None):
+    def __init__(self, data_root, img_names_source, img_names_target, split, data_types, coord_names, random_region=None, norm_stats=tuple()):
         super(NetCDFLoader, self).__init__()
         
         self.PosCalc = PositionCalculator()
@@ -148,32 +147,50 @@ class NetCDFLoader(Dataset):
 
         self.num_tp = self.ds_target[data_types[0]].shape[0]
 
+        lons_s = torch.tensor(self.ds_source[self.coord_names[0][0]].values)
+        lats_s = torch.tensor(self.ds_source[self.coord_names[0][1]].values)
+        lons_t = torch.tensor(self.ds_target[self.coord_names[1][0]].values)
+        lats_t = torch.tensor(self.ds_target[self.coord_names[1][1]].values)
+
+        if lons_s.max()>torch.pi:
+            lons_s = lons_s.deg2rad()
+            lats_s = lats_s.deg2rad()
+            lons_t = lons_t.deg2rad()
+            lats_t = lats_t.deg2rad()
+        
+        lo_s, la_s, lo_t, la_t = len(lons_s), len(lats_s), len(lons_t), len(lats_t)
+
+        if self.flatten:
+            lons_s = lons_s.flatten().repeat(la_s)
+            lats_s = lats_s.view(-1,1).repeat(1,lo_s).flatten()
+            lons_t = lons_t.flatten().repeat(la_t)
+            lats_t = lats_t.view(-1,1).repeat(1,lo_t).flatten()
+
         if random_region is not None:
-            self.region_generator = random_region_generator(torch.tensor(random_region['lon_range']), 
-                                                            torch.tensor(random_region['lat_range']),
-                                                            torch.tensor(self.ds_source[coord_names[0][0]].values),
-                                                            torch.tensor(self.ds_source[coord_names[0][1]].values),
-                                                            torch.tensor(self.ds_target[coord_names[1][0]].values),
-                                                            torch.tensor(self.ds_target[coord_names[1][1]].values),
-                                                            torch.tensor(random_region['radius_target']),
-                                                            torch.tensor(random_region['radius_factor']),
-                                                            torch.tensor(random_region['batch_size']))
+            if "n_points_hr" not in random_region.keys():
+                self.region_generator = random_region_generator(torch.tensor(random_region['lon_range']), 
+                                                                torch.tensor(random_region['lat_range']),
+                                                                lons_s,
+                                                                lats_s,
+                                                                lons_t,
+                                                                lats_t,
+                                                                torch.tensor(random_region['radius_factor']),
+                                                                torch.tensor(random_region['batch_size']),
+                                                                radius_target=torch.tensor(random_region['radius_target']))
+            else:
+                self.region_generator = random_region_generator(torch.tensor(random_region['lon_range']), 
+                                                                torch.tensor(random_region['lat_range']),
+                                                                lons_s,
+                                                                lats_s,
+                                                                lons_t,
+                                                                lats_t,
+                                                                torch.tensor(random_region['radius_factor']),
+                                                                n_points_hr=torch.tensor(random_region['n_points_hr']))
             self.coord_dict = {}
             self.generate_region()
 
         else:
             self.region_generator=None
-
-            lons_s = torch.tensor(self.ds_source[self.coord_names[0][0]].values)
-            lats_s = torch.tensor(self.ds_source[self.coord_names[0][1]].values)
-            lons_t = torch.tensor(self.ds_target[self.coord_names[1][0]].values)
-            lats_t = torch.tensor(self.ds_target[self.coord_names[1][1]].values)
-
-            if self.flatten:
-                lons_s = lons_s.flatten().repeat(len(lons_s))
-                lats_s = lats_s.flatten().repeat(len(lats_s))
-                lons_t = lons_t.flatten().repeat(len(lons_t))
-                lats_t = lats_t.flatten().repeat(len(lats_t))
 
             coord_dict_lr  = {'lons': lons_s,
                    'lats': lats_s}
@@ -185,6 +202,12 @@ class NetCDFLoader(Dataset):
 
             
             self.coord_dict = self.get_coords(coord_dict)
+        
+        value_data = np.concatenate([self.ds_source[data_types[0]].values.flatten(), self.ds_target[data_types[0]].values.flatten()])
+        self.normalizer = ds_norm(norm_stats)  
+        self.normalizer(value_data)
+
+
 
     def generate_region(self):
         self.region_dict = self.region_generator.generate()
@@ -221,6 +244,10 @@ class NetCDFLoader(Dataset):
         data_source = torch.tensor(self.ds_source[self.data_types[0]][index].values)
         data_target = torch.tensor(self.ds_target[self.data_types[0]][index].values)
 
+        if cfg.normalize_data:
+            data_source = self.normalizer(data_source)
+            data_target = self.normalizer(data_target)
+            
         if self.flatten:
             data_source = data_source.flatten().unsqueeze(dim=1)
             data_target = data_target.flatten().unsqueeze(dim=1)
@@ -230,14 +257,12 @@ class NetCDFLoader(Dataset):
 
 
         if self.region_generator is not None:
-            data_source = data_source.view(-1,1)
-            data_target = data_target.view(-1,1)
             data_source = data_source[self.region_dict['lr']['indices'][:,0]]
             data_target = data_target[self.region_dict['hr']['indices'][:,0]]
 
 
         if cfg.apply_img_norm:
-            norm = img_norm()
+            norm = ds_norm()
             data_source = norm(data_source)
             data_target = norm(data_target)
 

@@ -70,6 +70,8 @@ def train_transformer(arg_file=None):
                                    num_workers=cfg.n_threads,
                                    pin_memory=True if cfg.device == 'cuda' else False,
                                    pin_memory_device=cfg.device))
+    
+    train_stats = {"mean": dataset_train.normalizer.moments[0], "std": dataset_train.normalizer.moments[1]}
 
     model = nt.CRTransNet(settings['model']).to(cfg.device)
 
@@ -179,7 +181,7 @@ def train_transformer(arg_file=None):
                 create_snapshot_image(model, dataset_val, '{:s}/images/iter_{:d}'.format(cfg.snapshot_dir, n_iter))
 
         if n_iter % cfg.save_model_interval == 0:
-            save_ckpt('{:s}/ckpt/{:d}.pth'.format(cfg.snapshot_dir, n_iter), [],
+            save_ckpt('{:s}/ckpt/{:d}.pth'.format(cfg.snapshot_dir, n_iter), train_stats,
                       [(str(n_iter), n_iter, model, optimizer)])
 
         if n_iter in final_models:
@@ -190,12 +192,10 @@ def train_transformer(arg_file=None):
             model = early_stop.best_model
             break
 
-
-
-    save_ckpt('{:s}/ckpt/best.pth'.format(cfg.snapshot_dir), [],
+    save_ckpt('{:s}/ckpt/best.pth'.format(cfg.snapshot_dir), train_stats,
               [(str(n_iter), n_iter, early_stop.best_model, optimizer)])
 
-    save_ckpt('{:s}/ckpt/final.pth'.format(cfg.snapshot_dir), [], savelist)
+    save_ckpt('{:s}/ckpt/final.pth'.format(cfg.snapshot_dir), train_stats, savelist)
 
     writer.close()
 

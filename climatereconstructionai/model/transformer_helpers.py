@@ -376,7 +376,7 @@ def knn(x, k):
     return idx
 
 
-def get_graph_feature(x, k=20, idx=None, dim9=False):
+def get_graph_feature(x, k=20, idx=None, dim9=False, device="cpu"):
     batch_size = x.size(0)
     num_points = x.size(2)
     x = x.view(batch_size, -1, num_points)
@@ -385,7 +385,7 @@ def get_graph_feature(x, k=20, idx=None, dim9=False):
             idx = knn(x, k=k)   # (batch_size, num_points, k)
         else:
             idx = knn(x[:, 6:], k=k)
-    device = torch.device('cuda')
+    device = torch.device(device)
 
     idx_base = torch.arange(0, batch_size, device=device).view(-1, 1, 1)*num_points
 
