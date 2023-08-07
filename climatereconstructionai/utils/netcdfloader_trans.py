@@ -46,7 +46,7 @@ class ds_norm(torch.nn.Module):
 def norm_mm(data, min_max_output=(0,1), moments=tuple(), epsilon=1e-15):
     if len(moments)==0:
         #moments = (data.min(), data.max())
-        moments = (np.quantile(data, 0.1), np.quantile(data, 0.9))
+        moments = (np.quantile(data, 0.05), np.quantile(data, 0.95))
 
     data_norm = (data-moments[0])/(epsilon + moments[1]-moments[0])
 
