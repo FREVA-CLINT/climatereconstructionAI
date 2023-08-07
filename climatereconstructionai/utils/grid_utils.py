@@ -144,7 +144,7 @@ def get_regions(lons, lats, seeds_lon, seeds_lat, radius_region=None, n_points=N
 
     if n_points is None:
         distances, indices = torch.topk(d_mat, k=d_mat.shape[0], dim=0, largest=False)
-        distances *= radius_earth*2
+        distances *= radius_earth
         region_indices = distances.median(dim=1).values <= radius_region 
 
         distances_regions = distances[region_indices]
@@ -201,7 +201,7 @@ class PositionCalculator(nn.Module):
 
 
 class random_region_generator():
-    def __init__(self, lon_range, lat_range, lon_lr, lat_lr, lon_hr, lat_hr, radius_target, radius_factor, batch_size=1) -> None:
+    def __init__(self, lon_range, lat_range, lon_lr, lat_lr, lon_hr, lat_hr, radius_factor, radius_target=None, n_points_hr=None, batch_size=1) -> None:
         self.lon_range = lon_range
         self.lat_range = lat_range
         self.lon_lr = lon_lr
@@ -214,14 +214,14 @@ class random_region_generator():
 
         self.batch_size=batch_size
         self.n_points_lr = None
-        self.n_points_hr = None
+        self.n_points_hr = n_points_hr
     
     def generate(self):
         seeds_lon = torch.randint(self.lon_range[0],self.lon_range[1], size=(self.batch_size,1))
         seeds_lat = torch.randint(self.lat_range[0],self.lat_range[1], size=(self.batch_size,1))
 
   
-        distances_regions, indices_regions, lons_regions, lats_regions = get_regions(self.lon_hr, self.lat_hr, seeds_lon, seeds_lat, self.radius_target, n_points=self.n_points_hr, in_deg=True)
+        distances_regions, indices_regions, lons_regions, lats_regions = get_regions(self.lon_hr, self.lat_hr, seeds_lon, seeds_lat, radius_region=self.radius_target, n_points=self.n_points_hr, in_deg=True)
         self.n_points_hr = len(distances_regions)
 
         out_dict_hr = {'distances': distances_regions,
@@ -229,8 +229,12 @@ class random_region_generator():
                    'lons': lons_regions,
                    'lats': lats_regions}
         
-     
-        distances_regions, indices_regions, lons_regions, lats_regions = get_regions(self.lon_lr, self.lat_lr, seeds_lon, seeds_lat, self.radius_target*self.radius_factor,n_points=self.n_points_lr, in_deg=True)
+        if self.radius_target is None:
+            radius_lr = distances_regions.max()*self.radius_factor
+        else:
+            radius_lr = self.radius_target*self.radius_factor
+
+        distances_regions, indices_regions, lons_regions, lats_regions = get_regions(self.lon_lr, self.lat_lr, seeds_lon, seeds_lat, radius_region=radius_lr,n_points=self.n_points_lr, in_deg=True)
         self.n_points_lr = len(distances_regions)
 
         out_dict_lr = {'distances': distances_regions,
