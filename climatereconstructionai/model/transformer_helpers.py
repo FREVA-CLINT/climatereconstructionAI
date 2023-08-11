@@ -31,7 +31,7 @@ def scaled_dot_product_rpe(q, k, v, a_k, a_v):
     return values, attention
 
 
-def scaled_dot_product_rpe_swin(q, k, v, b, logit_scale=None):
+def scaled_dot_product_rpe_swin(q, k, v, b=None, logit_scale=None):
     # with relative position embeddings swin transformer (2022)
     
     # q is the size of (t, dk)
@@ -47,7 +47,8 @@ def scaled_dot_product_rpe_swin(q, k, v, b, logit_scale=None):
         attn = (attn)/torch.sqrt(torch.tensor(d_z))
     
    # b,n,s,s = attn.shape
-    attn =  attn + b
+    if b is not None:
+        attn =  attn + b
 
     attn = F.softmax(attn, dim=-1)
 
@@ -76,7 +77,7 @@ class PositionEmbedder_phys(nn.Module):
         
         embeddings = self.embeddings_table[d_mat_clipped.long()]
 
-        return embeddings,d_mat_clipped.long()
+        return embeddings, d_mat_clipped.long()
 
 
 class PositionEmbedder_phys_log(nn.Module):
@@ -144,13 +145,36 @@ class RelPositionEmbedder_phys_log(nn.Module):
             return embeddings
 
 
+class LinearPositionEmbedder_mlp(nn.Module):
+    def __init__(self, mdoel_dim, hidden_dim, device='cpu',conv_coordinates=False):
+        super().__init__()
+
+        self.conv_coordinates = conv_coordinates
+
+        self.rpe_mlp = nn.Sequential(
+            nn.Linear(2, hidden_dim, bias=False),
+            nn.LeakyReLU(inplace=True, negative_slope=0.2),
+            nn.Linear(hidden_dim, mdoel_dim, bias=False),
+            nn.Sigmoid())
+       
+
+    def forward(self, d_mat_lon, d_mat_lat):
+        
+        rpe = self.rpe_mlp(torch.concat((d_mat_lon.unsqueeze(dim=-1), d_mat_lat.unsqueeze(dim=-1)),dim=-1).squeeze())
+   
+        return rpe
+
 class RelativePositionEmbedder_mlp(nn.Module):
     def __init__(self, settings, emb_table_lon=None, emb_table_lat=None, device='cpu'):
         super().__init__()
  
         emb_dim=settings['emb_dim']
-        self.rpe_mlp = nn.Sequential(nn.Linear(2, settings['mlp_hidden_dim'], bias=False), nn.LeakyReLU(inplace=True, negative_slope=0.2), nn.Linear(settings['mlp_hidden_dim'], emb_dim, bias=False), nn.LeakyReLU(inplace=True, negative_slope=0.2))
-       
+
+        self.rpe_mlp = nn.Sequential(
+            nn.Linear(2, settings['mlp_hidden_dim'], bias=False),
+            nn.LeakyReLU(inplace=True, negative_slope=0.2),
+            nn.Linear(settings['mlp_hidden_dim'], emb_dim, bias=False),
+            nn.LeakyReLU(inplace=True, negative_slope=0.2))
 
     def forward(self, d_mat_lon, d_mat_lat):
         
@@ -238,13 +262,13 @@ class SelfAttentionRPPEBlock(nn.Module):
         return x 
 
 class MultiHeadAttentionBlock(nn.Module):
-    def __init__(self, model_dim, output_dim, RPE_phys, n_heads, logit_scale=False):
+    def __init__(self, model_dim, output_dim, n_heads, rel_pos=None, logit_scale=False, qkv_proj=False):
         super().__init__()
 
         self.n_heads = n_heads
         self.head_dim = model_dim // n_heads
 
-        self.RPE_phys = RPE_phys
+        self.rel_pos = rel_pos
                
         self.output_projection = nn.Linear(model_dim, output_dim)
         
@@ -252,23 +276,36 @@ class MultiHeadAttentionBlock(nn.Module):
             self.logit_scale = nn.Parameter(torch.log(10 * torch.ones((n_heads, 1, 1))))
         else:
             self.logit_scale = None
-
-    def forward(self, q, k, v, rel_coords, return_debug=False):
-        # batch, sequence length, embedding dimension
-        b, t = q.shape[0], q.shape[1] 
-        b, s = k.shape[0], k.shape[1] 
-        b, s = v.shape[0], v.shape[1] 
-
-        q = q.reshape(b, t, self.n_heads, self.head_dim).permute(0,2,1,3)
-        k = k.reshape(b, s, self.n_heads, self.head_dim).permute(0,2,1,3)
-        v = v.reshape(b, s, self.n_heads, self.head_dim).permute(0,2,1,3)
-
-        rel_pos_bias = self.RPE_phys(rel_coords[0], rel_coords[1])
-
-        if len(rel_pos_bias.shape)>3:
-            rel_pos_bias = rel_pos_bias.permute(0,3,1,2)
+        
+        if qkv_proj:
+            self.qkv_projection = nn.ModuleList([nn.Linear(model_dim, model_dim, bias=False)]*3)
         else:
-            rel_pos_bias = rel_pos_bias.permute(-1,0,1)
+            self.qkv_projection = nn.ModuleList([nn.Identity()]*3)
+
+
+    def forward(self, q, k, v, rel_coords=None, return_debug=False):
+        # batch, sequence length, embedding dimension
+        bq, t = q.shape[0], q.shape[1] 
+        bk, s = k.shape[0], k.shape[1] 
+        bv, s = v.shape[0], v.shape[1] 
+
+        q = self.qkv_projection[0](q)
+        k = self.qkv_projection[1](k)
+        v = self.qkv_projection[2](v)
+
+        q = q.reshape(bq, t, self.n_heads, self.head_dim).permute(0,2,1,3)
+        k = k.reshape(bk, s, self.n_heads, self.head_dim).permute(0,2,1,3)
+        v = v.reshape(bv, s, self.n_heads, self.head_dim).permute(0,2,1,3)
+
+        if self.rel_pos is not None:
+            rel_pos_bias = self.RPE_phys(rel_coords[0], rel_coords[1])
+
+            if len(rel_pos_bias.shape)>3:
+                rel_pos_bias = rel_pos_bias.permute(0,3,1,2)
+            else:
+                rel_pos_bias = rel_pos_bias.permute(-1,0,1)
+        else:
+            rel_pos_bias=None
 
         if return_debug:
             values, att = scaled_dot_product_rpe_swin(q, k, v, rel_pos_bias, self.logit_scale)
@@ -276,7 +313,7 @@ class MultiHeadAttentionBlock(nn.Module):
             values = scaled_dot_product_rpe_swin(q, k, v, rel_pos_bias, self.logit_scale)[0]
            
         values = values.permute(0,2,1,3)
-        values = values.reshape(b, t, self.head_dim*self.n_heads)
+        values = values.reshape(bv, t, self.head_dim*self.n_heads)
 
         x = self.output_projection(values)
 
@@ -318,11 +355,16 @@ class nn_layer(nn.Module):
         d_mat = (d_lon**2 + d_lat**2).sqrt()
         t = d_mat.shape[-2] 
 
+        if self.nh==-1:
+            self.nh = d_mat.shape[1]
         indices_dist = d_mat.topk(self.nh, largest=False).indices
         indices_dlon = d_lon.abs().topk(self.nh, largest=False).indices
         indices_dlat = d_lat.abs().topk(self.nh, largest=False).indices
 
-        x_nearest = x.view(b,-1)[:,indices_dist.view(-1)].view(b,t,self.nh,1)
+        if len(indices_dlon.shape)>2:
+            x_nearest = torch.gather(x.repeat(1,1,self.nh),dim=1,index=indices_dlon).view(b,t,self.nh,1)
+        else:
+            x_nearest = x.view(b,-1)[:,indices_dist.view(-1)].view(b,t,self.nh,1)
 
         return x_nearest.float(), indices_dist, indices_dlon, indices_dlat
     
@@ -357,7 +399,7 @@ class interpolator_iwd(nn.Module):
         coords_dist = (coords_rel[0]**2 + coords_rel[1]**2).sqrt()
         dist_abs, indices = torch.topk(coords_dist, self.nh, dim=1, largest=False)
 
-        dist_abs = 1/dist_abs**2
+        dist_abs = 1/(dist_abs+1e-15)**2
         dist_abs = (dist_abs/dist_abs.sum(dim=1).view(-1,1)).unsqueeze(dim=2)
 
         x = x[:,indices]
@@ -365,7 +407,7 @@ class interpolator_iwd(nn.Module):
         x = (x*dist_abs).sum(dim=2)
 
         return x
-    
+
 
 def knn(x, k):
     inner = -2*torch.matmul(x.transpose(2, 1), x)
