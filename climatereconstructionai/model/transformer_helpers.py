@@ -399,14 +399,15 @@ class interpolator_iwd(nn.Module):
         coords_dist = (coords_rel[0]**2 + coords_rel[1]**2).sqrt()
         dist_abs, indices = torch.topk(coords_dist, self.nh, dim=1, largest=False)
 
+        b, nh, t = dist_abs.shape
         dist_abs = 1/(dist_abs+1e-15)**2
-        dist_abs = (dist_abs/dist_abs.sum(dim=1).view(-1,1)).unsqueeze(dim=2)
+        dist_abs = (dist_abs.view(t,b,nh)/dist_abs.sum(dim=2)).view(b,t,nh)
 
-        x = x[:,indices]
+        x = torch.gather(x.repeat(1,1,self.nh),dim=1,index=indices.view(b,t,nh)).view(b,t,self.nh)
 
         x = (x*dist_abs).sum(dim=2)
 
-        return x
+        return x.unsqueeze(dim=-1)
 
 
 def knn(x, k):
