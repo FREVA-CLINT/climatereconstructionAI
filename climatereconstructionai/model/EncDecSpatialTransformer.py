@@ -81,7 +81,7 @@ class feature_net(nn.Module):
         b, n, nh, f = x.shape
 
         x_v = x[:,:,[0]].repeat(1,1,nh,1)
-        x = torch.cat(((x - x_v), x),dim=-1)
+        x = torch.cat(((x - x_v), x_v),dim=-1)
          
         x = x.permute(0,-1,1,2).contiguous()
 
@@ -149,7 +149,7 @@ class EncoderBlock(nn.Module):
         if return_debug:
             att_out, att, rel_emb = self.self_att_layer(q, k, x, return_debug=True)
         else:
-            att_out = self.self_att_layer(q, k, x)[0]
+            att_out = self.self_att_layer(q, k, x)
 
         x = x + self.dropout1(att_out)
         x = self.norm2(x)
@@ -206,9 +206,9 @@ class DecoderBlock(nn.Module):
         q = k = v = target
 
         if return_debug:
-            att_out, att, rel_emb = self.self_att_layer(q, k, v, return_debug=True)
+            att_out, att, rel_emb = self.self_att_layer(q, k, v, return_debug=return_debug)
         else:
-            att_out = self.self_att_layer(q, k, v)[0]
+            att_out = self.self_att_layer(q, k, v)
 
         target = target + self.dropout1(att_out)
 
@@ -216,7 +216,6 @@ class DecoderBlock(nn.Module):
 
         q = target2
         k = x + self.norm_target(pos_source)
-        #k = self.norm_target(pos_source)
         v = x
 
         if return_debug:
@@ -355,6 +354,7 @@ class SpatialTransNet(tm.transformer_model):
         if return_debug:
             atts = atts + out[1]
             out = out[0]
+            out_dec = out
 
         out = self.mlp_out(out)
 
@@ -369,7 +369,8 @@ class SpatialTransNet(tm.transformer_model):
             debug_dict = {'x_inter': x_inter,
                           'atts':atts,
                           'pos_source': pos_source,
-                          'pos_target': pos_target}
+                          'pos_target': pos_target,
+                          'out_dec': out_dec}
             
             return out, debug_dict
         else:
