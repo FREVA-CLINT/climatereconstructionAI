@@ -230,7 +230,7 @@ class random_region_generator():
                    'lats': lats_regions}
         
         if self.radius_target is None:
-            radius_lr = distances_regions.max()*self.radius_factor
+            radius_lr = (distances_regions.max()/2)*self.radius_factor
         else:
             radius_lr = self.radius_target*self.radius_factor
 

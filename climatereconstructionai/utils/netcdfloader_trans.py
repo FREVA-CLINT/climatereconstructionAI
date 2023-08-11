@@ -7,7 +7,6 @@ import xarray as xr
 from torch.utils.data import Dataset, Sampler
 
 from .netcdfchecker import dataset_formatter
-from .. import config as cfg
 from .grid_utils import random_region_generator, PositionCalculator
 
 
@@ -24,13 +23,13 @@ class InfiniteSampler(Sampler):
 
     def loop(self):
         i = 0
-        n_samples = self.num_samples - sum(cfg.time_steps)
-        order = np.random.permutation(n_samples) + cfg.time_steps[0]
+        n_samples = self.num_samples 
+        order = np.random.permutation(n_samples) 
         while True:
             yield order[i]
             i += 1
             if i >= n_samples:
-                order = np.random.permutation(n_samples) + cfg.time_steps[0]
+                order = np.random.permutation(n_samples) 
                 i = 0
 
 class ds_norm(torch.nn.Module):
@@ -60,7 +59,7 @@ class FiniteSampler(Sampler):
         self.num_samples = num_samples
 
     def __iter__(self):
-        return iter(range(cfg.time_steps[0], self.num_samples - cfg.time_steps[1]))
+        return iter(range(self.num_samples))
 
     def __len__(self):
         return self.num_samples
@@ -114,13 +113,16 @@ def load_netcdf(path, data_names, data_types, keep_dss=False):
 
 
 class NetCDFLoader(Dataset):
-    def __init__(self, data_root, img_names_source, img_names_target, split, data_types, coord_names, random_region=None, norm_stats=tuple()):
+    def __init__(self, data_root, img_names_source, img_names_target, split, data_types, coord_names, apply_img_norm=False, normalize_data=True, random_region=None, norm_stats=tuple(), device='cpu'):
         super(NetCDFLoader, self).__init__()
         
+        self.device=device
         self.PosCalc = PositionCalculator()
-        self.random = random.Random(cfg.loop_random_seed)
+        self.random = random.Random()
         self.data_types = data_types
         self.coord_names = coord_names
+        self.apply_img_norm = apply_img_norm
+        self.normalize_data = normalize_data
 
         if 'lon' in self.coord_names[0]:
             self.flatten=True
@@ -218,24 +220,26 @@ class NetCDFLoader(Dataset):
 
     def get_coords(self, coord_dict):
 
-        _, _, d_lon_lr_hr, d_lat_lr_hr = self.PosCalc(coord_dict['lr']['lons'], coord_dict['lr']['lats'], coord_dict['hr']['lons'], coord_dict['hr']['lats'])
+        d_mat_lr_hr, d_phi_lr_hr, d_lon_lr_hr, d_lat_lr_hr = self.PosCalc(coord_dict['lr']['lons'], coord_dict['lr']['lats'], coord_dict['hr']['lons'], coord_dict['hr']['lats'])
 
-        _, _, d_lon_lr_lr, d_lat_lr_lr  = self.PosCalc(coord_dict['lr']['lons'], coord_dict['lr']['lats'], coord_dict['lr']['lons'], coord_dict['lr']['lats'])
+        d_mat_lr_hr, d_phi_lr_lr, d_lon_lr_lr, d_lat_lr_lr  = self.PosCalc(coord_dict['lr']['lons'], coord_dict['lr']['lats'], coord_dict['lr']['lons'], coord_dict['lr']['lats'])
 
-        _, _, d_lon_hr_hr, d_lat_hr_hr  = self.PosCalc(coord_dict['hr']['lons'], coord_dict['hr']['lats'], coord_dict['hr']['lons'], coord_dict['hr']['lats'])
+        d_mat_hr_hr, d_phi_hr_hr, d_lon_hr_hr, d_lat_hr_hr  = self.PosCalc(coord_dict['hr']['lons'], coord_dict['hr']['lats'], coord_dict['hr']['lons'], coord_dict['hr']['lats'])
 
         _, _, d_lons_s, d_lats_s = self.PosCalc(coord_dict['lr']['lons'], coord_dict['lr']['lats'], (coord_dict['seeds'][0]), (coord_dict['seeds'][1]))
 
         _, _, d_lons_t, d_lats_t = self.PosCalc(coord_dict['hr']['lons'], coord_dict['hr']['lats'], (coord_dict['seeds'][0]), (coord_dict['seeds'][1]))
 
          
-        rel_coords = {'source': [d_lon_lr_lr.float().to(cfg.device), d_lat_lr_lr.float().to(cfg.device)],
-                    'target': [d_lon_hr_hr.float().to(cfg.device), d_lat_hr_hr.float().to(cfg.device)],
-                    'target-source': [d_lon_lr_hr.float().to(cfg.device), d_lat_lr_hr.float().to(cfg.device)]}
+        rel_coords = {'source': [d_lon_lr_lr.float().to(self.device), d_lat_lr_lr.float().to(self.device)],
+                    'target': [d_lon_hr_hr.float().to(self.device), d_lat_hr_hr.float().to(self.device)],
+                    'target-source': [d_lon_lr_hr.float().to(self.device), d_lat_lr_hr.float().to(self.device)]}
         
-        abs_coords = {'source': [d_lons_s.float().to(cfg.device), d_lats_s.float().to(cfg.device)],
-                    'target': [d_lons_t.float().to(cfg.device), d_lats_t.float().to(cfg.device)]}
+        abs_coords = {'source': [d_lons_s.float().to(self.device), d_lats_s.float().to(self.device)],
+                    'target': [d_lons_t.float().to(self.device), d_lats_t.float().to(self.device)]}
         
+        #abs_coords_true = {'source': [d_lons_s.float().to(self.device), d_lats_s.float().to(self.device)],
+        #            'target': [d_lons_t.float().to(self.device), d_lats_t.float().to(self.device)]}
         return {'rel': rel_coords, 'abs': abs_coords}
     
 
@@ -244,7 +248,7 @@ class NetCDFLoader(Dataset):
         data_source = torch.tensor(self.ds_source[self.data_types[0]][index].values)
         data_target = torch.tensor(self.ds_target[self.data_types[0]][index].values)
 
-        if cfg.normalize_data:
+        if self.normalize_data:
             data_source = self.normalizer(data_source)
             data_target = self.normalizer(data_target)
             
@@ -261,7 +265,7 @@ class NetCDFLoader(Dataset):
             data_target = data_target[self.region_dict['hr']['indices'][:,0]]
 
 
-        if cfg.apply_img_norm:
+        if self.apply_img_norm:
             norm = ds_norm()
             data_source = norm(data_source)
             data_target = norm(data_target)
