@@ -400,12 +400,12 @@ class interpolator_iwd(nn.Module):
         dist_abs, indices = torch.topk(coords_dist, self.nh, dim=1, largest=False)
 
         b, nh, t = dist_abs.shape
-        dist_abs = 1/(dist_abs+1e-15)**2
-        dist_abs = (dist_abs.view(t,b,nh)/dist_abs.sum(dim=2)).view(b,t,nh)
+        dist_abs = 1/(dist_abs+1e-10)**2
+        dist_abs = (dist_abs/dist_abs.sum(dim=1).unsqueeze(dim=1)).view(b,t,nh)
 
         x = torch.gather(x.repeat(1,1,self.nh),dim=1,index=indices.view(b,t,nh)).view(b,t,self.nh)
 
-        x = (x*dist_abs).sum(dim=2)
+        x = (x*F.softmax(dist_abs,dim=2)).sum(dim=2)
 
         return x.unsqueeze(dim=-1)
 
