@@ -10,6 +10,24 @@ from .utils.io import save_ckpt
 from .utils.netcdfloader_trans import NetCDFLoader, InfiniteSampler
 
 
+class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
+
+    def __init__(self, optimizer, warmup, max_iters):
+        self.warmup = warmup
+        self.max_num_iters = max_iters
+        super().__init__(optimizer)
+
+    def get_lr(self):
+        lr_factor = self.get_lr_factor(epoch=self.last_epoch)
+        return [base_lr * lr_factor for base_lr in self.base_lrs]
+
+    def get_lr_factor(self, epoch):
+        lr_factor = 0.5 * (1 + np.cos(np.pi * epoch / self.max_num_iters))
+        if epoch <= self.warmup:
+            lr_factor *= epoch * 1.0 / self.warmup
+        return lr_factor
+
+
 def gather_rel_coords(c, indices):
     c = c[indices].squeeze()
     c = torch.gather(c, dim=2, index=indices.permute(0,2,1).repeat(1,indices.shape[1],1))
@@ -113,9 +131,9 @@ def train(model, training_settings, model_hparams={}):
   
     early_stop = early_stopping.early_stopping(training_settings['early_stopping_delta'], training_settings['early_stopping_patience'])
     
-    optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=training_settings['lr'],weight_decay=0.05)
+    optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=training_settings['lr'], weight_decay=0.05)
 
-    lr_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1/training_settings["T_warmup"], end_factor=1, total_iters=training_settings["T_warmup"])
+    lr_scheduler = CosineWarmupScheduler(optimizer, training_settings["T_warmup"], training_settings['max_iter'])
 
     start_iter = 0
 
@@ -126,12 +144,14 @@ def train(model, training_settings, model_hparams={}):
 
     train_losses_save = []
     val_losses_save = []
+    lrs = []
     for i in pbar:
      
         n_iter = i + 1
         lr_val = optimizer.param_groups[0]['lr']
         pbar.set_description("lr = {:.1e}".format(lr_val))
 
+        lrs.append(lr_val)
         # train model
         model.train()
 
@@ -161,7 +181,6 @@ def train(model, training_settings, model_hparams={}):
             model.eval()
             val_losses = []
 
-
             for _ in range(training_settings['n_iters_val']):
 
                 if 'random_region' in training_settings.keys():
@@ -190,6 +209,7 @@ def train(model, training_settings, model_hparams={}):
                 torch.save(source, os.path.join(log_dir,'source.pt'))
                 np.savetxt(os.path.join(log_dir,'losses_val.txt'),np.array(val_losses_save))
                 np.savetxt(os.path.join(log_dir,'losses_train.txt'),np.array(train_losses_save))
+                np.savetxt(os.path.join(log_dir,'lrs.txt'),np.array(lrs))
 
             val_loss = torch.tensor(val_losses).mean(dim=0)
             val_loss = dict(zip(train_loss.keys(), val_loss))
