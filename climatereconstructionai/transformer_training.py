@@ -31,8 +31,8 @@ def input_dropout(x, coord_dict, perc=0.2, device='cpu'):
     coord_dict['rel']['source'][0] = gather_rel_coords(coord_dict['rel']['source'][0], indices)
     coord_dict['rel']['source'][1] = gather_rel_coords(coord_dict['rel']['source'][1], indices)
 
-    coord_dict['rel']['target-source'][0] = coord_dict['rel']['target-source'][0].squeeze()[indices.squeeze()]
-    coord_dict['rel']['target-source'][1] = coord_dict['rel']['target-source'][1].squeeze()[indices.squeeze()]
+    coord_dict['rel']['target-source'][0] = coord_dict['rel']['target-source'][0].squeeze().T[indices.squeeze()]
+    coord_dict['rel']['target-source'][1] = coord_dict['rel']['target-source'][1].squeeze().T[indices.squeeze()]
 
     coord_dict['abs']['source'][0] = coord_dict['abs']['source'][0].squeeze()[indices]
     coord_dict['abs']['source'][1] = coord_dict['abs']['source'][1].squeeze()[indices]
