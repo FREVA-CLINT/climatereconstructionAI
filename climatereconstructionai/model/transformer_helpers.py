@@ -390,22 +390,32 @@ class interpolator(nn.Module):
 
 
 class interpolator_iwd(nn.Module):
-    def __init__(self, nh):
+    def __init__(self, nh, local_lambda=1e-4):
         super().__init__()
         self.nh = nh
+        self.local_lambda = local_lambda
 
     def forward(self, x, coords_rel):
+        
+        b,s,e = x.shape
+        t = coords_rel[0].shape[-1]
 
         coords_dist = (coords_rel[0]**2 + coords_rel[1]**2).sqrt()
-        dist_abs, indices = torch.topk(coords_dist, self.nh, dim=1, largest=False)
 
-        b, nh, t = dist_abs.shape
-        dist_abs = 1/(dist_abs+1e-10)**2
-        dist_abs = (dist_abs/dist_abs.sum(dim=1).unsqueeze(dim=1)).view(b,t,nh)
+        c_val, c_ix = coords_dist.sort(dim=1, descending=False)
 
-        x = torch.gather(x.repeat(1,1,self.nh),dim=1,index=indices.view(b,t,nh)).view(b,t,self.nh)
+        idx_shift = (torch.arange(c_ix.shape[0])*s).view(b,1,1)
 
-        x = (x*F.softmax(dist_abs,dim=2)).sum(dim=2)
+        c_ix_shifted = c_ix+idx_shift
+        c_ix_shifted = c_ix_shifted.transpose(-2,-1).reshape(b*t,s)
+        x_bs = x.view(b*s,e)
+        x_bs = x_bs[c_ix_shifted].view(b,t,s)
+
+        c_val = c_val.transpose(-2,-1)
+        c_val = 1/(c_val+self.local_lambda)
+
+        c_val = torch.nn.functional.softmax(c_val, dim=-1)
+        x = (x_bs*c_val).sum(dim=2)
 
         return x.unsqueeze(dim=-1)
 

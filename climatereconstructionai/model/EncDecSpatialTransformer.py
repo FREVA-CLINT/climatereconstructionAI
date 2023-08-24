@@ -153,7 +153,7 @@ class EncoderBlock(nn.Module):
 
         x = x + self.dropout1(att_out)
         x = self.norm2(x)
-
+    
         x = x + self.dropout2(self.mlp_layer(x))
 
         if return_debug:
@@ -302,7 +302,7 @@ class SpatialTransNet(tm.transformer_model):
 
 
         if self.add_interpolation:
-            self.interpolator = helpers.interpolator_iwd(model_settings['input_nh'])
+            self.interpolator = helpers.interpolator_iwd(model_settings['input_nh'], local_lambda=model_settings['local_lambda'])
 
         self.linear_pos_embedder = helpers.LinearPositionEmbedder_mlp(model_dim, model_settings['emb_hidden_dim'])
 
@@ -351,6 +351,7 @@ class SpatialTransNet(tm.transformer_model):
 
         pos_target = pos_target.unsqueeze(dim=0).repeat(x2.shape[0],1,1)
         out = self.Decoder(pos_target, x2, pos_source, return_debug=return_debug)
+
         if return_debug:
             atts = atts + out[1]
             out = out[0]
