@@ -390,10 +390,11 @@ class interpolator(nn.Module):
 
 
 class interpolator_iwd(nn.Module):
-    def __init__(self, nh, local_lambda=1e-4):
+    def __init__(self, nh, local_lambda=1e-4, device='cpu'):
         super().__init__()
         self.nh = nh
         self.local_lambda = local_lambda
+        self.device=device
 
     def forward(self, x, coords_rel):
         
@@ -404,7 +405,7 @@ class interpolator_iwd(nn.Module):
 
         c_val, c_ix = coords_dist.sort(dim=1, descending=False)
 
-        idx_shift = (torch.arange(c_ix.shape[0])*s).view(b,1,1)
+        idx_shift = (torch.arange(c_ix.shape[0],device=self.device)*s).view(b,1,1)
 
         c_ix_shifted = c_ix+idx_shift
         c_ix_shifted = c_ix_shifted.transpose(-2,-1).reshape(b*t,s)

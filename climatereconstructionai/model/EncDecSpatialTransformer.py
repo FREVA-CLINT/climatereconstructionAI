@@ -302,7 +302,7 @@ class SpatialTransNet(tm.transformer_model):
 
 
         if self.add_interpolation:
-            self.interpolator = helpers.interpolator_iwd(model_settings['input_nh'], local_lambda=model_settings['local_lambda'])
+            self.interpolator = helpers.interpolator_iwd(model_settings['input_nh'], local_lambda=model_settings['local_lambda'], device=model_settings['device'])
 
         self.linear_pos_embedder = helpers.LinearPositionEmbedder_mlp(model_dim, model_settings['emb_hidden_dim'])
 
