@@ -166,7 +166,7 @@ def train(model, training_settings, model_hparams={}):
         output = model(source, coord_dict)
 
         optimizer.zero_grad()
-        loss = loss_fcn(output.view(batch_size,-1), target.view(batch_size,-1).to(device))
+        loss = loss_fcn(output, target.to(device))
         loss.backward()
 
         train_losses_save.append(loss.item())
@@ -193,7 +193,7 @@ def train(model, training_settings, model_hparams={}):
 
                 with torch.no_grad():
                     output = model(source, coord_dict)
-                    loss = loss_fcn(output.view(batch_size,-1), target.view(batch_size,-1).to(device))
+                    loss = loss_fcn(output, target.to(device))
                     val_loss = {'total': loss.item(), 'valid': loss.item()}
 
                 val_losses.append(list(val_loss.values()))
