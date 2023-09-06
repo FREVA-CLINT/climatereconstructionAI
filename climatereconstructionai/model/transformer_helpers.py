@@ -146,7 +146,7 @@ class RelPositionEmbedder_phys_log(nn.Module):
 
 
 class LinearPositionEmbedder_mlp(nn.Module):
-    def __init__(self, mdoel_dim, hidden_dim, device='cpu',conv_coordinates=False):
+    def __init__(self, model_dim, hidden_dim, device='cpu',conv_coordinates=False):
         super().__init__()
 
         self.conv_coordinates = conv_coordinates
@@ -154,8 +154,7 @@ class LinearPositionEmbedder_mlp(nn.Module):
         self.rpe_mlp = nn.Sequential(
             nn.Linear(2, hidden_dim, bias=False),
             nn.LeakyReLU(inplace=True, negative_slope=0.2),
-            nn.Linear(hidden_dim, mdoel_dim, bias=False),
-            nn.Sigmoid())
+            nn.Linear(hidden_dim, model_dim, bias=False))
        
 
     def forward(self, d_mat_lon, d_mat_lat):
@@ -165,21 +164,21 @@ class LinearPositionEmbedder_mlp(nn.Module):
         return rpe
 
 class RelativePositionEmbedder_mlp(nn.Module):
-    def __init__(self, settings, emb_table_lon=None, emb_table_lat=None, device='cpu'):
+    def __init__(self, model_dim, hidden_dim, device='cpu', transform=True):
         super().__init__()
- 
-        emb_dim=settings['emb_dim']
+
+        self.transform = transform
 
         self.rpe_mlp = nn.Sequential(
-            nn.Linear(2, settings['mlp_hidden_dim'], bias=False),
+            nn.Linear(2, hidden_dim, bias=False),
             nn.LeakyReLU(inplace=True, negative_slope=0.2),
-            nn.Linear(settings['mlp_hidden_dim'], emb_dim, bias=False),
-            nn.LeakyReLU(inplace=True, negative_slope=0.2))
+            nn.Linear(hidden_dim, model_dim, bias=False))
 
     def forward(self, d_mat_lon, d_mat_lat):
         
-        d_mat_lon = conv_coordinates_inv(d_mat_lon)
-        d_mat_lat = conv_coordinates_inv(d_mat_lat)
+        if self.transform:
+            d_mat_lon = conv_coordinates_inv(d_mat_lon)
+            d_mat_lat = conv_coordinates_inv(d_mat_lat)
                       
         rpe = self.rpe_mlp(torch.concat((d_mat_lon.unsqueeze(dim=-1), d_mat_lat.unsqueeze(dim=-1)),dim=-1).squeeze())
     
@@ -191,9 +190,10 @@ def conv_coordinates(coords):
     coords_log_m = torch.clamp(coords_log_m, min=0)
     return sign * coords_log_m
 
-def conv_coordinates_inv(coords, epsilon=1e-10):
+def conv_coordinates_inv(coords, epsilon=1e-5):
     sign = torch.sign(coords)
-    coords = sign*torch.log10(1/(coords.abs()+epsilon))   
+    sign[sign==0]=1
+    coords = torch.log10(1/(coords.abs()+epsilon))   
     return sign * coords
 
 class RelativePositionEmbedder_par(nn.Module):
@@ -262,15 +262,13 @@ class SelfAttentionRPPEBlock(nn.Module):
         return x 
 
 class MultiHeadAttentionBlock(nn.Module):
-    def __init__(self, model_dim, output_dim, n_heads, rel_pos=None, logit_scale=False, qkv_proj=False):
+    def __init__(self, model_dim, output_dim, n_heads, logit_scale=False, qkv_proj=False):
         super().__init__()
 
         self.n_heads = n_heads
         self.head_dim = model_dim // n_heads
-
-        self.rel_pos = rel_pos
                
-        self.output_projection = nn.Linear(model_dim, output_dim)
+        self.output_projection = nn.Linear(model_dim, output_dim, bias=False)
         
         if logit_scale:
             self.logit_scale = nn.Parameter(torch.log(10 * torch.ones((n_heads, 1, 1))))
@@ -283,7 +281,7 @@ class MultiHeadAttentionBlock(nn.Module):
             self.qkv_projection = nn.ModuleList([nn.Identity()]*3)
 
 
-    def forward(self, q, k, v, rel_coords=None, return_debug=False):
+    def forward(self, q, k, v, rel_pos_bias=None, return_debug=False):
         # batch, sequence length, embedding dimension
         bq, t = q.shape[0], q.shape[1] 
         bk, s = k.shape[0], k.shape[1] 
@@ -297,9 +295,7 @@ class MultiHeadAttentionBlock(nn.Module):
         k = k.reshape(bk, s, self.n_heads, self.head_dim).permute(0,2,1,3)
         v = v.reshape(bv, s, self.n_heads, self.head_dim).permute(0,2,1,3)
 
-        if self.rel_pos is not None:
-            rel_pos_bias = self.RPE_phys(rel_coords[0], rel_coords[1])
-
+        if rel_pos_bias is not None:
             if len(rel_pos_bias.shape)>3:
                 rel_pos_bias = rel_pos_bias.permute(0,3,1,2)
             else:
@@ -345,28 +341,43 @@ class nearest_proj_layer(nn.Module):
 
 
 class nn_layer(nn.Module):
-    def __init__(self, nh):
+    def __init__(self, nh, cart=True, both_dims=False):
         super().__init__()
 
         self.nh = nh
+        self.cart = cart
+        self.both_dims = both_dims
 
-    def forward(self, x, d_lon, d_lat):
+    def forward(self, x, c1, c2):
         b,s,e = x.shape
-        d_mat = (d_lon**2 + d_lat**2).sqrt()
-        t = d_mat.shape[-2] 
 
-        if self.nh==-1:
-            self.nh = d_mat.shape[1]
-        indices_dist = d_mat.topk(self.nh, largest=False).indices
-        indices_dlon = d_lon.abs().topk(self.nh, largest=False).indices
-        indices_dlat = d_lat.abs().topk(self.nh, largest=False).indices
-
-        if len(indices_dlon.shape)>2:
-            x_nearest = torch.gather(x.repeat(1,1,self.nh),dim=1,index=indices_dlon).view(b,t,self.nh,1)
+        if self.cart:
+            d_mat = (c1**2 + c2**2).sqrt()
         else:
-            x_nearest = x.view(b,-1)[:,indices_dist.view(-1)].view(b,t,self.nh,1)
+            d_mat = c1
 
-        return x_nearest.float(), indices_dist, indices_dlon, indices_dlat
+        t = d_mat.shape[-1] 
+
+        if self.both_dims:
+            # leave out central datapoint? attention of datapoint to neighbourhood?
+            _, indices = d_mat.sort(dim=0, descending=False)
+            x_bs = x[:,indices,:]
+            x_bs = x_bs[:,:,:self.nh,:]
+            indices = indices[:self.nh,:]
+        else:
+            _, indices = d_mat.sort(dim=1, descending=False)
+        
+            idx_shift = (torch.arange(indices.shape[0],device='cpu')*s).view(b,1,1)
+
+            c_ix_shifted = indices+idx_shift
+            c_ix_shifted = c_ix_shifted.transpose(-2,-1).reshape(b*t,s)
+            x_bs = x.view(b*s,e)
+            x_bs = x_bs[c_ix_shifted].view(b,t,s,e)
+        
+            x_bs = x_bs[:,:,:self.nh,:]
+            indices = indices[:,:self.nh,:]
+
+        return x_bs, indices
     
 
 class interpolator(nn.Module):

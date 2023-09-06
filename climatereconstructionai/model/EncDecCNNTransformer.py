@@ -9,62 +9,6 @@ from ..utils import grid_utils as gu
 
 
 radius_earth = 6371
-
-class Input_Net(nn.Module):
-    def __init__(self, emb_settings, model_dim, emb_dim_target, dropout=0):
-        super().__init__()
-        if emb_settings['polar']:
-            emb_class = helpers.RelativePositionEmbedder_polar
-        else:
-            emb_class = helpers.RelativePositionEmbedder_cart
-        self.APE_phys = emb_class(emb_settings)
-
-        self.source_inp_layer = nn.Linear(emb_settings['emb_dim'], model_dim)
-        self.target_inp_layer = nn.Linear(emb_settings['emb_dim'], emb_dim_target)
-
-        self.t_proj = helpers.nearest_proj_layer(5)
-
-    def forward(self, x, coord_dict):
-        
-        b,t,e = x.shape
-
-        ape_emb_s ,b_idx_as =  self.APE_phys(coord_dict['abs']['source'][0], coord_dict['abs']['source'][1])
-        xs = x + ape_emb_s
-
-        xt = self.t_proj(x, torch.sqrt(coord_dict['rel']['target-source'][0]**2+coord_dict['rel']['target-source'][1]**2))
-        ape_emb_t, b_idx_at =  self.APE_phys(coord_dict['abs']['target'][0], coord_dict['abs']['target'][1])
-        xt = xt + ape_emb_t
-        #xt = torch.zeros((b,len(coord_dict['abs']['target'][0]),1), device='cpu') + ape_emb_t.permute(1,2,0)
-
-        xs = self.source_inp_layer(xs)
-        xt = self.target_inp_layer(xt)
-
-        return xs, xt, b_idx_as, b_idx_at
-
-class feature_net2(nn.Module):
-    def __init__(self, in_feat, out_feat, dropout=0):
-        super().__init__()
-      
-        self.dropout = nn.Dropout(dropout) if dropout >0 else nn.Identity()
-
-        self.conv = nn.Sequential(nn.Conv2d(in_feat, out_feat, kernel_size=1, bias=True),
-                                   nn.LeakyReLU(negative_slope=0.2))
-        
-
-    def forward(self, x):
-        
-        b, n, nh, f = x.shape
-
-        x_v = x[:,:,[0]].repeat(1,1,nh,1)
-        x = torch.cat(((x - x_v), x),dim=-1)
-         
-        x = x.permute(0,-1,1,2).contiguous()
-
-        x = self.conv(x)
-
-        x = x.max(dim=-1, keepdim=True)[0]
-
-        return x.transpose(-1,1)
     
 class feature_net(nn.Module):
     def __init__(self, in_feat, out_feat, dropout=0):
@@ -74,10 +18,9 @@ class feature_net(nn.Module):
 
         self.conv = nn.Sequential(nn.Conv2d(in_feat, out_feat, kernel_size=1, bias=True),
                                    nn.LeakyReLU(negative_slope=0.2))
-        
 
     def forward(self, x):
-        
+
         b, n, nh, f = x.shape
 
         x_v = x[:,:,[0]].repeat(1,1,nh,1)
