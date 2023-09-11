@@ -42,18 +42,7 @@ class Input_Net(nn.Module):
         return xs, xt, b_idx_as, b_idx_at
 
 
-#def gather_rel(mat, idx, device='cpu'):
-#    b,s,t = mat.shape
-
-#    shift = (torch.arange(idx.shape[0],device=device)*s).view(b,1,1)
-
- #   idx_shifted = idx + shift
-
- #   idx_shifted = idx_shifted.transpose(-2,-1).reshape(b*t,s)
- #   mat_bs = mat.view(b*s,e)
- #   x_bs = mat_bs[c_ix_shifted].view(b,t,s)
-
-class nh_Block_g(nn.Module):
+class nh_Block_self(nn.Module):
     def __init__(self, nh, model_dim, ff_dim, PE=None, out_dim=1, input_dim=1, dropout=0, n_heads=4) -> None: 
         super().__init__()
         
@@ -63,6 +52,7 @@ class nh_Block_g(nn.Module):
 
         self.nh = nh
         self.md = model_dim
+        self.n_heads = n_heads
 
         self.local_att = helpers.MultiHeadAttentionBlock(
             model_dim, model_dim, n_heads, logit_scale=True, qkv_proj=True
@@ -98,18 +88,17 @@ class nh_Block_g(nn.Module):
         x = self.norm1(x)
         
         #get nearest neighbours
-        x, indices = self.nn_layer(x, coords_rel[0], coords_rel[1])
+        x, _, cs = self.nn_layer(x, coords_rel[0], coords_rel[1])
 
-        c1 = torch.gather(coords_rel[0], dim=1, index=indices).transpose(0,1)
-        c2 = torch.gather(coords_rel[1], dim=1, index=indices).transpose(0,1)
-
-        c1 = c1.repeat(b,1)
-        c2 = c2.repeat(b,1)
-
-        x = x.view(b*t,self.nh,e)
+        x = x.reshape(b*t,self.nh,e)
 
         # absolute coordinates with respect to target coordinates
-        rel_p_bias = self.PE(c1,c2)
+        rel_p_bias = self.PE(cs[0], cs[1])
+
+        if rel_p_bias.dim() == x.dim()+1:
+            rel_p_bias = rel_p_bias.repeat(b,1,1,1)
+        else:
+            rel_p_bias = rel_p_bias.reshape(b*t,self.nh, self.nh, self.n_heads)
 
         q = k = v = x
 
@@ -130,17 +119,17 @@ class nh_Block_g(nn.Module):
         x = self.dropout3(self.mlp_layer_unfold(x))
 
         if return_debug:
-            return x, att, rel_p_bias, [c1,c2]
+            return x, att, rel_p_bias, cs
         else:
             return x
 
 
 
-class nh_Block(nn.Module):
-    def __init__(self, nh, model_dim, ff_dim, PE=None, out_dim=1, input_dim=1, dropout=0, n_heads=4) -> None: 
+class nh_Block_mix(nn.Module):
+    def __init__(self, nh, model_dim, ff_dim, PE=None, input_dim=1, dropout=0, n_heads=4) -> None: 
         super().__init__()
         
-        self.nn_layer = helpers.nn_layer(nh, cart=True)
+        self.nn_layer = helpers.nn_layer(nh, cart=True, both_dims=False)
 
         self.PE = PE
 
@@ -185,18 +174,15 @@ class nh_Block(nn.Module):
         b,s,t = coords_rel[0].shape
 
         #get nearest neighbours
-        x, indices = self.nn_layer(x, coords_rel[0], coords_rel[1])
-
-        c1 = torch.gather(coords_rel[0], dim=1, index=indices)
-        c2 = torch.gather(coords_rel[1], dim=1, index=indices)
+        x, _, cs = self.nn_layer(x, coords_rel[0], coords_rel[1])
 
         v = x.view(b*t,self.nh,e)
         v = self.v_proj(v)
 
         # absolute coordinates with respect to target coordinates
-        pe = self.pe_dropout(self.PE(c1,c2))
+        pe = self.pe_dropout(self.PE(cs[0],cs[1]))
 
-        x = x + pe.transpose(2,1)
+        x = x + pe
         x = self.norm1(x)
         x = x.view(b*t,self.nh,self.md)
 
@@ -220,7 +206,7 @@ class nh_Block(nn.Module):
         x = self.dropout3(self.mlp_layer_unfold(x))
 
         if return_debug:
-            return x, att, pe, [c1,c2]
+            return x, att, pe, cs
         else:
             return x
 
@@ -282,134 +268,173 @@ class trans_Block(nn.Module):
 
 
 
-class EncoderBlock(nn.Module):
-    def __init__(self, model_dim, nh, ff_dim, output_dim=None, n_heads=10, dropout=0.1, logit_scale=True):
-        super().__init__()
-
-    def forward(self, x, rel_coords, return_debug=False):
-        return x
-
-
-class DecoderBlock(nn.Module):
-    def __init__(self, model_dim, ff_dim, g_RPE, l_RPE, output_dim=None, nh=4, n_heads=10, dropout=0.1, logit_scale=True):
+class Block(nn.Module):
+    def __init__(self, model_dim, ff_dim, g_RPE, l_RPE, output_dim=None, nh=4, n_heads=10, dropout=0.1, global_att=True):
         super().__init__()
 
         self.g_RPE = g_RPE
-        self.trans_Block = trans_Block(model_dim, ff_dim, out_dim=output_dim, input_dim=model_dim, n_heads=n_heads)
         
- #       self.nh_net = nh_Block_g(nh, model_dim, ff_dim, l_RPE, out_dim=output_dim, dropout=dropout, n_heads=n_heads)
+        if not global_att:
+            self.trans_Block = None
+        else:
+            self.trans_Block = trans_Block(model_dim, ff_dim, out_dim=model_dim, input_dim=model_dim, n_heads=n_heads)
+        
+        self.nh_net = nh_Block_self(nh, model_dim, ff_dim, l_RPE, out_dim=output_dim, dropout=dropout, n_heads=n_heads)
 
                
     def forward(self, x, rel_coords, return_debug=False):
         b,t,e = x.shape
 
-        rp_bias = self.g_RPE(rel_coords[0], rel_coords[1])
+        if not self.trans_Block is None:
+            rp_bias = self.g_RPE(rel_coords[0], rel_coords[1])
+        else:
+            rp_bias = None
+        atts = []
+        rp_biass = [rp_bias]
 
         if return_debug:
-            x, att = self.trans_Block(x, rp_bias, return_debug)
-            return x, att, rp_bias
-        else:
-            x = self.trans_Block(x, rp_bias)
 
-    #        x = self.nh_net(x, rel_coords)
+            if not self.trans_Block is None:
+                x, att = self.trans_Block(x, rp_bias, return_debug)
+                atts.append(att)
+
+            x, att_nh, rp_bias_nh, _ = self.nh_net(x, rel_coords, return_debug)
+            atts.append(att_nh)
+
+            rp_biass.append(rp_bias_nh)
+
+            return x, atts, rp_biass
+        
+        else:
+
+            if not self.trans_Block is None:
+                x = self.trans_Block(x, rp_bias)
+
+            x = self.nh_net(x, rel_coords)
+
             return x
+
             
 
 
 class Encoder(nn.Module):
 
-    def __init__(self, n_layers, model_dim, feat_nh, ff_dim, n_heads=10, dropout=0.1, logit_scale=True):
+    def __init__(self, n_layers, model_dim, nh, ff_dim, local_PE, n_heads=10, dropout=0.1, global_att=True):
         super().__init__()
-        self.layers = nn.ModuleList([EncoderBlock(model_dim,
-                                                feat_nh,
-                                                ff_dim,
-                                                n_heads=n_heads,
-                                                dropout=dropout,
-                                                logit_scale=logit_scale) for _ in range(n_layers)])
-        
 
-    def forward(self, x, rel_coords, pos=None, return_debug=False):
-        
-        atts = []
-        for layer in self.layers:
-            if not return_debug:
-                output = layer(x, rel_coords, pos)
-            else:
-                output, att, rel_emb, cs = layer(x, rel_coords, pos, return_debug=return_debug)
-                atts.append(att)
+        model_dim_nh = model_dim // nh
+        ff_dim_nh = ff_dim // nh
 
-        if return_debug:
-            return output, atts, rel_emb, cs
+        if global_att:
+            g_RPE = helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=True)
         else:
-            return output
+            g_RPE = None
+
+        self.nh_input_net = nh_Block_mix(nh, model_dim_nh, ff_dim_nh, local_PE, dropout=dropout, n_heads=n_heads)
+
+        self.layers = nn.ModuleList()
+
+        for n in range(n_layers):
+            output_dim=model_dim if n == n_layers-1 else model_dim
+            self.layers.append(Block(model_dim,
+                                        ff_dim,
+                                        g_RPE,
+                                        helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim_nh, transform=True),
+                                        output_dim=output_dim,
+                                        n_heads=n_heads,
+                                        dropout=dropout,
+                                        global_att=global_att))
+
+    def forward(self, x, rel_coords, return_debug=False):
+            
+            atts = []
+            rel_embs = []
+
+            x = self.nh_input_net(x, rel_coords, return_debug=return_debug)
+
+            if return_debug:
+                atts += x[1]
+                rel_embs += x[2]
+                x = x[0]
+
+            for layer in self.layers:
+                x = layer(x, rel_coords, return_debug)
+                if return_debug:
+                    atts += x[1]
+                    rel_embs += x[2]
+                    x = x[0]
+
+            if return_debug:
+                return x, atts, rel_embs
+            else:
+                return x
 
 
 class Decoder(nn.Module):
 
-    def __init__(self, n_layers, model_dim, ff_dim, nh_mix=4, n_heads=10, dropout=0.1, logit_scale=True, train_interpolation=False):
+    def __init__(self, dec_layers, cross_layers, model_dim, nh, ff_dim, n_heads=10, dropout=0.1, global_RPE=None, global_att=False):
         super().__init__()
+    
+        self.global_RPE = global_RPE
+
+        self.cross_att = helpers.MultiHeadAttentionBlock(
+            model_dim, model_dim, n_heads, logit_scale=True, qkv_proj=True
+            )
         
-        self.train_interpolation = train_interpolation
-
-        model_dim_nh = model_dim // nh_mix
-        ff_dim_nh = ff_dim // nh_mix
-
-        PE = helpers.RelativePositionEmbedder_mlp(model_dim_nh, ff_dim, transform=False)
-        self.nh_input_net = nh_Block(nh_mix, model_dim_nh, ff_dim_nh, PE, dropout=dropout, n_heads=n_heads)
-
-        #nh output net for interpolation
-        self.interpolation =  nn.Sequential(
-            nn.Linear(model_dim, ff_dim),
-            nn.Dropout(dropout),
-            nn.LeakyReLU(inplace=True, negative_slope=0.2),
-            nn.Linear(ff_dim, 1),
-            nn.LeakyReLU(inplace=True, negative_slope=0.2)
-        )
-
-        g_PE = helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=True)
-
-    #    l_PE = helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim_nh, transform=False)
-        l_PE = None
-
         self.layers = nn.ModuleList()
-        for n in range(n_layers):
-            output_dim=1 if n == n_layers-1 else model_dim
-            self.layers.append(DecoderBlock(model_dim,
-                                                ff_dim,
-                                                g_PE,
-                                                l_PE,
-                                                output_dim=output_dim,
-                                                n_heads=n_heads,
-                                                dropout=dropout,
-                                                logit_scale=logit_scale))
+        for _ in range(dec_layers):
+            self.layers.append(Block(model_dim,
+                                        ff_dim,
+                                        global_RPE,
+                                        helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=True),
+                                        output_dim=model_dim,
+                                        nh=nh,
+                                        n_heads=n_heads,
+                                        dropout=dropout,
+                                        global_att=global_att))
+        
+        self.layers_cross = []
+        for k in range(cross_layers):
+            output_dim = 1 if k == cross_layers - 1 else model_dim
+            self.layers_cross.append(Block(model_dim,
+                                            ff_dim,
+                                            global_RPE,
+                                            helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=True),
+                                            output_dim=output_dim,
+                                            nh=nh,
+                                            n_heads=n_heads,
+                                            dropout=dropout,
+                                            global_att=global_att))
         
         
-    def forward(self, x, rel_coords_target_source, rel_coords_target, return_debug=False):
+    def forward(self, x, x_enc, rel_coords_target_source, rel_coords_target, return_debug=False):
         
         atts = []
         rel_embs = []
 
-        if return_debug:
-            x, att, rel_emb, _ = self.nh_input_net(x, rel_coords_target_source, return_debug=return_debug)
-            atts.append(att)
-            rel_embs.append(rel_emb)
-        else:
-            x = self.nh_input_net(x, rel_coords_target_source)
-
-        out_proj = self.interpolation(x)
-
         for layer in self.layers:
-            if return_debug:
-                x, att, rel_emb = layer(x, rel_coords_target, return_debug)
-                atts.append(att)
-                rel_embs.append(rel_emb)
-            else:
-                x = layer(x, rel_coords_target)
+            x = layer(x, rel_coords_target, return_debug)
 
-        if self.train_interpolation:
-            x = out_proj
-        else:
-            x = x + out_proj 
+            if return_debug:
+                atts += x[1]
+                rel_embs += x[2]
+                x = x[0]
+        
+        cross_pos_bias = self.global_RPE(rel_coords_target_source[0], rel_coords_target_source[1]).transpose(1,2)
+
+        x = self.cross_att(x, x_enc, x_enc, cross_pos_bias, return_debug)
+        if return_debug:
+            atts.append(x[1])
+            rel_embs.append(x[2])
+            x = x[0]
+
+        for layer in self.layers_cross:
+            x = layer(x, rel_coords_target, return_debug)
+
+            if return_debug:
+                atts += x[1]
+                rel_embs += x[2]
+                x = x[0]
 
         if return_debug:
             return x, atts, rel_embs
@@ -425,57 +450,101 @@ class SpatialTransNet(tm.transformer_model):
         dropout = model_settings['dropout']
         model_dim = model_settings['model_dim']
         n_heads = model_settings['n_heads']
-        logit_scale = model_settings['logit_scale']
+        nh = model_settings['feat_nh']
+        ff_dim = model_settings['ff_dim']
+        self.train_interpolation = model_settings['train_interpolation']
 
-        self.Encoder = Encoder(
-            model_settings['encoder']['n_layers'],
-            model_settings['model_dim'],
-            model_settings['feat_nh'],
-            model_settings['ff_dim'],
-            n_heads=n_heads,
-            dropout=dropout,
-            logit_scale=logit_scale
+        model_dim_nh = model_dim // nh
+        ff_dim_nh = ff_dim // nh
+
+        self.abs_pos_emb_local = helpers.RelativePositionEmbedder_mlp(model_dim_nh, ff_dim_nh, transform=True)
+
+        self.nh_input_net = nh_Block_mix(nh, model_dim_nh, ff_dim_nh, self.abs_pos_emb_local, input_dim=1, dropout=dropout, n_heads=n_heads)
+
+        self.interpolation =  nn.Sequential(
+            nn.Linear(model_dim, ff_dim),
+            nn.Dropout(dropout),
+            nn.LeakyReLU(inplace=True, negative_slope=0.2),
+            nn.Linear(ff_dim, 1),
+            nn.LeakyReLU(inplace=True, negative_slope=0.2)
         )
 
-        self.Decoder = Decoder(
-            model_settings['decoder']['n_layers'],
-            model_settings['model_dim'],
-            model_settings['ff_dim'],
-            nh_mix=model_settings['feat_nh'],
-            n_heads=n_heads,
-            dropout=dropout,
-            logit_scale=logit_scale,
-            train_interpolation=model_settings['train_interpolation']
-        )
+        if not self.train_interpolation:
+            self.cross_pos_emb_bias = helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=True)
+            
+            self.Encoder = Encoder(
+                model_settings['encoder']['n_layers'],
+                model_settings['model_dim'],
+                model_settings['feat_nh'],
+                model_settings['ff_dim'],
+                self.abs_pos_emb_local,
+                n_heads=n_heads,
+                dropout=dropout,
+                global_att=model_settings['encoder']['global_att']
+            )
+
+            self.Decoder = Decoder(
+                model_settings['decoder']['n_layers'],
+                model_settings['decoder']['n_layers'],
+                model_settings['model_dim'],
+                model_settings['feat_nh'],
+                model_settings['ff_dim'],
+                global_RPE=self.cross_pos_emb_bias,
+                n_heads=n_heads,
+                dropout=dropout,
+                global_att=model_settings['decoder']['global_att']
+            )
 
         self.mlp_out = nn.Sequential(nn.Linear(model_dim, 1),nn.LeakyReLU(negative_slope=0.2,inplace=True))
         
 
     def forward(self, x, coord_dict, return_debug=False):
         
-
         rel_coords_source = coord_dict['rel']['source']
         rel_coords_target = coord_dict['rel']['target']
         rel_coords_target_source = coord_dict['rel']['target-source']
-        coords_source = coord_dict['abs']['source']
-        coords_target = coord_dict['abs']['target']
-   
-        out = self.Decoder(x, rel_coords_target_source, rel_coords_target, return_debug=return_debug)
+
+        atts = []
+        rel_embs = []
+
+        if not self.train_interpolation:
+            x_enc = self.Encoder(x, rel_coords_source, return_debug=return_debug)
+
+            if return_debug:
+                atts += x_enc[1]
+                rel_embs += x_enc[2]
+                x_enc = x_enc[0]
+
+        x_inp = self.nh_input_net(x, rel_coords_target_source, return_debug=return_debug)
 
         if return_debug:
-            atts = out[1]
-            rel_emb = out[2]
-            out = out[0]
+            atts.append(x_inp[1])
+            rel_embs.append(x_inp[2])
+            x_inp = x_inp[0]
 
+        out_proj = self.interpolation(x_inp)
+
+        if not self.train_interpolation:
+            x = self.Decoder(x_inp, x_enc, rel_coords_target_source, rel_coords_target, return_debug=return_debug)
+
+            if return_debug:
+                atts += x[1]
+                rel_embs += x[2]
+                x = x[0]
+            
+            x = x + out_proj 
+        
+        else:
+            x = out_proj
 
         if return_debug:
 
             debug_dict = {
                           'atts':atts,
-                          'rel_emb': rel_emb,
+                          'rel_emb': rel_embs,
                         }
             
-            return out, debug_dict
+            return x, debug_dict
         else:
-            return out
+            return x
     

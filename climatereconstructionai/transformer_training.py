@@ -126,9 +126,11 @@ def train(model, training_settings, model_hparams={}):
 
     model = model.to(device)
 
+    if 'pretrained_interpolator' in training_settings.keys():
+        model.load_pretrained_interpolator(training_settings['pretrained_interpolator'], device=device)
+
     loss_fcn = torch.nn.L1Loss()
    
-  
     early_stop = early_stopping.early_stopping(training_settings['early_stopping_delta'], training_settings['early_stopping_patience'])
     
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=training_settings['lr'], weight_decay=0.05)
@@ -198,8 +200,13 @@ def train(model, training_settings, model_hparams={}):
 
                 val_losses.append(list(val_loss.values()))
 
-            val_losses_save.append(val_loss['total'])
+            
             output, debug_dict = model(source, coord_dict, return_debug=True)
+
+            val_loss = torch.tensor(val_losses).mean(dim=0)
+            val_loss = dict(zip(train_loss.keys(), val_loss))
+
+            val_losses_save.append(val_loss['total'])
 
             if training_settings['save_debug']:
                 torch.save(debug_dict, os.path.join(log_dir,'debug_dict.pt'))
@@ -210,10 +217,7 @@ def train(model, training_settings, model_hparams={}):
                 np.savetxt(os.path.join(log_dir,'losses_val.txt'),np.array(val_losses_save))
                 np.savetxt(os.path.join(log_dir,'losses_train.txt'),np.array(train_losses_save))
                 np.savetxt(os.path.join(log_dir,'lrs.txt'),np.array(lrs))
-
-            val_loss = torch.tensor(val_losses).mean(dim=0)
-            val_loss = dict(zip(train_loss.keys(), val_loss))
-
+       
             early_stop.update(val_loss['total'], n_iter, model_save=model)
 
             writer.update_scalars(val_loss, n_iter, 'val')

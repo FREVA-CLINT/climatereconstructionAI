@@ -21,9 +21,12 @@ class transformer_model(nn.Module):
         pass
 
     def load(self, ckpt_path:str, device=None):
-        ckpt_dict = load_ckpt(ckpt_path)
+        ckpt_dict = load_ckpt(ckpt_path, device=device)
         self.load_state_dict(ckpt_dict["labels"][-1]["model"])
 
+    def load_pretrained_interpolator(self, ckpt_path:str, device=None):
+        ckpt_dict = load_ckpt(ckpt_path, device=device)
+        self.load_state_dict(ckpt_dict[ckpt_dict["labels"][-1]]["model"], strict=False)
 
 def load_settings(dict_or_file):
     if isinstance(dict_or_file, dict):

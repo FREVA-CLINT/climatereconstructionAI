@@ -341,12 +341,13 @@ class nearest_proj_layer(nn.Module):
 
 
 class nn_layer(nn.Module):
-    def __init__(self, nh, cart=True, both_dims=False):
+    def __init__(self, nh, cart=True, both_dims=False, device='cpu'):
         super().__init__()
 
         self.nh = nh
         self.cart = cart
         self.both_dims = both_dims
+        self.device=device
 
     def forward(self, x, c1, c2):
         b,s,e = x.shape
@@ -358,16 +359,24 @@ class nn_layer(nn.Module):
 
         t = d_mat.shape[-1] 
 
-        if self.both_dims:
-            # leave out central datapoint? attention of datapoint to neighbourhood?
+        
+        # leave out central datapoint? attention of datapoint to neighbourhood?
+        if d_mat.dim()==2:
             _, indices = d_mat.sort(dim=0, descending=False)
-            x_bs = x[:,indices,:]
-            x_bs = x_bs[:,:,:self.nh,:]
             indices = indices[:self.nh,:]
+            x_bs = x[:,indices.mT]
+
+            c1 = torch.gather(c1,dim=0,index=indices).mT.unsqueeze(dim=-1)
+            c2 = torch.gather(c2,dim=0,index=indices).mT.unsqueeze(dim=-1)
+
+            if self.both_dims:
+                c1 = (c1 - c1.transpose(-1,1)) 
+                c2 = (c2 - c2.transpose(-1,1))
+
         else:
             _, indices = d_mat.sort(dim=1, descending=False)
-        
-            idx_shift = (torch.arange(indices.shape[0],device='cpu')*s).view(b,1,1)
+                
+            idx_shift = (torch.arange(indices.shape[0],device=self.device)*s).view(b,1,1)
 
             c_ix_shifted = indices+idx_shift
             c_ix_shifted = c_ix_shifted.transpose(-2,-1).reshape(b*t,s)
@@ -377,8 +386,20 @@ class nn_layer(nn.Module):
             x_bs = x_bs[:,:,:self.nh,:]
             indices = indices[:,:self.nh,:]
 
-        return x_bs, indices
-    
+            c1 = torch.gather(c1, dim=1, index=indices).transpose(-1,1)
+            c2 = torch.gather(c2, dim=1, index=indices).transpose(-1,1)
+
+            if self.both_dims:
+                c1 = c1.unsqueeze(dim=-1)
+                c2 = c2.unsqueeze(dim=-1)
+                c1 = (c1 - c1.transpose(-1,-2)) 
+                c2 = (c2 - c2.transpose(-1,-2))
+
+        
+   
+
+        return x_bs, indices, [c1,c2]
+
 
 class interpolator(nn.Module):
     def __init__(self,device):
