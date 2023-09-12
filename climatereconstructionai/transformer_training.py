@@ -28,37 +28,6 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
         return lr_factor
 
 
-def gather_rel_coords(c, indices):
-    c = c[indices].squeeze()
-    c = torch.gather(c, dim=2, index=indices.permute(0,2,1).repeat(1,indices.shape[1],1))
-    return c
-
-
-def input_dropout(x, coord_dict, perc=0.2, device='cpu'):
-
-    if perc == 0:
-        return x, coord_dict
-    
-    num_rows = x.shape[1]
-
-    keep = torch.rand((num_rows)) > perc
-
-    indices = [torch.randperm(num_rows)[keep].unsqueeze(dim=0) for _ in range(x.shape[0])]
-    indices = torch.cat(indices).unsqueeze(dim=-1).to(device)
-
-    x = torch.gather(x, dim=1, index=indices)
-
-    coord_dict['rel']['source'][0] = gather_rel_coords(coord_dict['rel']['source'][0], indices)
-    coord_dict['rel']['source'][1] = gather_rel_coords(coord_dict['rel']['source'][1], indices)
-
-    coord_dict['rel']['target-source'][0] = coord_dict['rel']['target-source'][0].squeeze().T[indices.squeeze()]
-    coord_dict['rel']['target-source'][1] = coord_dict['rel']['target-source'][1].squeeze().T[indices.squeeze()]
-
-    coord_dict['abs']['source'][0] = coord_dict['abs']['source'][0].squeeze()[indices]
-    coord_dict['abs']['source'][1] = coord_dict['abs']['source'][1].squeeze()[indices]
-
-    return x, coord_dict
-
 def train(model, training_settings, model_hparams={}):
  
     print("* Number of GPUs: ", torch.cuda.device_count())
@@ -78,8 +47,6 @@ def train(model, training_settings, model_hparams={}):
     device = training_settings['device']
     writer.set_hparams(model_hparams)
 
-    # create data sets
-        # create data sets
     if 'random_region' not in training_settings.keys():
         random_region = None
     else:
@@ -96,7 +63,7 @@ def train(model, training_settings, model_hparams={}):
                                  random_region=random_region,
                                  apply_img_norm=training_settings['apply_img_norm'],
                                  normalize_data=training_settings['normalize_data'],
-                                 device=training_settings['device'])
+                                 p_input_dropout=training_settings['input_dropout'])
     
     dataset_val = NetCDFLoader(training_settings['data_root_dir'],
                                  training_settings['data_names_source'], 
@@ -107,7 +74,7 @@ def train(model, training_settings, model_hparams={}):
                                  random_region=random_region,
                                  apply_img_norm=training_settings['apply_img_norm'],
                                  normalize_data=training_settings['normalize_data'],
-                                 device=training_settings['device'])
+                                 p_input_dropout=training_settings['input_dropout'])
     
     iterator_train = iter(DataLoader(dataset_train,
                                      batch_size=batch_size,
@@ -155,21 +122,15 @@ def train(model, training_settings, model_hparams={}):
         pbar.set_description("lr = {:.1e}".format(lr_val))
 
         lrs.append(lr_val)
-        # train model
+
         model.train()
 
-        if 'random_region' in training_settings.keys():
-            if i % training_settings['random_region']['generate_interval']==0:
-                dataset_train.generate_region()
-
-        source, target = next(iterator_train)
-
-        source, coord_dict = input_dropout(source.to(device), dataset_train.coord_dict, training_settings['input_dropout'], device=device)
+        source, target, coord_dict = next(iterator_train)
 
         output = model(source, coord_dict)
 
         optimizer.zero_grad()
-        loss = loss_fcn(output, target.to(device))
+        loss = loss_fcn(output, target)
         loss.backward()
 
         train_losses_save.append(loss.item())
@@ -186,21 +147,14 @@ def train(model, training_settings, model_hparams={}):
 
             for _ in range(training_settings['n_iters_val']):
 
-                if 'random_region' in training_settings.keys():
-                    if i % training_settings['random_region']['generate_interval']==0:
-                        dataset_val.generate_region()
-
-                source, target =  next(iterator_val)
-
-                source, coord_dict = input_dropout(source.to(device), dataset_val.coord_dict, training_settings['input_dropout'], device=device)
+                source, target, coord_dict = next(iterator_val)
 
                 with torch.no_grad():
                     output = model(source, coord_dict)
-                    loss = loss_fcn(output, target.to(device))
+                    loss = loss_fcn(output, target)
                     val_loss = {'total': loss.item(), 'valid': loss.item()}
 
                 val_losses.append(list(val_loss.values()))
-
             
             output, debug_dict = model(source, coord_dict, return_debug=True)
 

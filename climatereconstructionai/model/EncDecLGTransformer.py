@@ -386,8 +386,6 @@ class Decoder(nn.Module):
 
         if cross_pos_bias.dim() == x.dim():
             cross_pos_bias = cross_pos_bias.unsqueeze(dim=0).repeat(x.shape[0],1,1,1)
-        else:
-            cross_pos_bias = cross_pos_bias.transpose(1,2)
 
         x = self.cross_att(x, x_enc, x_enc, cross_pos_bias, return_debug)
 

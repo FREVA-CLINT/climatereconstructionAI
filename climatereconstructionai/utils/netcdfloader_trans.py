@@ -1,5 +1,6 @@
 import os
 import random
+import copy
 
 import numpy as np
 import torch
@@ -112,18 +113,20 @@ def load_netcdf(path, data_names, data_types, keep_dss=False):
             return data, lengths[0], sizes
 
 
+
+
 class NetCDFLoader(Dataset):
-    def __init__(self, data_root, img_names_source, img_names_target, split, data_types, coord_names, apply_img_norm=False, normalize_data=True, random_region=None, norm_stats=tuple(), device='cpu'):
+    def __init__(self, data_root, img_names_source, img_names_target, split, data_types, coord_names, apply_img_norm=False, normalize_data=True, random_region=None, norm_stats=tuple(), p_input_dropout=0):
         super(NetCDFLoader, self).__init__()
         
-        self.device=device
         self.PosCalc = PositionCalculator()
         self.random = random.Random()
         self.data_types = data_types
         self.coord_names = coord_names
         self.apply_img_norm = apply_img_norm
         self.normalize_data = normalize_data
-
+        self.p_input_dropout = p_input_dropout
+        
         if 'lon' in self.coord_names[0]:
             self.flatten=True
         else:
@@ -139,7 +142,6 @@ class NetCDFLoader(Dataset):
             ds_targets.append(xr.load_dataset(os.path.join(data_path, img_names_target)))
 
         self.ds_target = xr.concat(ds_targets, dim='time')
-
 
         ds_sources = []
         for img_name_source in img_names_source:
@@ -169,6 +171,9 @@ class NetCDFLoader(Dataset):
             lats_t = lats_t.view(-1,1).repeat(1,lo_t).flatten()
 
         if random_region is not None:
+
+            self.generate_region_prob = 1/random_region['generate_interval']
+
             if "n_points_hr" not in random_region.keys():
                 self.region_generator = random_region_generator(torch.tensor(random_region['lon_range']), 
                                                                 torch.tensor(random_region['lat_range']),
@@ -200,22 +205,41 @@ class NetCDFLoader(Dataset):
             coord_dict_hr  = {'lons': lons_t,
                    'lats': lats_t}
             
-            coord_dict = {'lr':coord_dict_lr, 'hr':coord_dict_hr, 'seeds':[torch.tensor([coord_dict_lr['lons'].median()]),torch.tensor([coord_dict_lr['lats'].median()])]}
+            coord_dict = {'lr':coord_dict_lr, 'hr':coord_dict_hr, 'seeds':[torch.tensor([coord_dict_lr['lons'].median()]), torch.tensor([coord_dict_lr['lats'].median()])]}
 
             
             self.coord_dict = self.get_coords(coord_dict)
         
+        self.n_source = int((1-p_input_dropout) * self.coord_dict['rel']['source'][0].shape[0])
+
         value_data = np.concatenate([self.ds_source[data_types[0]].values.flatten(), self.ds_target[data_types[0]].values.flatten()])
         self.normalizer = ds_norm(norm_stats)  
         self.normalizer(value_data)
 
 
+    def input_dropout(self, x, coord_dict):
+
+        coords = copy.deepcopy(coord_dict)
+
+        indices = torch.randperm(x.shape[0]-1)[:self.n_source]
+
+        x = x[indices,:]
+
+        coords['rel']['source'][0] = coords['rel']['source'][0][:,indices][indices,:]
+        coords['rel']['source'][1] = coords['rel']['source'][1][:,indices][indices,:]
+
+        coords['rel']['target-source'][0] = coords['rel']['target-source'][0][:,indices]
+        coords['rel']['target-source'][1] = coords['rel']['target-source'][1][:,indices]
+
+        coords['abs']['source'][0] = coords['abs']['source'][0][indices,:]
+        coords['abs']['source'][1] = coords['abs']['source'][1][indices,:]
+
+        return x, coords
+
 
     def generate_region(self):
         self.region_dict = self.region_generator.generate()
         self.coord_dict = self.get_coords(self.region_dict)
-        if self.coord_dict['abs']['target'][0].abs().mean()>1:
-            pass
 
 
     def get_coords(self, coord_dict):
@@ -231,19 +255,22 @@ class NetCDFLoader(Dataset):
         _, _, d_lons_t, d_lats_t = self.PosCalc(coord_dict['hr']['lons'], coord_dict['hr']['lats'], (coord_dict['seeds'][0]), (coord_dict['seeds'][1]))
 
          
-        rel_coords = {'source': [d_lon_lr_lr.float().to(self.device), d_lat_lr_lr.float().to(self.device)],
-                    'target': [d_lon_hr_hr.float().to(self.device), d_lat_hr_hr.float().to(self.device)],
-                    'target-source': [d_lon_lr_hr.float().to(self.device), d_lat_lr_hr.float().to(self.device)]}
+        rel_coords = {'source': [d_lon_lr_lr.float(), d_lat_lr_lr.float()],
+                    'target': [d_lon_hr_hr.float(), d_lat_hr_hr.float()],
+                    'target-source': [d_lon_lr_hr.float(), d_lat_lr_hr.float()]}
         
-        abs_coords = {'source': [d_lons_s.float().to(self.device), d_lats_s.float().to(self.device)],
-                    'target': [d_lons_t.float().to(self.device), d_lats_t.float().to(self.device)]}
+        abs_coords = {'source': [d_lons_s.float().T, d_lats_s.float().T],
+                    'target': [d_lons_t.float().T, d_lats_t.float().T]}
         
-        #abs_coords_true = {'source': [d_lons_s.float().to(self.device), d_lats_s.float().to(self.device)],
-        #            'target': [d_lons_t.float().to(self.device), d_lats_t.float().to(self.device)]}
+
         return {'rel': rel_coords, 'abs': abs_coords}
     
 
     def __getitem__(self, index):
+
+        if self.region_generator is not None:
+            if torch.rand(1) < self.generate_region_prob:
+                self.generate_region()
 
         data_source = torch.tensor(self.ds_source[self.data_types[0]][index].values)
         data_target = torch.tensor(self.ds_target[self.data_types[0]][index].values)
@@ -270,7 +297,12 @@ class NetCDFLoader(Dataset):
             data_source = norm(data_source)
             data_target = norm(data_target)
 
-        return data_source, data_target
+        if self.p_input_dropout > 0:
+            data_source, coord_dict = self.input_dropout(data_source, self.coord_dict)
+        else:
+            coord_dict = self.coord_dict
+
+        return data_source, data_target, coord_dict
 
     def __len__(self):
         return self.num_tp

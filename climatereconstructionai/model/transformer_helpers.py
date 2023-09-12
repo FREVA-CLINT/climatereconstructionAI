@@ -335,7 +335,7 @@ class nn_layer(nn.Module):
         else:
             d_mat = c1
 
-        t = d_mat.shape[-1] 
+        t = d_mat.shape[-2] 
 
         
         # leave out central datapoint? attention of datapoint to neighbourhood?
@@ -352,20 +352,20 @@ class nn_layer(nn.Module):
                 c2 = (c2 - c2.transpose(-1,1))
 
         else:
-            _, indices = d_mat.sort(dim=1, descending=False)
+            _, indices = d_mat.sort(dim=-1, descending=False)
                 
             idx_shift = (torch.arange(indices.shape[0],device=indices.device)*s).view(b,1,1)
 
             c_ix_shifted = indices+idx_shift
-            c_ix_shifted = c_ix_shifted.transpose(-2,-1).reshape(b*t,s)
+            c_ix_shifted = c_ix_shifted.reshape(b*t,s)
             x_bs = x.view(b*s,e)
             x_bs = x_bs[c_ix_shifted].view(b,t,s,e)
         
             x_bs = x_bs[:,:,:self.nh,:]
-            indices = indices[:,:self.nh,:]
+            indices = indices[:,:,:self.nh]
 
-            c1 = torch.gather(c1, dim=1, index=indices).transpose(-1,1)
-            c2 = torch.gather(c2, dim=1, index=indices).transpose(-1,1)
+            c1 = torch.gather(c1, dim=-1, index=indices)#.transpose(-1,1)
+            c2 = torch.gather(c2, dim=-1, index=indices)#.transpose(-1,1)
 
             if self.both_dims:
                 c1 = c1.unsqueeze(dim=-1)
