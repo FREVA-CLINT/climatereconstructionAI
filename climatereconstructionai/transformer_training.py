@@ -36,15 +36,17 @@ def gather_rel_coords(c, indices):
 
 def input_dropout(x, coord_dict, perc=0.2, device='cpu'):
 
+    if perc == 0:
+        return x, coord_dict
+    
     num_rows = x.shape[1]
 
     keep = torch.rand((num_rows)) > perc
 
-    indices = [torch.randperm(num_rows)[keep].unsqueeze(dim=0) for k in range(x.shape[0])]
+    indices = [torch.randperm(num_rows)[keep].unsqueeze(dim=0) for _ in range(x.shape[0])]
     indices = torch.cat(indices).unsqueeze(dim=-1).to(device)
 
     x = torch.gather(x, dim=1, index=indices)
-
 
     coord_dict['rel']['source'][0] = gather_rel_coords(coord_dict['rel']['source'][0], indices)
     coord_dict['rel']['source'][1] = gather_rel_coords(coord_dict['rel']['source'][1], indices)
@@ -54,7 +56,6 @@ def input_dropout(x, coord_dict, perc=0.2, device='cpu'):
 
     coord_dict['abs']['source'][0] = coord_dict['abs']['source'][0].squeeze()[indices]
     coord_dict['abs']['source'][1] = coord_dict['abs']['source'][1].squeeze()[indices]
-
 
     return x, coord_dict
 

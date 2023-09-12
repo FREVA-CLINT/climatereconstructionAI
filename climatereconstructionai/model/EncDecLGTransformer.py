@@ -7,41 +7,6 @@ import climatereconstructionai.model.transformer_model as tm
 from .. import config as cfg
 from ..utils import grid_utils as gu
 
-
-radius_earth = 6371
-
-class Input_Net(nn.Module):
-    def __init__(self, emb_settings, model_dim, emb_dim_target, dropout=0):
-        super().__init__()
-        if emb_settings['polar']:
-            emb_class = helpers.RelativePositionEmbedder_polar
-        else:
-            emb_class = helpers.RelativePositionEmbedder_cart
-        self.APE_phys = emb_class(emb_settings)
-
-        self.source_inp_layer = nn.Linear(emb_settings['emb_dim'], model_dim)
-        self.target_inp_layer = nn.Linear(emb_settings['emb_dim'], emb_dim_target)
-
-        self.t_proj = helpers.nearest_proj_layer(5)
-
-    def forward(self, x, coord_dict):
-        
-        b,t,e = x.shape
-
-        ape_emb_s ,b_idx_as =  self.APE_phys(coord_dict['abs']['source'][0], coord_dict['abs']['source'][1])
-        xs = x + ape_emb_s
-
-        xt = self.t_proj(x, torch.sqrt(coord_dict['rel']['target-source'][0]**2+coord_dict['rel']['target-source'][1]**2))
-        ape_emb_t, b_idx_at =  self.APE_phys(coord_dict['abs']['target'][0], coord_dict['abs']['target'][1])
-        xt = xt + ape_emb_t
-        #xt = torch.zeros((b,len(coord_dict['abs']['target'][0]),1), device='cpu') + ape_emb_t.permute(1,2,0)
-
-        xs = self.source_inp_layer(xs)
-        xt = self.target_inp_layer(xt)
-
-        return xs, xt, b_idx_as, b_idx_at
-
-
 class nh_Block_self(nn.Module):
     def __init__(self, nh, model_dim, ff_dim, PE=None, out_dim=1, input_dim=1, dropout=0, n_heads=4) -> None: 
         super().__init__()
@@ -59,18 +24,18 @@ class nh_Block_self(nn.Module):
             )
         
         self.mlp_layer_nh = nn.Sequential(
-            nn.Linear(model_dim, ff_dim),
+            nn.Linear(model_dim, ff_dim, bias=False),
             nn.Dropout(dropout),
             nn.LeakyReLU(inplace=True, negative_slope=0.2),
-            nn.Linear(ff_dim, 1),
+            nn.Linear(ff_dim, 1, bias=False),
             nn.LeakyReLU(inplace=True, negative_slope=0.2)
         )
 
         self.mlp_layer_unfold = nn.Sequential(
-            nn.Linear(model_dim*nh, model_dim*nh),
+            nn.Linear(model_dim*nh, model_dim*nh, bias=False),
             nn.Dropout(dropout),
             nn.LeakyReLU(inplace=True, negative_slope=0.2),
-            nn.Linear(model_dim*nh, out_dim),
+            nn.Linear(model_dim*nh, out_dim, bias=False),
             nn.LeakyReLU(inplace=True, negative_slope=0.2)
         )
 
@@ -83,14 +48,14 @@ class nh_Block_self(nn.Module):
         self.norm3 = nn.LayerNorm(model_dim*nh)
 
     def forward(self, x, coords_rel, return_debug=False):
-        b,t,e = x.shape
-        
+                
         x = self.norm1(x)
         
         #get nearest neighbours
         x, _, cs = self.nn_layer(x, coords_rel[0], coords_rel[1])
 
-        x = x.reshape(b*t,self.nh,e)
+        b, t, nh, e = x.shape
+        x = x.reshape(b*t,nh,e)
 
         # absolute coordinates with respect to target coordinates
         rel_p_bias = self.PE(cs[0], cs[1])
@@ -132,7 +97,6 @@ class nh_Block_mix(nn.Module):
         self.nn_layer = helpers.nn_layer(nh, cart=True, both_dims=False)
 
         self.PE = PE
-
         self.nh = nh
         self.md = model_dim
 
@@ -170,13 +134,13 @@ class nh_Block_mix(nn.Module):
 
 
     def forward(self, x, coords_rel, return_debug=False):
-        e = x.shape[-1]
-        b,s,t = coords_rel[0].shape
 
         #get nearest neighbours
         x, _, cs = self.nn_layer(x, coords_rel[0], coords_rel[1])
 
-        v = x.view(b*t,self.nh,e)
+        b, t, nh, e = x.shape
+
+        v = x.reshape(b*t,self.nh,e)
         v = self.v_proj(v)
 
         # absolute coordinates with respect to target coordinates
@@ -220,11 +184,11 @@ class trans_Block(nn.Module):
             )
         
         self.mlp_layer = nn.Sequential(
-            nn.Linear(model_dim, ff_dim),
+            nn.Linear(model_dim, ff_dim, bias=False),
             nn.Dropout(dropout),
-            nn.LeakyReLU(inplace=True),
-            nn.Linear(ff_dim, out_dim),
-            nn.LeakyReLU(inplace=True)
+            nn.LeakyReLU(inplace=True, negative_slope=0.2),
+            nn.Linear(ff_dim, out_dim, bias=False),
+            nn.LeakyReLU(inplace=True, negative_slope=0.2)
         )
 
         self.dropout1 = nn.Dropout(dropout)
@@ -314,8 +278,6 @@ class Block(nn.Module):
 
             return x
 
-            
-
 
 class Encoder(nn.Module):
 
@@ -393,7 +355,7 @@ class Decoder(nn.Module):
                                         dropout=dropout,
                                         global_att=global_att))
         
-        self.layers_cross = []
+        self.layers_cross = nn.ModuleList()
         for k in range(cross_layers):
             output_dim = 1 if k == cross_layers - 1 else model_dim
             self.layers_cross.append(Block(model_dim,
@@ -420,9 +382,15 @@ class Decoder(nn.Module):
                 rel_embs += x[2]
                 x = x[0]
         
-        cross_pos_bias = self.global_RPE(rel_coords_target_source[0], rel_coords_target_source[1]).transpose(1,2)
+        cross_pos_bias = self.global_RPE(rel_coords_target_source[0], rel_coords_target_source[1])
+
+        if cross_pos_bias.dim() == x.dim():
+            cross_pos_bias = cross_pos_bias.unsqueeze(dim=0).repeat(x.shape[0],1,1,1)
+        else:
+            cross_pos_bias = cross_pos_bias.transpose(1,2)
 
         x = self.cross_att(x, x_enc, x_enc, cross_pos_bias, return_debug)
+
         if return_debug:
             atts.append(x[1])
             rel_embs.append(x[2])
@@ -462,11 +430,11 @@ class SpatialTransNet(tm.transformer_model):
         self.nh_input_net = nh_Block_mix(nh, model_dim_nh, ff_dim_nh, self.abs_pos_emb_local, input_dim=1, dropout=dropout, n_heads=n_heads)
 
         self.interpolation =  nn.Sequential(
-            nn.Linear(model_dim, ff_dim),
+            nn.Linear(model_dim, ff_dim, bias=True),
             nn.Dropout(dropout),
             nn.LeakyReLU(inplace=True, negative_slope=0.2),
-            nn.Linear(ff_dim, 1),
-            nn.LeakyReLU(inplace=True, negative_slope=0.2)
+            nn.Linear(ff_dim, 1, bias=True)
+            #nn.LeakyReLU(inplace=True, negative_slope=0.2)
         )
 
         if not self.train_interpolation:
