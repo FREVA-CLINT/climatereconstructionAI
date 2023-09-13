@@ -10,7 +10,6 @@ from torch.utils.data import Dataset, Sampler
 from .netcdfchecker import dataset_formatter
 from .grid_utils import random_region_generator, PositionCalculator
 
-
 class InfiniteSampler(Sampler):
     def __init__(self, num_samples, data_source=None):
         super().__init__(data_source)
@@ -225,14 +224,12 @@ class NetCDFLoader(Dataset):
 
         x = x[indices,:]
 
-        coords['rel']['source'][0] = coords['rel']['source'][0][:,indices][indices,:]
-        coords['rel']['source'][1] = coords['rel']['source'][1][:,indices][indices,:]
+        coords['rel']['source'] = coords['rel']['source'][:,:,indices][:,indices,:]
 
-        coords['rel']['target-source'][0] = coords['rel']['target-source'][0][:,indices]
-        coords['rel']['target-source'][1] = coords['rel']['target-source'][1][:,indices]
+        coords['rel']['target-source'] = coords['rel']['target-source'][:,:,indices]
 
-        coords['abs']['source'][0] = coords['abs']['source'][0][indices,:]
-        coords['abs']['source'][1] = coords['abs']['source'][1][indices,:]
+        coords['abs']['source'] = coords['abs']['source'][:,indices,:]
+
 
         return x, coords
 
@@ -255,15 +252,16 @@ class NetCDFLoader(Dataset):
         _, _, d_lons_t, d_lats_t = self.PosCalc(coord_dict['hr']['lons'], coord_dict['hr']['lats'], (coord_dict['seeds'][0]), (coord_dict['seeds'][1]))
 
          
-        rel_coords = {'source': [d_lon_lr_lr.float(), d_lat_lr_lr.float()],
-                    'target': [d_lon_hr_hr.float(), d_lat_hr_hr.float()],
-                    'target-source': [d_lon_lr_hr.float(), d_lat_lr_hr.float()]}
+        rel_coords = {'source': torch.stack([d_lon_lr_lr.float(), d_lat_lr_lr.float()],dim=0),
+                    'target': torch.stack([d_lon_hr_hr.float(), d_lat_hr_hr.float()],dim=0),
+                    'target-source': torch.stack([d_lon_lr_hr.float(), d_lat_lr_hr.float()],dim=0)}
         
-        abs_coords = {'source': [d_lons_s.float().T, d_lats_s.float().T],
-                    'target': [d_lons_t.float().T, d_lats_t.float().T]}
+        abs_coords =  {'source': torch.stack([d_lons_s.float().T, d_lats_s.float().T],dim=0),
+                    'target': torch.stack([d_lons_t.float().T, d_lats_t.float().T],dim=0)}
         
+        coord_dict = {'rel': rel_coords, 'abs': abs_coords}
 
-        return {'rel': rel_coords, 'abs': abs_coords}
+        return coord_dict
     
 
     def __getitem__(self, index):
