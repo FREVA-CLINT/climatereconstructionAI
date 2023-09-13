@@ -1,7 +1,7 @@
 import os
 import json
 import argparse
-from climatereconstructionai.model import EncDecSpatialTransformer
+from climatereconstructionai.model import EncDecLGTransformer
 
 
 parser = argparse.ArgumentParser()
@@ -17,6 +17,6 @@ if __name__ == "__main__":
         with open(script_dict,'r') as file:
             script_dict = json.load(file)
 
-    model = EncDecSpatialTransformer.SpatialTransNet(script_dict['model_settings'])
+    model = EncDecLGTransformer.SpatialTransNet(script_dict['model_settings'])
     model.train_(script_dict['training_settings']) 
 
