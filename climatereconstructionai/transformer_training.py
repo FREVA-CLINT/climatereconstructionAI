@@ -28,6 +28,11 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
         return lr_factor
 
 
+def dict_to_device(d, device):
+    for key, value in d.items():
+        d[key] = value.to(device)
+    return d
+
 def train(model, training_settings, model_hparams={}):
  
     print("* Number of GPUs: ", torch.cuda.device_count())
@@ -127,6 +132,10 @@ def train(model, training_settings, model_hparams={}):
 
         source, target, coord_dict = next(iterator_train)
 
+        coord_dict['rel'] = dict_to_device(coord_dict['rel'], device)
+        source = source.to(device)
+        target = target.to(device)
+
         output = model(source, coord_dict)
 
         optimizer.zero_grad()
@@ -148,6 +157,10 @@ def train(model, training_settings, model_hparams={}):
             for _ in range(training_settings['n_iters_val']):
 
                 source, target, coord_dict = next(iterator_val)
+
+                coord_dict['rel'] = dict_to_device(coord_dict['rel'], device)
+                source = source.to(device)
+                target = target.to(device)
 
                 with torch.no_grad():
                     output = model(source, coord_dict)

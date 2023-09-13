@@ -174,13 +174,17 @@ class RelativePositionEmbedder_mlp(nn.Module):
             nn.LeakyReLU(inplace=True, negative_slope=0.2),
             nn.Linear(hidden_dim, model_dim, bias=False))
 
-    def forward(self, d_mat_lon, d_mat_lat):
+    def forward(self, coords, batched=False):
         
         if self.transform:
-            d_mat_lon = conv_coordinates_inv(d_mat_lon)
-            d_mat_lat = conv_coordinates_inv(d_mat_lat)
-                      
-        rpe = self.rpe_mlp(torch.concat((d_mat_lon.unsqueeze(dim=-1), d_mat_lat.unsqueeze(dim=-1)),dim=-1).squeeze())
+            coords = conv_coordinates_inv(coords)
+        
+        if batched:
+            coords = coords.unsqueeze(dim=-1).swapaxes(1,-1).squeeze()
+        else:
+            coords = coords = coords.unsqueeze(dim=-1).swapaxes(0,-1).squeeze()
+
+        rpe = self.rpe_mlp(coords)
     
         return rpe
   
@@ -261,6 +265,7 @@ class SelfAttentionRPPEBlock(nn.Module):
 
         return x 
 
+
 class MultiHeadAttentionBlock(nn.Module):
     def __init__(self, model_dim, output_dim, n_heads, logit_scale=False, qkv_proj=False):
         super().__init__()
@@ -303,18 +308,15 @@ class MultiHeadAttentionBlock(nn.Module):
         else:
             rel_pos_bias=None
 
-        if return_debug:
-            values, att = scaled_dot_product_rpe_swin(q, k, v, rel_pos_bias, self.logit_scale)
-        else:
-            values = scaled_dot_product_rpe_swin(q, k, v, rel_pos_bias, self.logit_scale)[0]
-           
+        values, att = scaled_dot_product_rpe_swin(q, k, v, rel_pos_bias, self.logit_scale)
+
         values = values.permute(0,2,1,3)
         values = values.reshape(bv, t, self.head_dim*self.n_heads)
 
         x = self.output_projection(values)
 
         if return_debug:
-            return x , att, rel_pos_bias
+            return x , att
         else:
             return x    
 
@@ -327,8 +329,15 @@ class nn_layer(nn.Module):
         self.cart = cart
         self.both_dims = both_dims
 
-    def forward(self, x, c1, c2):
+    def forward(self, x, coords):
         b,s,e = x.shape
+        
+        if coords.dim()==3:
+            c1 = coords[0]
+            c2 = coords[1]
+        else:
+            c1 = coords[:,0,:,:]
+            c2 = coords[:,1,:,:]
 
         if self.cart:
             d_mat = (c1**2 + c2**2).sqrt()
@@ -337,7 +346,6 @@ class nn_layer(nn.Module):
 
         t = d_mat.shape[-2] 
 
-        
         # leave out central datapoint? attention of datapoint to neighbourhood?
         if d_mat.dim()==2:
             _, indices = d_mat.sort(dim=1, descending=False)
@@ -350,6 +358,8 @@ class nn_layer(nn.Module):
             if self.both_dims:
                 c1 = (c1 - c1.transpose(-1,1)) 
                 c2 = (c2 - c2.transpose(-1,1))
+            
+            cs = torch.stack([c1,c2],dim=0)
 
         else:
             _, indices = d_mat.sort(dim=-1, descending=False)
@@ -372,8 +382,10 @@ class nn_layer(nn.Module):
                 c2 = c2.unsqueeze(dim=-1)
                 c1 = (c1 - c1.transpose(-1,-2)) 
                 c2 = (c2 - c2.transpose(-1,-2))
+            
+            cs = torch.stack([c1,c2],dim=1)
 
-        return x_bs, indices, [c1,c2]
+        return x_bs, indices, cs
 
 
 class interpolator(nn.Module):

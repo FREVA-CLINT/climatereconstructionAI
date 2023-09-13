@@ -52,25 +52,23 @@ class nh_Block_self(nn.Module):
         x = self.norm1(x)
         
         #get nearest neighbours
-        x, _, cs = self.nn_layer(x, coords_rel[0], coords_rel[1])
+        x, indices , cs = self.nn_layer(x, coords_rel)
 
         b, t, nh, e = x.shape
         x = x.reshape(b*t,nh,e)
 
-        # absolute coordinates with respect to target coordinates
-        rel_p_bias = self.PE(cs[0], cs[1])
+        batched = cs.shape[0] == b
+        
+        rel_p_bias = self.PE(cs, batched=batched)
 
-        if rel_p_bias.dim() == x.dim()+1:
-            rel_p_bias = rel_p_bias.repeat(b,1,1,1)
-        else:
+        if batched:
             rel_p_bias = rel_p_bias.reshape(b*t,self.nh, self.nh, self.n_heads)
+        else:
+            rel_p_bias = rel_p_bias.repeat(b,1,1,1)
 
         q = k = v = x
 
-        if return_debug:
-            att_out, att, _ = self.local_att(q, k, v, rel_pos_bias=rel_p_bias, return_debug=return_debug)
-        else:
-            att_out = self.local_att(q, k, v, rel_pos_bias=rel_p_bias)
+        att_out, att = self.local_att(q, k, v, rel_pos_bias=rel_p_bias, return_debug=True)
 
         x = x + self.dropout1(att_out)
         x = self.norm2(x)
@@ -88,6 +86,15 @@ class nh_Block_self(nn.Module):
         else:
             return x
 
+
+class voting_layer(nn.Module):
+    def __init__(self, nh, model_dim, ff_dim, PE=None, dropout=0, n_heads=4, reduction=0.1) -> None: 
+        super().__init__()
+
+        self.nh_Block = nh_Block_self(nh, model_dim, ff_dim, PE=PE, out_dim=model_dim, input_dim=model_dim, dropout=dropout, n_heads=n_heads)
+    
+    def forward(self, att, indices):
+        pass
 
 
 class nh_Block_mix(nn.Module):
@@ -136,15 +143,15 @@ class nh_Block_mix(nn.Module):
     def forward(self, x, coords_rel, return_debug=False):
 
         #get nearest neighbours
-        x, _, cs = self.nn_layer(x, coords_rel[0], coords_rel[1])
+        x, _, cs = self.nn_layer(x, coords_rel)
 
         b, t, nh, e = x.shape
 
-        v = x.reshape(b*t,self.nh,e)
+        v = x.reshape(b*t, nh,e)
         v = self.v_proj(v)
 
-        # absolute coordinates with respect to target coordinates
-        pe = self.pe_dropout(self.PE(cs[0],cs[1]))
+        batched = cs.shape[0] == b
+        pe = self.pe_dropout(self.PE(cs, batched=batched))
 
         x = x + pe
         x = self.norm1(x)
@@ -153,10 +160,11 @@ class nh_Block_mix(nn.Module):
         q = self.q_proj(x)
         k = self.k_proj(x)
 
+        att_out = self.local_att(q, k, v, return_debug=return_debug)
+
         if return_debug:
-            att_out, att, _ = self.local_att(q, k, v, return_debug=return_debug)
-        else:
-            att_out = self.local_att(q, k, v)
+            att = att_out[1]
+            att_out = att_out[0]
 
         x = x + self.dropout1(att_out)
         x = self.norm2(x)
@@ -170,7 +178,7 @@ class nh_Block_mix(nn.Module):
         x = self.dropout3(self.mlp_layer_unfold(x))
 
         if return_debug:
-            return x, att, pe, cs
+            return x, [att], [pe], cs
         else:
             return x
 
@@ -230,8 +238,6 @@ class trans_Block(nn.Module):
         
         return x
 
-
-
 class Block(nn.Module):
     def __init__(self, model_dim, ff_dim, g_RPE, l_RPE, output_dim=None, nh=4, n_heads=10, dropout=0.1, global_att=True):
         super().__init__()
@@ -250,7 +256,8 @@ class Block(nn.Module):
         b,t,e = x.shape
 
         if not self.trans_Block is None:
-            rp_bias = self.g_RPE(rel_coords[0], rel_coords[1])
+            batched = rel_coords.shape[0] == b
+            rp_bias = self.g_RPE(rel_coords, batched=batched)
         else:
             rp_bias = None
         atts = []
@@ -382,7 +389,8 @@ class Decoder(nn.Module):
                 rel_embs += x[2]
                 x = x[0]
         
-        cross_pos_bias = self.global_RPE(rel_coords_target_source[0], rel_coords_target_source[1])
+        batched = rel_coords_target_source.shape[0] == x.shape[0]
+        cross_pos_bias = self.global_RPE(rel_coords_target_source, batched=batched)
 
         if cross_pos_bias.dim() == x.dim():
             cross_pos_bias = cross_pos_bias.unsqueeze(dim=0).repeat(x.shape[0],1,1,1)
