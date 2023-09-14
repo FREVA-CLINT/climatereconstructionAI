@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-import torch.functional as F
+import torch.nn.functional as F
 
 import climatereconstructionai.model.transformer_helpers as helpers
 import climatereconstructionai.model.transformer_model as tm
@@ -8,12 +8,15 @@ from .. import config as cfg
 from ..utils import grid_utils as gu
 
 class nh_Block_self(nn.Module):
-    def __init__(self, nh, model_dim, ff_dim, PE=None, out_dim=1, input_dim=1, dropout=0, n_heads=4) -> None: 
+    def __init__(self, nh, model_dim, ff_dim, RPE=None, out_dim=1, input_dim=1, dropout=0, n_heads=4, transform_coords=True) -> None: 
         super().__init__()
         
-        self.nn_layer = helpers.nn_layer(nh, cart=True, both_dims=True)
+        self.nn_layer = helpers.nn_layer(nh, both_dims=True)
 
-        self.PE = PE
+        if RPE is None:
+            self.RPE = helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=transform_coords)
+        else:
+            self.RPE  = RPE
 
         self.nh = nh
         self.md = model_dim
@@ -52,14 +55,14 @@ class nh_Block_self(nn.Module):
         x = self.norm1(x)
         
         #get nearest neighbours
-        x, indices , cs = self.nn_layer(x, coords_rel)
+        x, indices , cs = self.nn_layer(x, coords_rel, coords_rel, skip_self=True)
 
         b, t, nh, e = x.shape
         x = x.reshape(b*t,nh,e)
 
         batched = cs.shape[0] == b
         
-        rel_p_bias = self.PE(cs, batched=batched)
+        rel_p_bias = self.RPE(cs, batched=batched)
 
         if batched:
             rel_p_bias = rel_p_bias.reshape(b*t,self.nh, self.nh, self.n_heads)
@@ -82,28 +85,103 @@ class nh_Block_self(nn.Module):
         x = self.dropout3(self.mlp_layer_unfold(x))
 
         if return_debug:
-            return x, att, rel_p_bias, cs
+            return x, att, indices, rel_p_bias, cs
         else:
-            return x
+            return x, att, indices
+
+
+def fetch_data(x, indices):
+    b, n, e = x.shape
+    n_k = indices.shape[-1]
+    indices = indices.view(b,n_k,1).repeat(1,1,e)
+    x = torch.gather(x, dim=1, index=indices)
+    return x
+
+def fetch_coords(rel_coords, indices):
+    b, n_c, n, _ = rel_coords.shape
+    n_k = indices.shape[-1]
+    indices = indices.view(b,1,n_k,1).repeat(1,2,1,1)
+    rel_coords = torch.gather(rel_coords, dim=2, index=indices)
+    return rel_coords
 
 
 class voting_layer(nn.Module):
-    def __init__(self, nh, model_dim, ff_dim, PE=None, dropout=0, n_heads=4, reduction=0.1) -> None: 
+    def __init__(self, nh, n_heads=4, p_reduction=0.4) -> None: 
+
         super().__init__()
+        self.p_reduction = p_reduction
+        self.head_reduction = nn.Sequential(nn.Linear(n_heads, n_heads, bias=True),
+                                            nn.Linear(n_heads, 1, bias=True))
 
-        self.nh_Block = nh_Block_self(nh, model_dim, ff_dim, PE=PE, out_dim=model_dim, input_dim=model_dim, dropout=dropout, n_heads=n_heads)
+        self.nh_voting = nn.Sequential(nn.Linear(nh*nh, nh*nh, bias=True),
+                                       nn.Linear(nh*nh, nh, bias=True),
+                                        nn.Linear(nh, 1, bias=True))
+        
     
-    def forward(self, att, indices):
-        pass
+    def forward(self, x, att_nh, coords):
+        
+        b, n, e = x.shape
+        bt, n_heads, nh, _ = att_nh.shape 
+                
+        att_nh = att_nh.reshape(b, n, n_heads, nh, nh)
 
+        att_nh = att_nh.view(b, n, nh, nh, n_heads)
+
+        att_vote = self.head_reduction(att_nh).view(b,n,nh*nh)
+
+        att_vote = F.softmax(self.nh_voting(att_vote).squeeze(),dim=1)
+        
+        indices_vote = att_vote.sort(dim=-1, descending=True).indices
+
+        n_keep = torch.tensor((1 - self.p_reduction)*indices_vote.shape[1]).long()
+        indices_keep = indices_vote[:,:n_keep]
+
+        coords= fetch_coords(coords.clone(), indices_keep)
+        x = fetch_data(x, indices_keep)
+
+        return x, coords
+
+class reduction_layer(nn.Module):
+    def __init__(self, nh, n_heads=4, p_reduction=0.4) -> None: 
+        super().__init__()
+        self.nn_layer = helpers.nn_layer(nh, both_dims=False)
+        self.p_reduction = p_reduction
+
+    def forward(self, x, coords):
+
+        x_nh, _, rel_coords = self.nn_layer(x, coords, coords)  
+        b, n, nh, e = x_nh.shape
+        
+        #local_m = x_nh.mean(dim=-2).abs()
+        local_dist = (x_nh[:,:,1:,:] - x_nh[:,:,[0],:]).pow(2).sum(dim=-2).sum(dim=-1).sqrt()
+        #local_s = x_nh.std(dim=-2)
+        #local_rel = (local_s/local_m).sum(dim=-1)
+       # local_rel = local_dist.sum(dim=-1)
+
+        _, indices = local_dist.sort(dim=1, descending=True)
+
+        n_keep = torch.tensor((1 - self.p_reduction)*indices.shape[1]).long()
+        indices = indices[:,:n_keep]
+
+        x = torch.gather(x, dim=1, index=indices.view(b,n_keep,1).repeat(1,1,e))
+        coords = torch.gather(coords, dim=2, index=indices.view(b,1,n_keep,1).repeat(1,coords.shape[1],1,1))
+        
+        return x, coords, local_dist
+
+            
+            
 
 class nh_Block_mix(nn.Module):
-    def __init__(self, nh, model_dim, ff_dim, PE=None, input_dim=1, dropout=0, n_heads=4) -> None: 
+    def __init__(self, nh, model_dim, ff_dim, PE=None, input_dim=1, dropout=0, n_heads=4, transform_coords=True) -> None: 
         super().__init__()
         
-        self.nn_layer = helpers.nn_layer(nh, cart=True, both_dims=False)
+        self.nn_layer = helpers.nn_layer(nh, both_dims=False)
 
-        self.PE = PE
+        if PE is None:
+            self.PE = helpers.RelativePositionEmbedder_mlp(model_dim, ff_dim, transform=transform_coords)
+        else:
+            self.PE  = PE
+
         self.nh = nh
         self.md = model_dim
 
@@ -140,18 +218,18 @@ class nh_Block_mix(nn.Module):
         self.v_proj = nn.Linear(input_dim, model_dim, bias=False)
 
 
-    def forward(self, x, coords_rel, return_debug=False):
+    def forward(self, x, coords_target, coords_source, return_debug=False):
 
         #get nearest neighbours
-        x, _, cs = self.nn_layer(x, coords_rel)
+        x, _, coords_target_source_nh = self.nn_layer(x, coords_target, coords_source)
 
         b, t, nh, e = x.shape
 
         v = x.reshape(b*t, nh,e)
         v = self.v_proj(v)
 
-        batched = cs.shape[0] == b
-        pe = self.pe_dropout(self.PE(cs, batched=batched))
+        batched = coords_target_source_nh.shape[0] == b
+        pe = self.pe_dropout(self.PE(coords_target_source_nh, batched=batched))
 
         x = x + pe
         x = self.norm1(x)
@@ -178,14 +256,20 @@ class nh_Block_mix(nn.Module):
         x = self.dropout3(self.mlp_layer_unfold(x))
 
         if return_debug:
-            return x, [att], [pe], cs
+            return x, [att], [pe], coords_target_source_nh
         else:
             return x
 
 
-class trans_Block(nn.Module):
-    def __init__(self, model_dim, ff_dim, out_dim=1, input_dim=1, dropout=0, n_heads=4) -> None: 
+class attention_Block(nn.Module):
+    def __init__(self, model_dim, ff_dim, out_dim=1, input_dim=1, dropout=0, n_heads=4, rpe_PE=None, transform_coords=True) -> None: 
         super().__init__()
+
+        if rpe_PE is None:
+            self.g_RPE = helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=transform_coords)
+        else:
+            self.g_RPE  = rpe_PE
+
 
         self.local_att = helpers.MultiHeadAttentionBlock(
             model_dim, model_dim, n_heads, logit_scale=True, qkv_proj=True
@@ -200,9 +284,7 @@ class trans_Block(nn.Module):
         )
 
         self.dropout1 = nn.Dropout(dropout)
-        self.norm1 = nn.LayerNorm(model_dim)
         
-
         if out_dim != input_dim:
             self.compute_res = False
             self.dropout2 = nn.Identity()
@@ -212,18 +294,19 @@ class trans_Block(nn.Module):
             self.dropout2 = nn.Dropout(dropout)
             self.norm2 = nn.LayerNorm(model_dim)
 
-    def forward(self, x, rp_bias, return_debug=False):
-        e = x.shape[-1]
+    def forward(self, q, k, v, rel_coords, return_debug=False):
+        e = v.shape[-1]
 
-        x = self.norm1(x)
-        q = k = v = x
+        batched = rel_coords.shape[0] == v.shape[0]
+        rp_bias = self.g_RPE(rel_coords, batched=batched)
+
+        att_out = self.local_att(q, k, v, rp_bias, return_debug)
 
         if return_debug:
-            att_out, att, _ = self.local_att(q, k, v, rp_bias, return_debug=return_debug)
-        else:
-            att_out = self.local_att(q, k, v, rp_bias)
+            att = att_out[1]
+            att_out = att_out[0]
 
-        x = x + self.dropout1(att_out)
+        x = q + self.dropout1(att_out)
         x = self.norm2(x)
         
         mlp_out = self.dropout2(self.mlp_layer(x))
@@ -238,180 +321,239 @@ class trans_Block(nn.Module):
         
         return x
 
-class Block(nn.Module):
-    def __init__(self, model_dim, ff_dim, g_RPE, l_RPE, output_dim=None, nh=4, n_heads=10, dropout=0.1, global_att=True):
+class EncoderBlock(nn.Module):
+    def __init__(self, model_dim, ff_dim, l_RPE=None, output_dim=None, p_reduction=0, nh=4, n_heads=10, dropout=0.1, self_att=True, g_RPE=None):
         super().__init__()
 
-        self.g_RPE = g_RPE
-        
-        if not global_att:
-            self.trans_Block = None
+        if self_att:
+            self.att_block = attention_Block(model_dim, ff_dim, out_dim=output_dim, input_dim=model_dim, n_heads=n_heads, rpe_PE=g_RPE)
         else:
-            self.trans_Block = trans_Block(model_dim, ff_dim, out_dim=model_dim, input_dim=model_dim, n_heads=n_heads)
-        
-        self.nh_net = nh_Block_self(nh, model_dim, ff_dim, l_RPE, out_dim=output_dim, dropout=dropout, n_heads=n_heads)
+            self.att_block = None
 
+        self.nh_block = nh_Block_self(nh, model_dim, ff_dim, l_RPE, out_dim=model_dim, dropout=dropout, n_heads=n_heads)
+        
+        if p_reduction > 0:
+            self.voting_layer = reduction_layer(nh*2, p_reduction=p_reduction)
+            #self.voting_layer = voting_layer(nh, n_heads=n_heads, p_reduction=p_reduction)
+        else:
+            self.voting_layer = None
                
-    def forward(self, x, rel_coords, return_debug=False):
+    def forward(self, x, coords, return_debug=False):
         b,t,e = x.shape
 
-        if not self.trans_Block is None:
-            batched = rel_coords.shape[0] == b
-            rp_bias = self.g_RPE(rel_coords, batched=batched)
-        else:
-            rp_bias = None
-        atts = []
-        rp_biass = [rp_bias]
+        if return_debug:
+            atts = []
+
+        output = self.nh_block(x, coords, return_debug)
+        x = output[0]
+        att_nh = output[1]
+        indices = output[2]
 
         if return_debug:
-
-            if not self.trans_Block is None:
-                x, att = self.trans_Block(x, rp_bias, return_debug)
-                atts.append(att)
-
-            x, att_nh, rp_bias_nh, _ = self.nh_net(x, rel_coords, return_debug)
             atts.append(att_nh)
 
-            rp_biass.append(rp_bias_nh)
-
-            return x, atts, rp_biass
-        
+        if self.voting_layer is not None:
+            #x, coords = self.voting_layer(x, att_nh, coords)
+            x, coords, local_dist = self.voting_layer(x, coords)
         else:
+            local_dist= []
+        
+        if self.att_block is not None:
+            rel_coords = helpers.get_coord_relation(coords, coords)
+            x = self.att_block(x, x, x, rel_coords, return_debug)
 
-            if not self.trans_Block is None:
-                x = self.trans_Block(x, rp_bias)
+            if return_debug:
+                atts.append(x[1])
+                x = x[0]
 
-            x = self.nh_net(x, rel_coords)
+        if return_debug:
+            return x, coords, atts, local_dist
+        
+        return x, coords
 
-            return x
 
+class DecoderBlock(nn.Module):
+    def __init__(self, model_dim, ff_dim, l_RPE=None, output_dim=None, nh=4, n_heads=10, dropout=0.1, cross_att=True, g_RPE=None):
+        super().__init__()
+
+        if cross_att:
+            self.att_block = attention_Block(model_dim, ff_dim, out_dim=output_dim, input_dim=model_dim, n_heads=n_heads, rpe_PE=g_RPE)
+        else:
+            self.att_block = None
+
+        self.nh_block = nh_Block_self(nh, model_dim, ff_dim, l_RPE, out_dim=model_dim, dropout=dropout, n_heads=n_heads)
+    
+               
+    def forward(self, x, x_enc, coords_target, coords_source, return_debug=False):
+        b,t,e = x.shape
+
+        if return_debug:
+            atts = []
+
+        output = self.nh_block(x, coords_target, return_debug)
+        x = output[0]
+        att_nh = output[1]
+
+        if return_debug:
+            atts.append(att_nh)
+
+        if self.att_block is not None:
+            rel_coords = helpers.get_coord_relation(coords_target, coords_source)
+            x = self.att_block(x, x_enc, x_enc, rel_coords, return_debug)
+
+            if return_debug:
+                atts.append(x[1])
+                x = x[0]
+
+        if return_debug:
+            return x, atts
+        
+        return x
 
 class Encoder(nn.Module):
 
-    def __init__(self, n_layers, model_dim, nh, ff_dim, local_PE, n_heads=10, dropout=0.1, global_att=True):
+    def __init__(self, n_layers, self_att_layers, p_reduction_layers, model_dim, nh, ff_dim, n_heads=10, dropout=0.1, PE=None, share_local_rpe=False, share_global_rpe=False):
         super().__init__()
 
         model_dim_nh = model_dim // nh
         ff_dim_nh = ff_dim // nh
 
-        if global_att:
+        if PE is None:
+            PE = helpers.RelativePositionEmbedder_mlp(model_dim_nh, ff_dim_nh, transform=True)
+        else:
+            PE = None
+
+        if share_local_rpe:
+            l_RPE = helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=True)
+        else:
+            l_RPE = None
+        
+        if share_global_rpe:
             g_RPE = helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=True)
         else:
             g_RPE = None
 
-        self.nh_input_net = nh_Block_mix(nh, model_dim_nh, ff_dim_nh, local_PE, dropout=dropout, n_heads=n_heads)
+        if n_layers>0:
+            self.nh_input_net = nh_Block_mix(nh, model_dim_nh, ff_dim_nh, PE, dropout=dropout, n_heads=n_heads)
+        else:
+            self.nh_input_net = None
 
         self.layers = nn.ModuleList()
 
         for n in range(n_layers):
-            output_dim=model_dim if n == n_layers-1 else model_dim
-            self.layers.append(Block(model_dim,
+            
+            self.layers.append(EncoderBlock(model_dim,
                                         ff_dim,
-                                        g_RPE,
-                                        helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim_nh, transform=True),
-                                        output_dim=output_dim,
+                                        g_RPE=g_RPE,
+                                        l_RPE=l_RPE,
+                                        output_dim=model_dim,
                                         n_heads=n_heads,
                                         dropout=dropout,
-                                        global_att=global_att))
+                                        self_att=self_att_layers[n],
+                                        p_reduction=p_reduction_layers[n]))
 
-    def forward(self, x, rel_coords, return_debug=False):
+    def forward(self, x, coords_source, return_debug=False):
             
-            atts = []
-            rel_embs = []
+        atts = []
+        local_dists = []
 
-            x = self.nh_input_net(x, rel_coords, return_debug=return_debug)
+        if self.nh_input_net is not None:
+            x = self.nh_input_net(x, coords_source, coords_source, return_debug=return_debug)
 
             if return_debug:
                 atts += x[1]
-                rel_embs += x[2]
                 x = x[0]
 
-            for layer in self.layers:
-                x = layer(x, rel_coords, return_debug)
-                if return_debug:
-                    atts += x[1]
-                    rel_embs += x[2]
-                    x = x[0]
+        for layer in self.layers:
+            x = layer(x, coords_source, return_debug)
 
             if return_debug:
-                return x, atts, rel_embs
-            else:
-                return x
+                atts += x[2]
+                local_dists.append(x[3])
+
+            coords_source = x[1]
+            x = x[0]
+
+    
+        if return_debug:
+            return x, coords_source, atts, local_dists
+        else:
+            return x, coords_source
 
 
 class Decoder(nn.Module):
 
-    def __init__(self, dec_layers, cross_layers, model_dim, nh, ff_dim, n_heads=10, dropout=0.1, global_RPE=None, global_att=False):
+    def __init__(self, dec_layers, model_dim, nh, ff_dim, output_dim=1, n_heads=10, dropout=0.1, PE=None, share_local_rpe=False, share_global_rpe=False):
         super().__init__()
     
-        self.global_RPE = global_RPE
+        model_dim_nh = model_dim // nh
+        ff_dim_nh = ff_dim // nh
 
-        self.cross_att = helpers.MultiHeadAttentionBlock(
-            model_dim, model_dim, n_heads, logit_scale=True, qkv_proj=True
-            )
+        if PE is None:
+            PE = helpers.RelativePositionEmbedder_mlp(model_dim_nh, ff_dim_nh, transform=True)
+        else:
+            PE = None
+
+        if share_local_rpe:
+            l_RPE = helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=True)
+        else:
+            l_RPE = None
         
+        if share_global_rpe:
+            g_RPE = helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=True)
+        else:
+            g_RPE = None
+  
+        self.nh_input_net = nh_Block_mix(nh, model_dim_nh, ff_dim_nh, PE, input_dim=1, dropout=dropout, n_heads=n_heads)
+
+        self.interpolation =  nn.Sequential(
+            nn.Linear(model_dim, ff_dim, bias=True),
+            nn.Dropout(dropout),
+            nn.LeakyReLU(inplace=True, negative_slope=0.2),
+            nn.Linear(ff_dim, 1, bias=True)
+        )
+
         self.layers = nn.ModuleList()
-        for _ in range(dec_layers):
-            self.layers.append(Block(model_dim,
+        for n in range(dec_layers):
+            out_dim = output_dim if n==dec_layers-1 else model_dim
+            self.layers.append(DecoderBlock(model_dim,
                                         ff_dim,
-                                        global_RPE,
-                                        helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=True),
-                                        output_dim=model_dim,
+                                        g_RPE=g_RPE,
+                                        l_RPE=l_RPE,
+                                        output_dim=out_dim,
                                         nh=nh,
                                         n_heads=n_heads,
                                         dropout=dropout,
-                                        global_att=global_att))
-        
-        self.layers_cross = nn.ModuleList()
-        for k in range(cross_layers):
-            output_dim = 1 if k == cross_layers - 1 else model_dim
-            self.layers_cross.append(Block(model_dim,
-                                            ff_dim,
-                                            global_RPE,
-                                            helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=True),
-                                            output_dim=output_dim,
-                                            nh=nh,
-                                            n_heads=n_heads,
-                                            dropout=dropout,
-                                            global_att=global_att))
+                                        cross_att=True))
         
         
-    def forward(self, x, x_enc, rel_coords_target_source, rel_coords_target, return_debug=False):
         
+    def forward(self, x, x_enc, coords_target, coords_source, coords_source_enc, return_debug=False):
+
         atts = []
-        rel_embs = []
 
-        for layer in self.layers:
-            x = layer(x, rel_coords_target, return_debug)
-
-            if return_debug:
-                atts += x[1]
-                rel_embs += x[2]
-                x = x[0]
-        
-        batched = rel_coords_target_source.shape[0] == x.shape[0]
-        cross_pos_bias = self.global_RPE(rel_coords_target_source, batched=batched)
-
-        if cross_pos_bias.dim() == x.dim():
-            cross_pos_bias = cross_pos_bias.unsqueeze(dim=0).repeat(x.shape[0],1,1,1)
-
-        x = self.cross_att(x, x_enc, x_enc, cross_pos_bias, return_debug)
+        x = self.nh_input_net(x, coords_target, coords_source, return_debug=return_debug)
 
         if return_debug:
-            atts.append(x[1])
-            rel_embs.append(x[2])
+            atts += x[1]
             x = x[0]
 
-        for layer in self.layers_cross:
-            x = layer(x, rel_coords_target, return_debug)
+        out_proj = self.interpolation(x)
+
+        for layer in self.layers:
+            x = layer(x, x_enc, coords_target, coords_source_enc, return_debug)
 
             if return_debug:
                 atts += x[1]
-                rel_embs += x[2]
                 x = x[0]
+        
+        if x.shape[-1]==out_proj.shape[-1]:
+            x = x + out_proj
+        else:
+            x = out_proj
 
         if return_debug:
-            return x, atts, rel_embs
+            return x, atts
         else:
             return x
         
@@ -424,98 +566,83 @@ class SpatialTransNet(tm.transformer_model):
         dropout = model_settings['dropout']
         model_dim = model_settings['model_dim']
         n_heads = model_settings['n_heads']
+        self.train_interpolation = model_settings['train_interpolation']
         nh = model_settings['feat_nh']
         ff_dim = model_settings['ff_dim']
-        self.train_interpolation = model_settings['train_interpolation']
 
         model_dim_nh = model_dim // nh
         ff_dim_nh = ff_dim // nh
 
-        self.abs_pos_emb_local = helpers.RelativePositionEmbedder_mlp(model_dim_nh, ff_dim_nh, transform=True)
+        if model_settings['share_PE']:
+            PE = helpers.RelativePositionEmbedder_mlp(model_dim_nh, ff_dim_nh, transform=True)
+        else:
+            PE = None
 
-        self.nh_input_net = nh_Block_mix(nh, model_dim_nh, ff_dim_nh, self.abs_pos_emb_local, input_dim=1, dropout=dropout, n_heads=n_heads)
-
-        self.interpolation =  nn.Sequential(
-            nn.Linear(model_dim, ff_dim, bias=True),
-            nn.Dropout(dropout),
-            nn.LeakyReLU(inplace=True, negative_slope=0.2),
-            nn.Linear(ff_dim, 1, bias=True)
-            #nn.LeakyReLU(inplace=True, negative_slope=0.2)
+        self.skip_encoder = model_settings['encoder']['n_layers']==0
+        self.Encoder = Encoder(
+            model_settings['encoder']['n_layers'],
+            model_settings['encoder']['self_att_layers'],
+            model_settings['encoder']['p_reduction_layers'],
+            model_settings['model_dim'],
+            model_settings['feat_nh'],
+            model_settings['ff_dim'],
+            PE=PE,
+            n_heads=n_heads,
+            dropout=dropout,
+            share_local_rpe=self.model_settings['encoder']['share_local_rpe'],
+            share_global_rpe=self.model_settings['encoder']['share_global_rpe'],
         )
 
-        if not self.train_interpolation:
-            self.cross_pos_emb_bias = helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=True)
-            
-            self.Encoder = Encoder(
-                model_settings['encoder']['n_layers'],
-                model_settings['model_dim'],
-                model_settings['feat_nh'],
-                model_settings['ff_dim'],
-                self.abs_pos_emb_local,
-                n_heads=n_heads,
-                dropout=dropout,
-                global_att=model_settings['encoder']['global_att']
-            )
-
-            self.Decoder = Decoder(
-                model_settings['decoder']['n_layers'],
-                model_settings['decoder']['n_layers'],
-                model_settings['model_dim'],
-                model_settings['feat_nh'],
-                model_settings['ff_dim'],
-                global_RPE=self.cross_pos_emb_bias,
-                n_heads=n_heads,
-                dropout=dropout,
-                global_att=model_settings['decoder']['global_att']
-            )
-
-        self.mlp_out = nn.Sequential(nn.Linear(model_dim, 1),nn.LeakyReLU(negative_slope=0.2,inplace=True))
+        self.Decoder = Decoder(
+            model_settings['decoder']['n_layers'],
+            model_settings['model_dim'],
+            model_settings['feat_nh'],
+            model_settings['ff_dim'],
+            PE=PE,
+            output_dim = model_settings['output_dim'],
+            share_local_rpe=self.model_settings['decoder']['share_local_rpe'],
+            share_global_rpe=self.model_settings['decoder']['share_global_rpe'],
+            n_heads=n_heads,
+            dropout=dropout
+        )
         
 
     def forward(self, x, coord_dict, return_debug=False):
         
-        rel_coords_source = coord_dict['rel']['source']
-        rel_coords_target = coord_dict['rel']['target']
-        rel_coords_target_source = coord_dict['rel']['target-source']
+        coords_source = coord_dict['rel']['source']
+        coords_target = coord_dict['rel']['target']
 
         atts = []
-        rel_embs = []
+        #rel_embs = []
 
-        if not self.train_interpolation:
-            x_enc = self.Encoder(x, rel_coords_source, return_debug=return_debug)
+        if not self.skip_encoder:
+            output = self.Encoder(x, coords_source, return_debug=return_debug)
+
+            x_enc = output[0]
+            coords_source_enc = output[1]
 
             if return_debug:
-                atts += x_enc[1]
-                rel_embs += x_enc[2]
-                x_enc = x_enc[0]
+                atts += output[2]
+                local_dists = output[3]
+        else:
+            x_enc = x
+            coords_source_enc = coords_source
 
-        x_inp = self.nh_input_net(x, rel_coords_target_source, return_debug=return_debug)
+        
+        x = self.Decoder(x, x_enc, coords_target, coords_source, coords_source_enc, return_debug=return_debug)
 
         if return_debug:
-            atts.append(x_inp[1])
-            rel_embs.append(x_inp[2])
-            x_inp = x_inp[0]
-
-        out_proj = self.interpolation(x_inp)
-
-        if not self.train_interpolation:
-            x = self.Decoder(x_inp, x_enc, rel_coords_target_source, rel_coords_target, return_debug=return_debug)
-
-            if return_debug:
-                atts += x[1]
-                rel_embs += x[2]
-                x = x[0]
-            
-            x = x + out_proj 
-        
-        else:
-            x = out_proj
+            atts += x[1]
+            #rel_embs += x[2]
+            x = x[0]
+    
 
         if return_debug:
 
             debug_dict = {
                           'atts':atts,
-                          'rel_emb': rel_embs,
+                          'coords_source': coords_source_enc,
+                          'local_dists': local_dists
                         }
             
             return x, debug_dict

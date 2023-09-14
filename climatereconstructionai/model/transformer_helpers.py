@@ -320,36 +320,46 @@ class MultiHeadAttentionBlock(nn.Module):
         else:
             return x    
 
+def get_coord_relation(coords_target, coords_source, cart=True):
+    
+    diff = coords_target - coords_source.transpose(-2,-1)
+    
+    if cart:
+        return diff
+    else:
+        d_mat = torch.sqrt(diff[:,0,:,:]**2 + diff[:,1,:,:]**2)
+        phi = torch.atan2(diff[:,1,:,:], diff[:,0,:,:])
+        return torch.stack((d_mat, phi), dim=1)
+
 
 class nn_layer(nn.Module):
-    def __init__(self, nh, cart=True, both_dims=False):
+    def __init__(self, nh, both_dims=False):
         super().__init__()
 
         self.nh = nh
-        self.cart = cart
         self.both_dims = both_dims
 
-    def forward(self, x, coords):
+
+    def forward(self, x, coords_target, coords_source, skip_self=False):
         b,s,e = x.shape
         
-        if coords.dim()==3:
-            c1 = coords[0]
-            c2 = coords[1]
-        else:
-            c1 = coords[:,0,:,:]
-            c2 = coords[:,1,:,:]
+        coord_diff = get_coord_relation(coords_target, coords_source)
 
-        if self.cart:
-            d_mat = (c1**2 + c2**2).sqrt()
+        if coords_source.dim()==3:
+            c1 = coord_diff[0]
+            c2 = coord_diff[1]
         else:
-            d_mat = c1
+            c1 = coord_diff[:,0,:,:]
+            c2 = coord_diff[:,1,:,:]
+
+        d_mat = (c1**2 + c2**2).sqrt()
 
         t = d_mat.shape[-2] 
 
         # leave out central datapoint? attention of datapoint to neighbourhood?
         if d_mat.dim()==2:
             _, indices = d_mat.sort(dim=1, descending=False)
-            indices = indices[:,:self.nh]
+            indices = indices[:,int(skip_self):self.nh+int(skip_self)]
             x_bs = x[:,indices]
 
             c1 = torch.gather(c1,dim=0,index=indices).unsqueeze(dim=-1)
@@ -371,8 +381,8 @@ class nn_layer(nn.Module):
             x_bs = x.view(b*s,e)
             x_bs = x_bs[c_ix_shifted].view(b,t,s,e)
         
-            x_bs = x_bs[:,:,:self.nh,:]
-            indices = indices[:,:,:self.nh]
+            x_bs = x_bs[:,:,int(skip_self):self.nh+int(skip_self),:]
+            indices = indices[:,:,int(skip_self):self.nh+int(skip_self)]
 
             c1 = torch.gather(c1, dim=-1, index=indices)#.transpose(-1,1)
             c2 = torch.gather(c2, dim=-1, index=indices)#.transpose(-1,1)
