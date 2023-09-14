@@ -224,12 +224,7 @@ class NetCDFLoader(Dataset):
 
         x = x[indices,:]
 
-        coords['rel']['source'] = coords['rel']['source'][:,:,indices][:,indices,:]
-
-        coords['rel']['target-source'] = coords['rel']['target-source'][:,:,indices]
-
-        coords['abs']['source'] = coords['abs']['source'][:,indices,:]
-
+        coords['rel']['source'] = coords['rel']['source'][:,indices,:]
 
         return x, coords
 
@@ -241,25 +236,25 @@ class NetCDFLoader(Dataset):
 
     def get_coords(self, coord_dict):
 
-        d_mat_lr_hr, d_phi_lr_hr, d_lon_lr_hr, d_lat_lr_hr = self.PosCalc(coord_dict['lr']['lons'], coord_dict['lr']['lats'], coord_dict['hr']['lons'], coord_dict['hr']['lats'])
+     #   d_mat_lr_hr, d_phi_lr_hr, d_lon_lr_hr, d_lat_lr_hr = self.PosCalc(coord_dict['lr']['lons'], coord_dict['lr']['lats'], coord_dict['hr']['lons'], coord_dict['hr']['lats'])
 
-        d_mat_lr_hr, d_phi_lr_lr, d_lon_lr_lr, d_lat_lr_lr  = self.PosCalc(coord_dict['lr']['lons'], coord_dict['lr']['lats'], coord_dict['lr']['lons'], coord_dict['lr']['lats'])
+     #   d_mat_lr_hr, d_phi_lr_lr, d_lon_lr_lr, d_lat_lr_lr  = self.PosCalc(coord_dict['lr']['lons'], coord_dict['lr']['lats'], coord_dict['lr']['lons'], coord_dict['lr']['lats'])
 
-        d_mat_hr_hr, d_phi_hr_hr, d_lon_hr_hr, d_lat_hr_hr  = self.PosCalc(coord_dict['hr']['lons'], coord_dict['hr']['lats'], coord_dict['hr']['lons'], coord_dict['hr']['lats'])
+     #   d_mat_hr_hr, d_phi_hr_hr, d_lon_hr_hr, d_lat_hr_hr  = self.PosCalc(coord_dict['hr']['lons'], coord_dict['hr']['lats'], coord_dict['hr']['lons'], coord_dict['hr']['lats'])
 
         _, _, d_lons_s, d_lats_s = self.PosCalc(coord_dict['lr']['lons'], coord_dict['lr']['lats'], (coord_dict['seeds'][0]), (coord_dict['seeds'][1]))
 
         _, _, d_lons_t, d_lats_t = self.PosCalc(coord_dict['hr']['lons'], coord_dict['hr']['lats'], (coord_dict['seeds'][0]), (coord_dict['seeds'][1]))
 
          
-        rel_coords = {'source': torch.stack([d_lon_lr_lr.float(), d_lat_lr_lr.float()],dim=0),
-                    'target': torch.stack([d_lon_hr_hr.float(), d_lat_hr_hr.float()],dim=0),
-                    'target-source': torch.stack([d_lon_lr_hr.float(), d_lat_lr_hr.float()],dim=0)}
+        #rel_coords = {'source': torch.stack([d_lon_lr_lr.float(), d_lat_lr_lr.float()],dim=0),
+        #            'target': torch.stack([d_lon_hr_hr.float(), d_lat_hr_hr.float()],dim=0),
+        #            'target-source': torch.stack([d_lon_lr_hr.float(), d_lat_lr_hr.float()],dim=0)}
         
-        abs_coords =  {'source': torch.stack([d_lons_s.float().T, d_lats_s.float().T],dim=0),
+        rel_coords =  {'source': torch.stack([d_lons_s.float().T, d_lats_s.float().T],dim=0),
                     'target': torch.stack([d_lons_t.float().T, d_lats_t.float().T],dim=0)}
         
-        coord_dict = {'rel': rel_coords, 'abs': abs_coords}
+        coord_dict = {'rel': rel_coords}
 
         return coord_dict
     

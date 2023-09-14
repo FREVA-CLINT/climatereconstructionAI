@@ -627,6 +627,7 @@ class SpatialTransNet(tm.transformer_model):
         else:
             x_enc = x
             coords_source_enc = coords_source
+            local_dists = []
 
         
         x = self.Decoder(x, x_enc, coords_target, coords_source, coords_source_enc, return_debug=return_debug)
