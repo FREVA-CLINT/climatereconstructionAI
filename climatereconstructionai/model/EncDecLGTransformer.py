@@ -333,7 +333,7 @@ class EncoderBlock(nn.Module):
         self.nh_block = nh_Block_self(nh, model_dim, ff_dim, l_RPE, out_dim=model_dim, dropout=dropout, n_heads=n_heads)
         
         if p_reduction > 0:
-            self.voting_layer = reduction_layer(nh*2, p_reduction=p_reduction)
+            self.voting_layer = reduction_layer(nh, p_reduction=p_reduction)
             #self.voting_layer = voting_layer(nh, n_heads=n_heads, p_reduction=p_reduction)
         else:
             self.voting_layer = None
