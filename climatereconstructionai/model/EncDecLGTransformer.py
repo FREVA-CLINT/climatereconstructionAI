@@ -8,13 +8,13 @@ from .. import config as cfg
 from ..utils import grid_utils as gu
 
 class nh_Block_self(nn.Module):
-    def __init__(self, nh, model_dim, ff_dim, RPE=None, out_dim=1, input_dim=1, dropout=0, n_heads=4, transform_coords=True) -> None: 
+    def __init__(self, nh, model_dim, ff_dim, RPE=None, out_dim=1, input_dim=1, dropout=0, n_heads=4, transform='inv') -> None: 
         super().__init__()
         
         self.nn_layer = helpers.nn_layer(nh, both_dims=True)
 
         if RPE is None:
-            self.RPE = helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=transform_coords)
+            self.RPE = helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=transform)
         else:
             self.RPE  = RPE
 
@@ -172,13 +172,13 @@ class reduction_layer(nn.Module):
             
 
 class nh_Block_mix(nn.Module):
-    def __init__(self, nh, model_dim, ff_dim, PE=None, input_dim=1, dropout=0, n_heads=4, transform_coords=True) -> None: 
+    def __init__(self, nh, model_dim, ff_dim, PE=None, input_dim=1, dropout=0, n_heads=4, transform='inv') -> None: 
         super().__init__()
         
         self.nn_layer = helpers.nn_layer(nh, both_dims=False)
 
         if PE is None:
-            self.PE = helpers.RelativePositionEmbedder_mlp(model_dim, ff_dim, transform=transform_coords)
+            self.PE = helpers.RelativePositionEmbedder_mlp(model_dim, ff_dim, transform=transform)
         else:
             self.PE  = PE
 
@@ -262,11 +262,11 @@ class nh_Block_mix(nn.Module):
 
 
 class attention_Block(nn.Module):
-    def __init__(self, model_dim, ff_dim, out_dim=1, input_dim=1, dropout=0, n_heads=4, rpe_PE=None, transform_coords=True) -> None: 
+    def __init__(self, model_dim, ff_dim, out_dim=1, input_dim=1, dropout=0, n_heads=4, rpe_PE=None, transform='inv') -> None: 
         super().__init__()
 
         if rpe_PE is None:
-            self.g_RPE = helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=transform_coords)
+            self.g_RPE = helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=transform)
         else:
             self.g_RPE  = rpe_PE
 
@@ -322,15 +322,15 @@ class attention_Block(nn.Module):
         return x
 
 class EncoderBlock(nn.Module):
-    def __init__(self, model_dim, ff_dim, l_RPE=None, output_dim=None, p_reduction=0, nh=4, n_heads=10, dropout=0.1, self_att=True, g_RPE=None):
+    def __init__(self, model_dim, ff_dim, l_RPE=None, output_dim=None, p_reduction=0, nh=4, n_heads=10, dropout=0.1, self_att=True, g_RPE=None, transform='inv'):
         super().__init__()
 
         if self_att:
-            self.att_block = attention_Block(model_dim, ff_dim, out_dim=output_dim, input_dim=model_dim, n_heads=n_heads, rpe_PE=g_RPE)
+            self.att_block = attention_Block(model_dim, ff_dim, out_dim=output_dim, input_dim=model_dim, n_heads=n_heads, rpe_PE=g_RPE, transform=transform)
         else:
             self.att_block = None
 
-        self.nh_block = nh_Block_self(nh, model_dim, ff_dim, l_RPE, out_dim=model_dim, dropout=dropout, n_heads=n_heads)
+        self.nh_block = nh_Block_self(nh, model_dim, ff_dim, l_RPE, out_dim=model_dim, dropout=dropout, n_heads=n_heads, transform=transform)
         
         if p_reduction > 0:
             self.voting_layer = reduction_layer(nh, p_reduction=p_reduction)
@@ -373,15 +373,15 @@ class EncoderBlock(nn.Module):
 
 
 class DecoderBlock(nn.Module):
-    def __init__(self, model_dim, ff_dim, l_RPE=None, output_dim=None, nh=4, n_heads=10, dropout=0.1, cross_att=True, g_RPE=None):
+    def __init__(self, model_dim, ff_dim, l_RPE=None, output_dim=None, nh=4, n_heads=10, dropout=0.1, cross_att=True, g_RPE=None,transform='inv'):
         super().__init__()
 
         if cross_att:
-            self.att_block = attention_Block(model_dim, ff_dim, out_dim=output_dim, input_dim=model_dim, n_heads=n_heads, rpe_PE=g_RPE)
+            self.att_block = attention_Block(model_dim, ff_dim, out_dim=output_dim, input_dim=model_dim, n_heads=n_heads, rpe_PE=g_RPE, transform=transform)
         else:
             self.att_block = None
 
-        self.nh_block = nh_Block_self(nh, model_dim, ff_dim, l_RPE, out_dim=model_dim, dropout=dropout, n_heads=n_heads)
+        self.nh_block = nh_Block_self(nh, model_dim, ff_dim, l_RPE, out_dim=model_dim, dropout=dropout, n_heads=n_heads, transform=transform)
     
                
     def forward(self, x, x_enc, coords_target, coords_source, return_debug=False):
@@ -412,29 +412,29 @@ class DecoderBlock(nn.Module):
 
 class Encoder(nn.Module):
 
-    def __init__(self, n_layers, self_att_layers, p_reduction_layers, model_dim, nh, ff_dim, n_heads=10, dropout=0.1, PE=None, share_local_rpe=False, share_global_rpe=False):
+    def __init__(self, n_layers, self_att_layers, p_reduction_layers, model_dim, nh, ff_dim, n_heads=10, dropout=0.1, PE=None, share_local_rpe=False, share_global_rpe=False, transform='inv'):
         super().__init__()
 
         model_dim_nh = model_dim // nh
         ff_dim_nh = ff_dim // nh
 
         if PE is None:
-            PE = helpers.RelativePositionEmbedder_mlp(model_dim_nh, ff_dim_nh, transform=True)
+            PE = helpers.RelativePositionEmbedder_mlp(model_dim_nh, ff_dim_nh, transform=transform)
         else:
             PE = None
 
         if share_local_rpe:
-            l_RPE = helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=True)
+            l_RPE = helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=transform)
         else:
             l_RPE = None
         
         if share_global_rpe:
-            g_RPE = helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=True)
+            g_RPE = helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=transform)
         else:
             g_RPE = None
 
         if n_layers>0:
-            self.nh_input_net = nh_Block_mix(nh, model_dim_nh, ff_dim_nh, PE, dropout=dropout, n_heads=n_heads)
+            self.nh_input_net = nh_Block_mix(nh, model_dim_nh, ff_dim_nh, PE, dropout=dropout, n_heads=n_heads, transform=transform)
         else:
             self.nh_input_net = None
 
@@ -448,9 +448,11 @@ class Encoder(nn.Module):
                                         l_RPE=l_RPE,
                                         output_dim=model_dim,
                                         n_heads=n_heads,
+                                        nh=nh,
                                         dropout=dropout,
                                         self_att=self_att_layers[n],
-                                        p_reduction=p_reduction_layers[n]))
+                                        p_reduction=p_reduction_layers[n],
+                                        transform=transform))
 
     def forward(self, x, coords_source, return_debug=False):
             
@@ -483,28 +485,28 @@ class Encoder(nn.Module):
 
 class Decoder(nn.Module):
 
-    def __init__(self, dec_layers, model_dim, nh, ff_dim, output_dim=1, n_heads=10, dropout=0.1, PE=None, share_local_rpe=False, share_global_rpe=False):
+    def __init__(self, dec_layers, model_dim, nh, ff_dim, output_dim=1, n_heads=10, dropout=0.1, PE=None, share_local_rpe=False, share_global_rpe=False, transform='inv'):
         super().__init__()
     
         model_dim_nh = model_dim // nh
         ff_dim_nh = ff_dim // nh
 
         if PE is None:
-            PE = helpers.RelativePositionEmbedder_mlp(model_dim_nh, ff_dim_nh, transform=True)
+            PE = helpers.RelativePositionEmbedder_mlp(model_dim_nh, ff_dim_nh, transform=transform)
         else:
             PE = None
 
         if share_local_rpe:
-            l_RPE = helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=True)
+            l_RPE = helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=transform)
         else:
             l_RPE = None
         
         if share_global_rpe:
-            g_RPE = helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=True)
+            g_RPE = helpers.RelativePositionEmbedder_mlp(n_heads, ff_dim, transform=transform)
         else:
             g_RPE = None
   
-        self.nh_input_net = nh_Block_mix(nh, model_dim_nh, ff_dim_nh, PE, input_dim=1, dropout=dropout, n_heads=n_heads)
+        self.nh_input_net = nh_Block_mix(nh, model_dim_nh, ff_dim_nh, PE, input_dim=1, dropout=dropout, n_heads=n_heads, transform=transform)
 
         self.interpolation =  nn.Sequential(
             nn.Linear(model_dim, ff_dim, bias=True),
@@ -524,7 +526,8 @@ class Decoder(nn.Module):
                                         nh=nh,
                                         n_heads=n_heads,
                                         dropout=dropout,
-                                        cross_att=True))
+                                        cross_att=True,
+                                        transform=transform))
         
         
         
@@ -566,15 +569,16 @@ class SpatialTransNet(tm.transformer_model):
         dropout = model_settings['dropout']
         model_dim = model_settings['model_dim']
         n_heads = model_settings['n_heads']
-        self.train_interpolation = model_settings['train_interpolation']
         nh = model_settings['feat_nh']
         ff_dim = model_settings['ff_dim']
+
+        transform = model_settings['transform_coordinates']
 
         model_dim_nh = model_dim // nh
         ff_dim_nh = ff_dim // nh
 
         if model_settings['share_PE']:
-            PE = helpers.RelativePositionEmbedder_mlp(model_dim_nh, ff_dim_nh, transform=True)
+            PE = helpers.RelativePositionEmbedder_mlp(model_dim_nh, ff_dim_nh, transform=transform)
         else:
             PE = None
 
@@ -591,6 +595,7 @@ class SpatialTransNet(tm.transformer_model):
             dropout=dropout,
             share_local_rpe=self.model_settings['encoder']['share_local_rpe'],
             share_global_rpe=self.model_settings['encoder']['share_global_rpe'],
+            transform = transform
         )
 
         self.Decoder = Decoder(
@@ -603,7 +608,8 @@ class SpatialTransNet(tm.transformer_model):
             share_local_rpe=self.model_settings['decoder']['share_local_rpe'],
             share_global_rpe=self.model_settings['decoder']['share_global_rpe'],
             n_heads=n_heads,
-            dropout=dropout
+            dropout=dropout,
+            transform = transform
         )
         
 

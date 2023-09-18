@@ -164,7 +164,7 @@ class LinearPositionEmbedder_mlp(nn.Module):
         return rpe
 
 class RelativePositionEmbedder_mlp(nn.Module):
-    def __init__(self, model_dim, hidden_dim, device='cpu', transform=True):
+    def __init__(self, model_dim, hidden_dim, device='cpu', transform='linear'):
         super().__init__()
 
         self.transform = transform
@@ -176,7 +176,9 @@ class RelativePositionEmbedder_mlp(nn.Module):
 
     def forward(self, coords, batched=False):
         
-        if self.transform:
+        if self.transform == 'log':
+            coords = conv_coordinates_log(coords)
+        elif self.transform == 'inv':
             coords = conv_coordinates_inv(coords)
         
         if batched:
@@ -188,7 +190,7 @@ class RelativePositionEmbedder_mlp(nn.Module):
     
         return rpe
   
-def conv_coordinates(coords):
+def conv_coordinates_log(coords):
     sign = torch.sign(coords)
     coords_log_m = torch.log10(1000.*6371.*(coords.abs()))
     coords_log_m = torch.clamp(coords_log_m, min=0)
