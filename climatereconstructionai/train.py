@@ -45,11 +45,8 @@ def train(arg_file=None):
     writer.set_hparams(cfg.passed_args)
 
     # create data sets
-    dataset_train = NetCDFLoader(cfg.data_root_dir, cfg.data_names, cfg.mask_dir, cfg.mask_names, 'train',
-                                 cfg.data_types, cfg.time_steps)
-
-    dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.val_names, cfg.mask_dir, cfg.mask_names, 'val', cfg.data_types,
-                               cfg.time_steps)
+    dataset_train = NetCDFLoader(cfg.train_data_dict, cfg.mask_data_dict, cfg.time_steps, remap_data=cfg.remap_data)
+    dataset_val = NetCDFLoader(cfg.val_data_dict, cfg.mask_data_dict, cfg.time_steps, remap_data=cfg.remap_data)
     iterator_train = iter(DataLoader(dataset_train, batch_size=cfg.batch_size,
                                      sampler=InfiniteSampler(len(dataset_train)),
                                      num_workers=cfg.n_threads))
@@ -57,7 +54,7 @@ def train(arg_file=None):
                                    sampler=InfiniteSampler(len(dataset_val)),
                                    num_workers=cfg.n_threads))
 
-    steady_mask = load_steadymask(cfg.mask_dir, cfg.steady_masks, cfg.data_types, cfg.device)
+    steady_mask = load_steadymask(None, None, None, cfg.device)
 
     image_sizes = dataset_train.img_sizes
     if cfg.conv_factor is None:

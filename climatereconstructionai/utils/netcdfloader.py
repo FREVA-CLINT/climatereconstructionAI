@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import xarray as xr
 from torch.utils.data import Dataset, Sampler
+from torch.functional import F
 
 from .netcdfchecker import dataset_formatter
 from .normalizer import img_normalization, bnd_normalization
@@ -90,53 +91,51 @@ def nc_loadchecker(filename, data_type):
     return [ds, ds1, dims, coords], data, data.shape[0], data.shape[1:]
 
 
-def load_netcdf(path, data_names, data_types, keep_dss=False):
-    if data_names is None:
-        return None, None, None
+def load_netcdf(data_paths, data_types, keep_dss=False):
+    if data_paths is None:
+        return None, None
     else:
-        ndata = len(data_names)
+        ndata = len(data_paths)
         assert ndata == len(data_types)
-
-        dss, data, lengths, sizes = zip(*[nc_loadchecker('{}{}'.format(path, data_names[i]),
-                                                         data_types[i]) for i in range(ndata)])
-
-        assert len(set(lengths)) == 1
+        dss, data, lengths, sizes = zip(*[nc_loadchecker(data_paths[i], data_types[i]) for i in range(ndata)])
 
         if keep_dss:
-            return dss, data, lengths[0], sizes
+            return dss[0], data, lengths[0], (sizes[0],)
         else:
-            return data, lengths[0], sizes
+            return data, lengths[0], (sizes[0],)
 
 
 class NetCDFLoader(Dataset):
-    def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, time_steps, train_stats=None):
-
+    def __init__(self, data_dir_dict, mask_dir_dict, time_steps, train_stats=None, remap_data=None):
         super(NetCDFLoader, self).__init__()
 
         self.random = random.Random(cfg.loop_random_seed)
 
-        self.data_types = data_types
         self.time_steps = time_steps
 
         self.n_time_steps = sum(time_steps) + 1
 
-        mask_path = mask_root
-        if split == 'infill':
-            data_path = '{:s}/test/'.format(data_root)
-            self.xr_dss, self.img_data, self.img_length, self.img_sizes = load_netcdf(data_path, img_names, data_types,
-                                                                                      keep_dss=True)
-        else:
-            if split == 'train':
-                data_path = '{:s}/train/'.format(data_root)
+        self.img_data, self.mask_data, self.data_types = [], [], []
+        self.xr_dss = None
+
+        self.remap_data = remap_data
+
+        for (data_name, data_type), data_dirs in data_dir_dict.items():
+            if self.xr_dss is None:
+                self.xr_dss, dir_data, self.img_length, self.img_sizes = load_netcdf(data_dirs,
+                                                                                     len(data_dirs)*[data_type],
+                                                                                     keep_dss=True)
             else:
-                data_path = '{:s}/val/'.format(data_root)
-                if not cfg.shuffle_masks:
-                    mask_path = '{:s}/val/'.format(mask_root)
-            self.img_data, self.img_length, self.img_sizes = load_netcdf(data_path, img_names, data_types)
+                dir_data, _, _ = load_netcdf(data_dirs, len(data_dirs)*[data_type])
+            self.img_data.append(np.concatenate(dir_data))
+            self.data_types.append(data_type)
 
-        self.mask_data, self.mask_length, _ = load_netcdf(mask_path, mask_names, data_types)
+        if mask_dir_dict:
+            for (mask_name, mask_type), mask_dirs in mask_dir_dict.items():
+                mask_data, self.mask_length, _ = load_netcdf(mask_dirs, len(mask_dirs)*[mask_type])
+                self.mask_data.append(np.concatenate(mask_data))
 
-        if self.mask_data is None:
+        if not self.mask_data:
             self.mask_length = self.img_length
         else:
             if not cfg.shuffle_masks:
@@ -145,6 +144,10 @@ class NetCDFLoader(Dataset):
         self.img_mean, self.img_std, self.img_znorm = img_normalization(self.img_data)
 
         self.bounds = bnd_normalization(self.img_mean, self.img_std, train_stats)
+
+        if self.remap_data:
+            _, x, y = self.remap_data.split("_")
+            self.img_sizes = ((int(x), int(y)),)
 
     def load_data(self, ind_data, img_indices, mask_indices):
 
@@ -180,6 +183,14 @@ class NetCDFLoader(Dataset):
         # stack to correct dimensions
         images = torch.stack([images], dim=1)
         masks = torch.stack([masks], dim=1)
+
+        # interpolate
+        if self.remap_data:
+            mode, x, y = self.remap_data.split("_")
+            if masks.shape[-1] != x or masks.shape[-2] != y:
+                masks = F.interpolate(masks, (int(x), int(y)), mode=mode)
+            if images.shape[-1] != x or images.shape[-2] != y:
+                images = F.interpolate(images, (int(x), int(y)), mode=mode)
 
         return images, masks
 

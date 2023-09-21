@@ -19,6 +19,14 @@ def get_passed_arguments(args, parser):
     return {key: val for key, val in vars(ns).items() if val is not sentinel}
 
 
+def parse_json(json_dict):
+    parsed_dict = {}
+    for key, value in json_dict.items():
+        dname, dtype = key.split(",")
+        parsed_dict[(dname, dtype)] = value
+    return parsed_dict
+
+
 class LoadFromFile(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         parser.parse_known_args(open(values).read().split(), namespace)
@@ -137,23 +145,33 @@ def global_args(parser, arg_file=None, prog_func=None):
 
     assert len(time_steps) == 2
 
+
+    # load data paths
+    global mask_data_dict
+    mask_data_dict = None
+    with open(data_path) as json_file:
+        data = json.load(json_file)
+
+        if "train" in data.keys():
+            global train_data_dict
+            train_data_dict = parse_json(data["train"])
+        if "val" in data.keys():
+            global val_data_dict
+            val_data_dict = parse_json(data["val"])
+        if "test" in data.keys():
+            global test_data_dict
+            test_data_dict = parse_json(data["test"])
+        if "mask" in data.keys():
+            mask_data_dict = parse_json(data["mask"])
+
     return args
 
 
 def set_common_args():
     arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument('--data-root-dir', type=str, default='../data/',
-                            help="Root directory containing the climate datasets")
-    arg_parser.add_argument('--mask-dir', type=str, default='masks/', help="Directory containing the mask datasets")
+    arg_parser.add_argument('--data-path', type=str, default='../data/data.json',
+                            help="JSON file path containing the paths of climate datasets")
     arg_parser.add_argument('--log-dir', type=str, default='logs/', help="Directory where the log files will be stored")
-    arg_parser.add_argument('--data-names', type=str_list, default='train.nc',
-                            help="Comma separated list of netCDF files (climate dataset) for training/infilling")
-    arg_parser.add_argument('--mask-names', type=str_list, default=None,
-                            help="Comma separated list of netCDF files (mask dataset). "
-                                 "If None, it extracts the masks from the climate dataset")
-    arg_parser.add_argument('--data-types', type=str_list, default='tas',
-                            help="Comma separated list of variable types, "
-                                 "in the same order as data-names and mask-names")
     arg_parser.add_argument('--n-target-data', type=int, default=0,
                             help="Number of data-names (from last) to be used as target data")
     arg_parser.add_argument('--device', type=str, default='cuda', help="Device used by PyTorch (cuda or cpu)")
@@ -198,6 +216,7 @@ def set_common_args():
     arg_parser.add_argument('--max-bounds', type=float_list, default="inf",
                             help="Comma separated list of values defining the permitted upper-bound of output values")
     arg_parser.add_argument('--profile', action='store_true', help="Profile code using tensorboard profiler")
+    arg_parser.add_argument('--remap-data', type=str, default=None, help="Remap technique that should be applied")
     return arg_parser
 
 
@@ -261,9 +280,6 @@ def set_train_args(arg_file=None):
         early_stopping = True
     else:
         early_stopping = False
-
-    if globals()["val_names"] is None:
-        globals()["val_names"] = globals()["data_names"].copy()
 
     set_lambdas()
 
