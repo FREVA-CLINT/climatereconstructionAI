@@ -12,11 +12,16 @@ def get_format(dataset_name):
     return dataset_format[str(dataset_name)]
 
 
-def get_passed_arguments(args, parser):
-    sentinel = object()
-    ns = argparse.Namespace(**{key: sentinel for key in vars(args)})
-    parser.parse_known_args(namespace=ns)
-    return {key: val for key, val in vars(ns).items() if val is not sentinel}
+def get_passed_arguments(argv, arg_parser):
+    passed_arguments = {}
+    if argv[0] == '--load-from-file' or argv[0] == '-f':
+        argv = open(argv[1]).read().split()
+    args = vars(arg_parser.parse_args(argv))
+    for action in vars(arg_parser)['_actions']:
+        option_str = action.option_strings[-1]
+        if option_str in argv:
+            passed_arguments[action.dest] = args[action.dest]
+    return passed_arguments
 
 
 def parse_json(json_dict):
@@ -164,7 +169,7 @@ def global_args(parser, arg_file=None, prog_func=None):
         if "mask" in data.keys():
             mask_data_dict = parse_json(data["mask"])
 
-    return args
+    return argv
 
 
 def set_common_args():
@@ -270,10 +275,10 @@ def set_train_args(arg_file=None):
     arg_parser.add_argument('--n-iters-val', type=int, default=1,
                             help="Number of batch iterations used to average the validation loss")
 
-    args = global_args(arg_parser, arg_file)
+    argv = global_args(arg_parser, arg_file)
 
     global passed_args
-    passed_args = get_passed_arguments(args, arg_parser)
+    passed_args = get_passed_arguments(argv, arg_parser)
 
     global early_stopping
     if ('early_stopping_delta' in passed_args.keys()) or ('early_stopping_patience' in passed_args.keys()):
