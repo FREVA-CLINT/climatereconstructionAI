@@ -13,12 +13,16 @@ class transformer_model(nn.Module):
     def forward(self):
         pass
 
-    def train_(self, train_settings):
+    def train_(self, train_settings, pretrain=False):
         self.train_settings = load_settings(train_settings)
+
+        if self.model_settings['use_gauss']:
+            self.train_settings['gauss_loss'] = True
+        else:
+            self.train_settings['gauss_loss'] = False
+
         trainer.train(self, self.train_settings, self.model_settings)
 
-    def pretrain(self):
-        pass
 
     def load(self, ckpt_path:str, device=None):
         ckpt_dict = load_ckpt(ckpt_path, device=device)

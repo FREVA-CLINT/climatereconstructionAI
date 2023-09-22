@@ -1,6 +1,8 @@
 import os
 import numpy as np
 import torch
+import torch.nn as nn
+
 import torch.multiprocessing
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -9,6 +11,15 @@ from .utils import twriter_t, early_stopping
 from .utils.io import save_ckpt
 from .utils.netcdfloader_trans import NetCDFLoader, InfiniteSampler
 
+
+class GaussLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.Gauss = torch.nn.GaussianNLLLoss()
+
+    def forward(self, output, target):
+        loss =  self.Gauss(output[:,:,0],target.squeeze(),output[:,:,1])
+        return loss
 
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
 
@@ -102,7 +113,10 @@ def train(model, training_settings, model_hparams={}):
     if 'pretrained_interpolator' in training_settings.keys():
         model.load_pretrained_interpolator(training_settings['pretrained_interpolator'], device=device)
 
-    loss_fcn = torch.nn.L1Loss()
+    if training_settings["gauss_loss"]:
+        loss_fcn = GaussLoss()
+    else:
+        loss_fcn = torch.nn.L1Loss()
    
     early_stop = early_stopping.early_stopping(training_settings['early_stopping_delta'], training_settings['early_stopping_patience'])
     

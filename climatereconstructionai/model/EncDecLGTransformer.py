@@ -507,11 +507,31 @@ class shortcut_block(nn.Module):
 
         return out
 
+class GaussActivation(nn.Module):
+    def __init__(self, activation_mu=nn.Identity()):
+        super().__init__() 
+        self.activation_mu = activation_mu
+        self.activation_std = nn.Softplus()
+
+    def forward(self, x):
+        mu = self.activation_mu(x[:,:,0])
+        std = self.activation_std(x[:,:,1])
+        
+        return torch.stack((mu,std),-1)
+
 class SpatialTransNet(tm.transformer_model):
     def __init__(self, model_settings) -> None: 
         super().__init__(model_settings)
         
         model_settings = self.model_settings
+
+
+        self.use_gauss = model_settings["use_gauss"]
+        if self.use_gauss:
+            output_dim = 2
+        else:
+            output_dim = 1
+
         dropout = model_settings['dropout']
         model_dim = model_settings['model_dim']
         model_dim_nh = model_settings['model_dim_nh']
@@ -601,13 +621,17 @@ class SpatialTransNet(tm.transformer_model):
             pos_encoders=pos_encoders_dec,
             share=share
         )
+        if model_settings["use_gauss"]:
+            last_layer_activation = GaussActivation(activation_mu=nn.LeakyReLU(negative_slope=0.2))
+        else:
+            last_layer_activation = nn.LeakyReLU(negative_slope=0.2)
 
         self.mlp_out = nn.Sequential(
                 nn.Linear(model_dim, ff_dim, bias=True),
                 nn.Dropout(dropout),
                 nn.LeakyReLU(inplace=True, negative_slope=0.2),
-                nn.Linear(ff_dim, model_settings["output_dim"], bias=True),
-                nn.LeakyReLU(inplace=True, negative_slope=0.2)
+                nn.Linear(ff_dim, output_dim, bias=True),
+                last_layer_activation
             )
 
 
@@ -652,8 +676,13 @@ class SpatialTransNet(tm.transformer_model):
         if return_debug:
             debug_information = merge_debug_information(debug_information, x[1])
             x = x[0]
-            
-        x = self.mlp_out(x) + x_interpolation
+        
+        if self.use_gauss:
+            x = self.mlp_out(x)
+            x[:,:,0] = x[:,:,0] + x_interpolation.squeeze()
+           # x = self.mlp_out(x) + x_interpolation
+        else:
+            x = self.mlp_out(x) + x_interpolation
 
         if return_debug:
             return x, debug_information
