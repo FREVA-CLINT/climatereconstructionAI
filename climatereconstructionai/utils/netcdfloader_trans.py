@@ -181,7 +181,7 @@ class NetCDFLoader(Dataset):
                                                                 lons_t,
                                                                 lats_t,
                                                                 torch.tensor(random_region['radius_factor']),
-                                                                torch.tensor(random_region['batch_size']),
+                                                                batch_size=torch.tensor(random_region['batch_size']),
                                                                 radius_target=torch.tensor(random_region['radius_target']))
             else:
                 self.region_generator = random_region_generator(torch.tensor(random_region['lon_range']), 
