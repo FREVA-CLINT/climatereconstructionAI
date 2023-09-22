@@ -17,6 +17,7 @@ if __name__ == "__main__":
         with open(script_dict,'r') as file:
             script_dict = json.load(file)
 
-    model = EncDecLGTransformer.SpatialTransNet(script_dict['model_settings'])
-    model.train_(script_dict['training_settings']) 
+    for task in script_dict:
+        model = EncDecLGTransformer.SpatialTransNet(task['model_settings'])
+        model.train_(task['training_settings']) 
 
