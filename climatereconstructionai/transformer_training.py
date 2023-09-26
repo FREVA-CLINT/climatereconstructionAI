@@ -38,7 +38,6 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
             lr_factor *= epoch * 1.0 / self.warmup
         return lr_factor
 
-
 def dict_to_device(d, device):
     for key, value in d.items():
         d[key] = value.to(device)
@@ -79,7 +78,9 @@ def train(model, training_settings, model_hparams={}):
                                  random_region=random_region,
                                  apply_img_norm=training_settings['apply_img_norm'],
                                  normalize_data=training_settings['normalize_data'],
-                                 p_input_dropout=training_settings['input_dropout'])
+                                 p_input_dropout=training_settings['input_dropout'],
+                                 sampling_mode=training_settings['sampling_mode'],
+                                 n_points=training_settings['n_points'])
     
     dataset_val = NetCDFLoader(training_settings['data_root_dir'],
                                  training_settings['data_names_source'], 
@@ -89,8 +90,10 @@ def train(model, training_settings, model_hparams={}):
                                  training_settings['coord_names'],
                                  random_region=random_region,
                                  apply_img_norm=training_settings['apply_img_norm'],
-                                 normalize_data=training_settings['normalize_data'],
-                                 p_input_dropout=training_settings['input_dropout'])
+                                 normalize_data=dataset_train.normalizer.moments,
+                                 p_input_dropout=training_settings['input_dropout'],
+                                 sampling_mode=training_settings['sampling_mode'],
+                                 n_points=training_settings['n_points'])
     
     iterator_train = iter(DataLoader(dataset_train,
                                      batch_size=batch_size,
@@ -110,8 +113,6 @@ def train(model, training_settings, model_hparams={}):
 
     model = model.to(device)
 
-    if 'pretrained_interpolator' in training_settings.keys():
-        model.load_pretrained_interpolator(training_settings['pretrained_interpolator'], device=device)
 
     if training_settings["gauss_loss"]:
         loss_fcn = GaussLoss()

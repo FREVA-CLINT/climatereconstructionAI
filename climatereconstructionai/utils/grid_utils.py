@@ -243,3 +243,86 @@ class random_region_generator():
                    'lats': lats_regions}
     
         return {'hr':out_dict_hr,'lr': out_dict_lr, 'seeds': [torch.deg2rad(seeds_lon), torch.deg2rad(seeds_lat)]}
+    
+
+class random_region_generator_multi():
+    def __init__(self, tags, lon_range, lat_range, lons, lats, n_points_global, factor=200, batch_size=1, init_radius=500) -> None:
+        self.lon_range = lon_range
+        self.lat_range = lat_range
+        self.lons = lons
+        self.lats = lats
+
+        #self.tags = tags
+        self.tag_dict = dict(zip(tags, np.arange(len(lons))))
+
+        self.batch_size=batch_size
+        
+        self.n_points = [None] * len(lons)
+
+        self.n_points_global = n_points_global
+
+        self.radii = [init_radius] * len(lons)
+
+        self.max_points = torch.tensor([len(lon) for lon in lons]).max()
+        
+
+
+    def generate(self, tags=None, indices=None, seeds=[]):
+
+        if tags is not None:
+            indices = [self.tag_dict[key] for key in tags]
+
+        if len(seeds)==0:
+            seeds_lon = torch.randint(self.lon_range[0],self.lon_range[1], size=(self.batch_size,1))
+            seeds_lat = torch.randint(self.lat_range[0],self.lat_range[1], size=(self.batch_size,1))
+
+        k= 0
+        regions = []
+        for k, index in enumerate(indices):
+            
+            n_points = self.n_points_global
+
+            if n_points is not None:
+                n_points = self.max_points if n_points > self.max_points else n_points
+
+            distances_regions, indices_regions, lons_regions, lats_regions = get_regions(self.lons[index], self.lats[index], seeds_lon, seeds_lat, radius_region=self.radii[index], n_points=n_points, in_deg=True)
+            self.n_points[index] = len(distances_regions)
+            self.radii[index] = (distances_regions.max()/2)
+
+            out_dict = {'distances': distances_regions,
+                      'indices': indices_regions,
+                      'lons': lons_regions,
+                     'lats': lats_regions}
+
+            regions.append(out_dict)
+
+        self.grid_point_density = torch.tensor(self.n_points)/torch.tensor(self.radii)
+
+        return {'regions':regions, 'seeds': [seeds_lon, seeds_lat]}
+    
+
+
+def generate_region(coords, range_lon=None, range_lat=None, n_points=None, radius=None, locations=[], batch_size=1):
+
+    if len(locations)==0:
+        seeds_lon = torch.randint(range_lon[0],range_lon[1], size=(batch_size,1))
+        seeds_lat = torch.randint(range_lat[0],range_lat[1], size=(batch_size,1))
+    else:
+        seeds_lon = locations[0]
+        seeds_lat = locations[1]
+
+
+    distances_regions, indices_regions, lons_regions, lats_regions = get_regions(coords['lon'], coords['lat'], seeds_lon, seeds_lat, radius_region=radius, n_points=n_points, in_deg=True)
+    n_points = len(distances_regions)
+    radius = (distances_regions.max()/2)
+
+    out_dict = {'distances': distances_regions,
+                'indices': indices_regions,
+                'lon': lons_regions,
+                'lat': lats_regions,
+                "n_points": n_points,
+                'radius': radius,
+                'locations': [seeds_lon.deg2rad(), seeds_lat.deg2rad()]}
+
+
+    return out_dict

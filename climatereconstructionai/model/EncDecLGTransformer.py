@@ -634,6 +634,7 @@ class SpatialTransNet(tm.transformer_model):
                 last_layer_activation
             )
 
+        self.check_pretrained()
 
     def forward(self, x, coord_dict, return_debug=False, rev=False):
         
