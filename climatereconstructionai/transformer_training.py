@@ -95,7 +95,7 @@ def train(model, training_settings, model_hparams={}):
                                  p_input_dropout=training_settings['input_dropout'],
                                  sampling_mode=training_settings['sampling_mode'],
                                  n_points=training_settings['n_points'],
-                                 coordinate_pert=training_settings['coordinate_pertubation'])
+                                 coordinate_pert=0)
     
     iterator_train = iter(DataLoader(dataset_train,
                                      batch_size=batch_size,
