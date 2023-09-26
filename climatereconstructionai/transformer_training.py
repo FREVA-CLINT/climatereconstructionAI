@@ -80,7 +80,8 @@ def train(model, training_settings, model_hparams={}):
                                  normalize_data=training_settings['normalize_data'],
                                  p_input_dropout=training_settings['input_dropout'],
                                  sampling_mode=training_settings['sampling_mode'],
-                                 n_points=training_settings['n_points'])
+                                 n_points=training_settings['n_points'],
+                                 coordinate_pert=training_settings['coordinate_pertubation'])
     
     dataset_val = NetCDFLoader(training_settings['data_root_dir'],
                                  training_settings['data_names_source'], 
@@ -93,7 +94,8 @@ def train(model, training_settings, model_hparams={}):
                                  normalize_data=dataset_train.normalizer.moments,
                                  p_input_dropout=training_settings['input_dropout'],
                                  sampling_mode=training_settings['sampling_mode'],
-                                 n_points=training_settings['n_points'])
+                                 n_points=training_settings['n_points'],
+                                 coordinate_pert=training_settings['coordinate_pertubation'])
     
     iterator_train = iter(DataLoader(dataset_train,
                                      batch_size=batch_size,

@@ -136,7 +136,7 @@ def prepare_coordinates(ds_dict, coord_names, flatten=False, random_region=None)
     return ds_dict
 
 class NetCDFLoader(Dataset):
-    def __init__(self, data_root, img_names_source, img_names_target, split, data_types, coord_names, apply_img_norm=False, normalize_data=True, random_region=None, norm_stats=tuple(), p_input_dropout=0, sampling_mode='mixed',n_points=None):
+    def __init__(self, data_root, img_names_source, img_names_target, split, data_types, coord_names, apply_img_norm=False, normalize_data=True, random_region=None, norm_stats=tuple(), p_input_dropout=0, sampling_mode='mixed',n_points=None,coordinate_pert=0):
         super(NetCDFLoader, self).__init__()
         
         self.PosCalc = PositionCalculator()
@@ -149,6 +149,7 @@ class NetCDFLoader(Dataset):
         self.sampling_mode = sampling_mode
         self.random_region=random_region
         self.n_points = n_points
+        self.coordinate_pert = coordinate_pert
 
         if 'lon' in self.coord_names[0]:
             self.flatten=True
@@ -280,6 +281,11 @@ class NetCDFLoader(Dataset):
                 pad_rel_coords = torch.zeros_like(rel_coords)[:,:diff] + 1000
                 rel_coords = torch.concat((rel_coords, pad_rel_coords),dim=1)
 
+        if self.coordinate_pert>0:
+            avg_dist = rel_coords.max()/torch.tensor(rel_coords.shape[1]).sqrt()
+
+            pertubation = torch.randn_like(rel_coords)*self.coordinate_pert*avg_dist
+            rel_coords = rel_coords+pertubation
         return data, rel_coords
 
     def __getitem__(self, index):
