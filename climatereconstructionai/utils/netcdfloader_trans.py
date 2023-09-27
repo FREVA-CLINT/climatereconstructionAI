@@ -117,8 +117,8 @@ def prepare_coordinates(ds_dict, coord_names, flatten=False, random_region=None)
     for tag, entry in ds_dict.items():
         ds = entry['ds']
 
-        lon = torch.tensor(ds[coord_names[0][0]].values) 
-        lat = torch.tensor(ds[coord_names[0][1]].values) 
+        lon = torch.tensor(ds[coord_names[0]].values) 
+        lat = torch.tensor(ds[coord_names[1]].values) 
         
         lon = lon.deg2rad() if lon.max()>2*torch.pi else lon 
         lat = lat.deg2rad() if lat.max()>2*torch.pi else lat
@@ -127,11 +127,11 @@ def prepare_coordinates(ds_dict, coord_names, flatten=False, random_region=None)
         len_lat = len(lat) 
 
         if flatten:
-            lons = lon.flatten().repeat(len_lat) 
-            lats = lat.view(-1,1).repeat(1,len_lon).flatten()
+            lon = lon.flatten().repeat(len_lat) 
+            lat = lat.view(-1,1).repeat(1,len_lon).flatten()
         
-        ds_dict[tag]['lon'] = lons
-        ds_dict[tag]['lat'] = lats
+        ds_dict[tag]['lon'] = lon
+        ds_dict[tag]['lat'] = lat
 
     return ds_dict
 
@@ -151,7 +151,7 @@ class NetCDFLoader(Dataset):
         self.n_points = n_points
         self.coordinate_pert = coordinate_pert
 
-        if 'lon' in self.coord_names[0]:
+        if 'lon' in self.coord_names:
             self.flatten=True
         else:
             self.flatten=False
