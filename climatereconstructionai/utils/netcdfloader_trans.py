@@ -173,8 +173,8 @@ class NetCDFLoader(Dataset):
             for img_name_target in img_names_target:
                 file_tag = os.path.basename(img_name_target)
                 file_tags_target.append(file_tag)
-                if img_name_target not in self.ds_dict.keys():
-                    self.ds_dict[img_name_target] = {'ds': xr.load_dataset(img_name_target)}
+                if file_tag not in self.ds_dict.keys():
+                    self.ds_dict[file_tag] = {'ds': xr.load_dataset(img_name_target)}
 
         self.num_files_source = len(img_names_source)
         self.num_files_target = len(img_names_target)
