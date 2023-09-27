@@ -43,6 +43,23 @@ def dict_to_device(d, device):
         d[key] = value.to(device)
     return d
 
+def check_get_data_files(list_or_path, root_path = '', train_or_val='train'):
+
+    if isinstance(list_or_path, list):
+        data_paths = list_or_path
+        if not os.path.isfile(data_paths[0]):
+            file_root = os.join(root_path, data_paths[0])
+            if os.path.isfile(file_root):
+                data_paths = [os.join(root_path, name) for name in data_paths]
+            else:
+                data_paths = [os.join(root_path, train_or_val, name) for name in data_paths]
+
+    elif isinstance(list_or_path,str):
+        if os.path.isfile(list_or_path):
+            data_paths = np.genfromtxt(list_or_path, dtype=str)
+
+    return data_paths
+
 def train(model, training_settings, model_hparams={}):
  
     print("* Number of GPUs: ", torch.cuda.device_count())
@@ -68,11 +85,15 @@ def train(model, training_settings, model_hparams={}):
         random_region = training_settings['random_region']
     
     batch_size = training_settings['batch_size']
+
+    source_files_train = check_get_data_files(training_settings['train_data']['data_names_source'], root_path = training_settings['root_dir'], train_or_val='train')
+    target_files_train = check_get_data_files(training_settings['train_data']['data_names_target'], root_path = training_settings['root_dir'], train_or_val='train')        
     
-    dataset_train = NetCDFLoader(training_settings['data_root_dir'],
-                                 training_settings['data_names_source'], 
-                                 training_settings['data_names_target'],
-                                 'train',
+    source_files_val = check_get_data_files(training_settings['val_data']['data_names_source'], root_path = training_settings['root_dir'], train_or_val='val')
+    target_files_val = check_get_data_files(training_settings['val_data']['data_names_target'], root_path = training_settings['root_dir'], train_or_val='val')      
+
+    dataset_train = NetCDFLoader(source_files_train, 
+                                 target_files_train,
                                  training_settings['variables'],
                                  training_settings['coord_names'],
                                  random_region=random_region,
@@ -83,10 +104,8 @@ def train(model, training_settings, model_hparams={}):
                                  n_points=training_settings['n_points'],
                                  coordinate_pert=training_settings['coordinate_pertubation'])
     
-    dataset_val = NetCDFLoader(training_settings['data_root_dir'],
-                                 training_settings['data_names_source'], 
-                                 training_settings['data_names_target'],
-                                 'val',
+    dataset_val = NetCDFLoader(  source_files_val, 
+                                 target_files_val,
                                  training_settings['variables'],
                                  training_settings['coord_names'],
                                  random_region=random_region,

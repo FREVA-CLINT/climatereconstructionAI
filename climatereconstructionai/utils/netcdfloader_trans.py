@@ -136,7 +136,7 @@ def prepare_coordinates(ds_dict, coord_names, flatten=False, random_region=None)
     return ds_dict
 
 class NetCDFLoader(Dataset):
-    def __init__(self, data_root, img_names_source, img_names_target, split, data_types, coord_names, apply_img_norm=False, normalize_data=True, random_region=None, norm_stats=tuple(), p_input_dropout=0, sampling_mode='mixed',n_points=None,coordinate_pert=0):
+    def __init__(self, img_names_source, img_names_target, data_types, coord_names, apply_img_norm=False, normalize_data=True, random_region=None, norm_stats=tuple(), p_input_dropout=0, sampling_mode='mixed',n_points=None,coordinate_pert=0):
         super(NetCDFLoader, self).__init__()
         
         self.PosCalc = PositionCalculator()
@@ -155,38 +155,40 @@ class NetCDFLoader(Dataset):
             self.flatten=True
         else:
             self.flatten=False
-
-        if split == 'train':
-            data_path = '{:s}/train/'.format(data_root)
-        else:
-            data_path = '{:s}/val/'.format(data_root)
         
         if random_region is not None:
             self.generate_region_prob = 1/random_region['generate_interval']
 
         self.ds_dict = {}
+        file_tags_train = []
         for img_name_source in img_names_source:
             if img_name_source not in self.ds_dict.keys():
-                self.ds_dict[img_name_source] = {'ds': xr.load_dataset(os.path.join(data_path, img_name_source))}
+                file_tag = os.path.basename(img_name_source)
+                file_tags_train.append(file_tag)
+                self.ds_dict[file_tag] = {'ds': xr.load_dataset(img_name_source)}
 
+                
+        file_tags_target = []
         if len(img_names_target) > 0:
             for img_name_target in img_names_target:
+                file_tag = os.path.basename(img_name_target)
+                file_tags_target.append(file_tag)
                 if img_name_target not in self.ds_dict.keys():
-                    self.ds_dict[img_name_target] = {'ds': xr.load_dataset(os.path.join(data_path, img_name_target))}
+                    self.ds_dict[img_name_target] = {'ds': xr.load_dataset(img_name_target)}
 
         self.num_files_source = len(img_names_source)
         self.num_files_target = len(img_names_target)
 
         self.ds_dict = prepare_coordinates(self.ds_dict, coord_names=coord_names, flatten=self.flatten)            
 
-        self.target_names = img_names_target
-        self.source_names = img_names_source
+        self.target_names = file_tags_target
+        self.source_names = file_tags_train
 
-        self.num_datapoints = self.ds_dict[img_names_source[0]]['ds'][data_types[0]].shape[0]        
+        self.num_datapoints = self.ds_dict[file_tags_train[0]]['ds'][data_types[0]].shape[0]        
            
-        self.update_coordinates(img_names_source+img_names_target)
+        self.update_coordinates(file_tags_train+file_tags_target)
 
-        self.n_source_dropout = int((1-p_input_dropout) * self.ds_dict[img_names_source[0]]['rel_coords'].shape[1])
+        self.n_source_dropout = int((1-p_input_dropout) * self.ds_dict[file_tags_train[0]]['rel_coords'].shape[1])
 
         self.normalizer = ds_norm(norm_stats)  
         
