@@ -66,7 +66,7 @@ class nh_Block_layer(nn.Module):
 
         else:
             self.mlp_nh_reduction = nn.Sequential(
-                nn.Linear(model_dim, model_dim_nh, bias=False),
+                nn.Linear(input_dim, model_dim_nh, bias=False),
                 nn.Dropout(dropout),
                 nn.LeakyReLU(inplace=True, negative_slope=0.2)
             )
@@ -483,10 +483,10 @@ class EncDecBlock(nn.Module):
         return x
     
 class shortcut_block(nn.Module):
-    def __init__(self, model_dim, ff_dim, model_dim_nh, ff_dim_nh, nh_conv, PE, nh=4, n_heads=10, dropout=0.1, output_dim=1):
+    def __init__(self, model_dim, ff_dim, model_dim_nh, ff_dim_nh, nh_conv, PE, input_dim=1, nh=4, n_heads=10, dropout=0.1, output_dim=1):
         super().__init__()
 
-        self.nh_layer = nh_Block_layer(nh, model_dim, model_dim_nh, ff_dim_nh, input_dim=1, dropout=dropout, n_heads=n_heads, PE=PE, nh_conv=nh_conv)
+        self.nh_layer = nh_Block_layer(nh, model_dim, model_dim_nh, ff_dim_nh, input_dim=input_dim, dropout=dropout, n_heads=n_heads, PE=PE, nh_conv=nh_conv)
 
         
         self.mlp_out = nn.Sequential(
@@ -507,30 +507,14 @@ class shortcut_block(nn.Module):
 
         return out
 
-class GaussActivation(nn.Module):
-    def __init__(self, activation_mu=nn.Identity()):
-        super().__init__() 
-        self.activation_mu = activation_mu
-        self.activation_std = nn.Softplus()
-
-    def forward(self, x):
-        mu = self.activation_mu(x[:,:,0])
-        std = self.activation_std(x[:,:,1])
-        
-        return torch.stack((mu,std),-1)
-
 class SpatialTransNet(tm.transformer_model):
     def __init__(self, model_settings) -> None: 
         super().__init__(model_settings)
         
         model_settings = self.model_settings
 
-
-        self.use_gauss = model_settings["use_gauss"]
-        if self.use_gauss:
-            output_dim = 2
-        else:
-            output_dim = 1
+        input_dim = model_settings["input_dim"]
+        output_dim = model_settings["output_dim"]
 
         dropout = model_settings['dropout']
         model_dim = model_settings['model_dim']
@@ -558,17 +542,34 @@ class SpatialTransNet(tm.transformer_model):
             pos_encoders_enc = get_pos_encoders_layer(model_settings["encoder"]["att_pe_type_layers"], model_settings, False)
             pos_encoders_dec = get_pos_encoders_layer(model_settings["decoder"]["att_pe_type_layers"], model_settings, False)
 
+        input_dim_enc = input_dim
+
+        if input_dim > 0:
+            self.feature_net = nn.Sequential(
+                nn.Linear(input_dim, ff_dim, bias=True),
+                nn.Dropout(dropout),
+                nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                nn.Linear(ff_dim, model_dim, bias=True),
+                nn.Dropout(dropout),
+                nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                nn.LayerNorm(model_dim))
+            
+            input_dim_enc = model_dim
+
+        else:
+            self.feature_net = nn.Identity()
+
         if model_settings['add_ape']:
             self.APE = get_pos_encoder("abs", model_settings, True)
-            input_dim = model_settings['model_dim']
+            input_dim_enc = model_dim
         else:
             self.APE = None
-            input_dim = 1
 
         if share:
             short_cut_pe = pos_encoders_enc["pe"][0]
         else:
             short_cut_pe = get_pos_encoder("pe", model_settings, True)
+
 
         self.shortcut_block = shortcut_block(
             model_dim,
@@ -577,10 +578,11 @@ class SpatialTransNet(tm.transformer_model):
             ff_dim_nh,
             nh_conv,
             short_cut_pe,
+            input_dim=model_dim,
             nh=nh,
             n_heads=n_heads,
             dropout=dropout,
-            output_dim=1
+            output_dim=model_dim
         )
 
         self.dropout_ape_s = nn.Dropout(dropout)
@@ -597,7 +599,7 @@ class SpatialTransNet(tm.transformer_model):
             ff_dim_nh,
             nh,
             nh_conv,
-            input_dim=input_dim,
+            input_dim=input_dim_enc,
             n_heads=n_heads,
             dropout=dropout,
             pos_encoders=pos_encoders_enc,
@@ -621,18 +623,27 @@ class SpatialTransNet(tm.transformer_model):
             pos_encoders=pos_encoders_dec,
             share=share
         )
-        if model_settings["use_gauss"]:
-            last_layer_activation = GaussActivation(activation_mu=nn.LeakyReLU(negative_slope=0.2))
-        else:
-            last_layer_activation = nn.LeakyReLU(negative_slope=0.2)
-
+  
         self.mlp_out = nn.Sequential(
                 nn.Linear(model_dim, ff_dim, bias=True),
                 nn.Dropout(dropout),
                 nn.LeakyReLU(inplace=True, negative_slope=0.2),
                 nn.Linear(ff_dim, output_dim, bias=True),
-                last_layer_activation
+                nn.LeakyReLU(inplace=True, negative_slope=0.2)
             )
+
+        self.use_gauss = model_settings["use_gauss"]
+
+        if model_settings["use_gauss"]:
+            self.mlp_out_std = nn.Sequential(
+                    nn.Linear(model_dim, ff_dim, bias=True),
+                    nn.Dropout(dropout),
+                    nn.LeakyReLU(inplace=True, negative_slope=0.2),
+                    nn.Linear(ff_dim, output_dim, bias=True),
+                    nn.Softplus()
+                )
+        else:
+            self.mlp_out_std = nn.Identity()
 
         self.check_pretrained()
 
@@ -651,8 +662,12 @@ class SpatialTransNet(tm.transformer_model):
                                  "pos_enc_abs":[],
                                  "local_dist":[]}
 
+        
+        x = self.feature_net(x)
+
         x_interpolation = self.shortcut_block(x, coords_target, coords_source)
         
+
         if self.APE is not None:
             batched = coords_source.shape[0] == x.shape[0]
             ape_enc = self.dropout_ape_s(self.APE(coords_source, batched=batched))
@@ -677,14 +692,19 @@ class SpatialTransNet(tm.transformer_model):
         if return_debug:
             debug_information = merge_debug_information(debug_information, x[1])
             x = x[0]
-        
-        if self.use_gauss:
-            x = self.mlp_out(x)
-            x[:,:,0] = x[:,:,0] + x_interpolation.squeeze()
-           # x = self.mlp_out(x) + x_interpolation
-        else:
-            x = self.mlp_out(x) + x_interpolation
 
+        x = x + x_interpolation
+        x_mu = self.mlp_out(x)
+
+        if self.use_gauss:
+            x_mu = x_mu.unsqueeze(dim=-1)
+            x_var = self.mlp_out_std(x).unsqueeze(dim=-1)
+            x = torch.concat((x_mu, x_var), dim=-1)
+        else:
+            x = x_mu
+
+
+        
         if return_debug:
             return x, debug_information
         else:

@@ -1,6 +1,8 @@
 import os
 import random
 import copy
+import json
+from typing import Any
 
 import numpy as np
 import torch
@@ -32,25 +34,50 @@ class InfiniteSampler(Sampler):
                 order = np.random.permutation(n_samples) 
                 i = 0
 
-class ds_norm(torch.nn.Module):
-    def __init__(self, moments=tuple()):
+def calc_stats(data):
+    stat_dict = {
+        "min":data.min(),
+        "max":data.max(),
+        "q_05":np.quantile(data,0.05),
+        "q_95":np.quantile(data,0.95),
+        "mean":data.mean(),
+        "std":data.std()
+    }
+    for key, value in stat_dict.items():
+        stat_dict[key] = float(value)
+    return stat_dict
+
+def get_moment(stat_dict, variables, stat_var):
+    return torch.tensor([stat_dict[var][stat_var] for var in variables]).view(1,len(variables))
+
+class normalizer(torch.nn.Module):
+    def __init__(self, stat_dict, variables, type="quantile"):
         super().__init__()
-        self.moments = moments
         
+        if type == 'quantile':
+            self.norm_fcn = norm_min_max
+            self.moments = (get_moment(stat_dict, variables, "q_05"),
+                            get_moment(stat_dict, variables, "q_95"))
+        elif type == 'min_max':
+            self.norm_fcn = norm_min_max
+            self.moments = (get_moment(stat_dict, variables, "min"),
+                            get_moment(stat_dict, variables, "max"))
+        else:
+            self.norm_fcn = norm_mean_std
+            self.moments = (get_moment(stat_dict, variables, "mean"),
+                            get_moment(stat_dict, variables, "std"))
+    
     def __call__(self, data):
-        data_norm, self.moments = norm_mm(data, moments=self.moments)
-        return data_norm
+        return self.norm_fcn(data, self.moments)
+        
 
+def norm_min_max(data, moments):
+    data = (data-moments[0])/(moments[1] - moments[0])
+    return data, moments
 
-def norm_mm(data, min_max_output=(0,1), moments=tuple(), epsilon=1e-15):
-    if len(moments)==0:
-        #moments = (data.min(), data.max())
-        moments = (np.quantile(data, 0.05), np.quantile(data, 0.95))
-
-    data_norm = (data-moments[0])/(epsilon + moments[1]-moments[0])
-
-    data_norm = data_norm * (min_max_output[1] - min_max_output[0]) + min_max_output[0]
-    return data_norm, moments
+def norm_mean_std(data, moments):
+    data = (data-moments[0])/(moments[1])
+    return data, moments
 
 
 class FiniteSampler(Sampler):
@@ -63,53 +90,6 @@ class FiniteSampler(Sampler):
 
     def __len__(self):
         return self.num_samples
-
-
-def nc_loadchecker(filename, data_type):
-    basename = filename.split("/")[-1]
-
-    if not os.path.isfile(filename):
-        print('File {} not found.'.format(filename))
-
-    try:
-        ds = xr.open_dataset(filename)
-    except Exception:
-        try:
-            ds = xr.open_dataset(filename, decode_times=False)
-        except Exception:
-            raise ValueError('Impossible to read {}.'
-                             '\nPlease, check that it is a netCDF file and it is not corrupted.'.format(basename))
-
-    ds1 = dataset_formatter(ds, data_type, basename)
-    ds = ds.drop_vars(data_type)
-
-    if cfg.lazy_load:
-        data = ds1[data_type]
-    else:
-        data = ds1[data_type].values
-
-    dims = ds1[data_type].dims
-    coords = {key: ds1[data_type][key] for key in dims if key != "time"}
-
-    return [ds, ds1, dims, coords], data, data.shape[0], data.shape[1:]
-
-
-def load_netcdf(path, data_names, data_types, keep_dss=False):
-    if data_names is None:
-        return None, None, None
-    else:
-        ndata = len(data_names)
-        assert ndata == len(data_types)
-
-        dss, data, lengths, sizes = zip(*[nc_loadchecker('{}{}'.format(path, data_names[i]),
-                                                         data_types[i]) for i in range(ndata)])
-
-        assert len(set(lengths)) == 1
-
-        if keep_dss:
-            return dss, data, lengths[0], sizes
-        else:
-            return data, lengths[0], sizes
 
 
 def prepare_coordinates(ds_dict, coord_names, flatten=False, random_region=None):
@@ -135,8 +115,10 @@ def prepare_coordinates(ds_dict, coord_names, flatten=False, random_region=None)
 
     return ds_dict
 
+
+
 class NetCDFLoader(Dataset):
-    def __init__(self, img_names_source, img_names_target, data_types, coord_names, apply_img_norm=False, normalize_data=True, random_region=None, norm_stats=tuple(), p_input_dropout=0, sampling_mode='mixed',n_points=None,coordinate_pert=0):
+    def __init__(self, img_names_source, img_names_target, data_types, coord_names, apply_img_norm=False, normalize_data=True, random_region=None, stat_dict=None, p_input_dropout=0, sampling_mode='mixed',n_points=None,coordinate_pert=0):
         super(NetCDFLoader, self).__init__()
         
         self.PosCalc = PositionCalculator()
@@ -190,12 +172,19 @@ class NetCDFLoader(Dataset):
 
         self.n_source_dropout = int((1-p_input_dropout) * self.ds_dict[file_tags_train[0]]['rel_coords'].shape[1])
 
-        self.normalizer = ds_norm(norm_stats)  
-        
-        if len(norm_stats)==0:
-            value_data = np.concatenate([ds_d['ds'][data_types[0]].values.flatten() for ds_d in self.ds_dict.values()])
-            self.normalizer(value_data)
-        
+        if stat_dict is None:
+            self.stat_dict = {}
+            for var in data_types:
+                data = np.concatenate([ds_d['ds'][var].values.flatten() for ds_d in self.ds_dict.values()])
+                self.stat_dict[var] = calc_stats(data)
+            
+            with open(os.path.join(os.path.dirname(img_names_source[0]),"norm_stats.json"),"w+") as f:
+                json.dump(self.stat_dict,f)
+
+        else:
+            self.stat_dict=stat_dict
+
+        self.normalizer = normalizer(self.stat_dict, data_types)
 
 
     def input_dropout(self, x, coords):
@@ -253,15 +242,16 @@ class NetCDFLoader(Dataset):
          
         return torch.stack([d_lons_s.float().T, d_lats_s.float().T],dim=0), distances
     
-    
+
     def get_data(self, key, index):
-        data = torch.tensor(self.ds_dict[key]['ds'][self.data_types[0]][index].values)
+        data = [torch.tensor(self.ds_dict[key]['ds'][data_type][index].values).squeeze() for data_type in self.data_types]
+        data = torch.stack(data, dim=-1)
 
         if self.flatten:
             data = data.flatten().unsqueeze(dim=1)
             data = data.flatten().unsqueeze(dim=1)
         else:
-            data = data.view(-1,1)
+            data = data.view(-1,len(self.data_types))
 
         if self.random_region is not None:
             indices = self.ds_dict[key]['region_indices']
@@ -289,6 +279,7 @@ class NetCDFLoader(Dataset):
             pertubation = torch.randn_like(rel_coords)*self.coordinate_pert*avg_dist
             rel_coords = rel_coords+pertubation
         return data, rel_coords
+
 
     def __getitem__(self, index):
         
@@ -323,13 +314,13 @@ class NetCDFLoader(Dataset):
             data_target, rel_coords_target = self.get_data(target_key, index)
 
         if self.normalize_data:
-            data_source = self.normalizer(data_source)
-            data_target = self.normalizer(data_target)
+            data_source = self.normalizer(data_source)[0]
+            data_target = self.normalizer(data_target)[0]
             
-        if self.apply_img_norm:
-            norm = ds_norm()
-            data_source = norm(data_source)
-            data_target = norm(data_target)
+        #if self.apply_img_norm:
+        #    norm = ds_norm()
+        #    data_source = norm(data_source)
+        #    data_target = norm(data_target)
 
         if self.p_input_dropout > 0:
             data_source, rel_coords_source = self.input_dropout(data_source, rel_coords_source)

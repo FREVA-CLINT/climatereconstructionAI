@@ -2,6 +2,7 @@ import os
 import numpy as np
 import torch
 import torch.nn as nn
+import json
 
 import torch.multiprocessing
 from torch.utils.data import DataLoader
@@ -18,7 +19,7 @@ class GaussLoss(nn.Module):
         self.Gauss = torch.nn.GaussianNLLLoss()
 
     def forward(self, output, target):
-        loss =  self.Gauss(output[:,:,0],target.squeeze(),output[:,:,1])
+        loss =  self.Gauss(output[:,:,:,0],target,output[:,:,:,1])
         return loss
 
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
@@ -48,11 +49,11 @@ def check_get_data_files(list_or_path, root_path = '', train_or_val='train'):
     if isinstance(list_or_path, list):
         data_paths = list_or_path
         if not os.path.isfile(data_paths[0]):
-            file_root = os.join(root_path, data_paths[0])
-            if os.path.isfile(file_root):
-                data_paths = [os.join(root_path, name) for name in data_paths]
+            root_file = os.path.join(root_path, data_paths[0])
+            if os.path.isfile(root_file):
+                data_paths = [os.path.join(root_path, name) for name in data_paths]
             else:
-                data_paths = [os.join(root_path, train_or_val, name) for name in data_paths]
+                data_paths = [os.path.join(root_path, train_or_val, name) for name in data_paths]
 
     elif isinstance(list_or_path,str):
         if os.path.isfile(list_or_path):
@@ -92,6 +93,12 @@ def train(model, training_settings, model_hparams={}):
     source_files_val = check_get_data_files(training_settings['val_data']['data_names_source'], root_path = training_settings['root_dir'], train_or_val='val')
     target_files_val = check_get_data_files(training_settings['val_data']['data_names_target'], root_path = training_settings['root_dir'], train_or_val='val')      
 
+    if len(training_settings["norm_stats"]) > 0:
+        with open(training_settings["norm_stats"],'r') as file:
+            stat_dict = json.load(file)
+    else:
+        stat_dict = None
+
     dataset_train = NetCDFLoader(source_files_train, 
                                  target_files_train,
                                  training_settings['variables'],
@@ -99,6 +106,7 @@ def train(model, training_settings, model_hparams={}):
                                  random_region=random_region,
                                  apply_img_norm=training_settings['apply_img_norm'],
                                  normalize_data=training_settings['normalize_data'],
+                                 stat_dict=stat_dict,
                                  p_input_dropout=training_settings['input_dropout'],
                                  sampling_mode=training_settings['sampling_mode'],
                                  n_points=training_settings['n_points'],
@@ -110,7 +118,8 @@ def train(model, training_settings, model_hparams={}):
                                  training_settings['coord_names'],
                                  random_region=random_region,
                                  apply_img_norm=training_settings['apply_img_norm'],
-                                 normalize_data=dataset_train.normalizer.moments,
+                                 normalize_data=training_settings['normalize_data'],
+                                 stat_dict=dataset_train.stat_dict if stat_dict is None else stat_dict,
                                  p_input_dropout=training_settings['input_dropout'],
                                  sampling_mode=training_settings['sampling_mode'],
                                  n_points=training_settings['n_points'],
@@ -130,7 +139,7 @@ def train(model, training_settings, model_hparams={}):
                                     pin_memory=True if device == 'cuda' else False,
                                     pin_memory_device=device))
     
-    train_stats = {"mean": dataset_train.normalizer.moments[0], "std": dataset_train.normalizer.moments[1]}
+    train_stats = dataset_train.stat_dict
 
     model = model.to(device)
 

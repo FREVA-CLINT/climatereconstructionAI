@@ -1,4 +1,3 @@
-import torch
 import json
 import torch.nn as nn
 from .. import transformer_training as trainer
