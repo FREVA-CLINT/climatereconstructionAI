@@ -267,10 +267,10 @@ class NetCDFLoader(Dataset):
 
             elif data.shape[0] < self.n_points:
                 diff = self.n_points-data.shape[0]
-                pad_data = torch.zeros_like(data)[:diff] + torch.mean(data)
-                data = torch.concat((data,pad_data),dim=0)
+                pad_data = torch.zeros((diff,data.shape[-1])) + torch.mean(data, dim=0).view(1, data.shape[-1])
+                data = torch.concat((data, pad_data),dim=0)
 
-                pad_rel_coords = torch.zeros_like(rel_coords)[:,:diff] + 1000
+                pad_rel_coords = torch.zeros((rel_coords.shape[0], diff,1)) + 10e3
                 rel_coords = torch.concat((rel_coords, pad_rel_coords),dim=1)
 
         if self.coordinate_pert>0:
