@@ -299,10 +299,13 @@ class reduction_layer(nn.Module):
         global_m = x.mean(dim=1).abs()
         local_s = x_nh.std(dim=-2)
         local_dist = (local_s/global_m.unsqueeze(dim=1)).sum(dim=-1)
-       
+
+        rel_coords_pad = (coords>999)[:,0,:,0]
+        local_dist[rel_coords_pad] = local_dist[rel_coords_pad] - 10e3
+
         n_keep = torch.tensor((1 - self.p_reduction)*local_dist.shape[1]).long()
 
-        indices = torch.topk(local_dist,dim=1,k=n_keep).indices
+        indices = torch.topk(local_dist, dim=1, k=n_keep).indices
 
         x = torch.gather(x, dim=1, index=indices.view(b,n_keep,1).repeat(1,1,e))
         coords = torch.gather(coords, dim=2, index=indices.view(b,1,n_keep,1).repeat(1,coords.shape[1],1,1))
