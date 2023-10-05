@@ -170,7 +170,7 @@ class NetCDFLoader(Dataset):
            
         self.update_coordinates(file_tags_train+file_tags_target)
 
-        self.n_source_dropout = int((1-p_input_dropout) * self.ds_dict[file_tags_train[0]]['rel_coords'].shape[1])
+        self.n_source_dropout = int((1-p_input_dropout) * n_points)
 
         if stat_dict is None:
             self.stat_dict = {}
