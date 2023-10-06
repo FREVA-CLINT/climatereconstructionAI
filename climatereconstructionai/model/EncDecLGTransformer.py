@@ -573,6 +573,10 @@ class SpatialTransNet(tm.transformer_model):
         else:
             short_cut_pe = get_pos_encoder("pe", model_settings, True)
 
+        if model_settings['encoder']['n_layers'] + model_settings['decoder']['n_layers'] >0:
+            self.train_interpolator = False
+        else:
+            self.train_interpolator = True
 
         self.shortcut_block = shortcut_block(
             model_dim,
@@ -633,13 +637,17 @@ class SpatialTransNet(tm.transformer_model):
                 nn.LeakyReLU(inplace=True, negative_slope=0.2)
             )
 
-        self.mlp_out = nn.Sequential(
-                nn.Linear(model_dim, ff_dim, bias=True),
-                nn.Dropout(dropout),
-                nn.LeakyReLU(inplace=True, negative_slope=0.2),
-                nn.Linear(ff_dim, output_dim, bias=True),
-                nn.LeakyReLU(inplace=True, negative_slope=0.2)
-            )
+        if not self.train_interpolator:
+            self.mlp_out = nn.Sequential(
+                    nn.Linear(model_dim, ff_dim, bias=True),
+                    nn.Dropout(dropout),
+                    nn.LeakyReLU(inplace=True, negative_slope=0.2),
+                    nn.Linear(ff_dim, output_dim, bias=True),
+                    nn.LeakyReLU(inplace=True, negative_slope=0.2)
+                )
+
+        else:
+            self.mlp_out = nn.Identity()
 
         self.use_gauss = model_settings["use_gauss"]
 
@@ -702,9 +710,10 @@ class SpatialTransNet(tm.transformer_model):
             debug_information = merge_debug_information(debug_information, x[1])
             x = x[0]
 
-        x_mu = self.mlp_out(x)
-
-        x_mu = x_mu + self.mlp_out_interpolation(x_interpolation)
+        if not self.train_interpolator:
+            x_mu = self.mlp_out(x) + self.mlp_out_interpolation(x_interpolation)
+        else:
+            x_mu = self.mlp_out_interpolation(x_interpolation)
 
         if self.use_gauss:
             x_mu = x_mu.unsqueeze(dim=-1)
