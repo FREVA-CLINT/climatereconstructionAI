@@ -626,7 +626,13 @@ class SpatialTransNet(tm.transformer_model):
             pos_encoders=pos_encoders_dec,
             share=share
         )
-  
+
+        self.mlp_out_interpolation = nn.Sequential(
+                nn.Dropout(dropout),
+                nn.Linear(model_dim, output_dim, bias=True),
+                nn.LeakyReLU(inplace=True, negative_slope=0.2)
+            )
+
         self.mlp_out = nn.Sequential(
                 nn.Linear(model_dim, ff_dim, bias=True),
                 nn.Dropout(dropout),
@@ -696,8 +702,9 @@ class SpatialTransNet(tm.transformer_model):
             debug_information = merge_debug_information(debug_information, x[1])
             x = x[0]
 
-        x = x + x_interpolation
         x_mu = self.mlp_out(x)
+
+        x_mu = x_mu + self.mlp_out_interpolation(x_interpolation)
 
         if self.use_gauss:
             x_mu = x_mu.unsqueeze(dim=-1)
@@ -705,8 +712,7 @@ class SpatialTransNet(tm.transformer_model):
             x = torch.concat((x_mu, x_var), dim=-1)
         else:
             x = x_mu
-
-
+        
         
         if return_debug:
             return x, debug_information
