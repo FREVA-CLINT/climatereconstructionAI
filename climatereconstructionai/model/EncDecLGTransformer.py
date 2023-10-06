@@ -67,7 +67,6 @@ class nh_Block_layer(nn.Module):
         else:
             self.mlp_nh_reduction = nn.Sequential(
                 nn.Linear(input_dim, model_dim_nh, bias=False),
-                nn.Dropout(dropout),
                 nn.LeakyReLU(inplace=True, negative_slope=0.2)
             )
 
@@ -588,7 +587,7 @@ class SpatialTransNet(tm.transformer_model):
             input_dim=model_dim,
             nh=nh,
             n_heads=n_heads,
-            dropout=dropout,
+            dropout=0,
             output_dim=model_dim
         )
 
@@ -632,7 +631,6 @@ class SpatialTransNet(tm.transformer_model):
         )
 
         self.mlp_out_interpolation = nn.Sequential(
-                nn.Dropout(dropout),
                 nn.Linear(model_dim, output_dim, bias=True),
                 nn.LeakyReLU(inplace=True, negative_slope=0.2)
             )
@@ -640,7 +638,6 @@ class SpatialTransNet(tm.transformer_model):
         if not self.train_interpolator:
             self.mlp_out = nn.Sequential(
                     nn.Linear(model_dim, ff_dim, bias=True),
-                    nn.Dropout(dropout),
                     nn.LeakyReLU(inplace=True, negative_slope=0.2),
                     nn.Linear(ff_dim, output_dim, bias=True),
                     nn.LeakyReLU(inplace=True, negative_slope=0.2)
@@ -654,7 +651,6 @@ class SpatialTransNet(tm.transformer_model):
         if model_settings["use_gauss"]:
             self.mlp_out_std = nn.Sequential(
                     nn.Linear(model_dim, ff_dim, bias=True),
-                    nn.Dropout(dropout),
                     nn.LeakyReLU(inplace=True, negative_slope=0.2),
                     nn.Linear(ff_dim, output_dim, bias=True),
                     nn.Softplus()
