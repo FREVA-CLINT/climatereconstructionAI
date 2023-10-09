@@ -36,14 +36,247 @@ def merge_debug_information(debug_info, debug_info_new):
 
     return debug_info
 
-class nh_Block_layer(nn.Module):
-    def __init__(self, nh, model_dim, model_dim_nh, ff_dim_nh, n_heads=4, dropout=0, input_dim=None, PE=None, RPE=None, nh_conv=True) -> None: 
+class nh_Block_input(nn.Module):
+    def __init__(self, nh, model_dim, model_dim_nh, ff_dim_nh, n_heads=4, dropout=0, input_dim=None, PE=None,add_pe=False) -> None: 
         super().__init__()
 
         self.nh = nh
         self.md_nh = model_dim_nh
         self.model_dim = model_dim
         self.n_heads = n_heads
+
+        self.add_pe = add_pe
+
+        if PE is not None:
+            self.nn_layer = helpers.nn_layer(nh, both_dims=False)
+        else:
+            self.nn_layer = helpers.nn_layer(nh, both_dims=True)
+
+        self.PE = PE
+
+        self.local_att = helpers.MultiHeadAttentionBlock(
+            model_dim_nh, model_dim_nh, n_heads, logit_scale=True, qkv_proj=False
+            )
+        
+        if input_dim is None:
+            input_dim = model_dim_nh
+    
+
+        if model_dim == model_dim_nh or input_dim==1:
+            self.mlp_nh_reduction = nn.Identity()
+
+        else:
+            self.mlp_nh_reduction = nn.Sequential(
+                nn.Linear(input_dim, model_dim_nh, bias=False),
+                nn.LeakyReLU(inplace=True, negative_slope=0.2)
+            )
+
+        self.q_proj = nn.Linear(model_dim_nh, model_dim_nh, bias=False)
+        self.k_proj = nn.Linear(model_dim_nh, model_dim_nh, bias=False)
+        self.v_proj = nn.Linear(model_dim_nh, model_dim_nh, bias=False)
+
+        self.mlp_layer_nh = nn.Sequential(
+            nn.Linear(model_dim_nh, ff_dim_nh, bias=False),
+            nn.Dropout(dropout),
+            nn.LeakyReLU(inplace=True, negative_slope=0.2),
+            nn.Linear(ff_dim_nh, 1, bias=False),
+            nn.LeakyReLU(inplace=True, negative_slope=0.2)
+        )
+
+      
+
+        self.mlp_layer_feat = nn.Sequential(
+            nn.Linear(model_dim_nh*nh, model_dim_nh*nh, bias=False),
+            nn.Dropout(dropout),
+            nn.LeakyReLU(inplace=True, negative_slope=0.2),
+            nn.Linear(model_dim_nh*nh, model_dim, bias=False),
+            nn.LeakyReLU(inplace=True, negative_slope=0.2)
+            )
+
+        self.dropout1 = nn.Dropout(dropout)
+        self.dropout2 = nn.Dropout(dropout)
+        self.dropout3 = nn.Dropout(dropout) if model_dim > 1 else nn.Identity()
+        self.pe_dropout = nn.Dropout(dropout) if PE is not None else nn.Identity()
+
+        self.norm1 = nn.LayerNorm(model_dim_nh) if input_dim > 1 else nn.Identity()
+        self.norm2 = nn.LayerNorm(model_dim_nh)
+        self.norm3 = nn.LayerNorm(model_dim) if model_dim > 1 else nn.Identity()
+
+    def forward(self, x, coords_target, coords_source, return_debug=False):
+
+        pos_enc = None # for debug information
+
+        x = self.mlp_nh_reduction(x)
+
+        x = self.norm1(x)
+
+        skip_self = False
+
+        if x is not None:
+            
+            if x.shape[1]==x.shape[1]:
+                skip_self = True
+        else:
+            skip_self = False
+
+        #get nearest neighbours
+        x_nh, _, cs_nh = self.nn_layer(x, coords_target, coords_source, skip_self=skip_self)
+        
+
+        b, t, nh, e = x_nh.shape
+        batched = cs_nh.shape[0] == b
+
+        
+        pe = self.pe_dropout(self.PE(cs_nh, batched=batched))
+
+
+        if self.add_pe:
+            v = q = k = (x_nh + pe).reshape(b*t,nh,self.md_nh)
+        else:
+            q = k = (x_nh + pe).reshape(b*t,nh,self.md_nh)
+            v = x_nh.reshape(b*t,nh,self.md_nh)
+
+        v = self.v_proj(v)
+        q = self.q_proj(q)
+        k = self.k_proj(k)
+
+        x_nh = x_nh.reshape(b*t,nh,e)
+
+        if return_debug:
+            pos_enc = pe
+
+        
+        att_out, att = self.local_att(q, k, v, rel_pos_bias=None, return_debug=True)
+            
+        x_nh = x_nh + self.dropout1(att_out)
+        x_nh = self.norm2(x_nh)
+    
+        x_nh = x_nh + self.dropout2(self.mlp_layer_nh(x_nh))
+
+        x_nh = x_nh.view(b*t,self.nh*self.md_nh)
+        x_nh = self.dropout3(self.mlp_layer_feat(x_nh).view(b,t,self.model_dim))
+
+        x = self.norm3(x_nh)
+
+        if return_debug:
+            debug_information = {"atts": att.detach(),
+                                 "pos_encs":pos_enc}
+            
+            return x, debug_information
+        else:
+            return x
+            
+
+
+class nh_feat_layer(nn.Module):
+    def __init__(self, nh, model_dim, ff_dim, n_heads=4, dropout=0, PE=None, add_pe=False) -> None: 
+        super().__init__()
+
+        self.nh = nh
+        self.model_dim = model_dim
+        self.n_heads = n_heads
+
+        self.add_pe = add_pe
+
+        if PE is not None:
+            self.nn_layer = helpers.nn_layer(nh, both_dims=False)
+        else:
+            self.nn_layer = helpers.nn_layer(nh, both_dims=True)
+
+        self.PE = PE    
+
+
+        self.local_att = helpers.MultiHeadAttentionBlock(
+            model_dim, model_dim, n_heads, logit_scale=True, qkv_proj=True
+            )
+
+        self.mlp_layer_feat = nn.Sequential(
+            nn.Linear(model_dim, ff_dim, bias=False),
+            nn.Dropout(dropout),
+            nn.LeakyReLU(inplace=True, negative_slope=0.2),
+            nn.Linear(ff_dim, model_dim, bias=False),
+            nn.LeakyReLU(inplace=True, negative_slope=0.2)
+            )
+
+        self.dropout1 = nn.Dropout(dropout)
+        self.dropout2 = nn.Dropout(dropout)
+        self.dropout3 = nn.Dropout(dropout) if model_dim > 1 else nn.Identity()
+        self.pe_dropout = nn.Dropout(dropout) if PE is not None else nn.Identity()
+
+        self.norm2 = nn.LayerNorm(model_dim)
+        self.norm3 = nn.LayerNorm(model_dim) if model_dim > 1 else nn.Identity()
+
+
+    def forward(self, x, coords, x_cross=None, coords_cross=None, return_debug=False):
+
+        pos_enc = None # for debug information
+
+     #   x_cross = self.mlp_nh_reduction(x_cross)
+
+      #  x_cross = self.norm1(x_cross)
+        
+        batched = x.shape[0] == coords.shape[0]
+
+        #get nearest neighbours
+        if x_cross is not None:
+            x_nh, _, cs_nh = self.nn_layer(x_cross, coords, coords_cross, skip_self=False)
+
+            pe_nh = self.pe_dropout(self.PE(cs_nh, batched=batched))
+
+        else:
+            x_nh, _, cs_nh = self.nn_layer(x, coords, coords, skip_self=True)
+
+            pe_nh = self.pe_dropout(self.PE(cs_nh, batched=batched))
+
+        
+        if return_debug:
+            pos_enc = pe_nh
+
+        b, t, nh, e = x_nh.shape
+        batched = cs_nh.shape[0] == b
+
+        q = x
+        k = x_nh + pe_nh
+
+        if self.add_pe:
+            v = x_nh + pe_nh
+        else:
+            v = x_nh
+
+        q = q.reshape(b*t,1,self.model_dim)
+        k = k.reshape(b*t,nh,self.model_dim)
+        v = v.reshape(b*t,nh,self.model_dim)
+
+        att_out, att = self.local_att(q, k, v, rel_pos_bias=None, return_debug=True)
+            
+        att_out = att_out.view(b,t,self.model_dim)
+
+        x = x + self.dropout1(att_out)
+        x = self.norm2(x)
+    
+        x = x + self.dropout3(self.mlp_layer_feat(x))
+
+        x = self.norm3(x)
+
+        if return_debug:
+            debug_information = {"atts": att.detach(),
+                                 "pos_encs":pos_enc}
+            
+            return x, debug_information
+        else:
+            return x
+
+
+class nh_Block_layer(nn.Module):
+    def __init__(self, nh, model_dim, model_dim_nh, ff_dim_nh, n_heads=4, dropout=0, input_dim=None, PE=None, RPE=None, nh_conv=True, add_pe=False) -> None: 
+        super().__init__()
+
+        self.nh = nh
+        self.md_nh = model_dim_nh
+        self.model_dim = model_dim
+        self.n_heads = n_heads
+
+        self.add_pe = add_pe
 
         if PE is not None:
             self.nn_layer = helpers.nn_layer(nh, both_dims=False)
@@ -109,18 +342,20 @@ class nh_Block_layer(nn.Module):
         self.norm2 = nn.LayerNorm(model_dim_nh)
         self.norm3 = nn.LayerNorm(model_dim) if model_dim > 1 else nn.Identity()
 
-    def forward(self, x, coords, x_cross, coords_cross=None, return_debug=False):
-        
+    def forward(self, x, coords, x_cross=None, coords_cross=None, return_debug=False):
+
         pos_enc = None # for debug information
 
-        x = x_cross
+     #   x_cross = self.mlp_nh_reduction(x_cross)
 
-        x = self.mlp_nh_reduction(x)
+      #  x_cross = self.norm1(x_cross)
 
-        x = self.norm1(x)
-        
         #get nearest neighbours
-        x_nh, _, cs_nh = self.nn_layer(x, coords, coords_cross, skip_self=False)
+        if x_cross is not None:
+            x_nh, _, cs_nh = self.nn_layer(x_cross, coords, coords_cross, skip_self=False)
+        else:
+            x_nh, _, cs_nh = self.nn_layer(x, coords, coords, skip_self=True)
+        
 
         b, t, nh, e = x_nh.shape
         batched = cs_nh.shape[0] == b
@@ -128,7 +363,13 @@ class nh_Block_layer(nn.Module):
         if self.PE:
             pe = self.pe_dropout(self.PE(cs_nh, batched=batched))
 
-            v = q = k = (x_nh + pe).reshape(b*t,nh,self.md_nh)
+
+            if self.add_pe:
+                v = q = k = (x_nh + pe).reshape(b*t,nh,self.md_nh)
+            else:
+                q = k = (x_nh + pe).reshape(b*t,nh,self.md_nh)
+
+                v = x_nh.reshape(b*t,nh,self.md_nh)
 
             v = self.v_proj(v)
             q = self.q_proj(q)
@@ -141,7 +382,8 @@ class nh_Block_layer(nn.Module):
 
         else: 
             x_nh = x_nh.reshape(b*t,nh,e)
-            q = k = v = x_nh
+            k = v = x_nh
+            q = x.reshape(b*t,1,e)
         
         if self.RPE is not None:
             rel_p_bias = self.RPE(cs_nh, batched=batched)
@@ -178,17 +420,18 @@ class nh_Block_layer(nn.Module):
             return x, debug_information
         else:
             return x
-            
 
 class attention_Block(nn.Module):
-    def __init__(self, model_dim, ff_dim, out_dim=1, input_dim=1, dropout=0, n_heads=4, PE=None, RPE=None) -> None: 
+    def __init__(self, model_dim, ff_dim, out_dim=1, input_dim=1, dropout=0, n_heads=4, PE=None, RPE=None, add_pe=False) -> None: 
         super().__init__()
 
         self.PE = PE
         self.RPE = RPE
 
-        self.norm_PEq = nn.LayerNorm(model_dim) if PE is not None else nn.Identity()
-        self.norm_PEk = nn.LayerNorm(model_dim) if PE is not None else nn.Identity()
+        #self.norm_PEq = nn.LayerNorm(model_dim) if PE is not None else nn.Identity()
+        #self.norm_PEk = nn.LayerNorm(model_dim) if PE is not None else nn.Identity()
+
+        self.add_pe = add_pe
 
         self.dropout_PEq = nn.Dropout(dropout) if PE is not None else nn.Identity()
         self.dropout_PEk = nn.Dropout(dropout) if PE is not None else nn.Identity()
@@ -246,13 +489,21 @@ class attention_Block(nn.Module):
         else:
             rel_p_bias = None
         
+
         if self.PE is not None:
-            batched = coords.shape[0] == q.shape[0]
+            batched = coords.shape[0] == k.shape[0]
             pe_q = self.dropout_PEq(self.PE(coords, batched=batched))
             pe_k = self.dropout_PEk(self.PE(coords_cross_, batched=batched))
 
-            q = self.norm_PEq(q + pe_q)
+            if q is not None:
+                q = self.norm_PEq(q + pe_q)
+            else:
+                q = self.norm_PEq(pe_q)
+
             k = self.norm_PEk(k + pe_k)
+
+            if self.add_pe:
+                v = v + pe_k
 
             if return_debug:
                 pos_enc = pe_q
@@ -264,7 +515,11 @@ class attention_Block(nn.Module):
                                  "pos_encs":pos_enc}
             att_out = att_out[0]
 
-        x = x + self.dropout1(att_out)
+        if x is not None:
+            x = x + self.dropout1(att_out)
+        else:
+            x = att_out
+
         x = self.norm2(x)
         
         mlp_out = self.dropout2(self.mlp_layer(x))
@@ -380,13 +635,15 @@ def get_pos_encoders_layer(pe_types, model_settings, share, transform='inv'):
 
 
 class Block(nn.Module):
-    def __init__(self, layer_type, input_dim, model_dim, ff_dim, model_dim_nh, ff_dim_nh, nh_conv, p_reduction=0, nh=4, n_heads=10, dropout=0.1, output_dim=None, PE=None, RPE=None):
+    def __init__(self, layer_type, input_dim, model_dim, ff_dim, model_dim_nh, ff_dim_nh, nh_conv, p_reduction=0, nh=4, n_heads=10, dropout=0.1, output_dim=None, PE=None, RPE=None, add_pe=False):
         super().__init__()
 
         if layer_type == "nh":
-            self.layer = nh_Block_layer(nh, model_dim, model_dim_nh, ff_dim_nh, input_dim=input_dim, dropout=dropout, n_heads=n_heads, PE=PE, RPE=RPE, nh_conv=nh_conv)
+            #self.layer = nh_feat_layer(nh, model_dim, model_dim_nh, ff_dim_nh, input_dim=input_dim, dropout=dropout, n_heads=n_heads, PE=PE, RPE=RPE, nh_conv=nh_conv, add_pe=add_pe)
+
+            self.layer = nh_feat_layer(nh, model_dim, ff_dim, n_heads=4, dropout=0, PE=PE, add_pe=False)
         else:
-            self.layer = attention_Block(model_dim, ff_dim, out_dim=output_dim, input_dim=model_dim, n_heads=n_heads, PE=PE, RPE=RPE)
+            self.layer = attention_Block(model_dim, ff_dim, out_dim=output_dim, input_dim=model_dim, n_heads=n_heads, PE=PE, RPE=RPE, add_pe=add_pe)
 
         self.reduction_layer = reduction_Block(nh, p_reduction)
 
@@ -407,7 +664,10 @@ class Block(nn.Module):
             debug_information = out[1]
             out = out[0] 
 
-        x = self.norm(x + out)
+        if x is not None:
+            x = self.norm(x + out)
+        else:
+            x = out
 
         if return_debug:
             return x, debug_information
@@ -417,7 +677,7 @@ class Block(nn.Module):
 
 class EncDecBlock(nn.Module):
 
-    def __init__(self, n_layers, layer_types, p_reduction_layers, pos_encoder_types, model_dim, ff_dim, model_dim_nh, ff_dim_nh, nh, nh_conv, input_dim=None, n_heads=10, dropout=0.1, cross_att_layers=None, pos_encoders=None, share=False):
+    def __init__(self, n_layers, layer_types, p_reduction_layers, pos_encoder_types, model_dim, ff_dim, model_dim_nh, ff_dim_nh, nh, nh_conv, input_dim=None, n_heads=10, dropout=0.1, cross_att_layers=None, pos_encoders=None, share=False, add_pe_first=False):
         super().__init__()
 
         self.cross_att_layers = cross_att_layers
@@ -444,6 +704,12 @@ class EncDecBlock(nn.Module):
 
             if input_dim is None or n>0:
                 input_dim=model_dim
+
+            if add_pe_first and n==0:
+                add_pe=True
+            else:
+                add_pe=False
+
             self.layers.append(Block(layer_types[n],
                                     input_dim,
                                     model_dim,
@@ -457,7 +723,8 @@ class EncDecBlock(nn.Module):
                                     dropout=dropout,
                                     output_dim=model_dim,
                                     PE=pe,
-                                    RPE=rpe
+                                    RPE=rpe,
+                                    add_pe=add_pe
                                     ))
 
     def forward(self, x, coords, x_cross=None, coords_cross=None, return_debug=False):
@@ -467,12 +734,12 @@ class EncDecBlock(nn.Module):
         for n, layer in enumerate(self.layers):
             if x_cross is not None and self.cross_att_layers[n]:
                 x_cross_ = x_cross
-                coords_cross__ = coords_cross
+                coords_cross_ = coords_cross
             else:
                 x_cross_ = None
-                coords_cross__ = None
+                coords_cross_ = None
 
-            x = layer(x, coords, x_cross=x_cross_, coords_cross=coords_cross__, return_debug=return_debug)
+            x = layer(x, coords, x_cross=x_cross_, coords_cross=coords_cross_, return_debug=return_debug)
 
             if return_debug:
                 debug_information = merge_debug_information(debug_information, x[1])
@@ -485,10 +752,10 @@ class EncDecBlock(nn.Module):
         return x
     
 class shortcut_block(nn.Module):
-    def __init__(self, model_dim, ff_dim, model_dim_nh, ff_dim_nh, nh_conv, PE, input_dim=1, nh=4, n_heads=10, dropout=0.1, output_dim=1):
+    def __init__(self, model_dim, ff_dim, model_dim_nh, ff_dim_nh, PE, input_dim=1, nh=4, n_heads=10, dropout=0.1, output_dim=1):
         super().__init__()
 
-        self.nh_layer = nh_Block_layer(nh, model_dim, model_dim_nh, ff_dim_nh, input_dim=input_dim, dropout=dropout, n_heads=n_heads, PE=PE, nh_conv=nh_conv)
+        self.nh_layer = nh_Block_input(nh, model_dim, model_dim_nh, ff_dim_nh, input_dim=input_dim, dropout=dropout, n_heads=n_heads, PE=PE, add_pe=True)
 
         
         self.mlp_out = nn.Sequential(
@@ -499,11 +766,9 @@ class shortcut_block(nn.Module):
                 nn.LeakyReLU(inplace=True, negative_slope=0.2)
             )
         
-        self.norm = nn.LayerNorm(model_dim)
-
     def forward(self, x_in, coords_target, coords_source, return_debug=False):
 
-        out = self.nh_layer(x_in, coords_target, x_in, coords_cross=coords_source)
+        out = self.nh_layer(x_in, coords_target, coords_source)
 
         out = self.mlp_out(out)
 
@@ -582,13 +847,12 @@ class SpatialTransNet(tm.transformer_model):
             ff_dim,
             model_dim_nh,
             ff_dim_nh,
-            nh_conv,
             short_cut_pe,
             input_dim=model_dim,
             nh=nh,
             n_heads=n_heads,
             dropout=0,
-            output_dim=model_dim
+            output_dim=output_dim
         )
 
         self.dropout_ape_s = nn.Dropout(dropout)
@@ -609,8 +873,10 @@ class SpatialTransNet(tm.transformer_model):
             n_heads=n_heads,
             dropout=dropout,
             pos_encoders=pos_encoders_enc,
-            share=share
+            share=share,
+            add_pe_first=False
         )
+
       
         self.Decoder = EncDecBlock(
             model_settings['decoder']['n_layers'],
@@ -627,15 +893,13 @@ class SpatialTransNet(tm.transformer_model):
             dropout=dropout,
             cross_att_layers=model_settings["decoder"]["cross_att_layers"],
             pos_encoders=pos_encoders_dec,
-            share=share
+            share=share,
+            add_pe_first=False
         )
 
-        self.mlp_out_interpolation = nn.Sequential(
-                nn.Linear(model_dim, output_dim, bias=True),
-                nn.LeakyReLU(inplace=True, negative_slope=0.2)
-            )
-
         if not self.train_interpolator:
+            self.Decoder_input = nh_Block_input(nh, model_dim, model_dim_nh, ff_dim_nh, input_dim=model_dim, dropout=dropout, n_heads=n_heads, PE=short_cut_pe, add_pe=True)
+
             self.mlp_out = nn.Sequential(
                     nn.Linear(model_dim, ff_dim, bias=True),
                     nn.LeakyReLU(inplace=True, negative_slope=0.2),
@@ -645,6 +909,7 @@ class SpatialTransNet(tm.transformer_model):
 
         else:
             self.mlp_out = nn.Identity()
+            self.Decoder_input = nn.Identity()
 
         self.use_gauss = model_settings["use_gauss"]
 
@@ -674,9 +939,13 @@ class SpatialTransNet(tm.transformer_model):
                                  "pos_encs":[],
                                  "pos_enc_abs":[],
                                  "local_dist":[]}
-
         
         x = self.feature_net(x)
+
+        if not self.train_interpolator:
+            x_dec = self.Decoder_input(x, coords_target, coords_source, return_debug=False)
+        else:
+            x_dec = x
 
         x_interpolation = self.shortcut_block(x, coords_target, coords_source)
         
@@ -685,13 +954,12 @@ class SpatialTransNet(tm.transformer_model):
             batched = coords_source.shape[0] == x.shape[0]
             ape_enc = self.dropout_ape_s(self.APE(coords_source, batched=batched))
             x_enc = x + ape_enc
-            x_dec = x_interpolation + self.dropout_ape_t(self.APE(coords_target, batched=batched))
+            x_dec = x_dec + self.dropout_ape_t(self.APE(coords_target, batched=batched))
         else:
             ape_enc = None
             x_enc = x
-            x_dec = x_interpolation
+            x_dec = x_dec
 
-       
         x_enc = self.Encoder(x_enc, coords_source, return_debug=return_debug)
 
         if return_debug:
@@ -707,9 +975,9 @@ class SpatialTransNet(tm.transformer_model):
             x = x[0]
 
         if not self.train_interpolator:
-            x_mu = self.mlp_out(x) + self.mlp_out_interpolation(x_interpolation)
+            x_mu = self.mlp_out(x) + x_interpolation
         else:
-            x_mu = self.mlp_out_interpolation(x_interpolation)
+            x_mu = x_interpolation
 
         if self.use_gauss:
             x_mu = x_mu.unsqueeze(dim=-1)

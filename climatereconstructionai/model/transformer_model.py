@@ -1,4 +1,6 @@
 import json
+import os
+import copy
 import torch.nn as nn
 from .. import transformer_training as trainer
 from ..utils.io import load_ckpt
@@ -8,8 +10,6 @@ class transformer_model(nn.Module):
         super().__init__()
         self.model_settings = load_settings(model_settings)
         
-        
-
     def forward(self):
         pass
 
@@ -20,6 +20,28 @@ class transformer_model(nn.Module):
             self.train_settings['gauss_loss'] = True
         else:
             self.train_settings['gauss_loss'] = False
+
+        if self.train_settings['pretrain_interpolator']:
+
+            pretrain_settings = copy.deepcopy(self.train_settings)
+            model_settings = copy.deepcopy(self.model_settings)
+            pretrain_model_setting = copy.deepcopy(self.model_settings)
+
+            pretrain_settings["T_warmup"]=2000
+            pretrain_settings["max_iter"]=5000
+            pretrain_settings["batch_size"]=32
+            pretrain_settings["log_interval"]=500
+            pretrain_settings["save_model_interval"]=1000
+
+            pretrain_settings["log_dir"] = os.path.join(pretrain_settings["log_dir"],'pretrain')
+            pretrain_model_setting['encoder']['n_layers']=0
+            pretrain_model_setting['decoder']['n_layers']=0
+
+            self.__init__(pretrain_model_setting)
+            trainer.train(self, pretrain_settings, pretrain_model_setting)
+            self.model_settings["pretrained"] = os.path.join(pretrain_settings["log_dir"],'ckpts','best.pth')
+
+            self.__init__(model_settings)
 
         trainer.train(self, self.train_settings, self.model_settings)
 
