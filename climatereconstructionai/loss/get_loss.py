@@ -1,6 +1,5 @@
 import torch
 
-from .gauss_loss import GaussLoss
 from .feature_loss import FeatureLoss
 from .hole_loss import HoleLoss
 from .total_variation_loss import TotalVariationLoss
@@ -20,13 +19,7 @@ def prepare_data_dict(img_mask, loss_mask, output, gt, tensor_keys):
         mask[mask > 1] = 1
         assert ((mask == 0) | (mask == 1)).all(), "Not all values in mask are zeros or ones!"
 
-    if output.shape[2]>gt.shape[2]:
-        if 'gauss' in tensor_keys:
-            data_dict['gauss'] = output[:, cfg.recurrent_steps, :, :, :]
-        output = output[:, cfg.recurrent_steps, [0], :, :]
-    else:
-        output = output[:, cfg.recurrent_steps, :, :, :]
-
+    output = output[:, cfg.recurrent_steps, :, :, :]
     mask = mask[:, cfg.recurrent_steps, :, :, :]
     gt = gt[:, cfg.recurrent_steps, cfg.gt_channels, :, :]
 
@@ -67,10 +60,6 @@ class loss_criterion(torch.nn.Module):
                     self.criterions.append(TotalVariationLoss().to(cfg.device))
                     if 'comp' not in self.tensors:
                         self.tensors.append('comp')
-
-                elif loss == 'gauss':
-                    self.criterions.append(GaussLoss().to(cfg.device))
-                    self.tensors.append('gauss')
                 
 
     def forward(self, img_mask, loss_mask, output, gt):

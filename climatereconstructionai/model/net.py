@@ -8,19 +8,6 @@ from .encoder_decoder import EncoderBlock, DecoderBlock
 from .bounds_scaler import constrain_bounds
 from .. import config as cfg
 
-
-class GaussActivation(nn.Module):
-    def __init__(self, activation_mu=nn.Identity()):
-        super().__init__() 
-        self.activation_mu = activation_mu
-        self.activation_std = nn.Softplus()
-
-    def forward(self, input):
-        mu = self.activation_mu(input[:,[0]])
-        std = self.activation_std(input[:,[1]])
-        
-        return torch.concat((mu,std),1)
-
 class CRAINet(nn.Module):
     def __init__(self, img_size_source, img_size_target, enc_dec_layers=4, pool_layers=4, in_channels=1, out_channels=1,
                  fusion_img_size=None, fusion_enc_layers=None, fusion_pool_layers=None, fusion_in_channels=0,
@@ -38,7 +25,7 @@ class CRAINet(nn.Module):
                                                      pool_layers, in_channels)
             dec_conv_configs = init_dec_conv_configs(cfg.conv_factor, img_size_target, enc_dec_layers,
                                                      pool_layers, in_channels,
-                                                     out_channels+cfg.use_gnlll_loss, cfg.skip_layers)
+                                                     out_channels, cfg.skip_layers)
         else:
             enc_conv_configs = init_enc_conv_configs_orig(img_size_target, enc_dec_layers,
                                                           out_channels, cfg.n_filters)
@@ -95,11 +82,6 @@ class CRAINet(nn.Module):
             if i == self.net_depth - 1:
                 activation = None
                 bias = True
-                if hasattr(cfg, 'lambda_dict'):
-                    if 'gauss' in cfg.lambda_dict:
-                        if cfg.lambda_dict['gauss']>0:
-                            activation = GaussActivation()
-                            bias = True
             else:
                 activation = nn.LeakyReLU()
                 bias = False
@@ -208,10 +190,7 @@ class CRAINet(nn.Module):
                                                              h_mask, hs_mask[self.net_depth - i - 1],
                                                              None)
         if cfg.predict_residual:
-            if cfg.use_gnlll_loss:
-                h[:,:,0] = h[:,:,0]+input_base[:,:,0]
-            else:
-                h+=input_base
+            h+=input_base
  
 
         if self.bounds is not None:

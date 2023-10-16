@@ -81,12 +81,6 @@ def set_lambdas():
     if lambda_loss is not None:
         lambda_dict.update(lambda_loss)
 
-    global use_gnlll_loss
-    if ('gauss' in lambda_dict.keys()) and (lambda_dict['gauss']>0):
-        use_gnlll_loss=True
-    else:
-        use_gnlll_loss=False
-
 
 def global_args(parser, arg_file=None, prog_func=None):
     import torch
@@ -151,9 +145,7 @@ def global_args(parser, arg_file=None, prog_func=None):
     upsample_modes = {
         0:'nearest',
         1: 'bilinear',
-        2: 'bicubic',
-        3: 'trilinear',
-        4: 'learned'}
+        2: 'bicubic'}
 
     global upsampling_mode
     upsampling_mode = upsample_modes[upsample_mode]
