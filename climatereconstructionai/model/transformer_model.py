@@ -3,6 +3,7 @@ import os
 import copy
 import torch.nn as nn
 from .. import transformer_training as trainer
+from .. import transformer_infer as inference
 from ..utils.io import load_ckpt
 
 class transformer_model(nn.Module):
@@ -45,6 +46,9 @@ class transformer_model(nn.Module):
 
         trainer.train(self, self.train_settings, self.model_settings)
 
+    def infer(self, settings):
+        self.inference_settings = load_settings(settings)
+        inference.infer(self, self.inference_settings)
 
     def load(self, ckpt_path:str, device=None):
         ckpt_dict = load_ckpt(ckpt_path, device=device)
@@ -78,3 +82,5 @@ def load_settings(dict_or_file):
             dict_or_file = json.load(file)
 
         return dict_or_file
+    
+

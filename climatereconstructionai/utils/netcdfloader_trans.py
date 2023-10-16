@@ -118,7 +118,7 @@ def prepare_coordinates(ds_dict, coord_names, flatten=False, random_region=None)
 
 
 class NetCDFLoader(Dataset):
-    def __init__(self, img_names_source, img_names_target, data_types, coord_names, apply_img_norm=False, normalize_data=True, random_region=None, stat_dict=None, p_input_dropout=0, sampling_mode='mixed',n_points=None,coordinate_pert=0):
+    def __init__(self, img_names_source, img_names_target, data_types, coord_names, apply_img_norm=False, normalize_data=True, random_region=None, stat_dict=None, p_input_dropout=0, sampling_mode='mixed',n_points=None,coordinate_pert=0, n_support_points=100):
         super(NetCDFLoader, self).__init__()
         
         self.PosCalc = PositionCalculator()
@@ -132,6 +132,7 @@ class NetCDFLoader(Dataset):
         self.random_region=random_region
         self.n_points = n_points
         self.coordinate_pert = coordinate_pert
+        self.n_support_points = n_support_points
 
         if 'lon' in self.coord_names:
             self.flatten=True
@@ -259,6 +260,16 @@ class NetCDFLoader(Dataset):
 
         rel_coords = self.ds_dict[key]['rel_coords']
 
+        if self.n_support_points:
+            d = int(np.sqrt(self.n_support_points))
+            lon = torch.linspace(rel_coords[0].min(),rel_coords[0].max(), d)
+            lat = torch.linspace(rel_coords[1].min(),rel_coords[1].max(), d**2)
+
+            lons = lon.unsqueeze(dim=1).repeat(d,1).unsqueeze(dim=0)
+            lats = lat.view(1,d**2,1)
+
+            support_coords = torch.concat((lons,lats),dim=0)
+
         if self.n_points is not None:
 
             if data.shape[0] > self.n_points:
@@ -278,7 +289,11 @@ class NetCDFLoader(Dataset):
 
             pertubation = torch.randn_like(rel_coords)*self.coordinate_pert*avg_dist
             rel_coords = rel_coords+pertubation
-        return data, rel_coords
+
+        if self.n_support_points:
+            return data, rel_coords, support_coords
+        else:
+            return data, rel_coords
 
 
     def __getitem__(self, index):
@@ -305,13 +320,23 @@ class NetCDFLoader(Dataset):
             if torch.rand(1) < self.generate_region_prob:
                 self.update_coordinates([source_key, target_key])
 
-        data_source, rel_coords_source = self.get_data(source_key, index)
+        coords_support_source = None
+        coords_support_target = None
+
+        if self.n_support_points>0:
+            data_source, rel_coords_source, coords_support_source = self.get_data(source_key, index)
+        else:
+            data_source, rel_coords_source = self.get_data(source_key, index)
 
         if self.sampling_mode=='self':
             data_target = data_source
             rel_coords_target = rel_coords_source
+            coords_support_target = coords_support_source
         else:
-            data_target, rel_coords_target = self.get_data(target_key, index)
+            if self.n_support_points>0:
+                data_target, rel_coords_target, coords_support_target = self.get_data(source_key, index)
+            else:
+                data_target, rel_coords_target = self.get_data(source_key, index)
 
         if self.normalize_data:
             data_source = self.normalizer(data_source)[0]
@@ -328,7 +353,13 @@ class NetCDFLoader(Dataset):
         coord_dict ={'rel': {'source': rel_coords_source,
                       'target': rel_coords_target}}
 
-        return data_source, data_target, coord_dict
+        coords_dict_support = {'source': coords_support_source,
+                               'target': coords_support_target}
+        
+        if self.n_support_points>0:
+            return data_source, data_target, coord_dict, coords_dict_support
+        else:
+            return data_source, data_target, coord_dict
 
     def __len__(self):
         return self.num_datapoints

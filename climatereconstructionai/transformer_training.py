@@ -63,9 +63,10 @@ def check_get_data_files(list_or_path, root_path = '', train_or_val='train'):
 
 def train(model, training_settings, model_hparams={}):
  
+    torch.multiprocessing.set_sharing_strategy('file_system')
+
     print("* Number of GPUs: ", torch.cuda.device_count())
 
-    torch.multiprocessing.set_sharing_strategy('file_system')
 
     log_dir = training_settings['log_dir']
     if not os.path.exists(log_dir):
@@ -99,6 +100,11 @@ def train(model, training_settings, model_hparams={}):
     else:
         stat_dict = None
 
+    if "n_points_support" not in training_settings.keys():
+        n_points_support = 0
+    else:
+        n_points_support = training_settings["n_points_support"]
+
     dataset_train = NetCDFLoader(source_files_train, 
                                  target_files_train,
                                  training_settings['variables'],
@@ -110,7 +116,8 @@ def train(model, training_settings, model_hparams={}):
                                  p_input_dropout=training_settings['input_dropout'],
                                  sampling_mode=training_settings['sampling_mode'],
                                  n_points=training_settings['n_points'],
-                                 coordinate_pert=training_settings['coordinate_pertubation'])
+                                 coordinate_pert=training_settings['coordinate_pertubation'],
+                                 n_support_points=n_points_support)
     
     dataset_val = NetCDFLoader(  source_files_val, 
                                  target_files_val,
@@ -123,7 +130,8 @@ def train(model, training_settings, model_hparams={}):
                                  p_input_dropout=training_settings['input_dropout'],
                                  sampling_mode=training_settings['sampling_mode'],
                                  n_points=training_settings['n_points'],
-                                 coordinate_pert=0)
+                                 coordinate_pert=0,
+                                 n_support_points=n_points_support)
     
     iterator_train = iter(DataLoader(dataset_train,
                                      batch_size=batch_size,
@@ -175,13 +183,25 @@ def train(model, training_settings, model_hparams={}):
 
         model.train()
 
-        source, target, coord_dict = next(iterator_train)
+        if training_settings['train_with_support']:
+            source, target, coord_dict, coord_dict_support = next(iterator_train)
 
-        coord_dict['rel'] = dict_to_device(coord_dict['rel'], device)
-        source = source.to(device)
-        target = target.to(device)
+            coord_dict['rel'] = dict_to_device(coord_dict['rel'], device)
+            coord_dict_support = dict_to_device(coord_dict_support, device)
 
-        output = model(source, coord_dict)
+            source = source.to(device)
+            target = target.to(device)
+
+            output = model(source, coord_dict, coord_dict_support)
+        else:
+            source, target, coord_dict = next(iterator_train)
+
+            coord_dict['rel'] = dict_to_device(coord_dict['rel'], device)
+
+            source = source.to(device)
+            target = target.to(device)
+
+            output = model(source, coord_dict)
 
         optimizer.zero_grad()
         loss = loss_fcn(output, target)
@@ -201,11 +221,25 @@ def train(model, training_settings, model_hparams={}):
 
             for _ in range(training_settings['n_iters_val']):
 
-                source, target, coord_dict = next(iterator_val)
+                if training_settings['train_with_support']:
+                    source, target, coord_dict, coord_dict_support = next(iterator_val)
 
-                coord_dict['rel'] = dict_to_device(coord_dict['rel'], device)
-                source = source.to(device)
-                target = target.to(device)
+                    coord_dict['rel'] = dict_to_device(coord_dict['rel'], device)
+                    coord_dict_support = dict_to_device(coord_dict_support, device)
+
+                    source = source.to(device)
+                    target = target.to(device)
+
+                    output = model(source, coord_dict, coord_dict_support)
+                else:
+                    source, target, coord_dict = next(iterator_val)
+
+                    coord_dict['rel'] = dict_to_device(coord_dict['rel'], device)
+                    
+                    source = source.to(device)
+                    target = target.to(device)
+
+                    output = model(source, coord_dict)
 
                 with torch.no_grad():
                     output = model(source, coord_dict)
