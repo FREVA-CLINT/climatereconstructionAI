@@ -99,9 +99,9 @@ class CRAINet(nn.Module):
         # create lists for skip connections
         # We split the inputs in case we use the attention module with different image dimension
         h_index = cfg.n_channel_steps
-        
-        input = self.upsample(input[:,0]).unsqueeze(dim=1)
-        input_mask = self.upsample(input_mask[:,0]).unsqueeze(dim=1)
+    
+        input = torch.stack([self.upsample(input[:,k]) for k in range(cfg.n_recurrent_steps)],dim=1)
+        input_mask = torch.stack([self.upsample(input_mask[:,k]) for k in range(cfg.n_recurrent_steps)],dim=1)
 
         if cfg.predict_residual:
             input_base = input.clone()
