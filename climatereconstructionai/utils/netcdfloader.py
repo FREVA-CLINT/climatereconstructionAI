@@ -5,11 +5,52 @@ import numpy as np
 import torch
 import xarray as xr
 from torch.utils.data import Dataset, Sampler
+import torchvision.transforms as T
 
 from .netcdfchecker import dataset_formatter
 from .normalizer import img_normalization, bnd_normalization
 from .. import config as cfg
 
+
+class RandomTransform(torch.nn.Module):
+    def __init__(self, transforms):
+        super().__init__()
+        #self.t = random.choice([identity, random.choice(transforms)])
+        self.t = random.choice(transforms)          
+    def __call__(self, img):
+        return self.t(img)
+
+class img_norm(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.moments = tuple()
+        
+    def __call__(self, img):
+        img_norm, moments = norm_img_mm(img, moments=self.moments)
+        self.moments = moments
+        return img_norm
+    
+def norm_img_mm(image, min_max_output=(-1,1), moments=tuple()):
+    if len(moments)==0:
+        img_norm = (image-image.min())/(image.max()-image.min())
+        moments = (image.min(), image.max())
+    else:
+        img_norm = (image-moments[0])/(moments[1]-moments[0])
+
+    img_norm = img_norm * (min_max_output[1] - min_max_output[0]) + min_max_output[0]
+    return img_norm, moments
+
+def identity(image):
+    return image
+
+def rot90(image):
+    return T.functional.rotate(image, 90)
+
+def rot270(image):
+    return T.functional.rotate(image, 270)
+
+def rot180(image):
+    return T.functional.rotate(image, 180)
 
 def load_steadymask(path, mask_names, data_types, device):
     if mask_names is None:
@@ -83,9 +124,7 @@ def nc_loadchecker(filename, data_type):
         data = ds1[data_type].values
 
     dims = ds1[data_type].dims
-    coords = {key: ds1[data_type].coords[key] for key in ds1[data_type].coords if key != "time"}
-    ds1 = ds1.drop_vars(ds1.keys())
-    ds1 = ds1.drop_dims("time")
+    coords = {key: ds1[data_type][key] for key in dims if key != "time"}
 
     return [ds, ds1, dims, coords], data, data.shape[0], data.shape[1:]
 
@@ -109,15 +148,16 @@ def load_netcdf(path, data_names, data_types, keep_dss=False):
 
 
 class NetCDFLoader(Dataset):
-    def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, time_steps, train_stats=None):
-
+    def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, time_steps, train_stats=None, apply_transform=False, apply_img_norm=False, apply_img_diff=False):
         super(NetCDFLoader, self).__init__()
 
         self.random = random.Random(cfg.loop_random_seed)
 
         self.data_types = data_types
         self.time_steps = time_steps
-
+        self.apply_transform = apply_transform
+        self.apply_img_norm = apply_img_norm
+        self.apply_img_diff = apply_img_diff
         self.n_time_steps = sum(time_steps) + 1
 
         mask_path = mask_root
@@ -134,6 +174,9 @@ class NetCDFLoader(Dataset):
                     mask_path = '{:s}/val/'.format(mask_root)
             self.img_data, self.img_length, self.img_sizes = load_netcdf(data_path, img_names, data_types)
 
+        img_sizes = np.array([img_data.shape[-2:] for img_data in self.img_data])
+        target_size = img_sizes.max(axis=0)
+ 
         self.mask_data, self.mask_length, _ = load_netcdf(mask_path, mask_names, data_types)
 
         if self.mask_data is None:
@@ -143,6 +186,8 @@ class NetCDFLoader(Dataset):
                 assert self.img_length == self.mask_length
 
         self.img_mean, self.img_std, self.img_znorm = img_normalization(self.img_data)
+
+        self.interpolations = [torch.nn.Upsample(size=tuple(target_size), mode=cfg.upsampling_mode) if ((img_size-target_size !=0).any() and cfg.upsample_dataloader) else torch.nn.Identity() for img_size in img_sizes]
 
         self.bounds = bnd_normalization(self.img_mean, self.img_std, train_stats)
 
@@ -190,9 +235,31 @@ class NetCDFLoader(Dataset):
         masked = []
         ndata = len(self.data_types)
 
+        
+        if self.apply_transform:
+            transform = RandomTransform([
+                    T.functional.vflip,
+                    T.functional.hflip,
+                    rot180,
+                    rot270,
+                    rot90,
+                    identity
+                ])
+        norm = img_norm()
+
         for i in range(ndata):
 
             image, mask = self.get_single_item(i, index, cfg.shuffle_masks)
+
+            if self.apply_transform:
+                image=transform(image)
+                mask=transform(mask)
+            
+            image = self.interpolations[i](image)
+            mask = self.interpolations[i](mask)
+
+            if self.apply_img_norm:
+                image = norm(image)
 
             if i >= ndata - cfg.n_target_data:
                 images.append(image)

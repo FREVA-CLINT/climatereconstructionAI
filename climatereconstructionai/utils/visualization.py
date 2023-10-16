@@ -12,7 +12,7 @@ def calculate_distributions(mask, steady_mask, output, gt, domain="valid", num_s
 
     value_list_pred = []
     value_list_target = []
-    for ch in range(output.shape[2]):
+    for ch in range(gt.shape[2]):
         mask_ch = mask[:, :, ch, :, :]
         gt_ch = gt[:, :, ch, :, :]
         output_ch = output[:, :, ch, :, :]
@@ -124,12 +124,12 @@ def create_error_map(mask, steady_mask, output, gt, num_samples=3, operation="AE
         mask[mask > 1] = 1
         assert ((mask == 0) | (mask == 1)).all(), "Not all values in mask are zeros or ones!"
 
-    num_channels = output.shape[2]
-    samples = torch.randint(output.shape[0], (num_samples,))
+    num_channels = gt.shape[2]
+    samples = torch.randint(gt.shape[0], (num_samples,))
 
     fig, axs = plt.subplots(num_channels, num_samples, squeeze=False, figsize=(num_samples * 7, num_channels * 7))
 
-    for ch in range(output.shape[2]):
+    for ch in range(gt.shape[2]):
         gt_ch = gt[:, :, ch, :, :]
         output_ch = output[:, :, ch, :, :]
 
@@ -161,7 +161,7 @@ def create_error_map(mask, steady_mask, output, gt, num_samples=3, operation="AE
     return fig
 
 
-def create_map(mask, steady_mask, output, gt, num_samples=3):
+def create_map(mask, steady_mask, output, gt, input, num_samples=3):
     if steady_mask is not None:
         mask += steady_mask
         mask[mask < 0] = 0
@@ -170,29 +170,36 @@ def create_map(mask, steady_mask, output, gt, num_samples=3):
 
     samples = torch.randint(output.shape[0], (num_samples,))
 
-    fig, axs = plt.subplots(2, num_samples, squeeze=False, figsize=(num_samples * 7, 14))
+    fig, axs = plt.subplots(3, num_samples, squeeze=False, figsize=(num_samples * 7, 14))
 
     gt_ch = gt[:, :, 0, :, :]
     output_ch = output[:, :, 0, :, :]
+    input_ch = input[:, :, 0, :, :]
 
     for sample_num in range(num_samples):
         target = gt_ch[samples[sample_num]].squeeze()
         pred = output_ch[samples[sample_num]].squeeze()
+        input = input_ch[samples[sample_num]].squeeze()
 
         vmin, vmax = torch.quantile(target, torch.tensor([0.05, 0.95], device=target.device))
 
         cp1 = axs[0, sample_num].matshow(target.cpu(), cmap='viridis', vmin=vmin, vmax=vmax)
         cp2 = axs[1, sample_num].matshow(pred.cpu(), cmap='viridis', vmin=vmin, vmax=vmax)
+        cp3 = axs[2, sample_num].matshow(input.cpu(), cmap='viridis', vmin=vmin, vmax=vmax)
 
         plt.colorbar(cp1, ax=axs[0, sample_num])
         plt.colorbar(cp2, ax=axs[1, sample_num])
+        plt.colorbar(cp3, ax=axs[2, sample_num])
 
         axs[0, sample_num].set_xticks([])
         axs[0, sample_num].set_yticks([])
         axs[1, sample_num].set_xticks([])
         axs[1, sample_num].set_yticks([])
-        axs[0, sample_num].set_title(f'gt - sample {sample_num}')
-        axs[1, sample_num].set_title(f'output - sample {sample_num}')
+        axs[2, sample_num].set_xticks([])
+        axs[2, sample_num].set_yticks([])
+        axs[0, sample_num].set_title(f'gt - sample {samples[sample_num]}')
+        axs[1, sample_num].set_title(f'output - sample {samples[sample_num]}')
+        axs[2, sample_num].set_title(f'input - sample {samples[sample_num]}')
     return fig
 
 

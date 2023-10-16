@@ -38,7 +38,15 @@ class writer():
         hparams_dict = {}
         for key, value in parameters_dict.items():
             if isinstance(value, list):
-                value = value[0]
+                if key=='data_names':
+                    for k, data_name in enumerate(value):
+                        if str.isnumeric(data_name.replace('.nc','')):
+                            if k < (len(value)-cfg.n_target_data):
+                                hparams_dict['source'] = int(data_name.replace('.nc',''))
+                            else:
+                                hparams_dict['target'] = int(data_name.replace('.nc',''))
+                else:
+                    value = value[0]
             if type(value) in (int, float) or ((type(value) == bool) and ('plot' not in key)):
                 hparams_dict[key] = value
         return hparams_dict
@@ -79,8 +87,8 @@ class writer():
         fig = visualization.create_error_dist_plot(mask, steady_mask, output, gt)
         self.add_figure(fig, iter_index, name_tag=f'plot/{setname}/error_dist')
 
-    def add_maps(self, mask, steady_mask, output, gt, iter_index, setname):
-        fig = visualization.create_map(mask, steady_mask, output, gt, num_samples=3)
+    def add_maps(self, mask, steady_mask, output, gt, input, iter_index, setname):
+        fig = visualization.create_map(mask, steady_mask, output, gt,input, num_samples=3)
         self.add_figure(fig, iter_index, name_tag=f'map/{setname}/values')
 
     def add_distribution(self, values, iter_index, name_tag=None):
@@ -97,7 +105,7 @@ class writer():
             for ch, values in enumerate(error_dist):
                 self.add_distribution(values, iter_index, name_tag=f'{name}_channel{ch}')
 
-    def add_visualizations(self, mask, steady_mask, output, gt, iter_index, setname):
+    def add_visualizations(self, mask, steady_mask, output, gt, input, iter_index, setname):
         if "correlation" in cfg.tensor_plots:
             self.add_correlation_plots(mask, steady_mask, output, gt, iter_index, setname)
             self.add_error_dist_plot(mask, steady_mask, output, gt, iter_index, setname)
@@ -107,7 +115,7 @@ class writer():
 
         if "error" in cfg.tensor_plots:
             self.add_error_maps(mask, steady_mask, output, gt, iter_index, setname)
-            self.add_maps(mask, steady_mask, output, gt, iter_index, setname)
+            self.add_maps(mask, steady_mask, output, gt, input, iter_index, setname)
 
     def close(self):
         self.writer.close()

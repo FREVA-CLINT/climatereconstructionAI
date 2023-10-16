@@ -25,9 +25,12 @@ def create_snapshot_image(model, dataset, filename):
         data_dict[key] = torch.stack(data_dict[key]).to(cfg.device)
 
     with torch.no_grad():
-        data_dict["output"] = model(data_dict["image"], data_dict["mask"])
+        data_dict["output"], data_dict["output_mask"] = model(data_dict["image"], data_dict["mask"])
 
-    data_dict["infilled"] = data_dict["mask"] * data_dict["image"] + (1 - data_dict["mask"]) * data_dict["output"]
+    if data_dict["output"][0].shape[-1] == data_dict["image"].shape[-1]:
+        data_dict["infilled"] = data_dict["mask"] * data_dict["image"] + (1 - data_dict["output_mask"]) * data_dict["output"]
+    else:
+        data_dict["infilled"] = data_dict["output"]
 
     keys = list(data_dict.keys())
     for key in keys:
@@ -113,9 +116,9 @@ def infill(model, dataset, eval_path, output_names, data_stats, xr_dss, i_model)
 
         # get results from trained network
         with torch.no_grad():
-            data_dict["output"] = model(data_dict["image"].to(cfg.device), data_dict["mask"].to(cfg.device))
+            data_dict["output"], data_dict["output_mask"] = model(data_dict["image"].to(cfg.device), data_dict["mask"].to(cfg.device))
 
-        for key in ('image', 'mask', 'gt', 'output'):
+        for key in ('image', 'mask', 'gt', 'output', 'output_mask'):
             data_dict[key] = data_dict[key][:, cfg.recurrent_steps, :, :, :].to(torch.device('cpu'))
 
         for key in ('image', 'mask', 'gt'):
