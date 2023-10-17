@@ -113,18 +113,15 @@ class NetCDFLoader(Dataset):
 
         self.n_time_steps = sum(time_steps) + 1
 
-        self.img_data, self.data_types, self.mask_data = [], [], []
-        self.xr_dss = None
+        self.img_data, self.data_types, self.mask_data, self.xr_dss = [], [], [], []
 
         self.remap_data = remap_data
 
         for (data_name, data_type), data_dirs in data_dir_dict.items():
-            if self.xr_dss is None:
-                self.xr_dss, dir_data, self.img_length, self.img_sizes = load_netcdf(data_dirs,
-                                                                                     len(data_dirs)*[data_type],
-                                                                                     keep_dss=True)
-            else:
-                dir_data, _, _ = load_netcdf(data_dirs, len(data_dirs)*[data_type])
+            xr_dss, dir_data, self.img_length, self.img_sizes = load_netcdf(data_dirs,
+                                                                            len(data_dirs)*[data_type],
+                                                                            keep_dss=True)
+            self.xr_dss.append(xr_dss)
             self.img_data.append(np.concatenate(dir_data))
             self.data_types.append(data_type)
 

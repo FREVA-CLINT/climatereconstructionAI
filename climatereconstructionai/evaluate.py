@@ -36,8 +36,7 @@ def evaluate(arg_file=None, prog_func=None):
         else:
             data_stats = None
 
-        dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.data_names, cfg.mask_dir, cfg.mask_names, "infill",
-                                   cfg.data_types, cfg.time_steps, data_stats)
+        dataset_val = NetCDFLoader(cfg.test_data_dict, cfg.mask_data_dict, cfg.time_steps, remap_data=cfg.remap_data)
 
         n_samples = dataset_val.img_length
 
@@ -77,7 +76,7 @@ def evaluate(arg_file=None, prog_func=None):
             batch_size = get_batch_size(model.parameters(), n_samples, image_sizes)
             iterator_val = iter(DataLoader(dataset_val, batch_size=batch_size,
                                            sampler=FiniteSampler(len(dataset_val)), num_workers=0))
-            infill(model, iterator_val, eval_path, output_names, data_stats, dataset_val.xr_dss, count)
+            infill(model, iterator_val, eval_path, output_names, data_stats, dataset_val.xr_dss, count, dataset_val.data_types)
 
     for name in output_names:
         if len(output_names[name]) == 1:

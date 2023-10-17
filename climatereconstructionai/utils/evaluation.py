@@ -98,11 +98,11 @@ def get_batch_size(parameters, n_samples, image_sizes):
     return int(np.ceil(n_samples / partitions))
 
 
-def infill(model, dataset, eval_path, output_names, data_stats, xr_dss, i_model):
+def infill(model, dataset, eval_path, output_names, data_stats, xr_dss, i_model, data_types):
     if not os.path.exists(cfg.evaluation_dirs[0]):
         os.makedirs('{:s}'.format(cfg.evaluation_dirs[0]))
 
-    steady_mask = load_steadymask(cfg.mask_dir, cfg.steady_masks, cfg.data_types, cfg.device)
+    steady_mask = load_steadymask(cfg.steady_mask_data_dict, cfg.device)
 
     data_dict = {'image': [], 'mask': [], 'gt': [], 'output': [], 'infilled': []}
 
@@ -139,7 +139,7 @@ def infill(model, dataset, eval_path, output_names, data_stats, xr_dss, i_model)
 
         data_dict["image"] /= data_dict["mask"]
 
-        create_outputs(data_dict, eval_path, output_names, data_stats, xr_dss, i_model, split, index)
+        create_outputs(data_dict, eval_path, output_names, data_stats, xr_dss, i_model, split, index, data_types)
 
         if cfg.progress_fwd is not None:
             cfg.progress_fwd[0]('Infilling...',
@@ -148,7 +148,7 @@ def infill(model, dataset, eval_path, output_names, data_stats, xr_dss, i_model)
     return output_names
 
 
-def create_outputs(data_dict, eval_path, output_names, data_stats, xr_dss, i_model, split, index):
+def create_outputs(data_dict, eval_path, output_names, data_stats, xr_dss, i_model, split, index, data_types):
 
     m_label = "." + str(i_model)
     suffix = m_label + "-" + str(split + 1)
@@ -163,7 +163,7 @@ def create_outputs(data_dict, eval_path, output_names, data_stats, xr_dss, i_mod
     for j in range(len(eval_path)):
 
         i_data = -cfg.n_target_data + j
-        data_type = cfg.data_types[i_data]
+        data_type = data_types[i_data]
 
         for cname in cnames:
 
@@ -171,7 +171,6 @@ def create_outputs(data_dict, eval_path, output_names, data_stats, xr_dss, i_mod
             if rootname not in output_names:
                 output_names[rootname] = []
             output_names[rootname] += [rootname + suffix + ".nc"]
-
             ds = xr_dss[i_data][1].copy()
 
             if cfg.normalize_data and cname != "mask":
