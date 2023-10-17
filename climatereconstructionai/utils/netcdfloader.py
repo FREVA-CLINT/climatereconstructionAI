@@ -221,7 +221,7 @@ class NetCDFLoader(Dataset):
         if cfg.predict_diff:
             images -= masked
 
-        return masked, masks, images, index
+        return masked.float(), masks.float(), images.float(), index
 
     def __len__(self):
         return self.img_length
