@@ -113,8 +113,8 @@ class NetCDFLoader(Dataset):
 
         self.n_time_steps = sum(time_steps) + 1
 
-        self.img_data, self.data_types = [], []
-        self.xr_dss = self.mask_data = None
+        self.img_data, self.data_types, self.mask_data = [], [], []
+        self.xr_dss = None
 
         self.remap_data = remap_data
 
