@@ -54,7 +54,7 @@ def train(arg_file=None):
                                    sampler=InfiniteSampler(len(dataset_val)),
                                    num_workers=cfg.n_threads))
 
-    steady_mask = load_steadymask(None, None, None, cfg.device)
+    steady_mask = load_steadymask(cfg.steady_mask_data_dict, cfg.device)
 
     image_sizes = dataset_train.img_sizes
     if cfg.conv_factor is None:

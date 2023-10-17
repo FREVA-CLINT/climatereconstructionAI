@@ -12,17 +12,15 @@ from .normalizer import img_normalization, bnd_normalization
 from .. import config as cfg
 
 
-def load_steadymask(path, mask_names, data_types, device):
-    if mask_names is None:
+def load_steadymask(steady_mask_dir_dict, device):
+    if steady_mask_dir_dict is None:
         return None
     else:
-        assert len(mask_names) == cfg.out_channels
-        if cfg.n_target_data == 0:
-            steady_mask = load_netcdf(path, mask_names, data_types[:cfg.out_channels])[0]
-        else:
-            steady_mask = load_netcdf(path, mask_names, data_types[-cfg.n_target_data:])[0]
-        # stack + squeeze ensures that it works with steady masks with one timestep or no timestep
-        return torch.stack([torch.from_numpy(np.array(mask)).to(device) for mask in steady_mask]).squeeze()
+        mask_data = []
+        for (mask_name, mask_type), mask_dirs in steady_mask_dir_dict.items():
+            data, _, _ = load_netcdf(mask_dirs, len(mask_dirs) * [mask_type])
+            mask_data.append(np.concatenate(data))
+        return torch.stack([torch.from_numpy(np.array(mask)).to(device) for mask in mask_data]).squeeze()
 
 
 class InfiniteSampler(Sampler):
@@ -187,10 +185,11 @@ class NetCDFLoader(Dataset):
         # interpolate
         if self.remap_data:
             mode, x, y = self.remap_data.split("_")
-            if masks.shape[-1] != x or masks.shape[-2] != y:
-                masks = F.interpolate(masks, (int(x), int(y)), mode=mode)
-            if images.shape[-1] != x or images.shape[-2] != y:
-                images = F.interpolate(images, (int(x), int(y)), mode=mode)
+            x, y = int(x), int(y)
+            if masks.shape[-1] != y or masks.shape[-2] != x:
+                masks = F.interpolate(masks, (x, y), mode=mode)
+            if images.shape[-1] != y or images.shape[-2] != x:
+                images = F.interpolate(images, (x, y), mode=mode)
 
         return images, masks
 
@@ -214,10 +213,15 @@ class NetCDFLoader(Dataset):
                 masked.append(image * mask)
 
         if cfg.channel_steps:
-            return torch.cat(masked, dim=0).transpose(0, 1), torch.cat(masks, dim=0) \
-                .transpose(0, 1), torch.cat(images, dim=0).transpose(0, 1), index
+            masked, masks, images = torch.cat(masked, dim=0).transpose(0, 1), torch.cat(masks, dim=0) \
+                .transpose(0, 1), torch.cat(images, dim=0).transpose(0, 1)
         else:
-            return torch.cat(masked, dim=1), torch.cat(masks, dim=1), torch.cat(images, dim=1), index
+            masked, masks, images = torch.cat(masked, dim=1), torch.cat(masks, dim=1), torch.cat(images, dim=1)
+
+        if cfg.predict_diff:
+            images -= masked
+
+        return masked, masks, images, index
 
     def __len__(self):
         return self.img_length

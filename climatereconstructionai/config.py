@@ -154,6 +154,8 @@ def global_args(parser, arg_file=None, prog_func=None):
     # load data paths
     global mask_data_dict
     mask_data_dict = None
+    global steady_mask_data_dict
+    steady_mask_data_dict = None
     with open(data_path) as json_file:
         data = json.load(json_file)
 
@@ -168,6 +170,8 @@ def global_args(parser, arg_file=None, prog_func=None):
             test_data_dict = parse_json(data["test"])
         if "mask" in data.keys():
             mask_data_dict = parse_json(data["mask"])
+        if "steady_mask" in data.keys():
+            steady_mask_data_dict = parse_json(data["steady_mask"])
 
     return argv
 
@@ -222,6 +226,7 @@ def set_common_args():
                             help="Comma separated list of values defining the permitted upper-bound of output values")
     arg_parser.add_argument('--profile', action='store_true', help="Profile code using tensorboard profiler")
     arg_parser.add_argument('--remap-data', type=str, default=None, help="Remap technique that should be applied")
+    arg_parser.add_argument('--predict-diff', action='store_true', help="Predict the difference between input and ground truth instead of ground truth directly")
     return arg_parser
 
 
