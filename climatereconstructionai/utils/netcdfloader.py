@@ -149,7 +149,7 @@ class NetCDFLoader(Dataset):
 
     def load_data(self, ind_data, img_indices, mask_indices):
 
-        if self.mask_data is None:
+        if not self.mask_data:
             # Get masks from images
             image = np.array(self.img_data[ind_data][mask_indices])
             mask = torch.from_numpy((1 - (np.isnan(image))).astype(image.dtype))
