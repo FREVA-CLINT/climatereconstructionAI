@@ -96,6 +96,10 @@ def load_netcdf(data_paths, data_types, keep_dss=False):
         ndata = len(data_paths)
         assert ndata == len(data_types)
         dss, data, lengths, sizes = zip(*[nc_loadchecker(data_paths[i], data_types[i]) for i in range(ndata)])
+        new_data = data[0]
+        for i in range(ndata-1):
+            new_data += data[i]
+        data = new_data
 
         if keep_dss:
             return dss[0], data, lengths[0], (sizes[0],)
@@ -122,13 +126,12 @@ class NetCDFLoader(Dataset):
                                                                             len(data_dirs)*[data_type],
                                                                             keep_dss=True)
             self.xr_dss.append(xr_dss)
-            self.img_data.append(np.concatenate(dir_data))
+            self.img_data.append(dir_data)
             self.data_types.append(data_type)
-
         if mask_dir_dict:
             for (mask_name, mask_type), mask_dirs in mask_dir_dict.items():
                 mask_data, self.mask_length, _ = load_netcdf(mask_dirs, len(mask_dirs)*[mask_type])
-                self.mask_data.append(np.concatenate(mask_data))
+                self.mask_data.append(mask_data)
 
         if not self.mask_data:
             self.mask_length = self.img_length
