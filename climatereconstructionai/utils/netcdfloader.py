@@ -89,7 +89,7 @@ def nc_loadchecker(filename, data_type):
     return [ds, ds1, dims, coords], data, data.shape[0], data.shape[1:]
 
 
-def load_netcdf(data_paths, data_types, keep_dss=False):
+def load_netcdf(data_paths, data_types, keep_dss=False, mask=False):
     if data_paths is None:
         return None, None
     else:
@@ -101,7 +101,7 @@ def load_netcdf(data_paths, data_types, keep_dss=False):
             new_data += data[i]
         data = new_data
 
-        if cfg.flip_dims:
+        if cfg.flip_dims and not mask:
             for dim in cfg.flip_dims:
                 data = np.flip(data, dim)
 
@@ -134,7 +134,7 @@ class NetCDFLoader(Dataset):
             self.data_types.append(data_type)
         if mask_dir_dict:
             for (mask_name, mask_type), mask_dirs in mask_dir_dict.items():
-                mask_data, self.mask_length, _ = load_netcdf(mask_dirs, len(mask_dirs)*[mask_type])
+                mask_data, self.mask_length, _ = load_netcdf(mask_dirs, len(mask_dirs)*[mask_type], mask=True)
                 self.mask_data.append(mask_data)
 
         if not self.mask_data:
