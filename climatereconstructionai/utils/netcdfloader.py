@@ -101,6 +101,10 @@ def load_netcdf(data_paths, data_types, keep_dss=False):
             new_data += data[i]
         data = new_data
 
+        if cfg.flip_dims:
+            for dim in cfg.flip_dims:
+                data = np.flip(data, dim)
+
         if keep_dss:
             return dss[0], data, lengths[0], (sizes[0],)
         else:
@@ -220,11 +224,6 @@ class NetCDFLoader(Dataset):
 
         if cfg.predict_diff:
             images -= masked
-
-        if cfg.flip_dims:
-            masked = torch.flip(masked, cfg.flip_dims)
-            masks = torch.flip(masks, cfg.flip_dims)
-            images = torch.flip(images, cfg.flip_dims)
 
         return masked.float(), masks.float(), images.float(), index
 
