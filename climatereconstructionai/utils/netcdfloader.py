@@ -221,6 +221,11 @@ class NetCDFLoader(Dataset):
         if cfg.predict_diff:
             images -= masked
 
+        if cfg.flip_dims:
+            masked = torch.flip(masked, cfg.flip_dims)
+            masks = torch.flip(masks, cfg.flip_dims)
+            images = torch.flip(images, cfg.flip_dims)
+
         return masked.float(), masks.float(), images.float(), index
 
     def __len__(self):
