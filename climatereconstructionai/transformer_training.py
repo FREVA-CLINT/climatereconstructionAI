@@ -135,7 +135,9 @@ def train(model, training_settings, model_hparams={}):
                                  stat_dict=stat_dict,
                                  p_input_dropout=training_settings['input_dropout'],
                                  sampling_mode=training_settings['sampling_mode'],
-                                 coordinate_pert=training_settings['coordinate_pertubation'])
+                                 coordinate_pert=training_settings['coordinate_pertubation'],
+                                 index_range=training_settings['time_range'] if 'time_range' in training_settings else None,
+                                 rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False)
     
     dataset_val = NetCDFLoader(  source_files_val, 
                                  target_files_val,
@@ -147,7 +149,9 @@ def train(model, training_settings, model_hparams={}):
                                  stat_dict=dataset_train.stat_dict if stat_dict is None else stat_dict,
                                  p_input_dropout=training_settings['input_dropout'],
                                  sampling_mode=training_settings['sampling_mode'],
-                                 coordinate_pert=0)
+                                 coordinate_pert=0,
+                                 index_range=training_settings['time_range'] if 'time_range' in training_settings else None,
+                                 rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False)
     
     iterator_train = iter(DataLoader(dataset_train,
                                      batch_size=batch_size,

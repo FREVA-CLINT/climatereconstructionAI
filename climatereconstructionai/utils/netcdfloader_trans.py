@@ -154,7 +154,9 @@ class NetCDFLoader(Dataset):
                  n_points_s=None, 
                  n_points_t=None, 
                  coordinate_pert=0,
-                 save_sample_path=''):
+                 save_sample_path='',
+                 index_range=None,
+                 rel_coords=False):
         
         super(NetCDFLoader, self).__init__()
         
@@ -171,11 +173,13 @@ class NetCDFLoader(Dataset):
         self.n_points_t = n_points_t
         self.coordinate_pert = coordinate_pert
         self.save_sample_path = save_sample_path
+        self.index_range=index_range
+        self.rel_coords=rel_coords
 
-        if 'lon' in self.coord_names:
-            self.flatten=True
-        else:
-            self.flatten=False
+        #if 'lon' in self.coord_names:
+        #    self.flatten=True
+        #else:
+        self.flatten=False
         
         if random_region is not None:
             self.generate_region_prob = 1/random_region['generate_interval']
@@ -269,6 +273,13 @@ class NetCDFLoader(Dataset):
                 self.ds_dict[tag]['rel_coords'] = rel_coords
                 self.ds_dict[tag]['distances'] = distances
 
+            elif self.rel_coords:
+                if 'rel_coords' not in self.ds_dict[tag].keys():
+                    rel_coords = torch.stack([self.ds_dict[tag]['lon'], self.ds_dict[tag]['lat']],dim=0).unsqueeze(dim=-1)
+
+                    self.ds_dict[tag]['rel_coords'] = rel_coords
+                    self.ds_dict[tag]['distances'] = (rel_coords[0]**2+rel_coords[1]**2).sqrt()
+
             else:
                 if 'rel_coords' not in self.ds_dict[tag].keys():
                     if k== 0:
@@ -278,8 +289,7 @@ class NetCDFLoader(Dataset):
                     rel_coords, distances  = self.get_rel_coords(self.ds_dict[tag], seeds)
 
                     self.ds_dict[tag]['rel_coords'] = rel_coords
-                    self.ds_dict[tag]['distances'] = distances
-
+                    self.ds_dict[tag]['distances'] = distances    
              
 
     def get_rel_coords(self, coords, seeds):
@@ -336,7 +346,11 @@ class NetCDFLoader(Dataset):
 
 
     def __getitem__(self, index):
-        index=0
+        
+        if self.index_range is not None:
+            if (index < self.index_range[0]) or (index > self.index_range[1]):
+                index = int(torch.randint(self.index_range[0], self.index_range[1]+1, (1)))
+
         if len(self.source_names)>0:
             source_index = torch.randint(0, len(self.source_names), (1,1))
             source_key = self.source_names[source_index]

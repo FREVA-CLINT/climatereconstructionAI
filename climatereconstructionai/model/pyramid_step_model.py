@@ -286,7 +286,7 @@ class output_net(nn.Module):
             x = x.view(b, n, c//2, 2)
             x = torch.stack((self.activation_mu(x[:,:,:,0]),self.activation_std(x[:,:,:,1])), dim=-1)
         else:
-            x = x.view(b,n,c,1)
+            x = x.view(b,n,c,1) 
             x = self.activation_mu(x)
 
         return x
@@ -434,6 +434,9 @@ class pyramid_step_model(nn.Module):
         if not use_samples:
             if "random_region" not in self.train_settings.keys():
                 train_settings["random_region"] = self.get_region_generator_settings()
+        else:
+            train_settings["rel_coords"]=True
+
 
         train_settings["gauss_loss"] = self.model_settings['gauss'] 
 
