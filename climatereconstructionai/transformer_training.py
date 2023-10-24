@@ -136,8 +136,10 @@ def train(model, training_settings, model_hparams={}):
                                  p_input_dropout=training_settings['input_dropout'],
                                  sampling_mode=training_settings['sampling_mode'],
                                  coordinate_pert=training_settings['coordinate_pertubation'],
-                                 index_range=training_settings['time_range'] if 'time_range' in training_settings else None,
-                                 rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False)
+                                 index_range=training_settings['index_range'] if 'index_range' in training_settings else None,
+                                 rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False,
+                                 lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
+                                 sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else -1)
     
     dataset_val = NetCDFLoader(  source_files_val, 
                                  target_files_val,
@@ -150,8 +152,10 @@ def train(model, training_settings, model_hparams={}):
                                  p_input_dropout=training_settings['input_dropout'],
                                  sampling_mode=training_settings['sampling_mode'],
                                  coordinate_pert=0,
-                                 index_range=training_settings['time_range'] if 'time_range' in training_settings else None,
-                                 rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False)
+                                 index_range=training_settings['index_range'] if 'index_range' in training_settings else None,
+                                 rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False,
+                                 lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
+                                 sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else -1)
     
     iterator_train = iter(DataLoader(dataset_train,
                                      batch_size=batch_size,
@@ -338,7 +342,10 @@ def create_samples(sample_settings):
                                  p_input_dropout=0,
                                  sampling_mode=sample_settings['sampling_mode'],
                                  coordinate_pert=0,
-                                 save_sample_path=sample_dir_train)
+                                 save_sample_path=sample_dir_train,
+                                 index_range=sample_settings['index_range'] if 'index_range' in sample_settings else None,
+                                 lazy_load=sample_settings['lazy_load'] if 'lazy_load' in sample_settings else False,
+                                 sample_for_norm=sample_settings['sample_for_norm'] if 'sample_for_norm' in sample_settings else -1)
     
     dataset_val = NetCDFLoader(  source_files_val, 
                                  target_files_val,
@@ -351,7 +358,10 @@ def create_samples(sample_settings):
                                  p_input_dropout=0,
                                  sampling_mode=sample_settings['sampling_mode'],
                                  coordinate_pert=0,
-                                 save_sample_path=sample_dir_val)
+                                 save_sample_path=sample_dir_val,
+                                 index_range=sample_settings['index_range'] if 'index_range' in sample_settings else None,
+                                 lazy_load=sample_settings['lazy_load'] if 'lazy_load' in sample_settings else False,
+                                 sample_for_norm=sample_settings['sample_for_norm'] if 'sample_for_norm' in sample_settings else -1)
     
     iterator_train = iter(DataLoader(dataset_train,
                                      batch_size=batch_size,
