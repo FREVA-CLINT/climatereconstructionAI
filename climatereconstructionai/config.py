@@ -195,7 +195,7 @@ def set_common_args():
     arg_parser.add_argument('--encoding-layers', type=int_list, default='3',
                             help="Number of encoding layers in the CNN")
     arg_parser.add_argument('--pooling-layers', type=int_list, default='0', help="Number of pooling layers in the CNN")
-    arg_parser.add_argument('--flip-dims', type=int_list, default='0', help="flip-dimensions")
+    arg_parser.add_argument('--flip-dims', type=int_list, default=None, help="flip-dimensions")
     arg_parser.add_argument('--conv-factor', type=int, default=None, help="Number of channels in the deepest layer")
     arg_parser.add_argument('--weights', type=str, default=None, help="Initialization weight")
     arg_parser.add_argument('--steady-masks', type=str_list, default=None,
