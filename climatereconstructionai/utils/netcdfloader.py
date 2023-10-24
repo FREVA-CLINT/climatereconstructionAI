@@ -10,7 +10,7 @@ from torch.functional import F
 from .netcdfchecker import dataset_formatter
 from .normalizer import img_normalization, bnd_normalization
 from .. import config as cfg
-
+import nctoolkit as nc
 
 def load_steadymask(steady_mask_dir_dict, device):
     if steady_mask_dir_dict is None:
@@ -68,10 +68,14 @@ def nc_loadchecker(filename, data_type):
         ds = xr.open_dataset(filename)
     except Exception:
         try:
-            ds = xr.open_dataset(filename, decode_times=False)
+            ds = xr.open_dataset(filename, decode_times=True)
         except Exception:
-            raise ValueError('Impossible to read {}.'
-                             '\nPlease, check that it is a netCDF file and it is not corrupted.'.format(basename))
+            try:
+                data = nc.open_data(filename)
+                ds = data.to_xarray(cdo_times=True)
+            except Exception:
+                raise ValueError('Impossible to read {}.'
+                                 '\nPlease, check that it is a netCDF file and it is not corrupted.'.format(basename))
 
     ds1 = dataset_formatter(ds, data_type, basename)
     ds = ds.drop_vars(data_type)
