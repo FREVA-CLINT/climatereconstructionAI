@@ -4,7 +4,6 @@ import copy
 import torch
 import torch.nn as nn
 from .. import transformer_training as trainer
-from .. import transformer_infer as inference
 
 import climatereconstructionai.model.transformer_helpers as helpers
 import climatereconstructionai.model.pyramid_step_model as pysm
@@ -115,10 +114,6 @@ class pyramid_model(nn.Module):
             self.__init__(model_settings)
 
         trainer.train(self, self.train_settings, self.model_settings)
-
-    def infer(self, settings):
-        self.inference_settings = load_settings(settings)
-        inference.infer(self, self.inference_settings)
 
     def load(self, ckpt_path:str, device=None):
         ckpt_dict = load_ckpt(ckpt_path, device=device)

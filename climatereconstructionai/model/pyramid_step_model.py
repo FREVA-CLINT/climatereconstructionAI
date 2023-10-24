@@ -10,7 +10,6 @@ from .. import transformer_training as trainer
 
 import climatereconstructionai.model.transformer_helpers as helpers
 
-from .. import transformer_infer as inference
 from ..utils.io import load_ckpt
 from ..utils import grid_utils as gu
 
@@ -458,11 +457,6 @@ class pyramid_step_model(nn.Module):
         sample_settings["coord_dict"] = self.model_settings["coord_dict"]
 
         trainer.create_samples(sample_settings)
-
-
-    def infer(self, settings):
-        self.inference_settings = load_settings(settings)
-        inference.infer(self, self.inference_settings)
 
 
     def check_pretrained(self, model_dir_check=''):
