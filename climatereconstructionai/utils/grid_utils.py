@@ -13,6 +13,11 @@ def distance_on_sphere(lon1,lat1,lon2,lat2):
     d_rad = 2*torch.arcsin(torch.sqrt(asin + (1-asin-torch.sin((lat1+lat2)/2)**2)*torch.sin(d_lon/2)**2))
     return d_rad
 
+def get_coords_as_tensor(grid, lon='vlon', lat='vlat'):
+    lons = torch.tensor(grid[lon].values)
+    lats = torch.tensor(grid[lat].values)
+    coords = torch.stack((lons, lats))
+    return coords
 
 def get_flat_coords(ds, coord_dict:dict):
     
@@ -117,7 +122,7 @@ def get_neighbours_of_grids(ds1, ds2, variable=None, coord_dict1=None, coord_dic
     dist_mat, coords = get_distance_matrix(ds1, ds2, coord_dict1, coord_dict2)
 
     if nh is not None:
-        values, nh_indices = get_neighbours_of_distmat(dist_mat, nh=nh, dim=dim)[0]
+        values, nh_indices = get_neighbours_of_distmat(dist_mat, nh=nh, dim=dim)
 
     elif avg_distance_km is not None:
         values, nh_indices = get_neighbours_of_distmat(dist_mat, nh=dist_mat.shape[dim], dim=dim)
@@ -131,8 +136,61 @@ def get_neighbours_of_grids(ds1, ds2, variable=None, coord_dict1=None, coord_dic
     return values, nh_indices
 
 
+def get_grid_relations(grids, coord_dict, regional=True, radius_regions_km=None, resolutions=None, min_overlap=3, radius_inc=100, save_file_path=None):
+    #tbd: implement global
 
-def get_parent_child_indices(parent_coords, child_coords, radius_km, radius_inc_km, in_deg=False, min_overlap=1, max_overlap=5):
+    if isinstance(grids[0], str):
+        data = [xr.load_dataset(d) for d in grids]
+    else:
+        data = grids
+
+    if radius_regions_km is None:
+        resolutions = [d.mean_dual_edge_length for d in data]
+        res_sort_idx = np.argsort(np.array(resolutions))[::-1]
+        resolutions = [resolutions[ix] for ix in res_sort_idx]
+        size_of_field = resolutions[0] * 1.5
+        radius_regions_km = 2*size_of_field
+
+    relations = {'indices':[],
+                'rel_coords': {'children':[],'parents':[]}}
+
+    region_coords = get_coords_as_tensor(data[0], lon=coord_dict['lon'], lat=coord_dict['lat'])
+
+    for g_ix in range(1, len(data)):
+
+        child_coords = get_coords_as_tensor(data[g_ix], lon=coord_dict['lon'], lat=coord_dict['lat'])
+
+        relation_dict, radius_regions_km = get_parent_child_indices(region_coords, child_coords, radius_regions_km, radius_inc, min_overlap=min_overlap)
+
+        relations['indices'].append(relation_dict)
+
+
+    for g_ix in range(0, len(data)-1):
+
+        relation = relations['indices'][g_ix]
+        parent_coords = get_coords_as_tensor(data[g_ix], lon=coord_dict['lon'], lat=coord_dict['lat'])
+        child_coords = get_coords_as_tensor(data[g_ix+1], lon=coord_dict['lon'], lat=coord_dict['lat'])
+
+        rel_coords_children = get_relative_coordinates_grids(parent_coords, child_coords, relation, relative_to='parents')
+        rel_coords_parents = get_relative_coordinates_grids(parent_coords, child_coords, relation, relative_to='children')
+
+        relations['rel_coords']['children'].append(rel_coords_children)
+        relations['rel_coords']['parents'].append(rel_coords_parents)
+    
+    grid_meta = [{'resolution:': resolutions[k]}.update(dict(data[k].attrs)) for k in range(len(resolutions))]
+    grid_data = {
+        'regional': True,
+        'meta': grid_meta,
+        'relations': relations}
+    
+    # maybe iobuffer here?
+    if save_file_path is not None:
+        torch.save(grid_data, save_file_path)
+    
+    return grid_data
+
+
+def get_parent_child_indices(parent_coords: torch.tensor, child_coords: torch.tensor, radius_km: int, radius_inc_km: int, in_deg=False, min_overlap=1, max_overlap=5):
 
     n_iter = 0
     min_overlap_criterion = True
@@ -156,6 +214,7 @@ def get_parent_child_indices(parent_coords, child_coords, radius_km, radius_inc_
 
     max_overlap = int(counts.max()) if max_overlap is None else max_overlap
 
+    print(max_overlap)
     # get parent indices for children
     c_p_distances = [[] for _ in range(len(child_coords[0]))]
     c_p_indices = [[] for _ in range(len(child_coords[0]))]
@@ -202,7 +261,7 @@ def get_parent_child_indices(parent_coords, child_coords, radius_km, radius_inc_
                'children_idx': torch.stack(c_p_indices_rel_pad),
               'parents':torch.stack(c_p_indices_pad)}
 
-    return indices 
+    return indices, radius_km
 
 
 def get_relative_coordinates_grids(parent_coords, child_coords, relation_dict, relative_to="parents"):
@@ -234,9 +293,9 @@ def get_relative_coordinates_regions(coords_in_regions, region_center_coords):
     return rel_coords
 
 
-def get_regions(lons, lats, seeds_lon, seeds_lat, radius_region=None, n_points=None ,in_deg=True):
+def get_regions(lons, lats, seeds_lon, seeds_lat, radius_region=None, n_points=None ,in_deg=True, rect=False):
 
-
+    
     if in_deg:
         seeds_lon = torch.deg2rad(seeds_lon)
         seeds_lat = torch.deg2rad(seeds_lat)
@@ -247,20 +306,37 @@ def get_regions(lons, lats, seeds_lon, seeds_lat, radius_region=None, n_points=N
     seeds_lon = seeds_lon.view(1,len(seeds_lon))
     seeds_lat = seeds_lat.view(1,len(seeds_lat))
 
-    d_mat = distance_on_sphere(lons, lats, seeds_lon, seeds_lat)
+    if rect:
+        Pos_calc = PositionCalculator()
+        d_mat, phi, dlon, dlat = Pos_calc(lons, lats, seeds_lon, seeds_lat)
 
-    if n_points is None:
-        distances, indices = torch.topk(d_mat, k=d_mat.shape[0], dim=0, largest=False)
-        distances *= radius_earth
-        region_indices = distances.median(dim=1).values <= radius_region 
+        region_indices_lon = dlon.median(dim=0).values.abs()*radius_earth <= radius_region 
+        region_indices_lat = dlat.median(dim=0).values.abs()*radius_earth <= radius_region 
 
-        distances_regions = distances[region_indices]
-        indices_regions = indices[region_indices] 
+        region_indices = torch.logical_and(region_indices_lon, region_indices_lat).view(1,-1)
+
+        distances_regions = d_mat[region_indices]
+        indices_regions = region_indices.flatten().argwhere()
+
+        idx_sort = distances_regions.sort().indices
+        distances_regions = distances_regions[idx_sort]
+        indices_regions = indices_regions[idx_sort]
+
     else:
-        distances, indices = torch.topk(d_mat, k=n_points, dim=0, largest=False)
-        indices_regions = indices
-        distances *= radius_earth*2
-        distances_regions = distances
+        d_mat = distance_on_sphere(lons, lats, seeds_lon, seeds_lat)
+
+        if n_points is None:
+            distances, indices = torch.topk(d_mat, k=d_mat.shape[0], dim=0, largest=False)
+            distances *= radius_earth
+            region_indices = distances.median(dim=1).values <= radius_region 
+
+            distances_regions = distances[region_indices]
+            indices_regions = indices[region_indices] 
+        else:     
+            distances, indices = torch.topk(d_mat, k=n_points, dim=0, largest=False)
+            indices_regions = indices
+            distances *= radius_earth*2
+            distances_regions = distances
 
     lons_regions = lons.view(-1)[indices_regions]
     lats_regions = lats.view(-1)[indices_regions]
@@ -409,7 +485,7 @@ class random_region_generator_multi():
     
 
 
-def generate_region(coords, range_lon=None, range_lat=None, n_points=None, radius=None, locations=[], batch_size=1):
+def generate_region(coords, range_lon=None, range_lat=None, n_points=None, radius=None, locations=[], batch_size=1, rect=False):
 
     if len(locations)==0:
         seeds_lon = torch.randint(range_lon[0],range_lon[1], size=(batch_size,1))
@@ -419,7 +495,7 @@ def generate_region(coords, range_lon=None, range_lat=None, n_points=None, radiu
         seeds_lat = locations[1]
 
 
-    distances_regions, indices_regions, lons_regions, lats_regions = get_regions(coords['lon'], coords['lat'], seeds_lon, seeds_lat, radius_region=radius, n_points=n_points, in_deg=True)
+    distances_regions, indices_regions, lons_regions, lats_regions = get_regions(coords['lon'], coords['lat'], seeds_lon, seeds_lat, radius_region=radius, n_points=n_points, in_deg=True, rect=rect)
     n_points = len(distances_regions)
     radius = (distances_regions.max()/2)
 

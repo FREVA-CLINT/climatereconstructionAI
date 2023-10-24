@@ -3,6 +3,7 @@ import random
 import copy
 import json
 from typing import Any
+import datetime
 
 import numpy as np
 import torch
@@ -97,8 +98,8 @@ def prepare_coordinates(ds_dict, coord_names, flatten=False, random_region=None)
     for tag, entry in ds_dict.items():
         ds = entry['ds']
 
-        lon = torch.tensor(ds[coord_names[0]].values) 
-        lat = torch.tensor(ds[coord_names[1]].values) 
+        lon = torch.tensor(ds[coord_names['lon']].values) 
+        lat = torch.tensor(ds[coord_names['lat']].values) 
         
         lon = lon.deg2rad() if lon.max()>2*torch.pi else lon 
         lat = lat.deg2rad() if lat.max()>2*torch.pi else lat
@@ -116,9 +117,45 @@ def prepare_coordinates(ds_dict, coord_names, flatten=False, random_region=None)
     return ds_dict
 
 
+def save_sample(ds, time_index, indices, variables, save_path):
+
+    dims = tuple(ds['ds'][variables[0]].dims)
+    indices = np.array(indices).squeeze()
+
+    rel_coords = ds['rel_coords']
+
+    if len(dims)==2:
+        sel_indices = ([time_index], indices)
+    else:
+        sel_indices = ([time_index],[0],indices)
+    
+    sel_dict = dict(zip(tuple(ds['ds'][variables[0]].dims), sel_indices))
+
+    ds_save = ds['ds'].isel(sel_dict)
+
+    ds_save = ds_save.assign_coords(clon=ds['rel_coords'][0,:,0].numpy(), clat=ds['rel_coords'][1,:,0].numpy())
+
+    ds_save.to_netcdf(save_path)
+
+    return ds
+
 
 class NetCDFLoader(Dataset):
-    def __init__(self, img_names_source, img_names_target, data_types, coord_names, apply_img_norm=False, normalize_data=True, random_region=None, stat_dict=None, p_input_dropout=0, sampling_mode='mixed',n_points=None,coordinate_pert=0, n_support_points=100):
+    def __init__(self, img_names_source, 
+                 img_names_target, 
+                 data_types, 
+                 coord_names, 
+                 apply_img_norm=False, 
+                 normalize_data=True, 
+                 random_region=None, 
+                 stat_dict=None, 
+                 p_input_dropout=0, 
+                 sampling_mode='mixed', 
+                 n_points_s=None, 
+                 n_points_t=None, 
+                 coordinate_pert=0,
+                 save_sample_path=''):
+        
         super(NetCDFLoader, self).__init__()
         
         self.PosCalc = PositionCalculator()
@@ -130,9 +167,10 @@ class NetCDFLoader(Dataset):
         self.p_input_dropout = p_input_dropout
         self.sampling_mode = sampling_mode
         self.random_region=random_region
-        self.n_points = n_points
+        self.n_points_s = n_points_s
+        self.n_points_t = n_points_t
         self.coordinate_pert = coordinate_pert
-        self.n_support_points = n_support_points
+        self.save_sample_path = save_sample_path
 
         if 'lon' in self.coord_names:
             self.flatten=True
@@ -143,11 +181,11 @@ class NetCDFLoader(Dataset):
             self.generate_region_prob = 1/random_region['generate_interval']
 
         self.ds_dict = {}
-        file_tags_train = []
+        file_tags_source = []
         for img_name_source in img_names_source:
             if img_name_source not in self.ds_dict.keys():
                 file_tag = os.path.basename(img_name_source)
-                file_tags_train.append(file_tag)
+                file_tags_source.append(file_tag)
                 self.ds_dict[file_tag] = {'ds': xr.load_dataset(img_name_source)}
 
                 
@@ -165,13 +203,20 @@ class NetCDFLoader(Dataset):
         self.ds_dict = prepare_coordinates(self.ds_dict, coord_names=coord_names, flatten=self.flatten)            
 
         self.target_names = file_tags_target
-        self.source_names = file_tags_train
+        self.source_names = file_tags_source
 
-        self.num_datapoints = self.ds_dict[file_tags_train[0]]['ds'][data_types[0]].shape[0]        
+        self.num_datapoints = self.ds_dict[file_tags_source[0]]['ds'][data_types[0]].shape[0]        
            
-        self.update_coordinates(file_tags_train+file_tags_target)
+        self.update_coordinates(file_tags_source + file_tags_target)
 
-        self.n_source_dropout = int((1-p_input_dropout) * n_points)
+        if n_points_s is None:
+            self.n_points_s = self.ds_dict[file_tags_source[0]]['rel_coords'].shape[1]
+
+        if n_points_t is None:
+            self.n_points_t = self.ds_dict[file_tags_target[0]]['rel_coords'].shape[1]
+
+        self.n_source_dropout_s = int((1-p_input_dropout) * self.n_points_s)
+       #self.n_source_dropout_t = int((1-p_input_dropout) * n_points_t)
 
         if stat_dict is None:
             self.stat_dict = {}
@@ -188,18 +233,17 @@ class NetCDFLoader(Dataset):
         self.normalizer = normalizer(self.stat_dict, data_types)
 
 
-    def input_dropout(self, x, coords):
+    def input_dropout(self, x, coords, n_drop):
 
         coords = copy.deepcopy(coords)
 
-        indices = torch.randperm(x.shape[0]-1)[:self.n_source_dropout]
+        indices = torch.randperm(x.shape[0]-1)[:n_drop]
 
         x = x[indices,:]
 
         coords = coords[:,indices,:]
  
         return x, coords
-
 
 
     def update_coordinates(self, tags):
@@ -212,7 +256,8 @@ class NetCDFLoader(Dataset):
 
                 radius = self.random_region["radius"] if "radius" in self.random_region.keys() else None
                 n_points = self.random_region["n_points"] if "n_points" in self.random_region.keys() else None
-                region_dict = generate_region(self.ds_dict[tag], self.random_region['lon_range'], self.random_region['lat_range'], n_points=n_points, radius=radius, batch_size=self.random_region['batch_size'],locations=seeds)
+                rect = self.random_region["rect"] if "rect" in self.random_region.keys() else False
+                region_dict = generate_region(self.ds_dict[tag], self.random_region['lon_range'], self.random_region['lat_range'], n_points=n_points, radius=radius, batch_size=self.random_region['batch_size'],locations=seeds, rect=rect)
 
                 seeds = region_dict['locations']
                 seeds = [seeds[0].rad2deg(), seeds[1].rad2deg()]
@@ -244,7 +289,7 @@ class NetCDFLoader(Dataset):
         return torch.stack([d_lons_s.float().T, d_lats_s.float().T],dim=0), distances
     
 
-    def get_data(self, key, index):
+    def get_data(self, key, index, n_points=None, origin='source'):
         data = [torch.tensor(self.ds_dict[key]['ds'][data_type][index].values).squeeze() for data_type in self.data_types]
         data = torch.stack(data, dim=-1)
 
@@ -260,28 +305,24 @@ class NetCDFLoader(Dataset):
 
         rel_coords = self.ds_dict[key]['rel_coords']
 
-        if self.n_support_points:
-            d = int(np.sqrt(self.n_support_points))
-            lon = torch.linspace(rel_coords[0].min(),rel_coords[0].max(), d)
-            lat = torch.linspace(rel_coords[1].min(),rel_coords[1].max(), d**2)
+        if len(self.save_sample_path)>0:
+            save_path = os.path.join(self.save_sample_path, key.replace('.nc', f'_{index}_{float(self.ds_dict[key]["seeds"][0]):.3f}_{float(self.ds_dict[key]["seeds"][1]):.3f}_{origin}.nc'))
+            save_sample(self.ds_dict[key], index, indices, self.data_types, save_path)
 
-            lons = lon.unsqueeze(dim=1).repeat(d,1).unsqueeze(dim=0)
-            lats = lat.view(1,d**2,1)
+        if n_points is not None:
 
-            support_coords = torch.concat((lons,lats),dim=0)
+            if data.shape[0] > n_points:
+                data = data[:n_points]
+                rel_coords = rel_coords[:,:n_points]
 
-        if self.n_points is not None:
+            elif data.shape[0] < n_points:
+                diff = n_points-data.shape[0]
+                pad_indices = torch.randint(data.shape[0],size=(diff,1)).view(-1)
 
-            if data.shape[0] > self.n_points:
-                data = data[:self.n_points]
-                rel_coords = rel_coords[:,:self.n_points]
-
-            elif data.shape[0] < self.n_points:
-                diff = self.n_points-data.shape[0]
-                pad_data = torch.zeros((diff,data.shape[-1])) + torch.mean(data, dim=0).view(1, data.shape[-1])
+                pad_data = data[pad_indices]
                 data = torch.concat((data, pad_data),dim=0)
 
-                pad_rel_coords = torch.zeros((rel_coords.shape[0], diff,1)) + 10e3
+                pad_rel_coords = rel_coords[:,pad_indices,:]
                 rel_coords = torch.concat((rel_coords, pad_rel_coords),dim=1)
 
         if self.coordinate_pert>0:
@@ -290,14 +331,12 @@ class NetCDFLoader(Dataset):
             pertubation = torch.randn_like(rel_coords)*self.coordinate_pert*avg_dist
             rel_coords = rel_coords+pertubation
 
-        if self.n_support_points:
-            return data, rel_coords, support_coords
-        else:
-            return data, rel_coords
+    
+        return data, rel_coords
 
 
     def __getitem__(self, index):
-        
+        index=0
         if len(self.source_names)>0:
             source_index = torch.randint(0, len(self.source_names), (1,1))
             source_key = self.source_names[source_index]
@@ -320,23 +359,14 @@ class NetCDFLoader(Dataset):
             if torch.rand(1) < self.generate_region_prob:
                 self.update_coordinates([source_key, target_key])
 
-        coords_support_source = None
-        coords_support_target = None
-
-        if self.n_support_points>0:
-            data_source, rel_coords_source, coords_support_source = self.get_data(source_key, index)
-        else:
-            data_source, rel_coords_source = self.get_data(source_key, index)
+    
+        data_source, rel_coords_source = self.get_data(source_key, index, self.n_points_s, 'source')
 
         if self.sampling_mode=='self':
             data_target = data_source
             rel_coords_target = rel_coords_source
-            coords_support_target = coords_support_source
         else:
-            if self.n_support_points>0:
-                data_target, rel_coords_target, coords_support_target = self.get_data(source_key, index)
-            else:
-                data_target, rel_coords_target = self.get_data(source_key, index)
+            data_target, rel_coords_target = self.get_data(target_key, index, self.n_points_t, 'target')
 
         if self.normalize_data:
             data_source = self.normalizer(data_source)[0]
@@ -348,18 +378,13 @@ class NetCDFLoader(Dataset):
         #    data_target = norm(data_target)
 
         if self.p_input_dropout > 0:
-            data_source, rel_coords_source = self.input_dropout(data_source, rel_coords_source)
+            data_source, rel_coords_source = self.input_dropout(data_source, rel_coords_source, self.n_source_dropout_s)
    
         coord_dict ={'rel': {'source': rel_coords_source,
                       'target': rel_coords_target}}
 
-        coords_dict_support = {'source': coords_support_source,
-                               'target': coords_support_target}
-        
-        if self.n_support_points>0:
-            return data_source, data_target, coord_dict, coords_dict_support
-        else:
-            return data_source, data_target, coord_dict
+
+        return data_source, data_target, coord_dict
 
     def __len__(self):
         return self.num_datapoints

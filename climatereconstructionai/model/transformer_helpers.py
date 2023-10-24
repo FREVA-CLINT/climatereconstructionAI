@@ -344,7 +344,7 @@ class nn_layer(nn.Module):
         self.both_dims = both_dims
 
 
-    def forward(self, x, coords_target, coords_source, skip_self=False):
+    def forward(self, x, coords_target, coords_source, d_mat=None, skip_self=False):
         b,s,e = x.shape
         
         coord_diff = get_coord_relation(coords_target, coords_source)
@@ -356,7 +356,8 @@ class nn_layer(nn.Module):
             c1 = coord_diff[:,0,:,:]
             c2 = coord_diff[:,1,:,:]
 
-        d_mat = (c1**2 + c2**2).sqrt()
+        if d_mat is None:
+            d_mat = (c1**2 + c2**2).sqrt()
 
         t = d_mat.shape[-2] 
 

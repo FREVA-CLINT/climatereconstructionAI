@@ -12,21 +12,22 @@ def sequence_to_batch(input):
 
 
 def batch_to_sequence(input, batch_size):
+    n_recurrent_steps = 1
     return torch.reshape(input,
-                         (batch_size, cfg.n_recurrent_steps, input.shape[1], input.shape[2], input.shape[3]))
+                         (batch_size, n_recurrent_steps, input.shape[1], input.shape[2], input.shape[3]))
 
 
 class EncoderBlock(nn.Module):
-    def __init__(self, conv_config, kernel, stride, activation, dilation=(1, 1), groups=1):
+    def __init__(self, conv_config, kernel, stride, activation, dilation=(1, 1), groups=1, dropout=0, lstm_steps=0, gru_steps=0):
         super().__init__()
         padding = kernel[0] // 2, kernel[1] // 2
         self.partial_conv = PConvBlock(conv_config['in_channels'], conv_config['out_channels'], kernel,
-                                       stride, padding, dilation, groups, False, activation, conv_config['bn'], dropout=cfg.dropout)
+                                       stride, padding, dilation, groups, False, activation, conv_config['bn'], dropout=dropout)
 
-        if cfg.lstm_steps:
+        if lstm_steps:
             self.recurrent_conv = ConvLSTMBlock(conv_config['out_channels'], conv_config['out_channels'],
                                                 conv_config['rec_size'], kernel, (1, 1), padding, (1, 1), groups)
-        elif cfg.gru_steps:
+        elif gru_steps:
             self.recurrent_conv = TrajGRUBlock(conv_config['out_channels'], conv_config['out_channels'],
                                                conv_config['rec_size'])
 
@@ -50,18 +51,18 @@ class EncoderBlock(nn.Module):
 
 
 class DecoderBlock(nn.Module):
-    def __init__(self, conv_config, kernel, stride, activation, dilation=(1, 1), groups=1, bias=False, skip_layers=True, up_factor=None):
+    def __init__(self, conv_config, kernel, stride, activation, dilation=(1, 1), groups=1, bias=False, skip_layers=True, up_factor=None, dropout=0, lstm_steps=0, gru_steps=0):
         super().__init__()
         padding = kernel[0] // 2, kernel[1] // 2
         self.skip_layers=skip_layers
 
         self.partial_conv = PConvBlock(conv_config['in_channels'] + conv_config['skip_channels'],
                                        conv_config['out_channels'], kernel, stride, padding, dilation, groups, bias,
-                                       activation, conv_config['bn'],dropout=cfg.dropout)
-        if cfg.lstm_steps:
+                                       activation, conv_config['bn'],dropout=dropout)
+        if lstm_steps:
             self.recurrent_conv = ConvLSTMBlock(conv_config['in_channels'], conv_config['in_channels'],
                                                 conv_config['rec_size'], kernel, (1, 1), padding, (1, 1), groups)
-        elif cfg.gru_steps:
+        elif gru_steps:
             self.recurrent_conv = TrajGRUBlock(conv_config['in_channels'], conv_config['in_channels'],
                                                conv_config['rec_size'])
 

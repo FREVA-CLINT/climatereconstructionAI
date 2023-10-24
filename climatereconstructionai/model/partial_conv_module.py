@@ -16,11 +16,12 @@ def bound_pad(input, padding):
 
 
 class PConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel, stride, padding, dilation, groups, bias, activation, bn, dropout=0):
+    def __init__(self, in_channels, out_channels, kernel, stride, padding, dilation, groups, bias, activation, bn, dropout=0, global_padding=False, weights=False, masked_bn=False):
         super().__init__()
 
+        self.masked_bn = masked_bn
         self.padding = 2 * padding
-        if cfg.global_padding:
+        if global_padding:
             self.trans_pad = bound_pad
         else:
             self.trans_pad = F.pad
@@ -28,14 +29,14 @@ class PConvBlock(nn.Module):
         self.input_conv = nn.Conv2d(in_channels, out_channels, kernel, stride, 0, dilation, groups, bias)
         self.mask_conv = nn.Conv2d(in_channels, out_channels, kernel, stride, 0, dilation, groups, False)
 
-        if cfg.weights:
-            self.input_conv.apply(weights_init(cfg.weights))
+        if weights:
+            self.input_conv.apply(weights_init(weights))
         torch.nn.init.constant_(self.mask_conv.weight, 1.0)
 
         self.activation = activation if activation else nn.Identity()
 
         if bn:
-            if cfg.masked_bn:
+            if masked_bn:
                 self.bn = MaskedBatchNorm2d(out_channels)
             else:
                 self.bn = nn.BatchNorm2d(out_channels)
@@ -71,7 +72,7 @@ class PConvBlock(nn.Module):
         new_mask = new_mask.masked_fill_(no_update_holes, 0.0)
 
         if hasattr(self, 'bn'):
-            if cfg.masked_bn:
+            if self.masked_bn:
                 output = self.bn(output, new_mask)
             else:
                 output = self.bn(output)

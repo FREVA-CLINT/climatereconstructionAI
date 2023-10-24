@@ -3,16 +3,16 @@ from .. import config as cfg
 
 # define configurations for convolutions
 
-def init_enc_conv_configs(conv_factor, img_size, enc_dec_layers, pool_layers, start_channels):
+def init_enc_conv_configs(conv_factor, img_size, enc_dec_layers, pool_layers, start_channels, kernel_size_start=5, disable_first_bn=True):
     conv_configs = []
-    kernel_size_start=cfg.kernel_size_start
+    kernel_size_start=kernel_size_start
     kernel_size_mid = 3 if kernel_size_start-2 < 3 else kernel_size_start-2
     kernel_size_min = 3 if kernel_size_start-4 < 3 else kernel_size_start-4
     for i in range(enc_dec_layers):
         conv_config = {}
         conv_config['bn'] = True
         if i == 0:
-            if cfg.disable_first_bn:
+            if disable_first_bn:
                 conv_config['bn'] = False
             conv_config['in_channels'] = start_channels
             conv_config['kernel'] = (kernel_size_start, kernel_size_start)

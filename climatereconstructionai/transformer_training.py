@@ -22,6 +22,30 @@ class GaussLoss(nn.Module):
         loss =  self.Gauss(output[:,:,:,0],target,output[:,:,:,1])
         return loss
 
+class L1Loss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.loss = torch.nn.L1Loss()
+
+    def forward(self, output, target):
+        loss =  self.loss(output[:,:,:,0],target)
+        return loss
+
+
+class Loss_w_source(nn.Module):
+    def __init__(self, target_loss, p=0.5):
+        super().__init__()
+        self.source_loss = torch.nn.L1Loss()
+        self.target_loss = target_loss
+        self.p = p
+
+    def forward(self, output, target, source_output, source):
+        target_loss = self.target_loss(output, target)
+        source_loss = self.source_loss(source_output, source)
+
+        total_loss = self.p*target_loss + (1-self.p)*source_loss
+        return total_loss
+
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
 
     def __init__(self, optimizer, warmup, max_iters):
@@ -60,6 +84,7 @@ def check_get_data_files(list_or_path, root_path = '', train_or_val='train'):
             data_paths = np.genfromtxt(list_or_path, dtype=str)
 
     return data_paths
+
 
 def train(model, training_settings, model_hparams={}):
  
@@ -100,38 +125,29 @@ def train(model, training_settings, model_hparams={}):
     else:
         stat_dict = None
 
-    if "n_points_support" not in training_settings.keys():
-        n_points_support = 0
-    else:
-        n_points_support = training_settings["n_points_support"]
-
     dataset_train = NetCDFLoader(source_files_train, 
                                  target_files_train,
                                  training_settings['variables'],
-                                 training_settings['coord_names'],
+                                 training_settings['coord_dict'],
                                  random_region=random_region,
                                  apply_img_norm=training_settings['apply_img_norm'],
                                  normalize_data=training_settings['normalize_data'],
                                  stat_dict=stat_dict,
                                  p_input_dropout=training_settings['input_dropout'],
                                  sampling_mode=training_settings['sampling_mode'],
-                                 n_points=training_settings['n_points'],
-                                 coordinate_pert=training_settings['coordinate_pertubation'],
-                                 n_support_points=n_points_support)
+                                 coordinate_pert=training_settings['coordinate_pertubation'])
     
     dataset_val = NetCDFLoader(  source_files_val, 
                                  target_files_val,
                                  training_settings['variables'],
-                                 training_settings['coord_names'],
+                                 training_settings['coord_dict'],
                                  random_region=random_region,
                                  apply_img_norm=training_settings['apply_img_norm'],
                                  normalize_data=training_settings['normalize_data'],
                                  stat_dict=dataset_train.stat_dict if stat_dict is None else stat_dict,
                                  p_input_dropout=training_settings['input_dropout'],
                                  sampling_mode=training_settings['sampling_mode'],
-                                 n_points=training_settings['n_points'],
-                                 coordinate_pert=0,
-                                 n_support_points=n_points_support)
+                                 coordinate_pert=0)
     
     iterator_train = iter(DataLoader(dataset_train,
                                      batch_size=batch_size,
@@ -155,7 +171,11 @@ def train(model, training_settings, model_hparams={}):
     if training_settings["gauss_loss"]:
         loss_fcn = GaussLoss()
     else:
-        loss_fcn = torch.nn.L1Loss()
+        loss_fcn = L1Loss()
+
+    if training_settings["source_loss"]:
+        loss_fcn = Loss_w_source(loss_fcn, p=0.5)
+
    
     early_stop = early_stopping.early_stopping(training_settings['early_stopping_delta'], training_settings['early_stopping_patience'])
     
@@ -183,28 +203,23 @@ def train(model, training_settings, model_hparams={}):
 
         model.train()
 
-        if training_settings['train_with_support']:
-            source, target, coord_dict, coord_dict_support = next(iterator_train)
+        
+        source, target, coord_dict = next(iterator_train)
 
-            coord_dict['rel'] = dict_to_device(coord_dict['rel'], device)
-            coord_dict_support = dict_to_device(coord_dict_support, device)
+        coord_dict['rel'] = dict_to_device(coord_dict['rel'], device)
 
-            source = source.to(device)
-            target = target.to(device)
+        source = source.to(device)
+        target = target.to(device)
 
-            output = model(source, coord_dict, coord_dict_support)
-        else:
-            source, target, coord_dict = next(iterator_train)
-
-            coord_dict['rel'] = dict_to_device(coord_dict['rel'], device)
-
-            source = source.to(device)
-            target = target.to(device)
-
-            output = model(source, coord_dict)
+        output, source_output = model(source, coord_dict)
 
         optimizer.zero_grad()
-        loss = loss_fcn(output, target)
+
+        if training_settings['source_loss']:
+            loss = loss_fcn(output, target, source_output, source)
+        else:
+            loss = loss_fcn(output, target)
+
         loss.backward()
 
         train_losses_save.append(loss.item())
@@ -221,40 +236,32 @@ def train(model, training_settings, model_hparams={}):
 
             for _ in range(training_settings['n_iters_val']):
 
-                if training_settings['train_with_support']:
-                    source, target, coord_dict, coord_dict_support = next(iterator_val)
+                source, target, coord_dict = next(iterator_val)
 
-                    coord_dict['rel'] = dict_to_device(coord_dict['rel'], device)
-                    coord_dict_support = dict_to_device(coord_dict_support, device)
-
-                    source = source.to(device)
-                    target = target.to(device)
-
-                    output = model(source, coord_dict, coord_dict_support)
-                else:
-                    source, target, coord_dict = next(iterator_val)
-
-                    coord_dict['rel'] = dict_to_device(coord_dict['rel'], device)
-                    
-                    source = source.to(device)
-                    target = target.to(device)
-
-                    output = model(source, coord_dict)
+                coord_dict['rel'] = dict_to_device(coord_dict['rel'], device)
+                
+                source = source.to(device)
+                target = target.to(device)
 
                 with torch.no_grad():
-                    output = model(source, coord_dict)
-                    loss = loss_fcn(output, target)
+                    output, source_output = model(source, coord_dict)
+
+                    if training_settings['source_loss']:
+                        loss = loss_fcn(output, target, source_output, source)
+                    else:
+                        loss = loss_fcn(output, target)
+
                     val_loss = {'total': loss.item(), 'valid': loss.item()}
 
                 val_losses.append(list(val_loss.values()))
             
-            output, debug_dict = model(source, coord_dict, return_debug=True)
+            #output, debug_dict = model(source, coord_dict, return_debug=True)
 
             val_loss = torch.tensor(val_losses).mean(dim=0)
             val_loss = dict(zip(train_loss.keys(), val_loss))
 
             val_losses_save.append(val_loss['total'])
-
+            debug_dict = {}
             if training_settings['save_debug']:
                 torch.save(debug_dict, os.path.join(log_dir,'debug_dict.pt'))
                 torch.save(coord_dict,os.path.join(log_dir,'coord_dict.pt'))
@@ -287,3 +294,81 @@ def train(model, training_settings, model_hparams={}):
     writer.close()
 
 
+def create_samples(sample_settings):
+
+    print("* Number of GPUs: ", torch.cuda.device_count())
+
+    sample_dir = sample_settings['sample_dir']
+    sample_dir_train = os.path.join(sample_settings['sample_dir'], 'train')
+    sample_dir_val = os.path.join(sample_settings['sample_dir'], 'val')
+
+    if not os.path.exists(sample_dir_train):
+        os.makedirs(sample_dir_train)
+
+    if not os.path.exists(sample_dir_val):
+        os.makedirs(sample_dir_val)
+
+    if 'random_region' not in sample_settings.keys():
+        random_region = None
+    else:
+        random_region = sample_settings['random_region']
+    
+    batch_size = sample_settings['batch_size']
+
+    source_files_train = check_get_data_files(sample_settings['train_data']['data_names_source'], root_path = sample_settings['root_dir'], train_or_val='train')
+    target_files_train = check_get_data_files(sample_settings['train_data']['data_names_target'], root_path = sample_settings['root_dir'], train_or_val='train')        
+    
+    source_files_val = check_get_data_files(sample_settings['val_data']['data_names_source'], root_path = sample_settings['root_dir'], train_or_val='val')
+    target_files_val = check_get_data_files(sample_settings['val_data']['data_names_target'], root_path = sample_settings['root_dir'], train_or_val='val')      
+
+    stat_dict = None
+
+    dataset_train = NetCDFLoader(source_files_train, 
+                                 target_files_train,
+                                 sample_settings['variables'],
+                                 sample_settings['coord_dict'],
+                                 random_region=random_region,
+                                 apply_img_norm=False,
+                                 normalize_data=False,
+                                 stat_dict=None,
+                                 p_input_dropout=0,
+                                 sampling_mode=sample_settings['sampling_mode'],
+                                 coordinate_pert=0,
+                                 save_sample_path=sample_dir_train)
+    
+    dataset_val = NetCDFLoader(  source_files_val, 
+                                 target_files_val,
+                                 sample_settings['variables'],
+                                 sample_settings['coord_dict'],
+                                 random_region=random_region,
+                                 apply_img_norm=False,
+                                 normalize_data=False,
+                                 stat_dict=dataset_train.stat_dict if stat_dict is None else stat_dict,
+                                 p_input_dropout=0,
+                                 sampling_mode=sample_settings['sampling_mode'],
+                                 coordinate_pert=0,
+                                 save_sample_path=sample_dir_val)
+    
+    iterator_train = iter(DataLoader(dataset_train,
+                                     batch_size=batch_size,
+                                     sampler=InfiniteSampler(len(dataset_train)),
+                                     num_workers=sample_settings['n_workers']))
+
+    iterator_val = iter(DataLoader(dataset_val,
+                                    batch_size=batch_size,
+                                    sampler=InfiniteSampler(len(dataset_val)),
+                                    num_workers=sample_settings['n_workers']))
+    
+
+    start_iter = 0
+
+    pbar = tqdm(range(start_iter, sample_settings['n_samples_train']))
+
+    for i in pbar:      
+        next(iterator_train)
+
+
+    pbar = tqdm(range(start_iter, sample_settings['n_samples_val']))
+
+    for i in pbar:
+        next(iterator_val)
