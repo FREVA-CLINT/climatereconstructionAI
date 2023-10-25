@@ -158,7 +158,8 @@ class NetCDFLoader(Dataset):
                  index_range=None,
                  rel_coords=False,
                  lazy_load=False,
-                 sample_for_norm=-1):
+                 sample_for_norm=-1,
+                 norm_stats_save_path=''):
         
         super(NetCDFLoader, self).__init__()
         
@@ -179,6 +180,7 @@ class NetCDFLoader(Dataset):
         self.rel_coords=rel_coords
         self.lazy_load=lazy_load
         self.sample_for_norm = sample_for_norm
+        self.norm_stats_save_path = norm_stats_save_path
 
         #if 'lon' in self.coord_names:
         #    self.flatten=True
@@ -244,7 +246,7 @@ class NetCDFLoader(Dataset):
                 data = np.concatenate([ds_d['ds'][var].values.flatten() for ds_d in np.array(list(self.ds_dict.values()))[ds_rng]])
                 self.stat_dict[var] = calc_stats(data)
             
-            with open(os.path.join(os.path.dirname(img_names_source[0]),"norm_stats.json"),"w+") as f:
+            with open(os.path.join(self.norm_stats_save_path,"norm_stats.json"),"w+") as f:
                 json.dump(self.stat_dict,f)
 
         else:

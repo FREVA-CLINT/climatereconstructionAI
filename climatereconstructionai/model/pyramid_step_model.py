@@ -353,7 +353,13 @@ class pyramid_step_model(nn.Module):
             os.makedirs(self.model_dir)
 
         with open(model_settings_path, 'w') as f:
-            json.dump(self.model_settings, f)
+            json.dump(self.model_settings, f, indent=4)
+
+        norm_stats_file = os.path.join(self.model_dir,'norm_stats.json')
+        if os.path.isfile(norm_stats_file):
+            self.norm_stats_file = norm_stats_file
+        else:
+            self.norm_stats_file = ''
 
 
     def set_training_configuration(self, train_settings=None):
@@ -361,8 +367,11 @@ class pyramid_step_model(nn.Module):
 
         self.train_settings['log_dir'] = os.path.join(self.model_dir, 'logs')
 
+        if len(self.train_settings['norm_stats'])==0:
+            self.train_settings['norm_stats'] = self.norm_stats_file
+
         with open(os.path.join(self.model_dir,'train_settings.json'), 'w') as f:
-            json.dump(self.train_settings, f)
+            json.dump(self.train_settings, f, indent=4)
 
 
     def create_grids(self):
@@ -441,6 +450,7 @@ class pyramid_step_model(nn.Module):
 
         train_settings["variables"] = self.model_settings["variables"]
         train_settings["coord_dict"] = self.model_settings["coord_dict"]
+        train_settings['model_dir'] = self.model_dir
 
         trainer.train(self, train_settings, self.model_settings)
 
