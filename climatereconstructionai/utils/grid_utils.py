@@ -91,12 +91,15 @@ def get_distance_matrix(ds1, ds2, coord_dict1: dict, coord_dict2:dict):
 def get_coord_dict_from_var(ds, variable):
     dims = ds[variable].dims
     spatial_dim = dims[-1]
-
+    
     if not 'lon' in spatial_dim and not 'lat' in spatial_dim:
         coords = list(ds[spatial_dim].coords.keys())
     else:
         coords = dims
 
+    if len(coords)==0:
+        coords = list(ds[variable].coords.keys())
+        
     lon_c = [var for var in coords if 'lon' in var]
     lat_c = [var for var in coords if 'lat' in var]
 

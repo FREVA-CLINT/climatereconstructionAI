@@ -449,7 +449,8 @@ class pyramid_step_model(nn.Module):
         train_settings["gauss_loss"] = self.model_settings['gauss'] 
 
         train_settings["variables"] = self.model_settings["variables"]
-        train_settings["coord_dict"] = self.model_settings["coord_dict"]
+        train_settings["coord_dict_source"] = self.model_settings["coord_dict_source"]
+        train_settings["coord_dict_target"] = self.model_settings["coord_dict_target"]
         train_settings['model_dir'] = self.model_dir
 
         trainer.train(self, train_settings, self.model_settings)
@@ -464,8 +465,12 @@ class pyramid_step_model(nn.Module):
             sample_settings["random_region"] = self.get_region_generator_settings()
 
         sample_settings["variables"] = self.model_settings["variables"]
-        sample_settings["coord_dict"] = self.model_settings["coord_dict"]
+        sample_settings["coord_dict_source"] = self.model_settings["coord_dict_source"]
+        sample_settings["coord_dict_target"] = self.model_settings["coord_dict_target"]
         sample_settings["model_dir"] = self.model_dir
+
+        if 'norm_stats' not in sample_settings.keys():
+            sample_settings['norm_stats'] = self.norm_stats_file
         
         trainer.create_samples(sample_settings)
 

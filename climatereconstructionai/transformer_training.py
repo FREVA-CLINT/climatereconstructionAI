@@ -128,7 +128,8 @@ def train(model, training_settings, model_hparams={}):
     dataset_train = NetCDFLoader(source_files_train, 
                                  target_files_train,
                                  training_settings['variables'],
-                                 training_settings['coord_dict'],
+                                 training_settings['coord_dict_source'],
+                                 training_settings['coord_dict_target'],
                                  random_region=random_region,
                                  apply_img_norm=training_settings['apply_img_norm'],
                                  normalize_data=training_settings['normalize_data'],
@@ -145,7 +146,8 @@ def train(model, training_settings, model_hparams={}):
     dataset_val = NetCDFLoader(  source_files_val, 
                                  target_files_val,
                                  training_settings['variables'],
-                                 training_settings['coord_dict'],
+                                 training_settings['coord_dict_source'],
+                                 training_settings['coord_dict_target'],
                                  random_region=random_region,
                                  apply_img_norm=training_settings['apply_img_norm'],
                                  normalize_data=training_settings['normalize_data'],
@@ -330,16 +332,21 @@ def create_samples(sample_settings):
     source_files_val = check_get_data_files(sample_settings['val_data']['data_names_source'], root_path = sample_settings['root_dir'], train_or_val='val')
     target_files_val = check_get_data_files(sample_settings['val_data']['data_names_target'], root_path = sample_settings['root_dir'], train_or_val='val')      
 
-    stat_dict = None
+    if "norm_stats" in sample_settings.keys():
+        with open(sample_settings["norm_stats"],'r') as file:
+            stat_dict = json.load(file)
+    else:
+        stat_dict = None
 
     dataset_train = NetCDFLoader(source_files_train, 
                                  target_files_train,
                                  sample_settings['variables'],
-                                 sample_settings['coord_dict'],
+                                 sample_settings['coord_dict_source'],
+                                 sample_settings['coord_dict_target'],
                                  random_region=random_region,
                                  apply_img_norm=False,
                                  normalize_data=False,
-                                 stat_dict=None,
+                                 stat_dict=stat_dict,
                                  p_input_dropout=0,
                                  sampling_mode=sample_settings['sampling_mode'],
                                  coordinate_pert=0,
@@ -352,7 +359,8 @@ def create_samples(sample_settings):
     dataset_val = NetCDFLoader(  source_files_val, 
                                  target_files_val,
                                  sample_settings['variables'],
-                                 sample_settings['coord_dict'],
+                                 sample_settings['coord_dict_source'],
+                                 sample_settings['coord_dict_target'],
                                  random_region=random_region,
                                  apply_img_norm=False,
                                  normalize_data=False,

@@ -93,11 +93,12 @@ class FiniteSampler(Sampler):
         return self.num_samples
 
 
-def prepare_coordinates(ds_dict, coord_names, flatten=False, random_region=None):
+def prepare_coordinates(ds_dict, flatten=False, random_region=None):
 
     for tag, entry in ds_dict.items():
         ds = entry['ds']
-
+        coord_names = entry['coord_names']
+        
         lon = torch.tensor(ds[coord_names['lon']].values) 
         lat = torch.tensor(ds[coord_names['lat']].values) 
         
@@ -144,7 +145,8 @@ class NetCDFLoader(Dataset):
     def __init__(self, img_names_source, 
                  img_names_target, 
                  data_types, 
-                 coord_names, 
+                 coord_names_source,
+                 coord_names_target,
                  apply_img_norm=False, 
                  normalize_data=True, 
                  random_region=None, 
@@ -166,7 +168,8 @@ class NetCDFLoader(Dataset):
         self.PosCalc = PositionCalculator()
         self.random = random.Random()
         self.data_types = data_types
-        self.coord_names = coord_names
+        self.coord_names_source = coord_names_source
+        self.coord_names_target = coord_names_target
         self.apply_img_norm = apply_img_norm
         self.normalize_data = normalize_data
         self.p_input_dropout = p_input_dropout
@@ -200,7 +203,7 @@ class NetCDFLoader(Dataset):
                     ds = xr.open_dataset(img_name_source)
                 else:
                     ds = xr.load_dataset(img_name_source)
-                self.ds_dict[file_tag] = {'ds': ds}
+                self.ds_dict[file_tag] = {'ds': ds, 'coord_names': coord_names_source}
 
                 
         file_tags_target = []
@@ -213,12 +216,12 @@ class NetCDFLoader(Dataset):
                         ds = xr.open_dataset(img_name_target)
                     else:
                         ds = xr.load_dataset(img_name_target)
-                    self.ds_dict[file_tag] = {'ds': ds}
+                    self.ds_dict[file_tag] = {'ds': ds, 'coord_names': coord_names_target}
 
         self.num_files_source = len(img_names_source)
         self.num_files_target = len(img_names_target)
 
-        self.ds_dict = prepare_coordinates(self.ds_dict, coord_names=coord_names, flatten=self.flatten)            
+        self.ds_dict = prepare_coordinates(self.ds_dict, flatten=self.flatten)            
 
         self.target_names = file_tags_target
         self.source_names = file_tags_source
