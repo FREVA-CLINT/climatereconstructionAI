@@ -465,7 +465,8 @@ class pyramid_step_model(nn.Module):
 
         sample_settings["variables"] = self.model_settings["variables"]
         sample_settings["coord_dict"] = self.model_settings["coord_dict"]
-
+        sample_settings["model_dir"] = self.model_dir
+        
         trainer.create_samples(sample_settings)
 
 

@@ -346,7 +346,8 @@ def create_samples(sample_settings):
                                  save_sample_path=sample_dir_train,
                                  index_range=sample_settings['index_range'] if 'index_range' in sample_settings else None,
                                  lazy_load=sample_settings['lazy_load'] if 'lazy_load' in sample_settings else False,
-                                 sample_for_norm=sample_settings['sample_for_norm'] if 'sample_for_norm' in sample_settings else -1)
+                                 sample_for_norm=sample_settings['sample_for_norm'] if 'sample_for_norm' in sample_settings else -1,
+                                 norm_stats_save_path=sample_settings['model_dir'])
     
     dataset_val = NetCDFLoader(  source_files_val, 
                                  target_files_val,
