@@ -315,7 +315,7 @@ def create_samples(sample_settings):
     source_files_val = check_get_data_files(sample_settings['val_data']['data_names_source'], root_path = sample_settings['root_dir'], train_or_val='val')
     target_files_val = check_get_data_files(sample_settings['val_data']['data_names_target'], root_path = sample_settings['root_dir'], train_or_val='val')      
 
-    if "norm_stats" in sample_settings.keys():
+    if len(sample_settings["norm_stats"])>1:
         with open(sample_settings["norm_stats"],'r') as file:
             stat_dict = json.load(file)
     else:
