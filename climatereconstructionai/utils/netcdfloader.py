@@ -10,7 +10,6 @@ from torch.functional import F
 from .netcdfchecker import dataset_formatter
 from .normalizer import img_normalization, bnd_normalization
 from .. import config as cfg
-import nctoolkit as nc
 
 def load_steadymask(steady_mask_dir_dict, device):
     if steady_mask_dir_dict is None:

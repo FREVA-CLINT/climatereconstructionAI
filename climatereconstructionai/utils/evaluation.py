@@ -120,7 +120,7 @@ def infill(model, dataset, eval_path, output_names, data_stats, xr_dss, i_model,
             data_dict["output"] = model(data_dict["image"].to(cfg.device), data_dict["mask"].to(cfg.device))
 
         if cfg.predict_diff:
-            data_dict["output"] += data_dict["image"]
+            data_dict["output"] += data_dict["image"].to(cfg.device)
             data_dict["gt"] += data_dict["image"]
 
         for key in ('image', 'mask', 'gt', 'output'):
@@ -179,11 +179,10 @@ def create_outputs(data_dict, eval_path, output_names, data_stats, xr_dss, i_mod
 
             ds[data_type] = xr.DataArray(data_dict[cname].to(torch.device('cpu')).detach().numpy()[:, j, :, :],
                                          dims=xr_dss[i_data][2], coords=xr_dss[i_data][3])
-            ds["time"] = xr_dss[i_data][0]["time"].values[index]
 
             ds = reformat_dataset(xr_dss[i_data][0], ds, data_type)
 
-            for var in xr_dss[i_data][0].keys():
+            for var in xr_dss[i_data][0].coords:
                 if "time" in xr_dss[i_data][0][var].dims:
                     ds[var] = xr_dss[i_data][0][var].isel(time=index)
                 else:
