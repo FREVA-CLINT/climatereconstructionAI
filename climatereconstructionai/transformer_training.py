@@ -28,23 +28,24 @@ class L1Loss(nn.Module):
         self.loss = torch.nn.L1Loss()
 
     def forward(self, output, target):
-        loss =  self.loss(output[:,:,:,0],target)
+        loss = self.loss(output[:,:,:,0],target)
         return loss
 
-
-class Loss_w_source(nn.Module):
-    def __init__(self, target_loss, p=0.5):
+class DictLoss(nn.Module):
+    def __init__(self, loss_fcn):
         super().__init__()
-        self.source_loss = torch.nn.L1Loss()
-        self.target_loss = target_loss
-        self.p = p
+        self.loss_fcn = loss_fcn
 
-    def forward(self, output, target, source_output, source):
-        target_loss = self.target_loss(output, target)
-        source_loss = self.source_loss(source_output, source)
+    def forward(self, output, target):
+        loss_dict = {}
+        total_loss = 0
 
-        total_loss = self.p*target_loss + (1-self.p)*source_loss
-        return total_loss
+        for var in output.keys():
+            loss = self.loss_fcn(output[var], target[var])
+            loss_dict[var] = loss.item()
+            total_loss+=loss
+
+        return total_loss, loss_dict
 
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
 
@@ -127,38 +128,38 @@ def train(model, training_settings, model_hparams={}):
 
     dataset_train = NetCDFLoader(source_files_train, 
                                  target_files_train,
-                                 training_settings['variables'],
-                                 training_settings['coord_dict_source'],
-                                 training_settings['coord_dict_target'],
+                                 training_settings['variables_source'],
+                                 training_settings['variables_target'],
                                  random_region=random_region,
                                  apply_img_norm=training_settings['apply_img_norm'],
                                  normalize_data=training_settings['normalize_data'],
                                  stat_dict=stat_dict,
-                                 p_input_dropout=training_settings['input_dropout'],
+                                 p_dropout_source=training_settings['p_dropout_source'],
+                                 p_dropout_target=training_settings['p_dropout_target'],
                                  sampling_mode=training_settings['sampling_mode'],
                                  coordinate_pert=training_settings['coordinate_pertubation'],
                                  index_range=training_settings['index_range'] if 'index_range' in training_settings else None,
                                  rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False,
                                  lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
-                                 sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else -1,
+                                 sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
                                  norm_stats_save_path=training_settings['model_dir'])
     
     dataset_val = NetCDFLoader(  source_files_val, 
                                  target_files_val,
-                                 training_settings['variables'],
-                                 training_settings['coord_dict_source'],
-                                 training_settings['coord_dict_target'],
+                                 training_settings['variables_source'],
+                                 training_settings['variables_target'],
                                  random_region=random_region,
                                  apply_img_norm=training_settings['apply_img_norm'],
                                  normalize_data=training_settings['normalize_data'],
                                  stat_dict=dataset_train.stat_dict if stat_dict is None else stat_dict,
-                                 p_input_dropout=training_settings['input_dropout'],
+                                 p_dropout_source=training_settings['p_dropout_source'],
+                                 p_dropout_target=training_settings['p_dropout_target'],
                                  sampling_mode=training_settings['sampling_mode'],
                                  coordinate_pert=0,
                                  index_range=training_settings['index_range'] if 'index_range' in training_settings else None,
                                  rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False,
                                  lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
-                                 sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else -1)
+                                 sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None)
     
     iterator_train = iter(DataLoader(dataset_train,
                                      batch_size=batch_size,
@@ -184,8 +185,7 @@ def train(model, training_settings, model_hparams={}):
     else:
         loss_fcn = L1Loss()
 
-    if training_settings["source_loss"]:
-        loss_fcn = Loss_w_source(loss_fcn, p=0.5)
+    dict_loss_fcn = DictLoss(loss_fcn)
 
    
     early_stop = early_stopping.early_stopping(training_settings['early_stopping_delta'], training_settings['early_stopping_patience'])
@@ -214,69 +214,52 @@ def train(model, training_settings, model_hparams={}):
 
         model.train()
 
-        
-        source, target, coord_dict = next(iterator_train)
+        source, target, coords_source, coords_target = [dict_to_device(x, device) for x in next(iterator_train)]
 
-        coord_dict['rel'] = dict_to_device(coord_dict['rel'], device)
-
-        source = source.to(device)
-        target = target.to(device)
-
-        output, source_output = model(source, coord_dict)
+        output = model(source, coords_source, coords_target)[0]
 
         optimizer.zero_grad()
 
-        if training_settings['source_loss']:
-            loss = loss_fcn(output, target, source_output, source)
-        else:
-            loss = loss_fcn(output, target)
+        loss, train_loss_dict = dict_loss_fcn(output, target)
 
         loss.backward()
 
         train_losses_save.append(loss.item())
-        train_loss = {'total': loss.item(), 'valid': loss.item()}
-        
+        train_loss_dict['total'] = loss.item()
+
         optimizer.step()
         lr_scheduler.step()
 
         if n_iter % training_settings['log_interval'] == 0:
-            writer.update_scalars(train_loss, n_iter, 'train')
+            writer.update_scalars(train_loss_dict, n_iter, 'train')
 
             model.eval()
             val_losses = []
 
             for _ in range(training_settings['n_iters_val']):
 
-                source, target, coord_dict = next(iterator_val)
-
-                coord_dict['rel'] = dict_to_device(coord_dict['rel'], device)
-                
-                source = source.to(device)
-                target = target.to(device)
+                source, target, coords_source, coords_target = [dict_to_device(x, device) for x in next(iterator_val)]
 
                 with torch.no_grad():
-                    output, source_output = model(source, coord_dict)
+                    output, output_reg = model(source, coords_source, coords_target)
 
-                    if training_settings['source_loss']:
-                        loss = loss_fcn(output, target, source_output, source)
-                    else:
-                        loss = loss_fcn(output, target)
+                    loss, val_loss_dict = dict_loss_fcn(output, target)
 
-                    val_loss = {'total': loss.item(), 'valid': loss.item()}
+                    val_loss_dict['total'] = loss.item()
 
-                val_losses.append(list(val_loss.values()))
+                val_losses.append(list(val_loss_dict.values()))
             
-            #output, debug_dict = model(source, coord_dict, return_debug=True)
-
             val_loss = torch.tensor(val_losses).mean(dim=0)
-            val_loss = dict(zip(train_loss.keys(), val_loss))
+            val_loss = dict(zip(train_loss_dict.keys(), val_loss))
 
             val_losses_save.append(val_loss['total'])
             debug_dict = {}
             if training_settings['save_debug']:
                 torch.save(debug_dict, os.path.join(log_dir,'debug_dict.pt'))
-                torch.save(coord_dict,os.path.join(log_dir,'coord_dict.pt'))
+                torch.save(coords_source,os.path.join(log_dir,'coords_source.pt'))
+                torch.save(coords_target,os.path.join(log_dir,'coords_target.pt'))
                 torch.save(output, os.path.join(log_dir,'output.pt'))
+                torch.save(output_reg, os.path.join(log_dir,'output_reg.pt'))
                 torch.save(target, os.path.join(log_dir,'target.pt'))
                 torch.save(source, os.path.join(log_dir,'source.pt'))
                 np.savetxt(os.path.join(log_dir,'losses_val.txt'),np.array(val_losses_save))
@@ -340,38 +323,38 @@ def create_samples(sample_settings):
 
     dataset_train = NetCDFLoader(source_files_train, 
                                  target_files_train,
-                                 sample_settings['variables'],
-                                 sample_settings['coord_dict_source'],
-                                 sample_settings['coord_dict_target'],
+                                 sample_settings['variables_source'],
+                                 sample_settings['variables_target'],
                                  random_region=random_region,
                                  apply_img_norm=False,
                                  normalize_data=False,
                                  stat_dict=stat_dict,
-                                 p_input_dropout=0,
+                                 p_dropout_source=0,
+                                 p_dropout_target=0,
                                  sampling_mode=sample_settings['sampling_mode'],
                                  coordinate_pert=0,
                                  save_sample_path=sample_dir_train,
                                  index_range=sample_settings['index_range'] if 'index_range' in sample_settings else None,
                                  lazy_load=sample_settings['lazy_load'] if 'lazy_load' in sample_settings else False,
-                                 sample_for_norm=sample_settings['sample_for_norm'] if 'sample_for_norm' in sample_settings else -1,
+                                 sample_for_norm=sample_settings['sample_for_norm'] if 'sample_for_norm' in sample_settings else None,
                                  norm_stats_save_path=sample_settings['model_dir'])
     
     dataset_val = NetCDFLoader(  source_files_val, 
                                  target_files_val,
-                                 sample_settings['variables'],
-                                 sample_settings['coord_dict_source'],
-                                 sample_settings['coord_dict_target'],
+                                 sample_settings['variables_source'],
+                                 sample_settings['variables_target'],
                                  random_region=random_region,
                                  apply_img_norm=False,
                                  normalize_data=False,
                                  stat_dict=dataset_train.stat_dict if stat_dict is None else stat_dict,
-                                 p_input_dropout=0,
+                                 p_dropout_source=0,
+                                 p_dropout_target=0,
                                  sampling_mode=sample_settings['sampling_mode'],
                                  coordinate_pert=0,
                                  save_sample_path=sample_dir_val,
                                  index_range=sample_settings['index_range'] if 'index_range' in sample_settings else None,
                                  lazy_load=sample_settings['lazy_load'] if 'lazy_load' in sample_settings else False,
-                                 sample_for_norm=sample_settings['sample_for_norm'] if 'sample_for_norm' in sample_settings else -1)
+                                 sample_for_norm=sample_settings['sample_for_norm'] if 'sample_for_norm' in sample_settings else None)
     
     iterator_train = iter(DataLoader(dataset_train,
                                      batch_size=batch_size,

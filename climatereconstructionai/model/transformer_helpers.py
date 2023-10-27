@@ -69,15 +69,15 @@ class PositionEmbedder_phys(nn.Module):
         nn.init.xavier_uniform_(self.embeddings_table)
 
 
-    def forward(self, d_mat):
+    def forward(self, coord):
 
-        d_mat_pos = self.n_pos_emb * (d_mat -self.min_pos_phys) / (self.max_pos_phys - self.min_pos_phys)
+        coord_pos = self.n_pos_emb * (coord -self.min_pos_phys) / (self.max_pos_phys - self.min_pos_phys)
 
-        d_mat_clipped = torch.clamp(d_mat_pos, 0, self.n_pos_emb)
+        coord_pos_clipped = torch.clamp(coord_pos, 0, self.n_pos_emb)
         
-        embeddings = self.embeddings_table[d_mat_clipped.long()]
+        embeddings = self.embeddings_table[coord_pos_clipped.long()]
 
-        return embeddings, d_mat_clipped.long()
+        return embeddings, coord_pos_clipped.long()
 
 
 class PositionEmbedder_phys_log(nn.Module):
@@ -152,9 +152,11 @@ class LinearPositionEmbedder_mlp(nn.Module):
         self.conv_coordinates = conv_coordinates
 
         self.rpe_mlp = nn.Sequential(
-            nn.Linear(2, hidden_dim, bias=False),
+            nn.Linear(2, hidden_dim, bias=True),
             nn.LeakyReLU(inplace=True, negative_slope=0.2),
-            nn.Linear(hidden_dim, model_dim, bias=False))
+            nn.Linear(hidden_dim, model_dim, bias=True),
+            nn.LeakyReLU(inplace=True, negative_slope=0.2)
+            )
        
 
     def forward(self, d_mat_lon, d_mat_lat):
@@ -164,13 +166,14 @@ class LinearPositionEmbedder_mlp(nn.Module):
         return rpe
 
 class RelativePositionEmbedder_mlp(nn.Module):
-    def __init__(self, model_dim, hidden_dim, device='cpu', transform='linear'):
+    def __init__(self, model_dim, hidden_dim, device='cpu', transform='linear',polar=False):
         super().__init__()
 
         self.transform = transform
 
+        self.polar = polar
         self.rpe_mlp = nn.Sequential(
-            nn.Linear(2, hidden_dim, bias=False),
+            nn.Linear(2+int(self.polar), hidden_dim, bias=False),
             nn.LeakyReLU(inplace=True, negative_slope=0.2),
             nn.Linear(hidden_dim, model_dim, bias=False))
 
@@ -181,11 +184,23 @@ class RelativePositionEmbedder_mlp(nn.Module):
         elif self.transform == 'inv':
             coords = conv_coordinates_inv(coords)
         
+
         if batched:
+            if self.polar:
+                dist, phi = coords.split(1, dim=1)
+                y = torch.sin(phi)
+                x = torch.cos(phi)
+                coords = torch.concat((dist,x,y),dim=1)
             coords = coords.unsqueeze(dim=-1).swapaxes(1,-1).squeeze()
         else:
+            if self.polar:
+                dist, phi = coords.split(1, dim=0)
+                y = torch.sin(phi)
+                x = torch.cos(phi)
+                coords = torch.concat((dist,x,y),dim=0)
             coords = coords = coords.unsqueeze(dim=-1).swapaxes(0,-1).squeeze()
 
+        
         rpe = self.rpe_mlp(coords)
     
         return rpe
@@ -203,44 +218,19 @@ def conv_coordinates_inv(coords, epsilon=1e-5):
     return sign * coords
 
 class RelativePositionEmbedder_par(nn.Module):
-    def __init__(self, settings, emb_table_lon=None, emb_table_lat=None, device='cpu'):
+    def __init__(self, n_params, min_vals, max_vals, out_dim, device='cpu'):
         super().__init__()
 
-        max_dist=settings['max_dist']
-        n_dist=settings['n_dist']
-        emb_dim=settings['emb_dim']
-        min_dist=settings['min_dist']
+        self.embedding1 = PositionEmbedder_phys(min_vals[0], max_vals[0], n_params[0], n_heads=out_dim, device=device)
+        self.embedding2 = PositionEmbedder_phys(min_vals[1], max_vals[1], n_params[1], n_heads=out_dim, device=device)
+
+    def forward(self, coords):
         
-        self.n_heads = emb_dim
+        embedding1 = self.embedding1(coords[:,0,:,:])[0]
+        embedding2 = self.embedding2(coords[:,1,:,:])[0]
 
-        if emb_table_lon is None:
-            self.emb_table_lon = RelPositionEmbedder_phys_log(min_dist/radius_earth, max_dist/radius_earth, n_dist, n_heads=emb_dim,device=device)
-        else:
-            self.emb_table_lon = emb_table_lon
-        
-        if emb_table_lat is None:
-            self.emb_table_lat = RelPositionEmbedder_phys_log(min_dist/radius_earth, max_dist/radius_earth, n_dist, n_heads=emb_dim,device=device)
-        else:
-            self.emb_table_lat = emb_table_lat
-
-
-    def forward(self, d_mat_lon, d_mat_lat, return_emb_idx=False):
-        
-        a_lon = self.emb_table_lon(d_mat_lon, return_emb_idx=return_emb_idx)
-        a_lat = self.emb_table_lat(d_mat_lat, return_emb_idx=return_emb_idx)
-   
-        if return_emb_idx:
-            idx_lon = a_lon[1]
-            a_lon = a_lon[0]
-            idx_lat = a_lat[1]
-            a_lat = a_lat[0]
-
-        rpe = a_lon + a_lat
-
-        if return_emb_idx:
-            return rpe, (idx_lon,idx_lat)
-        else:
-            return rpe
+        pos_emb = embedding1 * torch.sin(embedding2)
+        return pos_emb
 
 
 class SelfAttentionRPPEBlock(nn.Module):
@@ -335,13 +325,18 @@ def get_coord_relation(coords_target, coords_source, cart=True):
         phi = torch.atan2(diff[:,1,:,:], diff[:,0,:,:])
         return torch.stack((d_mat, phi), dim=1)
 
+def to_polar(dlon, dlat):
+    d_mat = torch.sqrt(dlon**2 + dlat**2)
+    phi = torch.atan2(dlon, dlat)
+    return d_mat, phi
 
 class nn_layer(nn.Module):
-    def __init__(self, nh, both_dims=False):
+    def __init__(self, nh, both_dims=False, cart=True):
         super().__init__()
 
         self.nh = nh
         self.both_dims = both_dims
+        self.cart = cart
 
 
     def forward(self, x, coords_target, coords_source, d_mat=None, skip_self=False):

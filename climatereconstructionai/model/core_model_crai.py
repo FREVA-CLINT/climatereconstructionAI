@@ -15,26 +15,24 @@ class CoreCRAI(psm.pyramid_step_model):
 
         model_settings = self.model_settings
 
-        input_dim = model_settings["input_dim"]
-        ff_dim = model_settings["ff_dim"]
+        output_dim = input_dim = model_settings["io_dim_core"]
         dropout = model_settings['dropout']
-        model_dim = model_settings['model_dim']
-        nh = model_settings['model_dim']
-
-        
-        if model_settings["gauss"]:
-            input_dim = input_dim*2
+        model_dim_core = model_settings['model_dim_core']
+   
 
         output_dim = input_dim
 
-        self.core_model = CRAINet(img_size_source=(self.n_lr, self.n_lr),
-                        img_size_target=(self.n_hr, self.n_hr),
+        if model_settings["gauss"]:
+            output_dim = output_dim*2
+
+        self.core_model = CRAINet(img_size_source=(self.n_in, self.n_in),
+                        img_size_target=(self.n_out, self.n_out),
                         enc_dec_layers=4,
                         pool_layers=2,
                         in_channels=input_dim,
                         out_channels=output_dim,
                         bounds=None,
-                        conv_factor=32,
+                        conv_factor=model_dim_core,
                         upsampling_mode='bicubic',
                         predict_residual=True)
 

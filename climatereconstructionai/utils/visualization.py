@@ -213,3 +213,35 @@ def get_all_error_maps(mask, steady_mask, output, gt, num_samples=3):
     error_maps = [create_error_map(mask, steady_mask, output, gt, num_samples=num_samples, operation=op, domain="valid")
                   for op in ['E', 'AE', 'RE', 'RAE']]
     return error_maps
+
+
+
+def create_scatter_plots(data_output, data_target, coords, var_spatial_dim_dict_target):
+
+    b,n,c,g = list(data_output.values())[0].shape
+
+    fig, axs = plt.subplots(len(data_output.keys()), 2+(g-1), squeeze=False, figsize=(5*len(data_output.keys()), 10*(2+(g-1))))
+
+    sample_idx = 0#np.random.randint(0,b,(1))
+
+    var_idx = 0
+
+    for var in data_output.keys():
+        coords_sd = coords[var_spatial_dim_dict_target[var]].cpu()
+        
+
+        p = axs[var_idx, 0].scatter(coords_sd[sample_idx,0], coords_sd[sample_idx,1], c=data_target[var][sample_idx,:,0])
+        axs[var_idx, 0].set_title(f'{var} - target')
+        plt.colorbar(p,ax=axs[var_idx, 0])
+
+        p =axs[var_idx, 1].scatter(coords_sd[sample_idx,0], coords_sd[sample_idx,1], c=data_output[var][sample_idx,:,0,0])
+        axs[var_idx, 1].set_title(f'{var} - output')
+        plt.colorbar(p,ax=axs[var_idx, 1])
+
+        if g>1:
+            p = axs[var_idx, 2].scatter(coords_sd[sample_idx,0], coords_sd[sample_idx,1], c=data_output[var][sample_idx,:,0,1])
+            axs[var_idx, 2].set_title(f'{var} - output std')
+            plt.colorbar(p,ax=axs[var_idx, 2])
+
+        var_idx+=1
+

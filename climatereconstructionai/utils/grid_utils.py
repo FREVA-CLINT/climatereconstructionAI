@@ -102,11 +102,18 @@ def get_coord_dict_from_var(ds, variable):
         
     lon_c = [var for var in coords if 'lon' in var]
     lat_c = [var for var in coords if 'lat' in var]
+    
+    if len(lon_c)==0:
+        len_points = len(ds.coords[spatial_dim].values)
+        dims_match = [dim for dim in ds.coords if len(ds[dim].values)==len_points]
+
+        lon_c = [var for var in dims_match if 'lon' in var]
+        lat_c = [var for var in dims_match if 'lat' in var]
 
     assert len(lon_c)==1, "no longitude variable was found"
     assert len(lat_c)==1, "no latitude variable was found"
 
-    return {'lon':lon_c[0],'lat':lat_c[0]}
+    return {'lon':lon_c[0],'lat':lat_c[0], 'spatial_dim': spatial_dim}
 
 
 

@@ -38,6 +38,8 @@ class CRAINet(nn.Module):
         self.recurrent_steps = recurrent_steps
         self.lstm_steps = lstm_steps
         self.gru_steps = gru_steps
+        self.in_channels = in_channels
+        self.out_channels = out_channels
 
         # initialize channel inputs and outputs and image size for encoder and decoder
         if n_filters is None:
@@ -215,7 +217,10 @@ class CRAINet(nn.Module):
                                                              h_mask, hs_mask[self.net_depth - i - 1],
                                                              None)
         if self.predict_residual:
-            h+=input_base
+            if self.in_channels != self.out_channels:
+                h[:,:,:self.in_channels] = h[:,:,:self.in_channels] + input_base
+            else:
+                h+=input_base
  
 
         if self.bounds is not None:
