@@ -140,11 +140,15 @@ def save_sample(ds, time_index, spatial_dims_dict, save_path):
 
     ds_save = copy.deepcopy(ds['ds'])
     
+    k = 0
     for spatial_dim, vars in spatial_dims_dict.items():
 
         dims = tuple(ds_save[vars[0]].dims)
         coord_names = get_coord_dict_from_var(ds_save, vars[0])
         indices = np.array(ds['spatial_dims'][spatial_dim]['region_indices']).squeeze()
+
+        if k>0:
+            time_index = 0
 
         if len(dims)==2:
             sel_indices = ([time_index], indices)
@@ -159,6 +163,8 @@ def save_sample(ds, time_index, spatial_dims_dict, save_path):
                       coord_names['lat']: ds['spatial_dims'][spatial_dim]['rel_coords'][1,:,0].numpy()}
 
         ds_save = ds_save.assign_coords(coord_dict)
+
+        k+=1
 
     ds_save.to_netcdf(save_path)
 
