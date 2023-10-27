@@ -15,12 +15,10 @@ class CoreCRAI(psm.pyramid_step_model):
 
         model_settings = self.model_settings
 
-        output_dim = input_dim = model_settings["io_dim_core"]
+        output_dim = len(model_settings["variables_target"])
+        input_dim = len(model_settings["variables_source"])
         dropout = model_settings['dropout']
         model_dim_core = model_settings['model_dim_core']
-   
-
-        output_dim = input_dim
 
         if model_settings["gauss"]:
             output_dim = output_dim*2
