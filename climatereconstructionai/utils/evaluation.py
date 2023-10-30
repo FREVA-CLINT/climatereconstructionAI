@@ -176,10 +176,10 @@ def create_outputs(data_dict, eval_path, output_names, data_stats, xr_dss, i_mod
             if cfg.normalize_data and cname != "mask":
                 data_dict[cname][:, j, :, :] = renormalize(data_dict[cname][:, j, :, :],
                                                            data_stats["mean"][i_data], data_stats["std"][i_data])
-                if cfg.cut_min is not None:
-                    data_dict[cname][:, j, :, :][data_dict[cname][:, j, :, :] < cfg.cut_min] = cfg.cut_min
-                if cfg.cut_max is not None:
-                    data_dict[cname][:, j, :, :][data_dict[cname][:, j, :, :] > cfg.cut_max] = cfg.cut_max
+            if cfg.cut_min is not None:
+                data_dict[cname][:, j, :, :][data_dict[cname][:, j, :, :] < cfg.cut_min] = cfg.cut_min
+            if cfg.cut_max is not None:
+                data_dict[cname][:, j, :, :][data_dict[cname][:, j, :, :] > cfg.cut_max] = cfg.cut_max
 
             ds[data_type] = xr.DataArray(data_dict[cname].to(torch.device('cpu')).detach().numpy()[:, j, :, :],
                                          dims=xr_dss[i_data][2], coords=xr_dss[i_data][3])
