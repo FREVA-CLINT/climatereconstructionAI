@@ -123,9 +123,9 @@ def infill(model, dataset, eval_path, output_names, data_stats, xr_dss, i_model,
             data_dict["output"] += data_dict["image"].to(cfg.device)
             data_dict["gt"] += data_dict["image"]
 
-        if cfg.cut_min:
+        if cfg.cut_min is not None:
             data_dict["output"][data_dict["output"] < cfg.cut_min] = cfg.cut_min
-        if cfg.cut_max:
+        if cfg.cut_max is not None:
             data_dict["output"][data_dict["output"] > cfg.cut_max] = cfg.cut_max
 
         for key in ('image', 'mask', 'gt', 'output'):
