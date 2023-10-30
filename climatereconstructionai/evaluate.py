@@ -84,7 +84,7 @@ def evaluate(arg_file=None, prog_func=None):
         else:
             if not cfg.split_outputs:
                 ds = xr.open_mfdataset(output_names[name], preprocess=store_encoding, autoclose=True, combine='nested',
-                                       data_vars='minimal', concat_dim="member", chunks={})
+                                       data_vars='minimal', concat_dim="time", chunks={})
 
                 ds["member"] = range(1, len(output_names[name]) + 1)
                 ds['time'].encoding = encoding
