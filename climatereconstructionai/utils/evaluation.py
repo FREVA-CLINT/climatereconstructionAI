@@ -123,6 +123,11 @@ def infill(model, dataset, eval_path, output_names, data_stats, xr_dss, i_model,
             data_dict["output"] += data_dict["image"].to(cfg.device)
             data_dict["gt"] += data_dict["image"]
 
+        if cfg.cut_min:
+            data_dict["output"][data_dict["output"] < cfg.cut_min] = cfg.cut_min
+        if cfg.cut_max:
+            data_dict["output"][data_dict["output"] > cfg.cut_max] = cfg.cut_max
+
         for key in ('image', 'mask', 'gt', 'output'):
             data_dict[key] = data_dict[key][:, cfg.recurrent_steps, :, :, :].to(torch.device('cpu'))
 

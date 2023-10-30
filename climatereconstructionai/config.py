@@ -316,4 +316,8 @@ def set_evaluate_args(arg_file=None, prog_func=None):
                             help="Do not merge the outputs when using multiple models and/or partitions")
     arg_parser.add_argument('-f', '--load-from-file', type=str, action=LoadFromFile,
                             help="Load all the arguments from a text file")
+    arg_parser.add_argument('--cut-min', type=float, default=None,
+                            help="Set all values smaller than this to value")
+    arg_parser.add_argument('--cut-max', type=float, default=None,
+                            help="Set all values greater than this to value")
     global_args(arg_parser, arg_file, prog_func)
