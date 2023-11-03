@@ -145,8 +145,8 @@ class nu_grid_sample(nn.Module):
 
         nh_m = ((nh-1)/2) + 0.5
 
-        self.pixel_offset_normal = torch.linspace(nh_m, -nh_m, n_res)
-        self.pixel_offset_indices = torch.linspace(-(nh-1)//2, (nh-1)//2, nh).int()
+        self.pixel_offset_normal = nn.Parameter(torch.linspace(nh_m, -nh_m, n_res), requires_grad=False)
+        self.pixel_offset_indices = nn.Parameter(torch.linspace(-(nh-1)//2, (nh-1)//2, nh).int(), requires_grad=False)
 
        # self.pixel_indices_xy = pixel_offset_indices.view(nh,1)*pixel_offset_indices.view(1,nh)
 
@@ -427,12 +427,12 @@ class pyramid_step_model(nn.Module):
         self.model_settings['grid_size_in'] = self.grid_size_in
         self.model_settings['grid_size_out'] = self.grid_size_out
        
-        c_range_lr =torch.linspace(self.range_region_rad[0], self.range_region_rad[1], self.n_in)
+        c_range_lr = torch.linspace(self.range_region_rad[0], self.range_region_rad[1], self.n_in)
 
         lon_lr = c_range_lr.view(-1,1).repeat(self.n_in,1)
         lat_lr = c_range_lr.view(-1,1).repeat(1, self.n_in).view(-1,1)
 
-        self.reg_coords_lr = torch.stack((lon_lr, lat_lr))
+        self.reg_coords_lr = nn.Parameter(torch.stack((lon_lr, lat_lr)), requires_grad=False)
 
 
     # -> high-level models first, cache results, then fusion

@@ -114,11 +114,19 @@ def train(model, training_settings, model_hparams={}):
     
     batch_size = training_settings['batch_size']
 
-    source_files_train = check_get_data_files(training_settings['train_data']['data_names_source'], root_path = training_settings['root_dir'], train_or_val='train')
-    target_files_train = check_get_data_files(training_settings['train_data']['data_names_target'], root_path = training_settings['root_dir'], train_or_val='train')        
+    source_files_train = check_get_data_files(training_settings['train_data']['data_names_source'], 
+                                              root_path = training_settings['root_dir'], 
+                                              train_or_val='train')
+    target_files_train = check_get_data_files(training_settings['train_data']['data_names_target'], 
+                                              root_path = training_settings['root_dir'], 
+                                              train_or_val='train')        
     
-    source_files_val = check_get_data_files(training_settings['val_data']['data_names_source'], root_path = training_settings['root_dir'], train_or_val='val')
-    target_files_val = check_get_data_files(training_settings['val_data']['data_names_target'], root_path = training_settings['root_dir'], train_or_val='val')      
+    source_files_val = check_get_data_files(training_settings['val_data']['data_names_source'],
+                                             root_path = training_settings['root_dir'], 
+                                             train_or_val='val')
+    target_files_val = check_get_data_files(training_settings['val_data']['data_names_target'], 
+                                            root_path = training_settings['root_dir'], 
+                                            train_or_val='val')      
 
     if len(training_settings["norm_stats"]) > 0:
         with open(training_settings["norm_stats"],'r') as file:
