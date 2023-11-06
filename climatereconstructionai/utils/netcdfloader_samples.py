@@ -271,9 +271,9 @@ class NetCDFLoader_lazy(Dataset):
             for var in unique_variables:
                 files = []
                 if var in self.variables_source:
-                    files+=files_source
+                    files+=list(files_source)
                 if var in self.variables_target:
-                    files+=files_target
+                    files+=list(files_target)
 
                 self.stat_dict[var] = get_stats(files, var, self.sample_for_norm)
             
