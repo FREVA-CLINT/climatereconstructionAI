@@ -1,7 +1,7 @@
 import os
 import json
 import argparse
-from climatereconstructionai.model import core_model_crai
+from climatereconstructionai.model import core_model_crai, pyramid_step_model
 
 
 parser = argparse.ArgumentParser()
@@ -17,15 +17,35 @@ if __name__ == "__main__":
         with open(script_dict,'r') as file:
             script_dict = json.load(file)
 
-    model = core_model_crai.CoreCRAI(script_dict['model_settings'])
-    model.set_training_configuration(train_settings=script_dict['training_settings'])
+    
+    model_init = False
 
-    for task in script_dict['tasks']:
+    for task_dict in script_dict['tasks']:
+        task = task_dict['task']
+
+        model_settings = script_dict['model_settings'] if "model_settings" not in task_dict.keys() else task_dict['model_settings']
+        train_settings = script_dict['training_settings'] if "training_settings" not in task_dict.keys() else task_dict['training_settings']
+
+        if task=='train_shell':
+            model = pyramid_step_model.pyramid_step_model(model_settings)
+        else:
+            if not model_init:
+                model = core_model_crai.CoreCRAI(model_settings)    
+                model_init = True
+
+        model.set_training_configuration(train_settings=train_settings)
+        
         if task=='sample_creation':
             model.create_samples(script_dict['sample_creation_settings'])
         
         elif task=='train_shell':
             model.train_(use_samples=True, subdir='shell')
 
-        elif task=='train':
+        elif task=='train_samples':
             model.train_(use_samples=True)
+
+        elif task=='train':
+            model.train_()
+
+        elif task=='train_with_pretrained_shell':
+            model.train_(use_samples=True, pretrain_subdir='shell')
