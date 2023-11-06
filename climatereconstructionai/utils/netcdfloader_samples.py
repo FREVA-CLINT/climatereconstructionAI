@@ -255,7 +255,7 @@ class NetCDFLoader_lazy(Dataset):
        
         if n_points_t is None:
             n_points_t = [coords.shape[1] for coords in rel_coords_dict_target.values()]
-            self.n_points_t = dict(zip(list(rel_coords_dict_target.keys()),n_points_t))
+            self.n_points_t = dict(zip(list(rel_coords_dict_target.keys()), n_points_t))
          
         n_dropout_source = [int((1-p_dropout_source) * n_points_s) for n_points_s in self.n_points_s.values()]
         self.n_dropout_source = dict(zip(list(self.n_points_s.keys()),n_dropout_source))
@@ -359,7 +359,7 @@ class NetCDFLoader_lazy(Dataset):
                     pad_rel_coords = rel_coords[spatial_dim][:,pad_indices,:]
                     rel_coords[spatial_dim] = torch.concat((rel_coords[spatial_dim], pad_rel_coords),dim=1)
 
-                for var in dims_variables_dict['var_spatial_dims'].keys(): 
+                for var in dims_variables_dict['var_spatial_dims'][spatial_dim]: 
                     data_var = data[var]       
 
                     if n_actual > n_pts:
