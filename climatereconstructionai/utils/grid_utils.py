@@ -146,6 +146,45 @@ def get_neighbours_of_grids(ds1, ds2, variable=None, coord_dict1=None, coord_dic
     return values, nh_indices
 
 
+def prepare_coordinates_ds_dict(ds_dict, tags, variables, flatten=False, random_region=None):
+
+    for tag in tags:
+        ds = ds_dict[tag]['ds']
+
+        ds_dict[tag]['spatial_dims'] = {}
+        ds_dict[tag]['var_spatial_dims'] = {}
+
+        spatial_dims = {}
+        for variable in variables:
+            
+            coord_dict = get_coord_dict_from_var(ds, variable)
+
+            lon = torch.tensor(ds[coord_dict['lon']].values) 
+            lat = torch.tensor(ds[coord_dict['lat']].values) 
+            
+            lon = lon.deg2rad() if lon.max()>2*torch.pi else lon 
+            lat = lat.deg2rad() if lat.max()>2*torch.pi else lat
+            
+            len_lon = len(lon) 
+            len_lat = len(lat) 
+
+            if flatten:
+                lon = lon.flatten().repeat(len_lat) 
+                lat = lat.view(-1,1).repeat(1,len_lon).flatten()
+            
+            spatial_coord_dict = {
+                'coords':
+                    {'lon': lon,
+                    'lat': lat}
+                        }
+            
+            ds_dict[tag]['spatial_dims'][coord_dict['spatial_dim']] = spatial_coord_dict
+            spatial_dims[variable] = coord_dict['spatial_dim']
+
+        ds_dict[tag]['var_spatial_dims'] = spatial_dims
+
+    return ds_dict
+
 def get_grid_relations(grids, coord_dict, regional=True, radius_regions_km=None, resolutions=None, min_overlap=3, radius_inc=100, save_file_path=None):
     #tbd: implement global
 
@@ -200,7 +239,7 @@ def get_grid_relations(grids, coord_dict, regional=True, radius_regions_km=None,
     return grid_data
 
 
-def get_parent_child_indices(parent_coords: torch.tensor, child_coords: torch.tensor, radius_km: int, radius_inc_km: int, in_deg=False, min_overlap=1, max_overlap=5):
+def get_parent_child_indices(parent_coords: torch.tensor, child_coords: torch.tensor, radius_km: float, radius_inc_km: float, in_deg=False, min_overlap=1, max_overlap=5):
 
     n_iter = 0
     min_overlap_criterion = True

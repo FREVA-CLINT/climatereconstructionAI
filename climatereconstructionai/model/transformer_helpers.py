@@ -180,9 +180,15 @@ class RelativePositionEmbedder_mlp(nn.Module):
     def forward(self, coords, batched=False):
         
         if self.transform == 'log':
-            coords = conv_coordinates_log(coords)
+            if self.polar:
+                coords[0] = conv_coordinates_log(coords[0])
+            else:
+                coords = conv_coordinates_log(coords)
         elif self.transform == 'inv':
-            coords = conv_coordinates_inv(coords)
+            if self.polar:
+                coords[0] = conv_coordinates_inv(coords[0])
+            else:
+                coords = conv_coordinates_inv(coords)
         
 
         if batched:

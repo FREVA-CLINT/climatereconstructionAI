@@ -14,66 +14,26 @@ from ..utils.io import load_ckpt
 from ..utils import grid_utils as gu
 
 
-class nh_spa_mapper(nn.Module):
-    def __init__(self, nh, input_dim, ff_dim, model_dim, output_dim, n_heads=4, dropout=0, PE=None, add_pe=False, polar=False) -> None: 
+class nh_spa_mapper_simple(nn.Module):
+    def __init__(self, nh, input_dim, model_dim, dropout=0, PE=None, polar=False) -> None: 
         super().__init__()
 
         self.nh = nh
         self.md_nh = model_dim // nh
-        ff_dim_nh = ff_dim // nh
-        self.n_heads = n_heads
-
-        self.add_pe = add_pe
 
         self.nn_layer = helpers.nn_layer(nh, both_dims=False)
 
         self.polar=polar
 
         self.PE = PE
+
+        self.k_proj = nn.Sequential(nn.Linear(self.md_nh*self.nh, self.nh, bias=True))
         
-        if input_dim>1:
-            self.mlp_input = nn.Sequential(
-                nn.Linear(input_dim, self.md_nh, bias=True),
-                nn.LeakyReLU(inplace=True, negative_slope=0.2),
-                nn.Linear(self.md_nh, self.md_nh, bias=True),
-            )
-        else:
-            self.mlp_input = nn.Identity()
-     
+        self.softm = nn.Softmax(dim=-1)
+
+
+        self.v_proj = nn.Identity()
         
-        self.local_att = helpers.MultiHeadAttentionBlock(
-            self.md_nh, self.md_nh, n_heads, logit_scale=True, qkv_proj=False
-            )
-
-        self.q_proj = nn.Linear(self.md_nh, self.md_nh, bias=False)
-        self.k_proj = nn.Linear(self.md_nh, self.md_nh, bias=False)
-
-        if add_pe or input_dim>1:
-            v_input_dim = self.md_nh
-        else:
-            v_input_dim = 1
-
-        self.v_proj = nn.Linear(v_input_dim, self.md_nh, bias=False)
-        
-        self.mlp_layer_nh = nn.Sequential(
-            nn.Linear(self.md_nh, ff_dim_nh, bias=True),
-            nn.Dropout(dropout),
-            nn.LeakyReLU(inplace=True, negative_slope=0.2),
-            nn.Linear(ff_dim_nh, 1, bias=True),
-            nn.LeakyReLU(inplace=True, negative_slope=0.2)
-
-        )
-
-        self.mlp_layer_output = nn.Sequential(
-            nn.Linear(self.md_nh*nh, ff_dim, bias=True),
-            nn.Dropout(dropout),
-            nn.LeakyReLU(inplace=True, negative_slope=0.2),
-            nn.Linear(ff_dim, output_dim, bias=True),
-            nn.LeakyReLU(inplace=True, negative_slope=0.2)
-
-            )
-        
-
         self.mlp_layer_nh = nn.Identity()
 
         self.dropout1 = nn.Dropout(dropout)
@@ -81,17 +41,14 @@ class nh_spa_mapper(nn.Module):
         self.pe_dropout = nn.Dropout(dropout) if PE is not None else nn.Identity()
 
         self.norm1 = nn.LayerNorm(self.md_nh)
-       #self.norm3 = nn.LayerNorm(self.md_nh*nh)
 
     def forward(self, x, coords_target, coords_source, d_mat=None, return_debug=False):
         
         pos_enc = None 
-       
-        x = self.mlp_input(x)
-        
+
         #get nearest neighbours
         x_nh, _, cs_nh = self.nn_layer(x, coords_target, coords_source, d_mat=d_mat, skip_self=False)
-        
+
         if self.polar:
             d_mat, phi = helpers.to_polar(cs_nh[:,0,:,:], cs_nh[:,1,:,:])
             cs_nh = torch.stack((d_mat,phi),dim=1)
@@ -100,43 +57,27 @@ class nh_spa_mapper(nn.Module):
         batched = cs_nh.shape[0] == b
         
         pe = self.pe_dropout(self.PE(cs_nh, batched=batched))
+       
+        k = self.norm1(pe).reshape(b*t,nh,self.md_nh)
 
-        if self.add_pe:
-            v = q = k = self.norm1(x_nh + pe).reshape(b*t,nh,self.md_nh)
-      
-        else:
-            q = k = self.norm1(x_nh + pe).reshape(b*t,nh,self.md_nh)
-            #q = k = self.norm1(pe).reshape(b*t,nh,self.md_nh)
-            v = x_nh.reshape(b*t,nh,x_nh.shape[-1])
-
-        v = self.v_proj(v)
-        q = self.q_proj(q)
-        k = self.k_proj(k)
+        k = self.k_proj(k.reshape(b*t,self.nh*self.md_nh))
+        k = self.softm(k).unsqueeze(dim=-1)
 
         x_nh = x_nh.reshape(b*t,nh,e)
+        x_nh = x_nh*k
+
+        x = x_nh.sum(dim=1).view(b,t,e)
+
 
         if return_debug:
             pos_enc = pe
-
-       # att_out, _ = helpers.scaled_dot_product_rpe_swin(q,k,v)
-        att_out, att = self.local_att(q, k, v, rel_pos_bias=None, return_debug=True)
-            
-        x_nh = (x_nh + self.mlp_layer_nh(att_out))/2
-        
-        #x_nh = self.norm2(x_nh)
-        x_nh = x_nh.view(b,t,self.nh*self.md_nh)
-        
-        #x_nh = x_nh.transpose(-2,-1)
-        x = self.mlp_layer_output(x_nh) #+ m
-
-
-        if return_debug:
             debug_information = {"atts": att.detach(),
                                  "pos_encs":pos_enc}
             
             return x, debug_information
         else:
             return x
+
         
 class nu_grid_sample(nn.Module):
     
@@ -147,8 +88,6 @@ class nu_grid_sample(nn.Module):
 
         self.pixel_offset_normal = nn.Parameter(torch.linspace(nh_m, -nh_m, n_res), requires_grad=False)
         self.pixel_offset_indices = nn.Parameter(torch.linspace(-(nh-1)//2, (nh-1)//2, nh).int(), requires_grad=False)
-
-       # self.pixel_indices_xy = pixel_offset_indices.view(nh,1)*pixel_offset_indices.view(1,nh)
 
         self.s = s
         self.n_res = n_res
@@ -228,18 +167,17 @@ class input_net(nn.Module):
         ff_dim_nh = ff_dim // nh
 
         if model_settings['abs_pe']:
-            self.abs_pe = helpers.RelativePositionEmbedder_mlp(model_dim, ff_dim, transform='inv')
+            self.abs_pe = helpers.RelativePositionEmbedder_mlp(model_dim, ff_dim, transform=model_settings['transform'])
         else:
             self.abs_pe = None
 
-        PE = helpers.RelativePositionEmbedder_mlp(model_dim_nh, ff_dim_nh, transform='lin', polar=polar)
+        PE = helpers.RelativePositionEmbedder_mlp(model_dim_nh, ff_dim_nh, transform=model_settings['transform'], polar=polar)
 
         self.nh_mapping = nn.ModuleList()
         for n in range(n_mappers):
             self.nh_mapping.append(
-                nh_spa_mapper(nh, input_dims[n], ff_dim, model_dim, input_dims[n], n_heads=n_heads, PE=PE, add_pe=model_settings['add_pe'], polar=polar)
+                nh_spa_mapper_simple(nh, input_dims[n], model_dim,PE=PE, polar=polar)
             )
-    
     
     def forward(self, x: dict, coords_source: dict, coords_source_reg):
 
@@ -255,11 +193,11 @@ class input_net(nn.Module):
             x_spatial_dims.append(self.nh_mapping[nh_mapping_iter](data, coords_source_reg, coords_source[spatial_dim]))
             nh_mapping_iter += 1
         x = torch.concat(x_spatial_dims, dim=-1)
+
         return x
     
 def normal(x, mu, s):
     return torch.exp(-0.5*((x-mu)/s)**2)/(s*torch.tensor(math.sqrt(2*math.pi)))
-
 
 
 def scale_coords(coords, mn, mx):
@@ -302,7 +240,13 @@ class output_net(nn.Module):
             self.output_dims = [out_dim*2 for out_dim in self.output_dims]
 
         self.activation_mu = nn.Identity()
-        self.activation_std = nn.Softplus() if self.gauss else nn.Identity()
+    #    self.activation_std = nn.functional.softplus() if self.gauss else nn.Identity()
+
+        total_dim_output = int(torch.sum(torch.tensor(self.output_dims)).sum())
+        
+        if model_settings['gauss']:
+            total_dim_output *=2
+
 
     def forward(self, x, coords_target):
         
@@ -317,15 +261,14 @@ class output_net(nn.Module):
             data = self.grid_to_target(data, coords_target[spatial_dim])
 
             if self.gauss:
-                data = torch.split(data, 2, dim=-1)
-                data = torch.stack((self.activation_mu(data[0]),self.activation_std(data[1])), dim=-1)
+                data = torch.split(data, len(vars), dim=-1)
+                data = torch.stack((self.activation_mu(data[0]), nn.functional.softplus(data[1])), dim=-1)
             else:
                 data = self.activation_mu(data).unsqueeze(dim=-1)
             
             data_out.update(dict(zip(vars, torch.split(data, 1, dim=2))))
 
         return data_out
-        
 
 
 class pyramid_step_model(nn.Module):
@@ -353,6 +296,7 @@ class pyramid_step_model(nn.Module):
 
         self.check_model_dir()
 
+        self.norm = nn.LayerNorm(len(self.model_settings["variables_source"]))
 
         if load_pretrained:
             self.check_pretrained(model_dir_check=self.model_settings['model_dir'])
@@ -363,18 +307,25 @@ class pyramid_step_model(nn.Module):
         coords_target = scale_coords(coords_target, self.range_region_rad[0], self.range_region_rad[1])
 
         x = self.input_net(x, coords_source, self.reg_coords_lr)
-                
+
         b, n, c = x.shape
         x = x.view(b, int(math.sqrt(n)), int(math.sqrt(n)), c)
 
-        x_reg = x.clone()
+        x_res = x
+        x_reg = x_res.clone()
 
 
-        if self.core_model is not nn.Identity():
+        if not isinstance(self.core_model,nn.Identity):
+            x = self.norm(x)
             x = x.permute(0,-1,1,2).unsqueeze(dim=1)
             x = self.core_model(x)
             x = x[:,0].permute(0,-2,-1,1)
+          
+            x[:,:,:,:len(self.model_settings['variables_target'])] = x[:,:,:,:len(self.model_settings['variables_target'])] + x_res
+            
 
+        else:
+            x = x_res
         x = self.output_net(x, coords_target)
 
         return x, x_reg
@@ -521,10 +472,9 @@ class pyramid_step_model(nn.Module):
                 weights_paths.sort(key=getint)
                 if len(weights_path)>0:
                     weights_path = os.path.join(ckpt_dir, weights_paths[-1])
-                else:
-                    raise Exception("No pretrained model was found")
-                
-            self.load_pretrained(weights_path)
+            
+            if os.path.isfile(weights_path):
+                self.load_pretrained(weights_path)
 
     def load_pretrained(self, ckpt_path:str, device=None):
         ckpt_dict = torch.load(ckpt_path)

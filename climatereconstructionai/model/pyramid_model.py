@@ -3,6 +3,7 @@ import os
 import copy
 import torch
 import torch.nn as nn
+import xarray as xr
 from .. import transformer_training as trainer
 
 import climatereconstructionai.model.transformer_helpers as helpers
@@ -24,7 +25,7 @@ class pyramid_model(nn.Module):
 
         self.check_model_dir()
 
-        self.load_step_models()
+        #self.load_step_models()
 
         self.check_load_relations()
 
@@ -50,16 +51,47 @@ class pyramid_model(nn.Module):
         if self.pre_computed_relations:
             self.relations = torch.load(self.relation_fp)
         else:
-            grids = [self.model_settings['region_grid'], self.pysm_models[0].model_settings['input_grid'], self.pysm_models[0].model_settings['output_grid']]
-            coord_dict = self.pysm_models[0].model_settings['coord_dict']
-            radius_region =  self.pysm_models[0].model_settings['radius_region_km']
-            self.relations = gu.get_grid_relations(grids, coord_dict, save_file_path=self.relation_fp, radius_regions_km=radius_region, resolutions=self.model_settings['resolutions'])
+            
+            region_grid = xr.load_dataset(self.model_settings['region_grid'])
+            parent_coords = gu.get_coords_as_tensor(region_grid, lon='clon', lat='clat')
+
+            if "radius_region" not in self.model_settings.keys():
+                radius_region_km =  2*xr.load_dataset(self.model_settings['region_grid']).mean_dual_edge_length/1000
+            else:
+                radius_region_km = self.model_settings["radius_region"]
+            
+            if "radius_inc" not in self.model_settings.keys():
+                radius_inc = 100
+            else:
+                radius_inc = self.model_settings["radius_inc"]
+
+            ds_output = xr.load_dataset(self.model_settings["data_file_output"])
+            ds_dict = gu.prepare_coordinates_ds_dict({0: {'ds': ds_output}},[0], self.model_settings['variables'])
+            child_coords_spatial_dims = ds_dict[0]['spatial_dims']
+
+            relations = {}
+            for spatial_dim, coords in child_coords_spatial_dims.items():
+                child_coords = torch.stack(tuple(coords['coords'].values()),dim=0)
+
+                relation_dict, radius_region_km = gu.get_parent_child_indices(parent_coords, child_coords, radius_region_km, radius_inc, min_overlap=self.model_settings["min_overlap_regions"])
+
+                rel_coords_children = gu.get_relative_coordinates_grids(parent_coords, child_coords, relation_dict, relative_to='parents')
+                rel_coords_parents = gu.get_relative_coordinates_grids(parent_coords, child_coords, relation_dict, relative_to='children')
+
+                relations[spatial_dim] = {
+                    'indices': relation_dict,
+                    'rel_coords_children': rel_coords_children,
+                    'rel_coords_parents': rel_coords_parents
+                }
+
+            torch.save(relations, self.relation_fp)
+            
 
     def load_step_models(self):
         self.pysm_models = nn.ModuleList()
 
         for pys_model_dir in self.model_settings["step_models"]:
-            pys_model = cmc.CoreCRAI(pys_model_dir)
+            pys_model = cmc.CoreCRAI(pys_model_dir, load_pretrained=True)
             self.pysm_models.append(pys_model)
 
     def forward(self):

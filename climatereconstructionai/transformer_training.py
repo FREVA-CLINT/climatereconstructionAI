@@ -11,7 +11,7 @@ from tqdm import tqdm
 from .utils import twriter_t, early_stopping
 from .utils.io import save_ckpt
 from .utils.netcdfloader_trans import NetCDFLoader, InfiniteSampler
-
+from .utils.netcdfloader_samples import NetCDFLoader_lazy
 
 class GaussLoss(nn.Module):
     def __init__(self):
@@ -134,40 +134,78 @@ def train(model, training_settings, model_hparams={}):
     else:
         stat_dict = None
 
-    dataset_train = NetCDFLoader(source_files_train, 
-                                 target_files_train,
-                                 training_settings['variables_source'],
-                                 training_settings['variables_target'],
-                                 random_region=random_region,
-                                 apply_img_norm=training_settings['apply_img_norm'],
-                                 normalize_data=training_settings['normalize_data'],
-                                 stat_dict=stat_dict,
-                                 p_dropout_source=training_settings['p_dropout_source'],
-                                 p_dropout_target=training_settings['p_dropout_target'],
-                                 sampling_mode=training_settings['sampling_mode'],
-                                 coordinate_pert=training_settings['coordinate_pertubation'],
-                                 index_range=training_settings['index_range'] if 'index_range' in training_settings else None,
-                                 rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False,
-                                 lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
-                                 sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
-                                 norm_stats_save_path=training_settings['model_dir'])
+    if training_settings["very_lazy_load"]:
+        dataset_train = NetCDFLoader_lazy(source_files_train, 
+                                    target_files_train,
+                                    training_settings['variables_source'],
+                                    training_settings['variables_target'],
+                                    random_region=random_region,
+                                    apply_img_norm=training_settings['apply_img_norm'],
+                                    normalize_data=training_settings['normalize_data'],
+                                    stat_dict=stat_dict,
+                                    p_dropout_source=training_settings['p_dropout_source'],
+                                    p_dropout_target=training_settings['p_dropout_target'],
+                                    sampling_mode=training_settings['sampling_mode'],
+                                    coordinate_pert=training_settings['coordinate_pertubation'],
+                                    index_range=training_settings['index_range'] if 'index_range' in training_settings else None,
+                                    rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False,
+                                    lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
+                                    sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
+                                    norm_stats_save_path=training_settings['model_dir'])
+        
+        dataset_val = NetCDFLoader_lazy(source_files_val, 
+                                    target_files_val,
+                                    training_settings['variables_source'],
+                                    training_settings['variables_target'],
+                                    random_region=random_region,
+                                    apply_img_norm=training_settings['apply_img_norm'],
+                                    normalize_data=training_settings['normalize_data'],
+                                    stat_dict=dataset_train.stat_dict if stat_dict is None else stat_dict,
+                                    p_dropout_source=training_settings['p_dropout_source'],
+                                    p_dropout_target=training_settings['p_dropout_target'],
+                                    sampling_mode=training_settings['sampling_mode'],
+                                    coordinate_pert=0,
+                                    index_range=training_settings['index_range'] if 'index_range' in training_settings else None,
+                                    rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False,
+                                    lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
+                                    sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None)
     
-    dataset_val = NetCDFLoader(  source_files_val, 
-                                 target_files_val,
-                                 training_settings['variables_source'],
-                                 training_settings['variables_target'],
-                                 random_region=random_region,
-                                 apply_img_norm=training_settings['apply_img_norm'],
-                                 normalize_data=training_settings['normalize_data'],
-                                 stat_dict=dataset_train.stat_dict if stat_dict is None else stat_dict,
-                                 p_dropout_source=training_settings['p_dropout_source'],
-                                 p_dropout_target=training_settings['p_dropout_target'],
-                                 sampling_mode=training_settings['sampling_mode'],
-                                 coordinate_pert=0,
-                                 index_range=training_settings['index_range'] if 'index_range' in training_settings else None,
-                                 rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False,
-                                 lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
-                                 sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None)
+
+    else:
+        dataset_train = NetCDFLoader(source_files_train, 
+                                    target_files_train,
+                                    training_settings['variables_source'],
+                                    training_settings['variables_target'],
+                                    random_region=random_region,
+                                    apply_img_norm=training_settings['apply_img_norm'],
+                                    normalize_data=training_settings['normalize_data'],
+                                    stat_dict=stat_dict,
+                                    p_dropout_source=training_settings['p_dropout_source'],
+                                    p_dropout_target=training_settings['p_dropout_target'],
+                                    sampling_mode=training_settings['sampling_mode'],
+                                    coordinate_pert=training_settings['coordinate_pertubation'],
+                                    index_range=training_settings['index_range'] if 'index_range' in training_settings else None,
+                                    rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False,
+                                    lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
+                                    sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
+                                    norm_stats_save_path=training_settings['model_dir'])
+        
+        dataset_val = NetCDFLoader(source_files_val, 
+                                    target_files_val,
+                                    training_settings['variables_source'],
+                                    training_settings['variables_target'],
+                                    random_region=random_region,
+                                    apply_img_norm=training_settings['apply_img_norm'],
+                                    normalize_data=training_settings['normalize_data'],
+                                    stat_dict=dataset_train.stat_dict if stat_dict is None else stat_dict,
+                                    p_dropout_source=training_settings['p_dropout_source'],
+                                    p_dropout_target=training_settings['p_dropout_target'],
+                                    sampling_mode=training_settings['sampling_mode'],
+                                    coordinate_pert=0,
+                                    index_range=training_settings['index_range'] if 'index_range' in training_settings else None,
+                                    rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False,
+                                    lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
+                                    sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None)
     
     iterator_train = iter(DataLoader(dataset_train,
                                      batch_size=batch_size,
