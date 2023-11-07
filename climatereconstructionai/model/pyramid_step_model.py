@@ -313,7 +313,7 @@ class pyramid_step_model(nn.Module):
         b, n, c = x.shape
         x = x.view(b, int(math.sqrt(n)), int(math.sqrt(n)), c)
         
-        x_reg = x.clone()
+        x_reg = x
 
         if not isinstance(self.core_model,nn.Identity):
             #x = self.norm(x)
@@ -437,25 +437,6 @@ class pyramid_step_model(nn.Module):
         train_settings['model_dir'] = self.model_dir
 
         trainer.train(self, train_settings, self.model_settings)
-
-
-
-    def create_samples(self, sample_settings=None):
-        
-        sample_settings = load_settings(sample_settings, 'model')
-
-        if "random_region" not in sample_settings.keys():
-            sample_settings["random_region"] = self.get_region_generator_settings()
-
-        sample_settings["variables_source"] = self.model_settings["variables_source"]
-        sample_settings["variables_target"] = self.model_settings["variables_target"]
-
-        sample_settings["model_dir"] = self.model_dir
-
-        if 'norm_stats' not in sample_settings.keys():
-            sample_settings['norm_stats'] = self.norm_stats_file
-        
-        trainer.create_samples(sample_settings)
 
 
     def check_pretrained(self, model_dir_check=''):

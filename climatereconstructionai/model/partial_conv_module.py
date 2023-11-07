@@ -7,9 +7,9 @@ from ..utils.masked_batchnorm import MaskedBatchNorm2d
 from ..utils.weights import weights_init
 
 
-def bound_pad(input, padding):
-    input = F.pad(input, (0, 0, padding[2], 0), "constant", 0.)
-    input = F.pad(input, (0, 0, 0, padding[3]), "constant", 0.)
+def bound_pad(input, padding, value=0.):
+    input = F.pad(input, (0, 0, padding[2], 0), "constant", value)
+    input = F.pad(input, (0, 0, 0, padding[3]), "constant", value)
     input = F.pad(input, (padding[0], padding[1], 0, 0), mode="circular")
 
     return input
@@ -50,7 +50,7 @@ class PConvBlock(nn.Module):
 
     def forward(self, input, mask):
 
-        pad_input = self.trans_pad(input, self.padding)
+        pad_input = self.trans_pad(input, self.padding, "replicate")
         pad_mask = self.trans_pad(mask, self.padding)
 
         output = self.input_conv(pad_input * pad_mask)

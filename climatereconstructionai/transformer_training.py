@@ -213,7 +213,7 @@ def train(model, training_settings, model_hparams={}):
    
     early_stop = early_stopping.early_stopping(training_settings['early_stopping_delta'], training_settings['early_stopping_patience'])
     
-    optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=training_settings['lr'], weight_decay=0.05)
+    optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=training_settings['lr'])
 
     lr_scheduler = CosineWarmupScheduler(optimizer, training_settings["T_warmup"], training_settings['max_iter'])
 
@@ -309,96 +309,3 @@ def train(model, training_settings, model_hparams={}):
               [(str(n_iter), n_iter, early_stop.best_model, optimizer)])
 
     writer.close()
-
-
-def create_samples(sample_settings):
-
-    print("* Number of GPUs: ", torch.cuda.device_count())
-
-    sample_dir = sample_settings['sample_dir']
-    sample_dir_train = os.path.join(sample_settings['sample_dir'], 'train')
-    sample_dir_val = os.path.join(sample_settings['sample_dir'], 'val')
-
-    if not os.path.exists(sample_dir_train):
-        os.makedirs(sample_dir_train)
-
-    if not os.path.exists(sample_dir_val):
-        os.makedirs(sample_dir_val)
-
-    if 'random_region' not in sample_settings.keys():
-        random_region = None
-    else:
-        random_region = sample_settings['random_region']
-    
-    batch_size = sample_settings['batch_size']
-
-    source_files_train = check_get_data_files(sample_settings['train_data']['data_names_source'], root_path = sample_settings['root_dir'], train_or_val='train')
-    target_files_train = check_get_data_files(sample_settings['train_data']['data_names_target'], root_path = sample_settings['root_dir'], train_or_val='train')        
-    
-    source_files_val = check_get_data_files(sample_settings['val_data']['data_names_source'], root_path = sample_settings['root_dir'], train_or_val='val')
-    target_files_val = check_get_data_files(sample_settings['val_data']['data_names_target'], root_path = sample_settings['root_dir'], train_or_val='val')      
-
-    if len(sample_settings["norm_stats"])>1:
-        with open(sample_settings["norm_stats"],'r') as file:
-            stat_dict = json.load(file)
-    else:
-        stat_dict = None
-
-    dataset_train = NetCDFLoader(source_files_train, 
-                                 target_files_train,
-                                 sample_settings['variables_source'],
-                                 sample_settings['variables_target'],
-                                 random_region=random_region,
-                                 apply_img_norm=False,
-                                 normalize_data=False,
-                                 stat_dict=stat_dict,
-                                 p_dropout_source=0,
-                                 p_dropout_target=0,
-                                 sampling_mode=sample_settings['sampling_mode'],
-                                 coordinate_pert=0,
-                                 save_sample_path=sample_dir_train,
-                                 index_range=sample_settings['index_range'] if 'index_range' in sample_settings else None,
-                                 lazy_load=sample_settings['lazy_load'] if 'lazy_load' in sample_settings else False,
-                                 sample_for_norm=sample_settings['sample_for_norm'] if 'sample_for_norm' in sample_settings else None,
-                                 norm_stats_save_path=sample_settings['model_dir'])
-    
-    dataset_val = NetCDFLoader(  source_files_val, 
-                                 target_files_val,
-                                 sample_settings['variables_source'],
-                                 sample_settings['variables_target'],
-                                 random_region=random_region,
-                                 apply_img_norm=False,
-                                 normalize_data=False,
-                                 stat_dict=dataset_train.stat_dict if stat_dict is None else stat_dict,
-                                 p_dropout_source=0,
-                                 p_dropout_target=0,
-                                 sampling_mode=sample_settings['sampling_mode'],
-                                 coordinate_pert=0,
-                                 save_sample_path=sample_dir_val,
-                                 index_range=sample_settings['index_range'] if 'index_range' in sample_settings else None,
-                                 lazy_load=sample_settings['lazy_load'] if 'lazy_load' in sample_settings else False,
-                                 sample_for_norm=sample_settings['sample_for_norm'] if 'sample_for_norm' in sample_settings else None)
-    
-    iterator_train = iter(DataLoader(dataset_train,
-                                     batch_size=batch_size,
-                                     sampler=InfiniteSampler(len(dataset_train)),
-                                     num_workers=sample_settings['n_workers']))
-
-    iterator_val = iter(DataLoader(dataset_val,
-                                    batch_size=batch_size,
-                                    sampler=InfiniteSampler(len(dataset_val)),
-                                    num_workers=sample_settings['n_workers']))
-    
-
-    start_iter = 0
-
-    pbar = tqdm(range(start_iter, sample_settings['n_samples_train']))
-
-    for i in pbar:      
-        next(iterator_train)
-
-
-    pbar = tqdm(range(start_iter, sample_settings['n_samples_val']))
-
-    for i in pbar:
-        next(iterator_val)
