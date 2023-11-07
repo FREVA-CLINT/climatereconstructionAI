@@ -9,9 +9,29 @@ import numpy as np
 import torch
 import xarray as xr
 from torch.utils.data import Dataset, Sampler
-
-from .netcdfchecker import dataset_formatter
 from .grid_utils import generate_region, PositionCalculator, get_coord_dict_from_var, get_coords_as_tensor
+
+class InfiniteSampler(Sampler):
+    def __init__(self, num_samples, data_source=None):
+        super().__init__(data_source)
+        self.num_samples = num_samples
+
+    def __iter__(self):
+        return iter(self.loop())
+
+    def __len__(self):
+        return 2 ** 31
+
+    def loop(self):
+        i = 0
+        n_samples = self.num_samples 
+        order = np.random.permutation(n_samples) 
+        while True:
+            yield order[i]
+            i += 1
+            if i >= n_samples:
+                order = np.random.permutation(n_samples) 
+                i = 0
 
 def calc_stats(data):
     stat_dict = {
@@ -72,44 +92,6 @@ class FiniteSampler(Sampler):
 
     def __len__(self):
         return self.num_samples
-
-
-def prepare_coordinates(ds, variables, flatten=False, random_region=None):
-
-    coord_dict_variables = {'spatial_dims': {},
-                            'var_spatial_dims':{}}
-    
-
-    spatial_dims = {}
-    for variable in variables:
-        
-        coord_dict = get_coord_dict_from_var(ds, variable)
-
-        lon = torch.tensor(ds[coord_dict['lon']].values) 
-        lat = torch.tensor(ds[coord_dict['lat']].values) 
-        
-        lon = lon.deg2rad() if lon.max()>2*torch.pi else lon 
-        lat = lat.deg2rad() if lat.max()>2*torch.pi else lat
-        
-        len_lon = len(lon) 
-        len_lat = len(lat) 
-
-        if flatten:
-            lon = lon.flatten().repeat(len_lat) 
-            lat = lat.view(-1,1).repeat(1,len_lon).flatten()
-        
-        spatial_coord_dict = {
-            'coords':
-                {'lon': lon,
-                'lat': lat}
-                    }
-            
-        coord_dict_variables['spatial_dims'][coord_dict['spatial_dim']] = spatial_coord_dict
-        spatial_dims[variable] = coord_dict['spatial_dim']
-
-    coord_dict_variables['var_spatial_dims'] = spatial_dims
-
-    return coord_dict_variables
 
 
 def get_dims_coordinates(ds, variables, flatten=False):
@@ -201,7 +183,6 @@ class NetCDFLoader_lazy(Dataset):
                  save_sample_path='',
                  index_range=None,
                  rel_coords=False,
-                 lazy_load=False,
                  sample_for_norm=-1,
                  norm_stats_save_path=''):
         
@@ -223,7 +204,6 @@ class NetCDFLoader_lazy(Dataset):
         self.save_sample_path = save_sample_path
         self.index_range=index_range
         self.rel_coords=rel_coords
-        self.lazy_load=lazy_load
         self.sample_for_norm = sample_for_norm
         self.norm_stats_save_path = norm_stats_save_path
 
@@ -243,25 +223,10 @@ class NetCDFLoader_lazy(Dataset):
         self.dims_variables_source = get_dims_coordinates(ds_source, self.variables_source)    
         self.dims_variables_target = get_dims_coordinates(ds_target, self.variables_target)         
 
-        self.num_datapoints = ds_source[self.variables_source[0]].shape[0]        
-           
-        rel_coords_dict_source = self.update_coordinates(ds_source, self.dims_variables_source)
+        self.num_datapoints_time = ds_source[self.variables_source[0]].shape[0]
 
-        if n_points_s is None:
-            n_points_s = [coords.shape[1] for coords in rel_coords_dict_source.values()]
-            self.n_points_s = dict(zip(list(rel_coords_dict_source.keys()),n_points_s))
-
-        rel_coords_dict_target = self.update_coordinates(ds_target, self.dims_variables_target)
-       
-        if n_points_t is None:
-            n_points_t = [coords.shape[1] for coords in rel_coords_dict_target.values()]
-            self.n_points_t = dict(zip(list(rel_coords_dict_target.keys()), n_points_t))
-         
-        n_dropout_source = [int((1-p_dropout_source) * n_points_s) for n_points_s in self.n_points_s.values()]
-        self.n_dropout_source = dict(zip(list(self.n_points_s.keys()),n_dropout_source))
-        
-        n_dropout_target = [int((1-p_dropout_target) * n_points_t) for n_points_t in self.n_points_t.values()]
-        self.n_dropout_target = dict(zip(list(self.n_points_t.keys()),n_dropout_target))
+        _, _, seeds, self.n_dict_source = self.get_coordinates(ds_source, self.dims_variables_source, p_drop=p_dropout_source)
+        _, _, _, self.n_dict_target = self.get_coordinates(ds_target, self.dims_variables_target, seeds=seeds, p_drop=p_dropout_target)
 
         if stat_dict is None:
             self.stat_dict = {}
@@ -286,47 +251,107 @@ class NetCDFLoader_lazy(Dataset):
         self.normalizer = normalizer(self.stat_dict)
 
 
-    def input_dropout(self, x, coords, n_drop, spatial_dims_var_dict):
-        
-        coords_drop_indices = {}
-        coords_drop = copy.deepcopy(coords)
 
-        for spatial_dim, spatial_coords in coords_drop.items():
-            
-            indices = torch.randperm(spatial_coords.shape[1]-1)[:n_drop[spatial_dim]]
-            coords_drop_indices[spatial_dim] = indices
-            coords_drop[spatial_dim] = spatial_coords[:,indices,:]
+    def get_coordinates(self, ds, dims_variables_dict, seeds=[], n_drop_dict={}, p_drop=0):
 
-        for spatial_dim, vars in spatial_dims_var_dict.items():
-            for var in vars:
-                x[var] = x[var][coords_drop_indices[spatial_dim]]
- 
-        return x, coords_drop
-
-
-    def update_coordinates(self, ds, dims_variables_dict, seeds=None):
-        
-        rel_coords_dict = {}
+        spatial_dim_indices = {}
+        rel_coords_dict = {} 
+        n_drop_dict = copy.deepcopy(n_drop_dict)
 
         for spatial_dim, coord_dict in dims_variables_dict['coord_dicts'].items():
             
             coords = get_coords_as_tensor(ds, lon=coord_dict['lon'], lat=coord_dict['lat'])
+
+            if self.random_region is not None:
+                radius = self.random_region["radius"] if "radius" in self.random_region.keys() else None
+                n_points = self.random_region["n_points"] if "n_points" in self.random_region.keys() else None
+                rect = self.random_region["rect"] if "rect" in self.random_region.keys() else False
+
+                region_dict = generate_region({'lon': coords[0], 'lat': coords[1]}, 
+                                              self.random_region['lon_range'], 
+                                              self.random_region['lat_range'], 
+                                              n_points=n_points, 
+                                              radius=radius, batch_size=self.random_region['batch_size'], 
+                                              locations=seeds, 
+                                              rect=rect)
+
+                seeds = region_dict['locations']
+                seeds = [seeds[0].rad2deg(), seeds[1].rad2deg()]
+                indices = region_dict['indices'].squeeze()
             
-            if self.rel_coords:
-                rel_coords = coords
-                distances = (rel_coords[0]**2+rel_coords[1]**2).sqrt()
+            else:
+                indices = torch.arange(coords.shape[1])
+            
+            if len(n_drop_dict) > 0:
+                n_drop = n_drop_dict[spatial_dim]
+
+            elif p_drop > 0:
+                n_drop = int((1-p_drop)*len(indices))
+                n_drop_dict[spatial_dim] = n_drop
+
+            if n_drop > len(indices):
+                pad_indices = torch.randint(len(indices), size=(n_drop - len(indices),1)).view(-1)
+                indices = torch.concat((indices, pad_indices))
+            else:    
+                indices = indices[torch.randperm(len(indices-1))[:n_drop]]
+
+            coords = coords[:,indices]
+
+            if not self.rel_coords:
+                if len(seeds)==[]:
+                    seeds = [coords[0].median(), coords[1].median()]
+                else:
+                    seeds = [seeds[0].deg2rad(), seeds[1].deg2rad()]
+
+                coords = {'lon': coords[0], 'lat': coords[1]}
+                rel_coords, _  = self.get_rel_coords(coords, seeds)    
 
             else:
-                coords = {'lon': coords[0], 'lat': coords[1]}
-                if seeds is not None:
-                    seeds = [coords[0].median(), coords[1].median()] 
+                rel_coords = coords
 
-                rel_coords, distances  = self.get_rel_coords(coords, seeds)
-             
-            rel_coords_dict[spatial_dim] = rel_coords.unsqueeze(dim=-1).float()
+            spatial_dim_indices[spatial_dim] = indices
+            rel_coords_dict[spatial_dim] = rel_coords.squeeze()
 
-        return rel_coords_dict
+        return spatial_dim_indices, rel_coords_dict, seeds, n_drop_dict
+
+
+    def apply_spatial_dim_indices(self, ds, dims_variables_dict, spatial_dim_indices, rel_coords_dict={}):
+        
+        ds_return = copy.deepcopy(ds)
+
+        for spatial_dim, vars in dims_variables_dict['spatial_dims_var'].items():
+            
+            coord_dict = dims_variables_dict['coord_dicts'][spatial_dim]
+
+            spatial_indices = spatial_dim_indices[spatial_dim]
+
+            dims = tuple(ds[vars[0]].dims)
+           
+            time_indices = np.arange(self.num_datapoints_time)
+
+            if len(dims)==2:
+                sel_indices = (time_indices, spatial_indices)
+            else:
+                sel_indices = (time_indices,[0],spatial_indices)
+            
+            sel_dict = dict(zip(dims, sel_indices))
+
+            ds_return = ds_return.isel(sel_dict)
+            
+            if len(rel_coords_dict)==0:
+                coords = coords[:,spatial_indices] 
+                coords = get_coords_as_tensor(ds, lon=coord_dict['lon'], lat=coord_dict['lat'])
+            else:
+                coords = rel_coords_dict[spatial_dim]
+
+            coord_dict = {coord_dict['lon']: coords[0].numpy(),
+                        coord_dict['lat']: coords[1].numpy()}
+
+            ds_return = ds_return.assign_coords(coords=coord_dict)
+
+        return ds_return
     
+
     def get_rel_coords(self, coords, seeds):
     
         distances, _, d_lons_s, d_lats_s = self.PosCalc(coords['lon'], coords['lat'], (seeds[0]), (seeds[1]))
@@ -334,50 +359,46 @@ class NetCDFLoader_lazy(Dataset):
         return torch.stack([d_lons_s.float().T, d_lats_s.float().T],dim=0), distances
     
 
-    def get_data(self, file_path, index, dims_variables_dict, n_points=None):
-     
-        ds = xr.load_dataset(file_path)
+    def get_files(self, file_path_source, file_path_target=None):
+
+        ds_source = xr.load_dataset(file_path_source)
+
+        if file_path_target is None:
+            ds_target = copy.deepcopy(ds_source)
+        else:
+            ds_target = xr.load_dataset(file_path_target)
+
+        spatial_dim_indices, rel_coords_dict, seeds, _ = self.get_coordinates(ds_source, self.dims_variables_source, n_drop_dict=self.n_dict_source)
+        ds_source = self.apply_spatial_dim_indices(ds_source, self.dims_variables_source, spatial_dim_indices, rel_coords_dict=rel_coords_dict)
+
+        spatial_dim_indices, rel_coords_dict, _, _ = self.get_coordinates(ds_target, self.dims_variables_target, seeds=seeds, n_drop_dict=self.n_dict_target)
+        ds_target = self.apply_spatial_dim_indices(ds_target, self.dims_variables_target, spatial_dim_indices, rel_coords_dict=rel_coords_dict)
+
+        if len(self.save_sample_path)>0:
+            
+            save_path_source = os.path.join(self.save_sample_path, os.path.basename(file_path_source).replace('.nc', f'_{float(seeds[0]):.3f}_{float(seeds[1]):.3f}_source.nc'))
+            ds_source.to_netcdf(save_path_source)
+
+            save_path_target = os.path.join(self.save_sample_path, os.path.basename(file_path_target).replace('.nc', f'_{float(seeds[0]):.3f}_{float(seeds[1]):.3f}_target.nc'))
+            ds_target.to_netcdf(save_path_target)
+
+        return ds_source, ds_target
+
+
+    def get_data(self, ds, index, dims_variables_dict):
 
         data = {}
-        for var in dims_variables_dict['var_spatial_dims'].keys():
-            data_var = torch.tensor(ds[var][index].values).squeeze()
-            data[var] = data_var.unsqueeze(dim=-1)
+        coords = {}
+        for spatial_dim, vars in dims_variables_dict['spatial_dims_var'].items():
+            coord_dict = dims_variables_dict['coord_dicts'][spatial_dim]
 
-        rel_coords = self.update_coordinates(ds, dims_variables_dict)
+            coords[spatial_dim] = get_coords_as_tensor(ds, lon=coord_dict['lon'], lat=coord_dict['lat']).float()
 
-        if n_points is not None:
-            for spatial_dim, n_pts in n_points.items():
-                n_actual = rel_coords[spatial_dim].shape[1]
+            for var in vars:
+                data_var = torch.tensor(ds[var][index].values).squeeze()
+                data[var] = data_var.unsqueeze(dim=-1)
 
-                if n_actual > n_pts:
-                    rel_coords[spatial_dim] = rel_coords[spatial_dim][:,:n_pts]
-
-                elif n_actual < n_pts:
-                    diff = n_pts-n_actual
-                    pad_indices = torch.randint(n_actual, size=(diff,1)).view(-1)
-
-                    pad_rel_coords = rel_coords[spatial_dim][:,pad_indices,:]
-                    rel_coords[spatial_dim] = torch.concat((rel_coords[spatial_dim], pad_rel_coords),dim=1)
-
-                for var in dims_variables_dict['var_spatial_dims'][spatial_dim]: 
-                    data_var = data[var]       
-
-                    if n_actual > n_pts:
-                        data_var = data_var[:n_pts]
-
-                    elif n_actual < n_pts:
-                        pad_data = data_var[pad_indices]
-                        data_var = torch.concat((data_var, pad_data),dim=0)
-
-                    data[var] = data_var   
-
-        if self.coordinate_pert>0:
-            avg_dist = rel_coords.max()/torch.tensor(rel_coords.shape[1]).sqrt()
-
-            pertubation = torch.randn_like(rel_coords)*self.coordinate_pert*avg_dist
-            rel_coords = rel_coords+pertubation
-
-        return data, rel_coords
+        return data, coords
 
 
     def __getitem__(self, index):
@@ -399,39 +420,21 @@ class NetCDFLoader_lazy(Dataset):
                     target_file = self.files_source[torch.randint(0, len(self.files_source)-1, (1,1))]
 
         elif self.sampling_mode=='self':
-            target_file = source_file
+            target_file = None
         
         elif self.sampling_mode=='paired':
             target_file = self.files_target[source_index]
 
-        data_source, rel_coords_source = self.get_data(source_file, index, self.dims_variables_source, self.n_points_s)
+        ds_source, ds_target = self.get_files(source_file, file_path_target=target_file)
 
-        if self.sampling_mode=='self':
-            data_target = copy.deepcopy(data_source)
-            rel_coords_target = copy.deepcopy(rel_coords_source)
-            dims_variables_target = self.dims_variables_source
-            n_dropout_target = self.n_dropout_source
-        else:
-            dims_variables_target = self.dims_variables_target
-            data_target, rel_coords_target = self.get_data(target_file, index, dims_variables_target, self.n_points_t)
-            n_dropout_target = self.n_dropout_target
+        data_source, rel_coords_source = self.get_data(ds_source, index, self.dims_variables_source)
+        data_target, rel_coords_target = self.get_data(ds_target, index, self.dims_variables_target)
 
         if self.normalize_data:
             data_source = self.normalizer(data_source)
             data_target = self.normalizer(data_target)
             
-        #if self.apply_img_norm:
-        #    norm = ds_norm()
-        #    data_source = norm(data_source)
-        #    data_target = norm(data_target)
-
-        if self.p_dropout_source > 0:
-            data_source, rel_coords_source = self.input_dropout(data_source, rel_coords_source, self.n_dropout_source, self.dims_variables_source['spatial_dims_var'])
-        
-        if self.p_dropout_target > 0:
-            data_target, rel_coords_target = self.input_dropout(data_target, rel_coords_target, n_dropout_target, dims_variables_target['spatial_dims_var'])
-   
         return data_source, data_target, rel_coords_source, rel_coords_target
 
     def __len__(self):
-        return self.num_datapoints
+        return self.num_datapoints_time

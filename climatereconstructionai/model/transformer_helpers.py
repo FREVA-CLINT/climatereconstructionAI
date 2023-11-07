@@ -322,7 +322,7 @@ class MultiHeadAttentionBlock(nn.Module):
 
 def get_coord_relation(coords_target, coords_source, cart=True):
     
-    diff = coords_target - coords_source.transpose(-2,-1)
+    diff = coords_target.unsqueeze(dim=-1) - coords_source.unsqueeze(dim=-1).transpose(-2,-1)
     
     if cart:
         return diff
@@ -350,7 +350,7 @@ class nn_layer(nn.Module):
         
         coord_diff = get_coord_relation(coords_target, coords_source)
 
-        if coords_source.dim()==3:
+        if coord_diff.dim()==3:
             c1 = coord_diff[0]
             c2 = coord_diff[1]
         else:

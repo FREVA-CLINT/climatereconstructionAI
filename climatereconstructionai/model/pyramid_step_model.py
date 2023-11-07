@@ -220,7 +220,7 @@ class interpolation_net(nn.Module):
 
         x = x.permute(0,3,1,2)
 
-        x = self.sample(x, coords_target.permute(0,2,1,-1).squeeze())
+        x = self.sample(x, coords_target.transpose(-2,-1))
 
         x = x.permute(0,-1,1)
 
@@ -296,7 +296,7 @@ class pyramid_step_model(nn.Module):
 
         self.check_model_dir()
 
-        self.norm = nn.LayerNorm(len(self.model_settings["variables_source"]))
+        #self.norm = nn.LayerNorm(len(self.model_settings["variables_source"]))
 
         if load_pretrained:
             self.check_pretrained(model_dir_check=self.model_settings['model_dir'])
@@ -310,22 +310,16 @@ class pyramid_step_model(nn.Module):
 
         b, n, c = x.shape
         x = x.view(b, int(math.sqrt(n)), int(math.sqrt(n)), c)
-
-        x_res = x
-        x_reg = x_res.clone()
-
+        
+        x_reg = x.clone()
 
         if not isinstance(self.core_model,nn.Identity):
-            x = self.norm(x)
+            #x = self.norm(x)
             x = x.permute(0,-1,1,2).unsqueeze(dim=1)
             x = self.core_model(x)
-            x = x[:,0].permute(0,-2,-1,1)
-          
-            x[:,:,:,:len(self.model_settings['variables_target'])] = x[:,:,:,:len(self.model_settings['variables_target'])] + x_res
-            
+            x = x[:,0].permute(0,-2,-1,1)            
 
-        else:
-            x = x_res
+     
         x = self.output_net(x, coords_target)
 
         return x, x_reg
@@ -383,7 +377,7 @@ class pyramid_step_model(nn.Module):
         lon_lr = c_range_lr.view(-1,1).repeat(self.n_in,1)
         lat_lr = c_range_lr.view(-1,1).repeat(1, self.n_in).view(-1,1)
 
-        self.reg_coords_lr = nn.Parameter(torch.stack((lon_lr, lat_lr)), requires_grad=False)
+        self.reg_coords_lr = nn.Parameter(torch.stack((lon_lr, lat_lr)), requires_grad=False).squeeze()
 
 
     # -> high-level models first, cache results, then fusion
