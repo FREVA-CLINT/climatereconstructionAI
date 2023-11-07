@@ -268,6 +268,8 @@ class output_net(nn.Module):
             
             data_out.update(dict(zip(vars, torch.split(data, 1, dim=2))))
 
+            idx += 1
+
         return data_out
 
 
