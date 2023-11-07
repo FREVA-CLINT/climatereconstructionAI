@@ -554,7 +554,7 @@ def generate_region(coords, range_lon=None, range_lat=None, n_points=None, radiu
                 'lat': lats_regions,
                 "n_points": n_points,
                 'radius': radius,
-                'locations': [seeds_lon.deg2rad(), seeds_lat.deg2rad()]}
+                'locations': [seeds_lon, seeds_lat]}
 
 
     return out_dict

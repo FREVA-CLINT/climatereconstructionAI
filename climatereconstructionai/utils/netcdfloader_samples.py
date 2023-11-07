@@ -257,6 +257,7 @@ class NetCDFLoader_lazy(Dataset):
         spatial_dim_indices = {}
         rel_coords_dict = {} 
         n_drop_dict = copy.deepcopy(n_drop_dict)
+        seeds = copy.deepcopy(seeds)
 
         for spatial_dim, coord_dict in dims_variables_dict['coord_dicts'].items():
             
@@ -276,7 +277,7 @@ class NetCDFLoader_lazy(Dataset):
                                               rect=rect)
 
                 seeds = region_dict['locations']
-                seeds = [seeds[0].rad2deg(), seeds[1].rad2deg()]
+
                 indices = region_dict['indices'].squeeze()
             
             else:
@@ -298,13 +299,12 @@ class NetCDFLoader_lazy(Dataset):
             coords = coords[:,indices]
 
             if not self.rel_coords:
-                if len(seeds)==[]:
-                    seeds = [coords[0].median(), coords[1].median()]
-                else:
-                    seeds = [seeds[0].deg2rad(), seeds[1].deg2rad()]
-
                 coords = {'lon': coords[0], 'lat': coords[1]}
-                rel_coords, _  = self.get_rel_coords(coords, seeds)    
+
+                if len(seeds)==[]:
+                    rel_coords, _  = self.get_rel_coords(coords, [coords[0].median(), coords[1].median()])    
+                else:
+                    rel_coords, _  = self.get_rel_coords(coords, [seeds[0].deg2rad(), seeds[1].deg2rad()])    
 
             else:
                 rel_coords = coords
@@ -368,11 +368,11 @@ class NetCDFLoader_lazy(Dataset):
         else:
             ds_target = xr.load_dataset(file_path_target)
 
-        spatial_dim_indices, rel_coords_dict, seeds, _ = self.get_coordinates(ds_source, self.dims_variables_source, n_drop_dict=self.n_dict_source)
-        ds_source = self.apply_spatial_dim_indices(ds_source, self.dims_variables_source, spatial_dim_indices, rel_coords_dict=rel_coords_dict)
+        spatial_dim_indices_source, rel_coords_dict_source, seeds, _ = self.get_coordinates(ds_source, self.dims_variables_source, n_drop_dict=self.n_dict_source)
+        spatial_dim_indices_target, rel_coords_dict_target, _, _ = self.get_coordinates(ds_target, self.dims_variables_target, seeds=seeds, n_drop_dict=self.n_dict_target)
 
-        spatial_dim_indices, rel_coords_dict, _, _ = self.get_coordinates(ds_target, self.dims_variables_target, seeds=seeds, n_drop_dict=self.n_dict_target)
-        ds_target = self.apply_spatial_dim_indices(ds_target, self.dims_variables_target, spatial_dim_indices, rel_coords_dict=rel_coords_dict)
+        ds_source = self.apply_spatial_dim_indices(ds_source, self.dims_variables_source, spatial_dim_indices_source, rel_coords_dict=rel_coords_dict_source)
+        ds_target = self.apply_spatial_dim_indices(ds_target, self.dims_variables_target, spatial_dim_indices_target, rel_coords_dict=rel_coords_dict_target)
 
         if len(self.save_sample_path)>0:
             
