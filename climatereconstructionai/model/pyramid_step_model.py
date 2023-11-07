@@ -377,7 +377,7 @@ class pyramid_step_model(nn.Module):
         lon_lr = c_range_lr.view(-1,1).repeat(self.n_in,1)
         lat_lr = c_range_lr.view(-1,1).repeat(1, self.n_in).view(-1,1)
 
-        self.reg_coords_lr = nn.Parameter(torch.stack((lon_lr, lat_lr)), requires_grad=False).squeeze()
+        self.reg_coords_lr = nn.Parameter(torch.stack((lon_lr, lat_lr)).squeeze(), requires_grad=False)
 
 
     # -> high-level models first, cache results, then fusion

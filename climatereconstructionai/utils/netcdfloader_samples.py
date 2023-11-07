@@ -282,7 +282,7 @@ class NetCDFLoader_lazy(Dataset):
             else:
                 indices = torch.arange(coords.shape[1])
             
-            if len(n_drop_dict) > 0:
+            if len(n_drop_dict) > 0 and spatial_dim in n_drop_dict.keys():
                 n_drop = n_drop_dict[spatial_dim]
 
             elif p_drop > 0:
