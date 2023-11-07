@@ -15,7 +15,8 @@ class CoreCRAI(psm.pyramid_step_model):
 
         model_settings = self.model_settings
 
-        output_dim = input_dim = len(model_settings["variables_source"])
+        input_dim = len(model_settings["variables_source"])
+        output_dim = len(model_settings["variables_target"])
         dropout = model_settings['dropout']
         model_dim_core = model_settings['model_dim_core']
 
