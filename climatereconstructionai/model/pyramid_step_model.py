@@ -392,8 +392,8 @@ class pyramid_step_model(nn.Module):
     
     def get_region_generator_settings(self):
         region_gen_dict = {
-                'rect_source': True,
-                'radius_source': self.radius_region_km,
+                'rect_source': False,
+                'radius_source': self.radius_region_km*math.sqrt(2),
                 'rect_target': False,
                 'radius_target': self.radius_region_km,
                 "lon_range": [
