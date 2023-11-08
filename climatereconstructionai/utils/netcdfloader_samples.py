@@ -264,9 +264,14 @@ class NetCDFLoader_lazy(Dataset):
             coords = get_coords_as_tensor(ds, lon=coord_dict['lon'], lat=coord_dict['lat'])
 
             if self.random_region is not None:
-                radius = self.random_region["radius"] if "radius" in self.random_region.keys() else None
-                n_points = self.random_region["n_points"] if "n_points" in self.random_region.keys() else None
-                rect = self.random_region["rect"] if "rect" in self.random_region.keys() else False
+                if len(seeds)==0:
+                    radius = self.random_region["radius_source"] if "radius_source" in self.random_region.keys() else None
+                    n_points = self.random_region["n_points_source"] if "n_points_source" in self.random_region.keys() else None
+                    rect = self.random_region["rect_source"] if "rect_source" in self.random_region.keys() else False
+                else:
+                    radius = self.random_region["radius_target"] if "radius_target" in self.random_region.keys() else None
+                    n_points = self.random_region["n_points_target"] if "n_points_target" in self.random_region.keys() else None
+                    rect = self.random_region["rect_target"] if "rect_target" in self.random_region.keys() else False
 
                 region_dict = generate_region({'lon': coords[0], 'lat': coords[1]}, 
                                               self.random_region['lon_range'], 
