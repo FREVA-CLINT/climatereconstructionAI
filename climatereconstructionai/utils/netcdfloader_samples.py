@@ -354,8 +354,8 @@ class NetCDFLoader_lazy(Dataset):
 
     def get_rel_coords(self, coords, seeds):
     
-        distances, _, d_lons_s, d_lats_s = self.PosCalc(coords['lon'], coords['lat'], (seeds[0]), (seeds[1]))
-         
+        distances, _, d_lons_s, d_lats_s = self.PosCalc(coords['lon'], coords['lat'], (seeds[0]), (seeds[1]), rotation_center=(seeds[0],seeds[1]))
+        
         return torch.stack([d_lons_s.float().T, d_lats_s.float().T],dim=0), distances
     
 

@@ -393,13 +393,36 @@ def get_regions(lons, lats, seeds_lon, seeds_lat, radius_region=None, n_points=N
     return distances_regions, indices_regions, lons_regions, lats_regions
 
 
+def rotate_coord_system(lons: torch.tensor, lats: torch.tensor, rotation_lon: float, rotation_lat:float):
+
+    theta = torch.tensor(rotation_lat)
+    phi = torch.tensor(rotation_lon)
+
+    x = torch.cos(lons)* torch.cos(lats)
+    y = torch.sin(lons)* torch.cos(lats)
+    z = torch.sin(lats)
+
+    rotated_x = torch.cos(theta)*torch.cos(phi)*x + torch.cos(theta)*torch.sin(phi)*y + torch.sin(theta)*z
+    rotated_y = -torch.sin(phi)*x + torch.cos(phi)*y
+    rotated_z = -torch.sin(theta)*torch.cos(phi)*x - torch.sin(theta)*torch.sin(phi)*y+ torch.cos(theta)*z
+
+    rot_lon = torch.atan2(rotated_y, rotated_x)
+    rot_lat = torch.arcsin(rotated_z)
+
+    return rot_lon, rot_lat
+
+
 class PositionCalculator(nn.Module):
     def __init__(self):
         super().__init__()
 
 
-    def forward(self, lons, lats, lons_t=None, lats_t=None):
+    def forward(self, lons, lats, lons_t=None, lats_t=None, rotation_center=None):
 
+        if rotation_center is not None:
+            lons, lats = rotate_coord_system(lons, lats, float(rotation_center[0]), float(rotation_center[1]))
+            lons_t, lats_t = rotate_coord_system(lons_t, lats_t, float(rotation_center[0]), float(rotation_center[1]))
+            
         lons = lons.view(1,len(lons))
         lats = lats.view(1,len(lats))
 
