@@ -197,6 +197,7 @@ def scale_coords(coords, mn, mx):
     coords_scaled = {}
     for spatial_dim, coords_ in coords.items():
         coords_scaled[spatial_dim] = (coords_ - mn)/(mx - mn)
+        coords_scaled[spatial_dim] = torch.clamp(coords_scaled[spatial_dim], min=0, max=1)
     return coords_scaled
 
 
@@ -391,7 +392,7 @@ class pyramid_step_model(nn.Module):
                 'rect_source': False,
                 'radius_source': self.radius_region_source_km*math.sqrt(2),
                 'rect_target': False,
-                'radius_target': self.radius_region_target_km*0.8,
+                'radius_target': self.radius_region_target_km*0.9,
                 "lon_range": [
                         -180,
                         180
