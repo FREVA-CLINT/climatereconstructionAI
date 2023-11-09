@@ -32,7 +32,8 @@ class CoreCRAI(psm.pyramid_step_model):
                         bounds=None,
                         conv_factor=model_dim_core,
                         upsampling_mode='bicubic',
-                        predict_residual=True)
+                        predict_residual=True,
+                        dropout=dropout)
 
         if load_pretrained:
             self.check_pretrained(model_dir_check=self.model_settings['model_dir'])

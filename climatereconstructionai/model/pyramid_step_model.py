@@ -15,7 +15,7 @@ from ..utils import grid_utils as gu
 
 
 class nh_spa_mapper_simple(nn.Module):
-    def __init__(self, nh, input_dim, model_dim, dropout=0, PE=None, polar=False) -> None: 
+    def __init__(self, nh, model_dim, dropout=0, PE=None, polar=False) -> None: 
         super().__init__()
 
         self.nh = nh
@@ -31,13 +31,10 @@ class nh_spa_mapper_simple(nn.Module):
         
         self.softm = nn.Softmax(dim=-1)
 
-
         self.v_proj = nn.Identity()
         
         self.mlp_layer_nh = nn.Identity()
 
-        self.dropout1 = nn.Dropout(dropout)
-        self.dropout2 = nn.Dropout(dropout)
         self.pe_dropout = nn.Dropout(dropout) if PE is not None else nn.Identity()
 
         self.norm1 = nn.LayerNorm(self.md_nh)
@@ -152,14 +149,10 @@ class input_net(nn.Module):
         model_dim = model_settings["model_dim"]
         ff_dim = model_settings["ff_dim"]
         nh = model_settings["nh"]
-        dropout = model_settings["dropout"]
-        n_heads = model_settings["n_heads"]
 
         self.spatial_dim_var_dict = model_settings['spatial_dims_var_source']
 
         n_mappers = model_settings['n_input_groups']
-
-        input_dims = model_settings['input_dims']
 
         polar = model_settings['polar']
 
@@ -176,7 +169,7 @@ class input_net(nn.Module):
         self.nh_mapping = nn.ModuleList()
         for n in range(n_mappers):
             self.nh_mapping.append(
-                nh_spa_mapper_simple(nh, input_dims[n], model_dim,PE=PE, polar=polar)
+                nh_spa_mapper_simple(nh, model_dim, PE=PE, polar=polar)
             )
     
     def forward(self, x: dict, coords_source: dict, coords_source_reg):
@@ -240,7 +233,6 @@ class output_net(nn.Module):
             self.output_dims = [out_dim*2 for out_dim in self.output_dims]
 
         self.activation_mu = nn.Identity()
-    #    self.activation_std = nn.functional.softplus() if self.gauss else nn.Identity()
 
         total_dim_output = int(torch.sum(torch.tensor(self.output_dims)).sum())
         
@@ -306,8 +298,6 @@ class pyramid_step_model(nn.Module):
         
     def forward(self, x, coords_source, coords_target):
         
-        coords_target = scale_coords(coords_target, self.range_region_rad[0], self.range_region_rad[1])
-
         x = self.input_net(x, coords_source, self.reg_coords_lr)
 
         b, n, c = x.shape
@@ -322,6 +312,8 @@ class pyramid_step_model(nn.Module):
             x = x[:,0].permute(0,-2,-1,1)            
 
      
+        coords_target = scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])
+        
         x = self.output_net(x, coords_target)
 
         return x, x_reg
@@ -362,19 +354,23 @@ class pyramid_step_model(nn.Module):
         # dependend on resolution and fov
         # "static"
         #
-        self.radius_region_km = self.model_settings['radius_region_km']
-        self.range_region_rad = [-self.radius_region_km/(6371), self.radius_region_km/(6371)]
+        self.radius_region_source_km = self.model_settings['radius_region_source_km']
+        self.range_region_source_rad = [-self.radius_region_source_km/(6371), self.radius_region_source_km/(6371)]
+
+        self.radius_region_target_km = self.model_settings['radius_region_target_km']
+        self.range_region_target_rad = [-self.radius_region_target_km/(6371), self.radius_region_target_km/(6371)]
 
         self.n_in, self.n_out = self.model_settings['n_regular']
 
-        self.grid_size_in = (self.range_region_rad[1] - self.range_region_rad[0])/self.n_in
-        self.grid_size_out = (self.range_region_rad[1] - self.range_region_rad[0])/self.n_out
+        self.grid_size_in = (2*self.radius_region_source_km)/self.n_in
+        self.grid_size_out = (2*self.radius_region_target_km)/self.n_out
 
-        self.model_settings['range_region_rad'] = self.range_region_rad
+        self.model_settings['range_region_source_rad'] = self.range_region_source_rad
+        self.model_settings['range_region_target_rad'] = self.range_region_target_rad
         self.model_settings['grid_size_in'] = self.grid_size_in
         self.model_settings['grid_size_out'] = self.grid_size_out
        
-        c_range_lr = torch.linspace(self.range_region_rad[0], self.range_region_rad[1], self.n_in)
+        c_range_lr = torch.linspace(self.range_region_source_rad[0], self.range_region_source_rad[1], self.n_in)
 
         lon_lr = c_range_lr.view(-1,1).repeat(self.n_in,1)
         lat_lr = c_range_lr.view(-1,1).repeat(1, self.n_in).view(-1,1)
@@ -395,7 +391,7 @@ class pyramid_step_model(nn.Module):
                 'rect_source': False,
                 'radius_source': self.radius_region_km*math.sqrt(2),
                 'rect_target': False,
-                'radius_target': self.radius_region_km,
+                'radius_target': self.radius_region_target_km*0.9,
                 "lon_range": [
                         -180,
                         180
@@ -410,7 +406,7 @@ class pyramid_step_model(nn.Module):
         return region_gen_dict
 
 
-    def train_(self, train_settings=None, use_samples=False, subdir=None, pretrain_subdir=None):
+    def train_(self, train_settings=None, subdir=None, pretrain_subdir=None):
 
         if train_settings is not None:
             self.set_training_configuration(train_settings)
@@ -425,15 +421,14 @@ class pyramid_step_model(nn.Module):
 
         train_settings = self.train_settings
 
-        if not use_samples:
+        if "use_samples" in train_settings.keys() and train_settings["use_samples"]:
+            train_settings["rel_coords"]=True
+        else:
             if "random_region" not in self.train_settings.keys():
                 train_settings["random_region"] = self.get_region_generator_settings()
-        else:
-            train_settings["rel_coords"]=True
 
 
         train_settings["gauss_loss"] = self.model_settings['gauss'] 
-
         train_settings["variables_source"] = self.model_settings["variables_source"]
         train_settings["variables_target"] = self.model_settings["variables_target"]
         train_settings['model_dir'] = self.model_dir
