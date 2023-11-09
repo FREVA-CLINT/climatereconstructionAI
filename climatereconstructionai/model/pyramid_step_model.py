@@ -280,6 +280,8 @@ class pyramid_step_model(nn.Module):
         self.model_settings['n_output_groups'] = len(self.model_settings['spatial_dims_var_target'])
         self.model_settings['output_dims'] = [len(values) for key, values in self.model_settings['spatial_dims_var_target'].items()]
 
+        self.predict_residual = self.model_settings['predict_residual']
+
         # core models operate on grids
         self.core_model = nn.Identity()
         
@@ -304,7 +306,7 @@ class pyramid_step_model(nn.Module):
         b, n, c = x.shape
         x = x.view(b, int(math.sqrt(n)), int(math.sqrt(n)), c)
         
-        x_reg = x
+        x_res = x
 
         if not isinstance(self.core_model,nn.Identity):
             #x = self.norm(x)
@@ -313,11 +315,19 @@ class pyramid_step_model(nn.Module):
             x = x[:,0].permute(0,-2,-1,1)            
 
      
-        coords_target = scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])
+        coords_target_hr = scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])
+        x = self.output_net(x, coords_target_hr)
         
-        x = self.output_net(x, coords_target)
+        if self.predict_residual:
+            coords_target_lr = scale_coords(coords_target, self.range_region_source_rad[0], self.range_region_source_rad[1])
 
-        return x, x_reg
+            x_lr = self.output_net(x_res, coords_target_lr)
+            
+            for var in x.keys():
+                x[var] = x[var] + x_lr[var]
+        
+
+        return x, x_res
 
     def check_model_dir(self):
         self.model_dir = self.model_settings['model_dir']
