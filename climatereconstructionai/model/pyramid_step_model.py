@@ -391,7 +391,7 @@ class pyramid_step_model(nn.Module):
                 'rect_source': False,
                 'radius_source': self.radius_region_source_km*math.sqrt(2),
                 'rect_target': False,
-                'radius_target': self.radius_region_target_km*0.9,
+                'radius_target': self.radius_region_target_km*0.8,
                 "lon_range": [
                         -180,
                         180

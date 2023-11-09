@@ -184,7 +184,8 @@ class NetCDFLoader_lazy(Dataset):
                  index_range=None,
                  rel_coords=False,
                  sample_for_norm=-1,
-                 norm_stats_save_path=''):
+                 norm_stats_save_path='',
+                 lazy_load=False):
         
         super(NetCDFLoader_lazy, self).__init__()
         
@@ -206,6 +207,7 @@ class NetCDFLoader_lazy(Dataset):
         self.rel_coords=rel_coords
         self.sample_for_norm = sample_for_norm
         self.norm_stats_save_path = norm_stats_save_path
+        self.lazy_load=lazy_load
 
         self.flatten=False
 
@@ -365,13 +367,19 @@ class NetCDFLoader_lazy(Dataset):
     
 
     def get_files(self, file_path_source, file_path_target=None):
-
-        ds_source = xr.load_dataset(file_path_source)
+        
+        if self.lazy_load:
+            ds_source = xr.open_dataset(file_path_source)
+        else:
+            ds_source = xr.load_dataset(file_path_source)
 
         if file_path_target is None:
             ds_target = copy.deepcopy(ds_source)
         else:
-            ds_target = xr.load_dataset(file_path_target)
+            if self.lazy_load:
+                ds_target = xr.open_dataset(file_path_target)
+            else:
+                ds_target = xr.load_dataset(file_path_target)
 
         spatial_dim_indices_source, rel_coords_dict_source, seeds, _ = self.get_coordinates(ds_source, self.dims_variables_source, n_drop_dict=self.n_dict_source)
         spatial_dim_indices_target, rel_coords_dict_target, _, _ = self.get_coordinates(ds_target, self.dims_variables_target, seeds=seeds, n_drop_dict=self.n_dict_target)
