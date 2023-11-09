@@ -35,17 +35,14 @@ if __name__ == "__main__":
 
         model.set_training_configuration(train_settings=train_settings)
         
-        if task=='sample_creation':
-            model.create_samples(script_dict['sample_creation_settings'])
-        
-        elif task=='train_shell':
-            model.train_(use_samples=True, subdir='shell')
+        if task=='train_shell':
+            model.train_(subdir='shell')
 
         elif task=='train_samples':
-            model.train_(use_samples=True)
+            model.train_()
 
         elif task=='train':
             model.train_()
 
         elif task=='train_with_pretrained_shell':
-            model.train_(use_samples=True, pretrain_subdir='shell')
+            model.train_(pretrain_subdir='shell')
