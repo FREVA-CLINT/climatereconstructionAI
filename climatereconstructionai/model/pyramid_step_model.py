@@ -14,6 +14,7 @@ from ..utils.io import load_ckpt
 from ..utils import grid_utils as gu
 
 
+
 class nh_spa_mapper_simple(nn.Module):
     def __init__(self, nh, model_dim, dropout=0, PE=None, polar=False) -> None: 
         super().__init__()
@@ -221,16 +222,17 @@ class interpolation_net(nn.Module):
         return x
 
 class output_net(nn.Module):
-    def __init__(self, model_settings):
+    def __init__(self, model_settings, use_gnlll=False):
         super().__init__()
-        self.gauss = model_settings['gauss']
+
+        self.use_gnlll = use_gnlll
         self.grid_to_target = interpolation_net(model_settings)
 
         self.n_output_groups = model_settings['n_output_groups']
         self.output_dims = model_settings['output_dims']
         self.spatial_dim_var_dict = model_settings['spatial_dims_var_target']
 
-        if model_settings['gauss']:
+        if use_gnlll:
             self.output_dims = [out_dim*2 for out_dim in self.output_dims]
 
         self.activation_mu = nn.Identity()
@@ -253,7 +255,7 @@ class output_net(nn.Module):
             data = x[idx]
             data = self.grid_to_target(data, coords_target[spatial_dim])
 
-            if self.gauss:
+            if self.use_gnlll:
                 data = torch.split(data, len(vars), dim=-1)
                 data = torch.stack((self.activation_mu(data[0]), nn.functional.softplus(data[1])), dim=-1)
             else:
@@ -281,15 +283,16 @@ class pyramid_step_model(nn.Module):
         self.model_settings['output_dims'] = [len(values) for key, values in self.model_settings['spatial_dims_var_target'].items()]
 
         self.predict_residual = self.model_settings['predict_residual']
-
+        self.use_gnlll = self.model_settings['gauss']
         # core models operate on grids
         self.core_model = nn.Identity()
         
         self.create_grids()
         
         self.input_net = input_net(self.model_settings)
-
-        self.output_net = output_net(self.model_settings)
+        
+        self.output_net_pre = output_net(self.model_settings, use_gnlll=False)
+        self.output_net_post = output_net(self.model_settings, use_gnlll=self.use_gnlll)
 
         self.check_model_dir()
 
@@ -316,15 +319,20 @@ class pyramid_step_model(nn.Module):
 
      
         coords_target_hr = scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])
-        x = self.output_net(x, coords_target_hr)
+        x = self.output_net_post(x, coords_target_hr)
         
         if self.predict_residual:
             coords_target_lr = scale_coords(coords_target, self.range_region_source_rad[0], self.range_region_source_rad[1])
 
-            x_lr = self.output_net(x_res, coords_target_lr)
-            
+            x_pre = self.output_net_pre(x_res, coords_target_lr)
+
             for var in x.keys():
-                x[var] = x[var] + x_lr[var]
+                if self.use_gnlll:
+                    mu, std = torch.split(x[var], 1, dim=-1)
+                    mu = mu + x_pre[var][:,:,:,[0]] 
+                    x[var] = torch.concat((mu,std), dim=-1)
+                else:
+                    x[var] = x[var] + x_pre[var]
         
 
         return x, x_res
