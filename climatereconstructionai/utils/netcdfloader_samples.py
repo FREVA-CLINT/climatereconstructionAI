@@ -181,7 +181,8 @@ class NetCDFLoader_lazy(Dataset):
                  n_points_t=None, 
                  coordinate_pert=0,
                  save_sample_path='',
-                 index_range=None,
+                 index_range_source=None,
+                 index_offset_target=0,
                  rel_coords=False,
                  sample_for_norm=-1,
                  norm_stats_save_path='',
@@ -203,7 +204,8 @@ class NetCDFLoader_lazy(Dataset):
         self.n_points_t = n_points_t
         self.coordinate_pert = coordinate_pert
         self.save_sample_path = save_sample_path
-        self.index_range=index_range
+        self.index_range_source=index_range_source
+        self.index_offset_target = index_offset_target
         self.rel_coords=rel_coords
         self.sample_for_norm = sample_for_norm
         self.norm_stats_save_path = norm_stats_save_path
@@ -416,9 +418,11 @@ class NetCDFLoader_lazy(Dataset):
 
     def __getitem__(self, index):
         
-        if self.index_range is not None:
-            if (index < self.index_range[0]) or (index > self.index_range[1]):
-                index = int(torch.randint(self.index_range[0], self.index_range[1]+1, (1,1)))
+        if self.index_range_source is not None:
+            if (index < self.index_range_source[0]) or (index > self.index_range_source[1]):
+                index = int(torch.randint(self.index_range_source[0], self.index_range_source[1]+1, (1,1)))
+
+        index_target = index + self.index_offset_target
 
         if len(self.files_source)>0:
             source_index = torch.randint(0, len(self.files_source), (1,1))
@@ -441,12 +445,16 @@ class NetCDFLoader_lazy(Dataset):
         ds_source, ds_target = self.get_files(source_file, file_path_target=target_file)
 
         data_source, rel_coords_source = self.get_data(ds_source, index, self.dims_variables_source)
-        data_target, rel_coords_target = self.get_data(ds_target, index, self.dims_variables_target)
+        data_target, rel_coords_target = self.get_data(ds_target, index_target, self.dims_variables_target)
 
         if self.normalize_data:
             data_source = self.normalizer(data_source)
             data_target = self.normalizer(data_target)
-            
+
+      #  if self.apply_img_norm:  
+      #      stats = [calc_stats(data) for data in data_source.values()]
+      #      stat_dict = dict(zip(list(self.variables_source)))
+
         return data_source, data_target, rel_coords_source, rel_coords_target
 
     def __len__(self):

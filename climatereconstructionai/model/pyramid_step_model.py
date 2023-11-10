@@ -296,7 +296,7 @@ class pyramid_step_model(nn.Module):
 
         self.check_model_dir()
 
-        #self.norm = nn.LayerNorm(len(self.model_settings["variables_source"]))
+        self.norm = nn.LayerNorm(len(self.model_settings["variables_source"])) if self.model_settings["norm_pre_core"] else nn.Identity()
 
         if load_pretrained:
             self.check_pretrained(model_dir_check=self.model_settings['model_dir'])
@@ -312,7 +312,7 @@ class pyramid_step_model(nn.Module):
         x_res = x
 
         if not isinstance(self.core_model,nn.Identity):
-            #x = self.norm(x)
+            x = self.norm(x)
             x = x.permute(0,-1,1,2).unsqueeze(dim=1)
             x = self.core_model(x)
             x = x[:,0].permute(0,-2,-1,1)            
