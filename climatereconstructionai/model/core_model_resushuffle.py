@@ -3,7 +3,7 @@ import torch
 import climatereconstructionai.model.pyramid_step_model as psm
 
 class res_net_block_reduction(nn.Module):
-    def __init__(self, in_channels, out_channels,  k_size=3):
+    def __init__(self, in_channels, out_channels,  k_size=3, batch_norm=True):
         super().__init__()
 
         padding = k_size // 2
@@ -13,7 +13,7 @@ class res_net_block_reduction(nn.Module):
 
         self.reduction = nn.Conv2d(in_channels, out_channels, stride=2, padding=0, kernel_size=1)
 
-        self.bn = nn.BatchNorm2d(in_channels*2)
+        self.bn = nn.BatchNorm2d(in_channels*2) if batch_norm else nn.Identity()
         self.activation2 = nn.LeakyReLU(negative_slope=-0.2)
         self.activation1 = nn.LeakyReLU(negative_slope=-0.2)
 
@@ -29,14 +29,15 @@ class res_net_block_reduction(nn.Module):
 
 
 class res_net_block(nn.Module):
-    def __init__(self, channels, k_size=3):
+    def __init__(self, channels, k_size=3 ,batch_norm=True):
         super().__init__()
 
         padding = k_size // 2
         self.conv1 = nn.Conv2d(channels, channels, stride=1, padding=padding, kernel_size=k_size)
         self.conv2 = nn.Conv2d(channels, channels, stride=1, padding=padding, kernel_size=k_size)
 
-        self.bn = nn.BatchNorm2d(channels)
+        self.bn = nn.BatchNorm2d(channels) if batch_norm else nn.Identity()
+        
         self.activation2 = nn.LeakyReLU(negative_slope=-0.2)
         self.activation1 = nn.LeakyReLU(negative_slope=-0.2)
 
@@ -52,14 +53,14 @@ class res_net_block(nn.Module):
 
 
 class res_blocks(nn.Module): 
-    def __init__(self,  n_blocks, in_channels, out_channels, k_size=3, with_reduction=True):
+    def __init__(self,  n_blocks, in_channels, out_channels, k_size=3, with_reduction=True, batch_norm=True):
         super().__init__()
 
         self.res_net_blocks = nn.ModuleList()
         for n in range(n_blocks-1):
-            self.res_net_blocks.append(res_net_block(in_channels, k_size=k_size))
+            self.res_net_blocks.append(res_net_block(in_channels, k_size=k_size, batch_norm=batch_norm))
         
-        self.reduction_block = res_net_block_reduction(in_channels, out_channels, k_size=k_size) if with_reduction else nn.Identity()
+        self.reduction_block = res_net_block_reduction(in_channels, out_channels, k_size=k_size, batch_norm=batch_norm) if with_reduction else nn.Identity()
 
     def forward(self,x):
 
@@ -100,16 +101,12 @@ class conv_block(nn.Module):
         self.conv_conc = nn.Conv2d(in_channels, out_channels, stride=1, padding=padding, kernel_size=k_size)
         self.conv = nn.Conv2d(out_channels, out_channels, stride=1, padding=padding, kernel_size=k_size)
 
-      #  self.bn = nn.BatchNorm2d(out_channels)
-        self.activation2 = nn.LeakyReLU(negative_slope=-0.2)
         self.activation1 = nn.LeakyReLU(negative_slope=-0.2)
 
     def forward(self, x):
         x = self.conv_conc(x)
-       # x = self.bn(x)
         x = self.conv(x)
         x = self.activation1(x)
-        x = self.activation2(x)
         return x
 
 
@@ -123,8 +120,8 @@ class decoder_block(nn.Module):
         self.with_skip=with_skip
         if not self.with_skip:
             in_channels = out_channels
-        self.res_blocks = conv_block(in_channels, out_channels, k_size=k_size)
 
+        self.conv_block = conv_block(in_channels, out_channels, k_size=k_size)
 
     def forward(self, x, skip_channels=None):
 
@@ -133,8 +130,7 @@ class decoder_block(nn.Module):
         if self.with_skip:
             x = torch.concat((x, skip_channels), dim=1)
       
-        
-        x = self.res_blocks(x)
+        x = self.conv_block(x)
 
         return x
     
@@ -185,6 +181,7 @@ class ResUNet(nn.Module):
         self.decoder = decoder(n_blocks_unet, n_res_blocks, out_channels_unet, upcale_factor, k_size=k_size)
 
         self.conv_out = conv_block(out_channels, out_channels, k_size=k_size)
+                
         
     def forward(self, x):
         x, layer_outputs = self.encoder(x)
@@ -207,7 +204,7 @@ class core_ResUNet(psm.pyramid_step_model):
         depth = model_settings["depth_core"]
 
         self.time_dim= False
-        
+
         if model_settings['gauss']:
             output_dim *=2
 
