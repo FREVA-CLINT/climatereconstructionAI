@@ -311,12 +311,19 @@ class pyramid_step_model(nn.Module):
         
         x_res = x
 
-        if not isinstance(self.core_model,nn.Identity):
+        if not isinstance(self.core_model, nn.Identity):
             x = self.norm(x)
-            x = x.permute(0,-1,1,2).unsqueeze(dim=1)
-            x = self.core_model(x)
-            x = x[:,0].permute(0,-2,-1,1)            
+            x = x.permute(0,-1,1,2)#.unsqueeze(dim=1)
 
+            if self.time_dim:
+                x = x.unsqueeze(dim=1)
+
+            x = self.core_model(x)
+
+            if self.time_dim:
+                x = x[:,0].permute(0,-2,-1,1)            
+            else:
+                x = x.permute(0,-2,-1,1)  
      
         coords_target_hr = scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])
         x = self.output_net_post(x, coords_target_hr)

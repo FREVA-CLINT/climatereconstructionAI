@@ -311,9 +311,9 @@ class NetCDFLoader_lazy(Dataset):
                 coords = {'lon': coords[0], 'lat': coords[1]}
 
                 if len(seeds)==[]:
-                    rel_coords, _  = self.get_rel_coords(coords, [coords[0].median(), coords[1].median()])    
+                    rel_coords, _  = self.get_rel_coords(coords, [coords[0].median(), coords[1].median()], rotate_cs=True)    
                 else:
-                    rel_coords, _  = self.get_rel_coords(coords, [seeds[0].deg2rad(), seeds[1].deg2rad()])    
+                    rel_coords, _  = self.get_rel_coords(coords, [seeds[0].deg2rad(), seeds[1].deg2rad()], rotate_cs=True)    
 
             else:
                 rel_coords = coords
@@ -361,9 +361,12 @@ class NetCDFLoader_lazy(Dataset):
         return ds_return
     
 
-    def get_rel_coords(self, coords, seeds):
-    
-        distances, _, d_lons_s, d_lats_s = self.PosCalc(coords['lon'], coords['lat'], (seeds[0]), (seeds[1]), rotation_center=(seeds[0],seeds[1]))
+    def get_rel_coords(self, coords, seeds, rotate_cs=False):
+        
+        if rotate_cs:
+            distances, _, d_lons_s, d_lats_s = self.PosCalc(coords['lon'], coords['lat'], (seeds[0]), (seeds[1]), rotation_center=(seeds[0],seeds[1]))
+        else:
+            distances, _, d_lons_s, d_lats_s = self.PosCalc(coords['lon'], coords['lat'], (seeds[0]), (seeds[1]))
         
         return torch.stack([d_lons_s.float().T, d_lats_s.float().T],dim=0), distances
     

@@ -23,9 +23,11 @@ class CoreCRAI(psm.pyramid_step_model):
         if model_settings['gauss']:
             output_dim *=2
 
+        self.time_dim= True
+
         self.core_model = CRAINet(img_size_source=(self.n_in, self.n_in),
                         img_size_target=(self.n_out, self.n_out),
-                        enc_dec_layers=model_settings["n_enc_core"],
+                        enc_dec_layers=model_settings["depth_core"],
                         pool_layers=model_settings["n_pool_core"],
                         in_channels=input_dim,
                         out_channels=output_dim,
