@@ -142,9 +142,9 @@ class NetCDFLoader(Dataset):
             if not cfg.shuffle_masks:
                 assert self.img_length == self.mask_length
 
-        self.img_mean, self.img_std, self.img_znorm = img_normalization(self.img_data)
+        self.img_mean, self.img_std, self.img_znorm = img_normalization(self.img_data, train_stats)
 
-        self.bounds = bnd_normalization(self.img_mean, self.img_std, train_stats)
+        self.bounds = bnd_normalization(self.img_mean, self.img_std)
 
     def load_data(self, ind_data, img_indices, mask_indices):
 
