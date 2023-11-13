@@ -37,3 +37,6 @@ class CoreCRAI(psm.pyramid_step_model):
 
         if load_pretrained:
             self.check_pretrained(model_dir_check=self.model_settings['model_dir'])
+
+        if "pretrained_path" in self.model_settings.keys():
+            self.check_pretrained(model_dir_check=self.model_settings['pretrained_path'])
