@@ -301,7 +301,7 @@ class NetCDFLoader_lazy(Dataset):
 
             if n_drop > len(indices):
                 pad_indices = torch.randint(len(indices), size=(n_drop - len(indices),1)).view(-1)
-                indices = torch.concat((indices, pad_indices))
+                indices = torch.concat((indices, indices[pad_indices]))
             else:    
                 indices = indices[torch.randperm(len(indices-1))[:n_drop]]
 
