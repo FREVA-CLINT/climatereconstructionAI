@@ -229,7 +229,9 @@ class NetCDFLoader_lazy(Dataset):
 
         self.num_datapoints_time = ds_source[self.variables_source[0]].shape[0]
 
-        _, _, seeds, self.n_dict_source = self.get_coordinates(ds_source, self.dims_variables_source, p_drop=p_dropout_source)
+        start_seeds = [] if self.random_region is None or 'start_seeds' not in self.random_region.keys() else self.random_region['start_seeds']
+
+        _, _, seeds, self.n_dict_source = self.get_coordinates(ds_source, self.dims_variables_source, p_drop=p_dropout_source, seeds=start_seeds)
         _, _, _, self.n_dict_target = self.get_coordinates(ds_target, self.dims_variables_target, seeds=seeds, p_drop=p_dropout_target)
 
         if stat_dict is None:
@@ -268,11 +270,13 @@ class NetCDFLoader_lazy(Dataset):
             coords = get_coords_as_tensor(ds, lon=coord_dict['lon'], lat=coord_dict['lat'])
 
             if self.random_region is not None:
+
                 if len(seeds)==0:
                     radius = self.random_region["radius_source"] if "radius_source" in self.random_region.keys() else None
                     n_points = self.random_region["n_points_source"] if "n_points_source" in self.random_region.keys() else None
                     rect = self.random_region["rect_source"] if "rect_source" in self.random_region.keys() else False
                 else:
+                    seeds = [torch.tensor(seed).view(1,1) for seed in seeds] if not torch.is_tensor(seeds[0]) else seeds
                     radius = self.random_region["radius_target"] if "radius_target" in self.random_region.keys() else None
                     n_points = self.random_region["n_points_target"] if "n_points_target" in self.random_region.keys() else None
                     rect = self.random_region["rect_target"] if "rect_target" in self.random_region.keys() else False
