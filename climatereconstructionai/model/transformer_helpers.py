@@ -336,70 +336,98 @@ def to_polar(dlon, dlat):
     phi = torch.atan2(dlon, dlat)
     return d_mat, phi
 
+
+def nh_computation(x, coords_target, coords_source, nh, skip_self=False, d_mat=None, both_dims=False):
+    b,s,e = x.shape
+
+    coord_diff = get_coord_relation(coords_target, coords_source)
+
+    if coord_diff.dim()==3:
+        c1 = coord_diff[0]
+        c2 = coord_diff[1]
+    else:
+        c1 = coord_diff[:,0,:,:]
+        c2 = coord_diff[:,1,:,:]
+
+    if d_mat is None:
+        d_mat = (c1**2 + c2**2).sqrt()
+
+    t = d_mat.shape[-2] 
+
+    # leave out central datapoint? attention of datapoint to neighbourhood?
+    if d_mat.dim()==2:
+        _, indices = d_mat.sort(dim=1, descending=False)
+        indices = indices[:,int(skip_self):nh+int(skip_self)]
+        x_bs = x[:,indices]
+
+        c1 = torch.gather(c1,dim=0,index=indices).unsqueeze(dim=-1)
+        c2 = torch.gather(c2,dim=0,index=indices).unsqueeze(dim=-1)
+
+        if both_dims:
+            c1 = (c1 - c1.transpose(-1,1)) 
+            c2 = (c2 - c2.transpose(-1,1))
+        
+        cs = torch.stack([c1,c2],dim=0)
+
+    else:
+        _, indices = d_mat.sort(dim=-1, descending=False)
+            
+        idx_shift = (torch.arange(indices.shape[0],device=indices.device)*s).view(b,1,1)
+
+        c_ix_shifted = indices+idx_shift
+        c_ix_shifted = c_ix_shifted.reshape(b*t,s)
+        x_bs = x.view(b*s,e)
+        x_bs = x_bs[c_ix_shifted].view(b,t,s,e)
+    
+        x_bs = x_bs[:,:,int(skip_self):nh+int(skip_self),:]
+        indices = indices[:,:,int(skip_self):nh+int(skip_self)]
+
+        c1 = torch.gather(c1, dim=-1, index=indices)#.transpose(-1,1)
+        c2 = torch.gather(c2, dim=-1, index=indices)#.transpose(-1,1)
+
+        if both_dims:
+            c1 = c1.unsqueeze(dim=-1)
+            c2 = c2.unsqueeze(dim=-1)
+            c1 = (c1 - c1.transpose(-1,-2)) 
+            c2 = (c2 - c2.transpose(-1,-2))
+        
+        cs = torch.stack([c1,c2],dim=1)
+    
+    return x_bs, indices, cs
+
+
 class nn_layer(nn.Module):
-    def __init__(self, nh, both_dims=False, cart=True):
+    def __init__(self, nh, both_dims=False, cart=True, batch_size=-1):
         super().__init__()
 
         self.nh = nh
         self.both_dims = both_dims
         self.cart = cart
+        self.batch_size= batch_size
 
 
     def forward(self, x, coords_target, coords_source, d_mat=None, skip_self=False):
         b,s,e = x.shape
-        
-        coord_diff = get_coord_relation(coords_target, coords_source)
 
-        if coord_diff.dim()==3:
-            c1 = coord_diff[0]
-            c2 = coord_diff[1]
+        if self.batch_size != -1:
+            n_chunks = s // self.batch_size 
         else:
-            c1 = coord_diff[:,0,:,:]
-            c2 = coord_diff[:,1,:,:]
-
-        if d_mat is None:
-            d_mat = (c1**2 + c2**2).sqrt()
-
-        t = d_mat.shape[-2] 
-
-        # leave out central datapoint? attention of datapoint to neighbourhood?
-        if d_mat.dim()==2:
-            _, indices = d_mat.sort(dim=1, descending=False)
-            indices = indices[:,int(skip_self):self.nh+int(skip_self)]
-            x_bs = x[:,indices]
-
-            c1 = torch.gather(c1,dim=0,index=indices).unsqueeze(dim=-1)
-            c2 = torch.gather(c2,dim=0,index=indices).unsqueeze(dim=-1)
-
-            if self.both_dims:
-                c1 = (c1 - c1.transpose(-1,1)) 
-                c2 = (c2 - c2.transpose(-1,1))
-            
-            cs = torch.stack([c1,c2],dim=0)
-
-        else:
-            _, indices = d_mat.sort(dim=-1, descending=False)
-                
-            idx_shift = (torch.arange(indices.shape[0],device=indices.device)*s).view(b,1,1)
-
-            c_ix_shifted = indices+idx_shift
-            c_ix_shifted = c_ix_shifted.reshape(b*t,s)
-            x_bs = x.view(b*s,e)
-            x_bs = x_bs[c_ix_shifted].view(b,t,s,e)
+            n_chunks = 1
         
-            x_bs = x_bs[:,:,int(skip_self):self.nh+int(skip_self),:]
-            indices = indices[:,:,int(skip_self):self.nh+int(skip_self)]
+        coords_target_chunks = torch.chunk(coords_target, n_chunks, dim=-1)
 
-            c1 = torch.gather(c1, dim=-1, index=indices)#.transpose(-1,1)
-            c2 = torch.gather(c2, dim=-1, index=indices)#.transpose(-1,1)
+        x_bs = [] 
+        indices = []
+        cs = []
+        for coords_target_chunk in coords_target_chunks:
+            output = nh_computation(x, coords_target_chunk, coords_source, self.nh, skip_self=skip_self, both_dims=self.both_dims, d_mat=d_mat)
+            x_bs.append(output[0])
+            indices.append(output[1])
+            cs.append(output[2])
 
-            if self.both_dims:
-                c1 = c1.unsqueeze(dim=-1)
-                c2 = c2.unsqueeze(dim=-1)
-                c1 = (c1 - c1.transpose(-1,-2)) 
-                c2 = (c2 - c2.transpose(-1,-2))
-            
-            cs = torch.stack([c1,c2],dim=1)
+        x_bs = torch.concat(x_bs, dim=1)
+        indices = torch.concat(indices, dim=1)
+        cs = torch.concat(cs, dim=2)
 
         return x_bs, indices, cs
 

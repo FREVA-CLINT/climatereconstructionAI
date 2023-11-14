@@ -413,9 +413,9 @@ def rotate_coord_system(lons: torch.tensor, lats: torch.tensor, rotation_lon: fl
 
 
 class PositionCalculator(nn.Module):
-    def __init__(self):
+    def __init__(self, batch_size=-1):
         super().__init__()
-
+        self.batch_size = batch_size
 
     def forward(self, lons, lats, lons_t=None, lats_t=None, rotation_center=None):
 
@@ -426,32 +426,55 @@ class PositionCalculator(nn.Module):
         lons = lons.view(1,len(lons))
         lats = lats.view(1,len(lats))
 
-        if lons_t is None:
-            lons_t=lons.transpose(1,0)
-            lats_t=lats.transpose(1,0)
-
-            d_lons = distance_on_sphere(lons,lats,lons_t,lats_t.transpose(0,1))
-            d_lats = distance_on_sphere(lons,lats,lons_t.transpose(0,1),lats_t)
+        if self.batch_size != -1:
+            n_chunks = lons.shape[-1] // self.batch_size 
         else:
-            lons_t = lons_t.view(len(lons_t),1)
-            lats_t = lats_t.view(len(lats_t),1)
+            n_chunks = 1
+        
+        lons_chunks = lons.chunk(n_chunks, dim=-1)
+        lats_chunks = lats.chunk(n_chunks, dim=-1)
 
-        d_lats = distance_on_sphere(lons, lats, lons, lats_t)
-        d_lons = distance_on_sphere(lons, lats, lons_t, lats)
+        d_lons = []
+        d_lats = []
+        d_mat = []
+        phis = []
+        for chunk_idx in range(len(lons_chunks)):
+            lons_chunk = lons_chunks[chunk_idx]
+            lats_chunk = lats_chunks[chunk_idx]
 
-        sgn = torch.sign(lats - lats_t)
-        sgn[(lats - lats_t).abs()/torch.pi>1] = sgn[(lats - lats_t).abs()/torch.pi>1]*-1
-        d_lats_s = d_lats*sgn
+            if lons_t is None:
+                lons_t=lons_chunk.transpose(1,0)
+                lats_t=lats_chunk.transpose(1,0)
 
-        sgn = torch.sign(lons - lons_t)
-        sgn[(lons - lons_t).abs()/torch.pi>1] = sgn[(lons - lons_t).abs()/torch.pi>1]*-1
-        d_lons_s = d_lons*sgn
+                d_lons_chunk = distance_on_sphere(lons_chunk,lats_chunk,lons_t,lats_t.transpose(0,1))
+                d_lats_chunk = distance_on_sphere(lons_chunk,lats_chunk,lons_t.transpose(0,1),lats_t)
+            else:
+                lons_t = lons_t.view(len(lons_t),1)
+                lats_t = lats_t.view(len(lats_t),1)
 
-        d_mat = torch.sqrt(d_lats**2+d_lons**2)
+                d_lats_chunk = distance_on_sphere(lons_chunk, lats_chunk, lons_chunk, lats_t)
+                d_lons_chunk = distance_on_sphere(lons_chunk, lats_chunk, lons_t, lats_chunk)
 
-        phis = torch.atan2(d_lats_s,d_lons_s)
+            sgn = torch.sign(lats_chunk - lats_t)
+            sgn[(lats_chunk - lats_t).abs()/torch.pi>1] = sgn[(lats_chunk - lats_t).abs()/torch.pi>1]*-1
+            d_lats_s = d_lats_chunk*sgn
 
-        return d_mat, phis, d_lons_s, d_lats_s
+            sgn = torch.sign(lons_chunk - lons_t)
+            sgn[(lons_chunk - lons_t).abs()/torch.pi>1] = sgn[(lons_chunk - lons_t).abs()/torch.pi>1]*-1
+            d_lons_s = d_lons_chunk*sgn
+
+            d_lons.append(d_lons_s)
+            d_lats.append(d_lats_s)
+
+            d_mat.append(torch.sqrt(d_lats_chunk**2+d_lons_chunk**2))
+            phis.append(torch.atan2(d_lats_s,d_lons_s))
+
+        d_lons = torch.concat(d_lons, dim=-1)
+        d_lats = torch.concat(d_lats, dim=-1)
+        d_mat = torch.concat(d_mat, dim=-1)
+        phis = torch.concat(phis, dim=-1)
+
+        return d_mat, phis, d_lons, d_lats
     
 
 

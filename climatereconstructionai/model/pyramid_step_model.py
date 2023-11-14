@@ -16,13 +16,13 @@ from ..utils import grid_utils as gu
 
 
 class nh_spa_mapper_simple(nn.Module):
-    def __init__(self, nh, model_dim, dropout=0, PE=None, polar=False) -> None: 
+    def __init__(self, nh, model_dim, dropout=0, PE=None, polar=False, nh_batch_size=-1) -> None: 
         super().__init__()
 
         self.nh = nh
         self.md_nh = model_dim // nh
 
-        self.nn_layer = helpers.nn_layer(nh, both_dims=False)
+        self.nn_layer = helpers.nn_layer(nh, both_dims=False, batch_size=nh_batch_size)
 
         self.polar=polar
 
@@ -154,6 +154,8 @@ class input_net(nn.Module):
         self.spatial_dim_var_dict = model_settings['spatial_dims_var_source']
 
         n_mappers = model_settings['n_input_groups']
+        
+        nh_batch_size = -1 if 'nh_batch_size' not in model_settings.keys() else model_settings['nh_batch_size']
 
         polar = model_settings['polar']
 
@@ -170,7 +172,7 @@ class input_net(nn.Module):
         self.nh_mapping = nn.ModuleList()
         for n in range(n_mappers):
             self.nh_mapping.append(
-                nh_spa_mapper_simple(nh, model_dim, PE=PE, polar=polar)
+                nh_spa_mapper_simple(nh, model_dim, PE=PE, polar=polar, nh_batch_size=nh_batch_size)
             )
     
     def forward(self, x: dict, coords_source: dict, coords_source_reg):
