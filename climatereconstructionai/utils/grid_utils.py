@@ -289,6 +289,7 @@ def get_parent_child_indices(parent_coords: torch.tensor, child_coords: torch.te
     c_p_indices_rel_pad = c_p_indices_rel
 
     for c_index, p_indices in enumerate(c_p_indices):
+
         if len(p_indices) < max_overlap:
             p = 0
             m = len(p_indices)
@@ -314,10 +315,10 @@ def get_parent_child_indices(parent_coords: torch.tensor, child_coords: torch.te
             
             c_p_indices_pad[c_index] = p_indices_repeat[:max_overlap]
             c_p_indices_rel_pad[c_index] = c_indices_rel[:max_overlap]
-
-    c_p_indices_rel_pad = [torch.tensor(indices) if not torch.is_tensor(indices) else indices for indices in c_p_indices_rel_pad]
-    c_p_indices_pad = [torch.tensor(indices) if not torch.is_tensor(indices) else indices for indices in c_p_indices_pad]
-
+        
+        c_p_indices_rel_pad[c_index] = torch.tensor(c_p_indices_rel_pad[c_index]) if not torch.is_tensor(c_p_indices_rel_pad[c_index]) else c_p_indices_rel_pad[c_index]
+        c_p_indices_pad[c_index] = torch.tensor(c_p_indices_pad[c_index]) if not torch.is_tensor(c_p_indices_pad[c_index]) else c_p_indices_pad[c_index]
+    
     indices = {'children': p_c_indices,
                'children_idx': torch.stack(c_p_indices_rel_pad),
               'parents':torch.stack(c_p_indices_pad)}
