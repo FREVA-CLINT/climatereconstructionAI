@@ -107,7 +107,7 @@ class decoder(nn.Module):
             in_channels_block = u_net_channels*(2**(n))
             out_channels_block = u_net_channels*(2**(n-1))
 
-            self.decoder_blocks.append(decoder_block(in_channels_block, out_channels_block, n_res_blocks, k_size=k_size, with_skip=True))      
+            self.decoder_blocks.append(decoder_block(in_channels_block, out_channels_block, k_size=k_size, with_skip=True))      
         
         self.out_layer = nn.Conv2d(out_channels_block, out_channels, stride=1, padding=1, kernel_size=k_size, padding_mode='replicate')
 
