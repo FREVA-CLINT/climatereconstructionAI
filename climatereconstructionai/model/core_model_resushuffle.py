@@ -75,7 +75,7 @@ class encoder(nn.Module):
 
 
 class decoder_block(nn.Module):
-    def __init__(self, in_channels, out_channels, n_blocks, k_size=3, with_skip=True):
+    def __init__(self, in_channels, out_channels, k_size=3, with_skip=True):
         super().__init__()
 
         self.trans_conv = nn.Sequential(nn.ConvTranspose2d(in_channels, out_channels, kernel_size=4, stride=2, padding=1))
