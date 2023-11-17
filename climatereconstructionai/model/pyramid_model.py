@@ -28,7 +28,10 @@ class pyramid_model(nn.Module):
 
         self.check_load_relations()
 
-        self.load_step_models()
+        self.save_local_domain_parameters()
+
+        if "trained_local_model" in self.model_settings.keys():
+            self.load_step_models()
 
         # for outputting the patch file
         #self.check_grid_file()
@@ -48,7 +51,7 @@ class pyramid_model(nn.Module):
                 self.pre_computed_relations = True 
 
         with open(model_settings, 'w') as f:
-            json.dump(self.model_settings, f)
+            json.dump(self.model_settings, f, indent=4)
 
         if not os.path.isdir(self.local_model_dir):
             os.mkdir(self.local_model_dir)
@@ -118,26 +121,31 @@ class pyramid_model(nn.Module):
 
         return relations, radius_region_km
     
+    def save_local_domain_parameters(self):
+
+        local_model_settings = {}
+        
+        local_model_settings['variables_source'] = self.model_settings['variables_source']
+        local_model_settings['variables_target'] = self.model_settings['variables_target']
+
+        local_model_settings['spatial_dims_var_source'] = self.relations_source['spatial_dims_var']
+        local_model_settings['spatial_dims_var_target'] = self.relations_target['spatial_dims_var']
+
+        local_model_settings['radius_region_source_km'] = self.relations_source['radius_region_km']
+        local_model_settings['radius_region_target_km'] = self.relations_target['radius_region_km']
+
+        with open(os.path.join(self.local_model_dir,"domain.json"),"w+") as f:
+            json.dump(local_model_settings, f, indent=4)   
+
     def load_step_models(self):
      
-        local_model_specs = self.model_settings["local_model"]
+        local_model_specs = self.model_settings["trained_local_model"]
         local_model_specs_is_file = local_model_specs.endswith('.json')
 
         step_model_settings = pysm.load_settings(local_model_specs)
 
         if not local_model_specs_is_file:
             step_model_settings['model_dir_pretrained'] = self.model_settings["local_model"]
-
-        step_model_settings['model_dir'] = self.local_model_dir
-        
-        step_model_settings['variables_source'] = self.model_settings['variables_source']
-        step_model_settings['variables_target'] = self.model_settings['variables_target']
-
-        step_model_settings['spatial_dims_var_source'] = self.relations_source['spatial_dims_var']
-        step_model_settings['spatial_dims_var_target'] = self.relations_target['spatial_dims_var']
-
-        step_model_settings['radius_region_source_km'] = self.relations_source['radius_region_km']
-        step_model_settings['radius_region_target_km'] = self.relations_target['radius_region_km']
 
         if step_model_settings['model'] =='crai':
             self.local_model = cmc.CoreCRAI(step_model_settings)

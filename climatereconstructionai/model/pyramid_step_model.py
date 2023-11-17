@@ -275,6 +275,8 @@ class pyramid_step_model(nn.Module):
         super().__init__()
         
         self.model_settings = load_settings(model_settings, 'model')
+        if 'domain' in self.model_settings.keys():
+            self.model_settings.update(load_settings(self.model_settings['domain'], 'model'))
 
         self.fusion_modules = None
 
