@@ -9,7 +9,7 @@ import numpy as np
 import torch
 import xarray as xr
 from torch.utils.data import Dataset, Sampler
-from .grid_utils import generate_region, PositionCalculator, get_coord_dict_from_var, get_coords_as_tensor
+from .grid_utils import generate_region, PositionCalculator, get_coord_dict_from_var, get_coords_as_tensor, invert_dict
 
 class InfiniteSampler(Sampler):
     def __init__(self, num_samples, data_source=None):
@@ -145,14 +145,6 @@ def save_sample(ds, time_index, spatial_dims_dict, save_path):
         k+=1
 
     ds_save.to_netcdf(save_path)
-
-def invert_dict(dict):
-    dict_out = {}
-    unique_values = np.unique(np.array(list(dict.values())))
-
-    for uni_value in unique_values:
-        dict_out[uni_value] = [key for key,value in dict.items() if value==uni_value]
-    return dict_out
 
 def get_stats(files, variable, n_sample=None):
     if (n_sample is not None) and (n_sample < len(files)):

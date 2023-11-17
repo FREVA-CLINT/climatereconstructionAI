@@ -303,6 +303,9 @@ class pyramid_step_model(nn.Module):
         if load_pretrained:
             self.check_pretrained(model_dir_check=self.model_settings['model_dir'])
         
+        if 'model_dir_pretrained' in self.model_settings.keys() and len(self.model_settings['model_dir_pretrained'])>0:
+            self.check_pretrained(model_dir_check=self.model_settings['model_dir_pretrained'])
+        
         
     def forward(self, x, coords_source, coords_target):
         

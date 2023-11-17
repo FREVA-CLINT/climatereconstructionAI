@@ -19,6 +19,14 @@ def get_coords_as_tensor(grid, lon='vlon', lat='vlat'):
     coords = torch.stack((lons, lats))
     return coords
 
+def invert_dict(dict):
+    dict_out = {}
+    unique_values = np.unique(np.array(list(dict.values())))
+
+    for uni_value in unique_values:
+        dict_out[uni_value] = [key for key,value in dict.items() if value==uni_value]
+    return dict_out
+
 def get_flat_coords(ds, coord_dict:dict):
     
     if 'lon' in coord_dict.values():
@@ -239,14 +247,14 @@ def get_grid_relations(grids, coord_dict, regional=True, radius_regions_km=None,
     return grid_data
 
 
-def get_parent_child_indices(parent_coords: torch.tensor, child_coords: torch.tensor, radius_km: float, radius_inc_km: float, in_deg=False, min_overlap=1, max_overlap=5):
+def get_parent_child_indices(parent_coords: torch.tensor, child_coords: torch.tensor, radius_km: float, radius_inc_km: float, in_deg=False, min_overlap=1, max_overlap=5, batch_size=-1):
 
     n_iter = 0
-    min_overlap_criterion = True
+    converged = False
 
-    while min_overlap_criterion:
+    while not converged:
 
-        pc_distance, p_c_indices, _, _ = get_regions(child_coords[0], child_coords[1], parent_coords[0], parent_coords[1], radius_region=radius_km, in_deg=in_deg)
+        pc_distance, p_c_indices, _, _ = get_regions(child_coords[0], child_coords[1], parent_coords[0], parent_coords[1], radius_region=radius_km, in_deg=in_deg, batch_size=batch_size)
 
         # relative to parents
         pc_distance = pc_distance.T
@@ -255,7 +263,7 @@ def get_parent_child_indices(parent_coords: torch.tensor, child_coords: torch.te
         c_indices, counts = p_c_indices.unique(return_counts=True)
         
         if (len(c_indices) == len(child_coords[0])) and (counts.min() > min_overlap):
-            min_overlap_criterion = False
+            converged = True
             print(f'converged at iteration {n_iter} radius of {radius_km}km with min_overlap={counts.min()}, max_overlap={counts.max()}')
         else:
             radius_km = radius_km + radius_inc_km
@@ -263,11 +271,11 @@ def get_parent_child_indices(parent_coords: torch.tensor, child_coords: torch.te
 
     max_overlap = int(counts.max()) if max_overlap is None else max_overlap
 
-    print(max_overlap)
     # get parent indices for children
     c_p_distances = [[] for _ in range(len(child_coords[0]))]
     c_p_indices = [[] for _ in range(len(child_coords[0]))]
     c_p_indices_rel = [[] for _ in range(len(child_coords[0]))]
+    
 
     for p_index, c_indices in enumerate(p_c_indices):
 
@@ -275,6 +283,7 @@ def get_parent_child_indices(parent_coords: torch.tensor, child_coords: torch.te
             c_p_indices[c_index].append(p_index)
             c_p_indices_rel[c_index].append(c_index_rel)
             c_p_distances[c_index].append(pc_distance[p_index, c_index_rel])
+            
 
     c_p_indices_pad = c_p_indices
     c_p_indices_rel_pad = c_p_indices_rel
@@ -313,7 +322,7 @@ def get_parent_child_indices(parent_coords: torch.tensor, child_coords: torch.te
     return indices, radius_km
 
 
-def get_relative_coordinates_grids(parent_coords, child_coords, relation_dict, relative_to="parents"):
+def get_relative_coordinates_grids(parent_coords, child_coords, relation_dict, relative_to="parents", batch_size=-1):
 
     if relative_to == 'children':
         coords_in_regions = [parent_coords[0][relation_dict['parents']], parent_coords[1][relation_dict['parents']]]
@@ -323,12 +332,12 @@ def get_relative_coordinates_grids(parent_coords, child_coords, relation_dict, r
         coords_in_regions = [child_coords[0][relation_dict['children']], child_coords[1][relation_dict['children']]]
         region_center_coords = parent_coords
     
-    return get_relative_coordinates_regions(coords_in_regions, region_center_coords)
+    return get_relative_coordinates_regions(coords_in_regions, region_center_coords, batch_size=batch_size)
 
 
-def get_relative_coordinates_regions(coords_in_regions, region_center_coords):
+def get_relative_coordinates_regions(coords_in_regions, region_center_coords, batch_size=-1):
 
-    PosCalc = PositionCalculator()
+    PosCalc = PositionCalculator(batch_size)
 
     rel_coords = []
 
@@ -342,21 +351,15 @@ def get_relative_coordinates_regions(coords_in_regions, region_center_coords):
     return rel_coords
 
 
-def get_regions(lons, lats, seeds_lon, seeds_lat, radius_region=None, n_points=None ,in_deg=True, rect=False):
+def get_regions(lons, lats, seeds_lon, seeds_lat, radius_region=None, n_points=None ,in_deg=True, rect=False, batch_size=-1):
 
     
     if in_deg:
         seeds_lon = torch.deg2rad(seeds_lon)
         seeds_lat = torch.deg2rad(seeds_lat)
 
-    lons = lons.view(len(lons),1)
-    lats = lats.view(len(lats),1)
-
-    seeds_lon = seeds_lon.view(1,len(seeds_lon))
-    seeds_lat = seeds_lat.view(1,len(seeds_lat))
-
     if rect:
-        Pos_calc = PositionCalculator()
+        Pos_calc = PositionCalculator(batch_size=batch_size)
         d_mat, phi, dlon, dlat = Pos_calc(lons, lats, seeds_lon, seeds_lat)
 
         region_indices_lon = dlon.median(dim=0).values.abs()*radius_earth <= radius_region 
@@ -372,20 +375,39 @@ def get_regions(lons, lats, seeds_lon, seeds_lat, radius_region=None, n_points=N
         indices_regions = indices_regions[idx_sort]
 
     else:
-        d_mat = distance_on_sphere(lons, lats, seeds_lon, seeds_lat)
+        Pos_calc = PositionCalculator(batch_size=batch_size)
 
-        if n_points is None:
-            distances, indices = torch.topk(d_mat, k=d_mat.shape[0], dim=0, largest=False)
-            distances *= radius_earth
-            region_indices = distances.median(dim=1).values <= radius_region 
+        d_mat = Pos_calc(lons, lats, seeds_lon, seeds_lat)[0].T
 
-            distances_regions = distances[region_indices]
-            indices_regions = indices[region_indices] 
-        else:     
-            distances, indices = torch.topk(d_mat, k=n_points, dim=0, largest=False)
-            indices_regions = indices
-            distances *= radius_earth*2
-            distances_regions = distances
+        if batch_size != -1 and batch_size <= d_mat.shape[-1]:
+            n_chunks = torch.tensor(d_mat.shape).max() // batch_size 
+        else:
+            n_chunks = 1
+
+        d_mat = d_mat.chunk(n_chunks, dim=-1)
+
+        distances_regions = []
+        indices_regions = []
+        idx=0
+        for d_mat_chunk in d_mat:
+            if n_points is None:
+                distances, indices = torch.topk(d_mat_chunk, k=d_mat_chunk.shape[0], dim=0, largest=False)
+                distances *= radius_earth
+                region_indices = distances.median(dim=1).values <= radius_region 
+
+                distances = distances[region_indices]
+                indices = indices[region_indices] 
+                n_points = indices.shape[0]
+            else:     
+                distances, indices = torch.topk(d_mat_chunk, k=n_points, dim=0, largest=False)
+                distances *= radius_earth*2
+
+            distances_regions.append(distances)
+            indices_regions.append(indices)
+            idx+=0
+
+        distances_regions = torch.concat(distances_regions, dim=-1)
+        indices_regions = torch.concat(indices_regions, dim=-1)
 
     lons_regions = lons.view(-1)[indices_regions]
     lats_regions = lats.view(-1)[indices_regions]
@@ -423,10 +445,10 @@ class PositionCalculator(nn.Module):
             lons, lats = rotate_coord_system(lons, lats, float(rotation_center[0]), float(rotation_center[1]))
             lons_t, lats_t = rotate_coord_system(lons_t, lats_t, float(rotation_center[0]), float(rotation_center[1]))
             
-        lons = lons.view(1,len(lons))
-        lats = lats.view(1,len(lats))
+        lons = lons.view(1,(lons).numel())
+        lats = lats.view(1,(lats).numel())
 
-        if self.batch_size != -1:
+        if self.batch_size != -1 and self.batch_size <= lons.shape[-1]:
             n_chunks = lons.shape[-1] // self.batch_size 
         else:
             n_chunks = 1
