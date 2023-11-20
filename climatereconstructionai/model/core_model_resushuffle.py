@@ -53,7 +53,7 @@ class res_blocks(nn.Module):
         return self.max_pool(x)
 
 class encoder(nn.Module): 
-    def __init__(self, n_levels, n_blocks, in_channels, u_net_channels, k_size=3, k_size_in=5):
+    def __init__(self, n_levels, n_blocks, in_channels, u_net_channels, k_size=3, k_size_in=5, batch_norm=True):
         super().__init__()
 
         self.layers = nn.ModuleList()
@@ -64,7 +64,7 @@ class encoder(nn.Module):
             else:
                 in_channels_block = u_net_channels*(2**(n-1))
                 out_channels_block = u_net_channels*(2**(n))
-            self.layers.append(res_blocks(n_blocks, in_channels_block, out_channels_block, k_size=k_size))
+            self.layers.append(res_blocks(n_blocks, in_channels_block, out_channels_block, k_size=k_size, batch_norm=batch_norm))
         
     def forward(self, x):
         outputs = []
@@ -122,10 +122,10 @@ class decoder(nn.Module):
         return x
 
 class ResUNet(nn.Module): 
-    def __init__(self, upcale_factor, n_blocks_unet, n_res_blocks, model_dim_unet, in_channels, out_channels, k_size=3):
+    def __init__(self, upcale_factor, n_blocks_unet, n_res_blocks, model_dim_unet, in_channels, out_channels, batch_norm=True, k_size=3):
         super().__init__()
 
-        self.encoder = encoder(n_blocks_unet, n_res_blocks, in_channels, model_dim_unet, k_size, 5)
+        self.encoder = encoder(n_blocks_unet, n_res_blocks, in_channels, model_dim_unet, k_size, 5, batch_norm=batch_norm)
 
         out_channels_unet = upcale_factor**2*out_channels
         self.decoder = decoder(n_blocks_unet, n_res_blocks, model_dim_unet, out_channels_unet, k_size=k_size)
@@ -153,6 +153,7 @@ class core_ResUNet(psm.pyramid_step_model):
         n_blocks = model_settings['n_blocks_core']
         model_dim_core = model_settings['model_dim_core']
         depth = model_settings["depth_core"]
+        batch_norm = model_settings["batch_norm"]
 
         self.time_dim= False
 
@@ -160,7 +161,7 @@ class core_ResUNet(psm.pyramid_step_model):
             output_dim *=2
 
         upcale_factor = model_settings['n_regular'][1] // model_settings['n_regular'][0]
-        self.core_model = ResUNet(upcale_factor, depth, n_blocks, model_dim_core, input_dim, output_dim)
+        self.core_model = ResUNet(upcale_factor, depth, n_blocks, model_dim_core, input_dim, output_dim, batch_norm=batch_norm)
 
         if load_pretrained:
             self.check_pretrained(model_dir_check=self.model_settings['model_dir'])
