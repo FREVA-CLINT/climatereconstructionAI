@@ -421,8 +421,8 @@ def get_regions(lons, lats, seeds_lon, seeds_lat, radius_region=None, n_points=N
 
 def rotate_coord_system(lons: torch.tensor, lats: torch.tensor, rotation_lon: float, rotation_lat:float):
 
-    theta = torch.tensor(rotation_lat)
-    phi = torch.tensor(rotation_lon)
+    theta = torch.tensor(rotation_lat) if not torch.is_tensor(rotation_lat) else rotation_lat
+    phi = torch.tensor(rotation_lon) if not torch.is_tensor(rotation_lon) else rotation_lon
 
     x = torch.cos(lons)* torch.cos(lats)
     y = torch.sin(lons)* torch.cos(lats)

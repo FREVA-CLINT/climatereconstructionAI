@@ -9,7 +9,7 @@ import numpy as np
 import torch
 import xarray as xr
 from torch.utils.data import Dataset, Sampler
-from .grid_utils import generate_region, PositionCalculator, get_coord_dict_from_var, get_coords_as_tensor, invert_dict
+from .grid_utils import generate_region, PositionCalculator, get_coord_dict_from_var, get_coords_as_tensor, invert_dict, rotate_coord_system
 
 class InfiniteSampler(Sampler):
     def __init__(self, num_samples, data_source=None):
@@ -309,9 +309,9 @@ class NetCDFLoader_lazy(Dataset):
                 coords = {'lon': coords[0], 'lat': coords[1]}
 
                 if len(seeds)==[]:
-                    rel_coords, _  = self.get_rel_coords(coords, [coords[0].median(), coords[1].median()], rotate_cs=self.rotate_cs)    
+                    rel_coords, _  = self.get_rel_coords(coords, [coords[0].median(), coords[1].median()], rotate_cs=self.rotate_cs)
                 else:
-                    rel_coords, _  = self.get_rel_coords(coords, [seeds[0].deg2rad(), seeds[1].deg2rad()], rotate_cs=self.rotate_cs)    
+                    rel_coords, _  = self.get_rel_coords(coords, [seeds[0].deg2rad(), seeds[1].deg2rad()], rotate_cs=self.rotate_cs)  
 
             else:
                 rel_coords = coords
@@ -398,10 +398,10 @@ class NetCDFLoader_lazy(Dataset):
             save_path_target = os.path.join(self.save_sample_path, os.path.basename(file_path_target).replace('.nc', f'_{float(seeds[0]):.3f}_{float(seeds[1]):.3f}_target.nc'))
             ds_target.to_netcdf(save_path_target)
 
-        return ds_source, ds_target
+        return ds_source, ds_target, seeds
 
 
-    def get_data(self, ds, index, dims_variables_dict):
+    def get_data(self, ds, index, dims_variables_dict, seeds):
 
         data = {}
         coords = {}
@@ -413,6 +413,12 @@ class NetCDFLoader_lazy(Dataset):
             for var in vars:
                 data_var = torch.tensor(ds[var][index].values).squeeze()
                 data[var] = data_var.unsqueeze(dim=-1)
+
+            if len(seeds)>0 and self.rotate_cs and 'u' in vars:
+                mag = (data['u']**2+data['v']**2).sqrt()
+                u, v = data['u']/mag, data['v']/mag
+                u, v = rotate_coord_system(u, v, seeds[0].deg2rad(),seeds[1].deg2rad())
+                data['u'],data['v'] = u*mag, v*mag
 
         return data, coords
 
@@ -443,10 +449,10 @@ class NetCDFLoader_lazy(Dataset):
         elif self.sampling_mode=='paired':
             target_file = self.files_target[source_index]
 
-        ds_source, ds_target = self.get_files(source_file, file_path_target=target_file)
+        ds_source, ds_target, seeds = self.get_files(source_file, file_path_target=target_file)
 
-        data_source, rel_coords_source = self.get_data(ds_source, index, self.dims_variables_source)
-        data_target, rel_coords_target = self.get_data(ds_target, index_target, self.dims_variables_target)
+        data_source, rel_coords_source = self.get_data(ds_source, index, self.dims_variables_source, seeds)
+        data_target, rel_coords_target = self.get_data(ds_target, index_target, self.dims_variables_target, seeds)
 
         if self.normalize_data:
             data_source = self.normalizer(data_source)
