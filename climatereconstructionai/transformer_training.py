@@ -165,7 +165,8 @@ def train(model, training_settings, model_hparams={}):
                                 rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False,
                                 sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
                                 norm_stats_save_path=training_settings['model_dir'],
-                                lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False)
+                                lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
+                                rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False)
     
     dataset_val = NetCDFLoader_lazy(source_files_val, 
                                 target_files_val,
@@ -184,7 +185,8 @@ def train(model, training_settings, model_hparams={}):
                                 index_offset_target=training_settings['index_offset_target'] if 'index_offset_target' in training_settings else 0,
                                 rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False,
                                 sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
-                                lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False)
+                                lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
+                                rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False)
     
 
     

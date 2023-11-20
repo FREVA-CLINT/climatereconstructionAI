@@ -178,7 +178,8 @@ class NetCDFLoader_lazy(Dataset):
                  rel_coords=False,
                  sample_for_norm=-1,
                  norm_stats_save_path='',
-                 lazy_load=False):
+                 lazy_load=False,
+                 rotate_cs=False):
         
         super(NetCDFLoader_lazy, self).__init__()
         
@@ -202,6 +203,7 @@ class NetCDFLoader_lazy(Dataset):
         self.sample_for_norm = sample_for_norm
         self.norm_stats_save_path = norm_stats_save_path
         self.lazy_load=lazy_load
+        self.rotate_cs = rotate_cs
 
         self.flatten=False
 
@@ -307,9 +309,9 @@ class NetCDFLoader_lazy(Dataset):
                 coords = {'lon': coords[0], 'lat': coords[1]}
 
                 if len(seeds)==[]:
-                    rel_coords, _  = self.get_rel_coords(coords, [coords[0].median(), coords[1].median()], rotate_cs=True)    
+                    rel_coords, _  = self.get_rel_coords(coords, [coords[0].median(), coords[1].median()], rotate_cs=self.rotate_cs)    
                 else:
-                    rel_coords, _  = self.get_rel_coords(coords, [seeds[0].deg2rad(), seeds[1].deg2rad()], rotate_cs=True)    
+                    rel_coords, _  = self.get_rel_coords(coords, [seeds[0].deg2rad(), seeds[1].deg2rad()], rotate_cs=self.rotate_cs)    
 
             else:
                 rel_coords = coords
