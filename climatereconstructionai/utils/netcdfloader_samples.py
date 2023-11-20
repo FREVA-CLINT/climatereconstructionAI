@@ -418,7 +418,7 @@ class NetCDFLoader_lazy(Dataset):
                 u_rad, v_rad = data['u']/(6371000), data['v']/6371000
                 mag = (u_rad**2+v_rad**2).sqrt()
                 u_rad, v_rad = u_rad/mag,v_rad/mag
-                u_rad, v_rad = rotate_coord_system(u_rad, v_rad, seeds[0].deg2rad(),seeds[1].deg2rad(), norm=False)
+                u_rad, v_rad = rotate_coord_system(u_rad, v_rad, seeds[0].deg2rad(),seeds[1].deg2rad())
                 data['u'], data['v'] = mag*u_rad*6371000, mag*v_rad*6371000
 
         return data, coords
