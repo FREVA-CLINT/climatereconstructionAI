@@ -415,10 +415,11 @@ class NetCDFLoader_lazy(Dataset):
                 data[var] = data_var.unsqueeze(dim=-1)
 
             if len(seeds)>0 and self.rotate_cs and 'u' in vars:
-                mag = (data['u']**2+data['v']**2).sqrt()
-                u, v = data['u']/mag, data['v']/mag
-                u, v = rotate_coord_system(u, v, seeds[0].deg2rad(),seeds[1].deg2rad())
-                data['u'],data['v'] = u*mag, v*mag
+                u_rad, v_rad = data['u']/(6371000), data['v']/6371000
+                mag = (u_rad**2+v_rad**2).sqrt()
+                u_rad, v_rad = u_rad/mag,v_rad/mag
+                u_rad, v_rad = rotate_coord_system(u_rad, v_rad, seeds[0].deg2rad(),seeds[1].deg2rad(), norm=False)
+                data['u'], data['v'] = mag*u_rad*6371000, mag*v_rad*6371000
 
         return data, coords
 

@@ -21,7 +21,7 @@ class pyramid_model(nn.Module):
         self.fusion_modules = None
         self.pre_computed_relations = False
     
-        self.model_settings = load_settings(model_settings)
+        self.model_settings = load_settings(model_settings, id='model')
         self.model_dir = self.model_settings['model_dir']
 
         self.check_model_dir()
@@ -278,7 +278,7 @@ class pyramid_model(nn.Module):
 
         # work through global data and then average - parameters?
     def train_(self, train_settings, pretrain=False):
-        self.train_settings = load_settings(train_settings)
+        self.train_settings = load_settings(train_settings, id='train')
 
         if self.model_settings['use_gauss']:
             self.train_settings['gauss_loss'] = True
@@ -332,15 +332,21 @@ class pyramid_model(nn.Module):
             load_state_dict = model_state_dict
         self.load_state_dict(load_state_dict, strict=False)
 
-def load_settings(dict_or_file):
+def load_settings(dict_or_file, id='model'):
     if isinstance(dict_or_file, dict):
         return dict_or_file
 
     elif isinstance(dict_or_file, str):
-        with open(dict_or_file,'r') as file:
-            dict_or_file = json.load(file)
+        if os.path.isfile(dict_or_file):
+            with open(dict_or_file,'r') as file:
+                dict_or_file = json.load(file)
+        else:
+            dict_or_file = os.path.join(dict_or_file, f'{id}_settings.json')
+            with open(dict_or_file,'r') as file:
+                dict_or_file = json.load(file)
 
         return dict_or_file
+
 
 def dl_to_ld(dl):
     return [dict(zip(dl,t)) for t in zip(*dl.values())]
