@@ -261,18 +261,18 @@ class pyramid_model(nn.Module):
                 
                 data = (data).detach().cpu()*(self.norm_stats[variable]['q_95'] - self.norm_stats[variable]['q_05']) + self.norm_stats[variable]['q_05']
                 data_output_regions[variable][batch_idx] = data[:,:,0,0]
-        
-        
-        for spatial_dim in spatial_dims_target:
+
+
+        for variable, spatial_dim in  self.relations_target['var_spatial_dims'].items():
             which_regions = self.relations_target[spatial_dim]['indices']['parents']
             which_idx_in_region = self.relations_target[spatial_dim]['indices']['children_idx']
 
-            for variable, data in data_output_regions.items():
-                b,n,c = data.shape
-                data = data.view(b*n,c)
-                data_output_regions[variable]=data[which_regions, which_idx_in_region].mean(dim=-1).numpy()
-                
-                ds_out[variable][ts] = data_output_regions[variable]
+            data = data_output_regions[variable]
+            b,n,c = data.shape
+            data = data.view(b*n,c)
+            data_output_regions[variable]=data[which_regions, which_idx_in_region].mean(dim=-1).numpy()
+            
+            ds_out[variable][ts] = data_output_regions[variable]
 
         return data_output_regions, ds_out
 
