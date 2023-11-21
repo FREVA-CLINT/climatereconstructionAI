@@ -230,8 +230,6 @@ class pyramid_model(nn.Module):
 
     def apply(self, x, ts=-1, batch_size=-1, device='cpu'):
 
-        ds_out = x.copy(deep=True)
-
         indices_source, coords_source_batches, indices_source_batches,_,_ = self.get_batches_coords(self.relations_source, batch_size, device=device)
         indices_target, coords_target_batches, _, _, _ = self.get_batches_coords(self.relations_target, batch_size, device=device)
 
@@ -272,9 +270,7 @@ class pyramid_model(nn.Module):
             data = data.view(b*n,c)
             data_output_regions[variable]=data[which_regions, which_idx_in_region].mean(dim=-1).numpy()
             
-            ds_out[variable][ts] = data_output_regions[variable]
-
-        return data_output_regions, ds_out
+        return data_output_regions
 
         # work through global data and then average - parameters?
     def train_(self, train_settings, pretrain=False):
