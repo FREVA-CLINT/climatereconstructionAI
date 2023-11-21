@@ -347,7 +347,11 @@ def get_relative_coordinates_regions(coords_in_regions, region_center_coords, ba
 
     for p in range(coords_in_regions[0].shape[0]):
 
-        dist, phi, dlon, dlat = PosCalc(coords_in_regions[0][[p]].T, coords_in_regions[1][[p]].T, (region_center_coords[0][p]).view(1,1), (region_center_coords[1][p]).view(1,1))
+        dist, phi, dlon, dlat = PosCalc(coords_in_regions[0][[p]].T, coords_in_regions[1][[p]].T,
+                                        (region_center_coords[0][p]).view(1,1),
+                                         (region_center_coords[1][p]).view(1,1),
+                                         ((region_center_coords[0][p]).view(1,1),
+                                         (region_center_coords[1][p]).view(1,1)))
         rel_coords.append(torch.stack([dist, phi, dlon, dlat],axis=0))
 
     rel_coords = torch.concat(rel_coords, dim=1).permute(1,2,0)
