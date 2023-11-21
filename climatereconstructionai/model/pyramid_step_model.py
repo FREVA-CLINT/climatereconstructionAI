@@ -484,9 +484,9 @@ class pyramid_step_model(nn.Module):
                 self.load_pretrained(weights_path)
 
     def load_pretrained(self, ckpt_path:str):
-        ckpt_dict = torch.load(ckpt_path)
         device = 'cpu' if 'device' not in self.model_settings.keys() else self.model_settings['device']
-        self.load_state_dict(ckpt_dict[ckpt_dict['labels'][-1]]['model'], strict=False, map_location=torch.device(device))
+        ckpt_dict = torch.load(ckpt_path, map_location=torch.device(device))
+        self.load_state_dict(ckpt_dict[ckpt_dict['labels'][-1]]['model'], strict=False)
 
 
 def getint(name):
