@@ -246,14 +246,10 @@ class pyramid_model(nn.Module):
 
         data_source_batched = dl_to_ld(data_source)
 
-        n, n_overlap = self.relations_target[spatial_dim]['indices']['parents'].shape
-
         data_output_regions = {}
-        data_output = {}
         for spatial_dim in spatial_dims_target:
             for variable in self.relations_target['spatial_dims_var'][spatial_dim]:
                 data_output_regions[variable] = torch.zeros_like(indices_target[spatial_dim], dtype=torch.float)
-                data_output[variable] = torch.zeros((n, n_overlap), dtype=torch.float)
 
         for batch_idx in range(len(indices_source_batches)):
             coords_source_batch = coords_source_batches[batch_idx]
@@ -266,16 +262,17 @@ class pyramid_model(nn.Module):
                 data = (data).detach().cpu()*(self.norm_stats[variable]['q_95'] - self.norm_stats[variable]['q_05']) + self.norm_stats[variable]['q_05']
                 data_output_regions[variable][batch_idx] = data[:,:,0,0]
         
-        which_regions = self.relations_target[spatial_dim]['indices']['parents']
-        which_idx_in_region = self.relations_target[spatial_dim]['indices']['children_idx']
-    
+        
+        for spatial_dim in spatial_dims_target:
+            which_regions = self.relations_target[spatial_dim]['indices']['parents']
+            which_idx_in_region = self.relations_target[spatial_dim]['indices']['children_idx']
 
-        for variable, data in data_output_regions.items():
-            b,n,c = data.shape
-            data = data.view(b*n,c)
-            data_output_regions[variable]=data[which_regions, which_idx_in_region].mean(dim=-1).numpy()
-            
-            ds_out[variable][ts] = data_output_regions[variable]
+            for variable, data in data_output_regions.items():
+                b,n,c = data.shape
+                data = data.view(b*n,c)
+                data_output_regions[variable]=data[which_regions, which_idx_in_region].mean(dim=-1).numpy()
+                
+                ds_out[variable][ts] = data_output_regions[variable]
 
         return data_output_regions, ds_out
 
