@@ -459,9 +459,12 @@ class NetCDFLoader_lazy(Dataset):
             data_source = self.normalizer(data_source)
             data_target = self.normalizer(data_target)
 
-      #  if self.apply_img_norm:  
-      #      stats = [calc_stats(data) for data in data_source.values()]
-      #      stat_dict = dict(zip(list(self.variables_source)))
+        if self.apply_img_norm:  
+            stats = [calc_stats(data) for data in data_source.values()]
+            stat_dict = dict(zip(self.variables_source,stats))
+            norm = normalizer(stat_dict)
+            data_source = norm(data_source)
+            data_target = norm(data_target)
 
         return data_source, data_target, rel_coords_source, rel_coords_target
 

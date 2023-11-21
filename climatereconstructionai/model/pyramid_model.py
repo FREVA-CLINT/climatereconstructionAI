@@ -30,7 +30,7 @@ class pyramid_model(nn.Module):
 
         self.save_local_domain_parameters()
 
-        if "trained_local_model" in self.model_settings.keys():
+        if "local_model" in self.model_settings.keys():
             self.load_step_models()
 
         # for outputting the patch file
@@ -139,7 +139,7 @@ class pyramid_model(nn.Module):
 
     def load_step_models(self):
      
-        local_model_specs = self.model_settings["trained_local_model"]
+        local_model_specs = self.model_settings["local_model"]
         local_model_specs_is_file = local_model_specs.endswith('.json')
 
         step_model_settings = pysm.load_settings(local_model_specs)
