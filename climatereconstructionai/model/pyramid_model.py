@@ -206,11 +206,13 @@ class pyramid_model(nn.Module):
         spatial_dim_indices_batched = {}
         spatial_dim_indices_rel = {}
         spatial_dim_indices = {}
+        spatial_dim_p_indices = {}
 
         for spatial_dim in spatial_dims:
             coords = relations_dict[spatial_dim]['rel_coords_children'][:,:,-2:].transpose(-2,-1).float()
             indices = relations_dict[spatial_dim]['indices']['children']
             c_indices_rel = relations_dict[spatial_dim]['indices']['children_idx'].to(device)
+            p_indices = relations_dict[spatial_dim]['indices']['parents'].to(device)
 
             spatial_dim_indices[spatial_dim] = indices[batch_indices].to(device)
 
@@ -218,19 +220,20 @@ class pyramid_model(nn.Module):
             spatial_dim_coords_batched[spatial_dim] = coords[batch_indices].to(device)
 
             spatial_dim_indices_rel[spatial_dim] = c_indices_rel[spatial_dim_indices[spatial_dim]].to(device)
+            spatial_dim_p_indices[spatial_dim] = p_indices[spatial_dim_indices[spatial_dim]].to(device)
 
         spatial_dim_coords_batched = dl_to_ld(spatial_dim_coords_batched)
         spatial_dim_indices_batched = dl_to_ld(spatial_dim_indices)
 
-        return spatial_dim_indices, spatial_dim_coords_batched, spatial_dim_indices_batched, spatial_dim_indices_rel
+        return spatial_dim_indices, spatial_dim_coords_batched, spatial_dim_indices_batched, spatial_dim_indices_rel, spatial_dim_p_indices
     
 
     def apply(self, x, ts=-1, batch_size=-1, device='cpu'):
 
         ds_out = x.copy(deep=True)
 
-        indices_source, coords_source_batches, indices_source_batches,_ = self.get_batches_coords(self.relations_source, batch_size, device=device)
-        indices_target, coords_target_batches, indices_target_batches, spatial_dim_indices_rel = self.get_batches_coords(self.relations_target, batch_size, device=device)
+        indices_source, coords_source_batches, indices_source_batches,_,_ = self.get_batches_coords(self.relations_source, batch_size, device=device)
+        indices_target, coords_target_batches, _, _, _ = self.get_batches_coords(self.relations_target, batch_size, device=device)
 
         spatial_dims_source = list(self.relations_source['spatial_dims_var'].keys())
         spatial_dims_target = list(self.relations_target['spatial_dims_var'].keys())
@@ -243,16 +246,19 @@ class pyramid_model(nn.Module):
 
         data_source_batched = dl_to_ld(data_source)
 
+        n, n_overlap = self.relations_target[spatial_dim]['indices']['parents'].shape
+
         data_output_regions = {}
+        data_output = {}
         for spatial_dim in spatial_dims_target:
-            for variable in self.relations_source['spatial_dims_var'][spatial_dim]:
+            for variable in self.relations_target['spatial_dims_var'][spatial_dim]:
                 data_output_regions[variable] = torch.zeros_like(indices_target[spatial_dim], dtype=torch.float)
+                data_output[variable] = torch.zeros((n, n_overlap), dtype=torch.float)
 
         for batch_idx in range(len(indices_source_batches)):
             coords_source_batch = coords_source_batches[batch_idx]
             coords_target_batch = coords_target_batches[batch_idx]
             data_source_batch = data_source_batched[batch_idx]
-            
             output_batch = self.local_model(data_source_batch, coords_source_batch, coords_target_batch)[0]
             
             for variable, data in output_batch.items():
@@ -260,17 +266,14 @@ class pyramid_model(nn.Module):
                 data = (data).detach().cpu()*(self.norm_stats[variable]['q_95'] - self.norm_stats[variable]['q_05']) + self.norm_stats[variable]['q_05']
                 data_output_regions[variable][batch_idx] = data[:,:,0,0]
         
-        which_region = self.relations_target[spatial_dim]['indices']['parents']
+        which_regions = self.relations_target[spatial_dim]['indices']['parents']
         which_idx_in_region = self.relations_target[spatial_dim]['indices']['children_idx']
+    
 
         for variable, data in data_output_regions.items():
             b,n,c = data.shape
             data = data.view(b*n,c)
-            data = data[which_region]
-            data = torch.gather(data, dim=2, index=which_idx_in_region.unsqueeze(dim=1).repeat(1,which_region.shape[-1],1))
-            data = torch.diagonal(data, dim1=1, dim2=2)
-
-            data_output_regions[variable]=data.mean(dim=-1).numpy()
+            data_output_regions[variable]=data[which_regions, which_idx_in_region].mean(dim=-1).numpy()
             
             ds_out[variable][ts] = data_output_regions[variable]
 
