@@ -253,7 +253,9 @@ class pyramid_model(nn.Module):
             coords_source_batch = coords_source_batches[batch_idx]
             coords_target_batch = coords_target_batches[batch_idx]
             data_source_batch = data_source_batched[batch_idx]
-            output_batch = self.local_model(data_source_batch, coords_source_batch, coords_target_batch)[0]
+
+            with torch.no_grad():
+                output_batch = self.local_model(data_source_batch, coords_source_batch, coords_target_batch)[0]
             
             for variable, data in output_batch.items():
                 
