@@ -53,14 +53,23 @@ class res_blocks(nn.Module):
         return self.max_pool(x)
 
 class encoder(nn.Module): 
-    def __init__(self, n_levels, n_blocks, in_channels, u_net_channels, k_size=3, k_size_in=5, batch_norm=True):
+    def __init__(self, n_levels, n_blocks, in_channels, u_net_channels, k_size=3, k_size_in=7, batch_norm=True, full_res=True):
         super().__init__()
+
+        padding_in = k_size_in // 2
+
+        if not full_res:
+            self.in_layer = nn.Sequential(nn.Conv2d(in_channels, u_net_channels, stride=1, padding=padding_in, kernel_size=k_size_in, padding_mode='replicate'),
+                                        nn.BatchNorm2d(u_net_channels),
+                                        nn.SiLU())
+        else:
+            self.in_layer = nn.Identity()
 
         self.layers = nn.ModuleList()
         for n in range(n_levels):
             if n==0:
-                in_channels_block = in_channels
-                out_channels_block = u_net_channels
+                in_channels_block = u_net_channels if not full_res else in_channels
+                out_channels_block = u_net_channels if not full_res else u_net_channels
             else:
                 in_channels_block = u_net_channels*(2**(n-1))
                 out_channels_block = u_net_channels*(2**(n))
@@ -68,6 +77,7 @@ class encoder(nn.Module):
         
     def forward(self, x):
         outputs = []
+        x = self.in_layer(x)
         for layer in self.layers:
             x = layer(x)
             outputs.append(x)
@@ -122,10 +132,10 @@ class decoder(nn.Module):
         return x
 
 class ResUNet(nn.Module): 
-    def __init__(self, upcale_factor, n_blocks_unet, n_res_blocks, model_dim_unet, in_channels, out_channels, batch_norm=True, k_size=3):
+    def __init__(self, upcale_factor, n_blocks_unet, n_res_blocks, model_dim_unet, in_channels, out_channels, batch_norm=True, k_size=3, full_res=True):
         super().__init__()
 
-        self.encoder = encoder(n_blocks_unet, n_res_blocks, in_channels, model_dim_unet, k_size, 5, batch_norm=batch_norm)
+        self.encoder = encoder(n_blocks_unet, n_res_blocks, in_channels, model_dim_unet, k_size, 5, batch_norm=batch_norm, full_res=full_res)
 
         out_channels_unet = upcale_factor**2*out_channels
         self.decoder = decoder(n_blocks_unet, n_res_blocks, model_dim_unet, out_channels_unet, k_size=k_size)
@@ -154,14 +164,15 @@ class core_ResUNet(psm.pyramid_step_model):
         model_dim_core = model_settings['model_dim_core']
         depth = model_settings["depth_core"]
         batch_norm = model_settings["batch_norm"]
-
+        full_res = True if 'full_res' not in model_settings.keys() else model_settings['full_res']
+        
         self.time_dim= False
 
         if model_settings['gauss']:
             output_dim *=2
 
         upcale_factor = model_settings['n_regular'][1] // model_settings['n_regular'][0]
-        self.core_model = ResUNet(upcale_factor, depth, n_blocks, model_dim_core, input_dim, output_dim, batch_norm=batch_norm)
+        self.core_model = ResUNet(upcale_factor, depth, n_blocks, model_dim_core, input_dim, output_dim, batch_norm=batch_norm, full_res=full_res)
 
         if load_pretrained:
             self.check_pretrained(model_dir_check=self.model_settings['model_dir'])

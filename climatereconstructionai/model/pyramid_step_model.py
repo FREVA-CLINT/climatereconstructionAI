@@ -10,7 +10,7 @@ from .. import transformer_training as trainer
 
 import climatereconstructionai.model.transformer_helpers as helpers
 
-from ..utils.io import load_ckpt
+from ..utils.io import load_ckpt, load_model
 from ..utils import grid_utils as gu
 
 
@@ -301,12 +301,6 @@ class pyramid_step_model(nn.Module):
         self.check_model_dir()
 
         self.norm = nn.LayerNorm(len(self.model_settings["variables_source"])) if self.model_settings["norm_pre_core"] else nn.Identity()
-
-        if load_pretrained:
-            self.check_pretrained(model_dir_check=self.model_settings['model_dir'])
-        
-        if 'model_dir_pretrained' in self.model_settings.keys() and len(self.model_settings['model_dir_pretrained'])>0:
-            self.check_pretrained(model_dir_check=self.model_settings['model_dir_pretrained'])
         
         
     def forward(self, x, coords_source, coords_target):
@@ -330,12 +324,12 @@ class pyramid_step_model(nn.Module):
             if self.time_dim:
                 x = x[:,0].permute(0,-2,-1,1)            
             else:
-                x = x.permute(0,-2,-1,1)  
+                x = x.permute(0,-2,-1,1)
      
         coords_target_hr = scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])
         x = self.output_net_post(x, coords_target_hr)
         
-        if self.predict_residual:
+        if self.predict_residual and not isinstance(self.core_model, nn.Identity):
             coords_target_lr = scale_coords(coords_target, self.range_region_source_rad[0], self.range_region_source_rad[1])
 
             x_pre = self.output_net_pre(x_res, coords_target_lr)
@@ -486,7 +480,7 @@ class pyramid_step_model(nn.Module):
     def load_pretrained(self, ckpt_path:str):
         device = 'cpu' if 'device' not in self.model_settings.keys() else self.model_settings['device']
         ckpt_dict = torch.load(ckpt_path, map_location=torch.device(device))
-        self.load_state_dict(ckpt_dict[ckpt_dict['labels'][-1]]['model'], strict=False)
+        load_model(ckpt_dict, self)
 
 
 def getint(name):
