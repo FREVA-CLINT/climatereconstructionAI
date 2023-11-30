@@ -21,10 +21,10 @@ def get_buckets_1d_batched(coords, n_q=2, equal_size=True):
 
     b,n = coords.shape
 
-    offset = coords.shape[0]*torch.arange(coords.shape[0]).view(-1,1)
+    offset = coords.shape[0]*torch.arange(coords.shape[0], device=coords.device).view(-1,1)
     coords = coords + offset
 
-    quants = torch.linspace(1/n_q, 1-1/n_q, n_q-1)
+    quants = torch.linspace(1/n_q, 1-1/n_q, n_q-1, device=coords.device)
     qs = coords.quantile(quants, dim=-1)
 
     o_b = (coords.shape[0]+1)/2
@@ -34,7 +34,7 @@ def get_buckets_1d_batched(coords, n_q=2, equal_size=True):
 
     qs = qs - offset.T
 
-    offset_buckets = boundaries.shape[0]*torch.arange(qs.shape[1]).view(-1,1)+1
+    offset_buckets = boundaries.shape[0]*torch.arange(qs.shape[1], device=coords.device).view(-1,1)+1
     
     buckets = buckets.reshape(b,n) - offset_buckets
 
@@ -47,7 +47,7 @@ def get_buckets_1d_batched(coords, n_q=2, equal_size=True):
 
 def get_field(n_output, coords, source, f=8):
     
-    x = y = torch.linspace(0, 1, n_output)
+    x = y = torch.linspace(0, 1, n_output, device=coords.device)
         
     b,n1,n2,c,nf = source.shape
     source_v = source.view(b,n1,n2,-1)

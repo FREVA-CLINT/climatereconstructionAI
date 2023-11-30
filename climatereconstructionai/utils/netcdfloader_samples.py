@@ -228,27 +228,28 @@ class NetCDFLoader_lazy(Dataset):
         _, _, seeds, self.n_dict_source = self.get_coordinates(ds_source, self.dims_variables_source, p_drop=p_dropout_source, seeds=start_seeds)
         _, _, _, self.n_dict_target = self.get_coordinates(ds_target, self.dims_variables_target, seeds=seeds, p_drop=p_dropout_target)
 
-        if stat_dict is None:
-            self.stat_dict = {}
+        if self.normalize_data:
+            if stat_dict is None:
+                self.stat_dict = {}
 
-            unique_variables = np.unique(np.array(self.variables_source + self.variables_target))
-          
-            for var in unique_variables:
-                files = []
-                if var in self.variables_source:
-                    files+=list(files_source)
-                if var in self.variables_target:
-                    files+=list(files_target)
-
-                self.stat_dict[var] = get_stats(files, var, self.sample_for_norm)
+                unique_variables = np.unique(np.array(self.variables_source + self.variables_target))
             
-            with open(os.path.join(self.norm_stats_save_path,"norm_stats.json"),"w+") as f:
-                json.dump(self.stat_dict,f, indent=4)
+                for var in unique_variables:
+                    files = []
+                    if var in self.variables_source:
+                        files+=list(files_source)
+                    if var in self.variables_target:
+                        files+=list(files_target)
 
-        else:
-            self.stat_dict=stat_dict
+                    self.stat_dict[var] = get_stats(files, var, self.sample_for_norm)
+                
+                with open(os.path.join(self.norm_stats_save_path,"norm_stats.json"),"w+") as f:
+                    json.dump(self.stat_dict,f, indent=4)
 
-        self.normalizer = normalizer(self.stat_dict)
+            else:
+                self.stat_dict=stat_dict
+
+            self.normalizer = normalizer(self.stat_dict)
 
 
 
