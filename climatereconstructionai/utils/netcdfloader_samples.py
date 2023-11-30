@@ -250,6 +250,8 @@ class NetCDFLoader_lazy(Dataset):
                 self.stat_dict=stat_dict
 
             self.normalizer = normalizer(self.stat_dict)
+        else:
+            self.stat_dict = None
 
 
 
