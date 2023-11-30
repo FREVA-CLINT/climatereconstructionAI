@@ -227,6 +227,7 @@ def set_common_args():
                             help="Comma separated list of values defining the permitted upper-bound of output values")
     arg_parser.add_argument('--profile', action='store_true', help="Profile code using tensorboard profiler")
     arg_parser.add_argument('--remap-data', type=str, default=None, help="Remap technique that should be applied")
+    arg_parser.add_argument('--down-sample-data', type=str, default=None, help="Use a custom padding for global dataset")
     arg_parser.add_argument('--predict-diff', action='store_true', help="Predict the difference between input and ground truth instead of ground truth directly")
     return arg_parser
 

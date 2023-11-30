@@ -198,6 +198,13 @@ class NetCDFLoader(Dataset):
             if images.shape[-1] != y or images.shape[-2] != x:
                 images = F.interpolate(images, (x, y), mode=mode)
 
+        if ind_data != cfg.n_target_data and cfg.down_sample_data:
+            x_orig, y_orig = images.shape[-2], images.shape[-1]
+            mode, x, y = cfg.down_sample_data.split("_")
+            x, y = int(x), int(y)
+            images = F.interpolate(images, (x, y), mode=mode)
+            images = F.interpolate(images, (x_orig, y_orig), mode=mode)
+
         return images, masks
 
     def __getitem__(self, index):
