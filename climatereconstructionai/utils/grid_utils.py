@@ -349,9 +349,10 @@ def get_relative_coordinates_regions(coords_in_regions, region_center_coords, ba
 
         dist, phi, dlon, dlat = PosCalc(coords_in_regions[0][[p]].T, coords_in_regions[1][[p]].T,
                                         (region_center_coords[0][p]).view(1,1),
-                                         (region_center_coords[1][p]).view(1,1),
-                                         ((region_center_coords[0][p]).view(1,1),
-                                         (region_center_coords[1][p]).view(1,1)))
+                                        (region_center_coords[1][p]).view(1,1),
+                                        ((region_center_coords[0][p]).view(1,1),
+                                        (region_center_coords[1][p]).view(1,1)))
+        
         rel_coords.append(torch.stack([dist, phi, dlon, dlat],axis=0))
 
     rel_coords = torch.concat(rel_coords, dim=1).permute(1,2,0)
@@ -432,9 +433,9 @@ def rotate_coord_system(lons: torch.tensor, lats: torch.tensor, rotation_lon: fl
     y = torch.sin(lons)* torch.cos(lats)
     z = torch.sin(lats)
 
-    rotated_x = torch.cos(theta)*torch.cos(phi)*x + torch.cos(theta)*torch.sin(phi)*y + torch.sin(theta)*z
+    rotated_x =  torch.cos(theta)*torch.cos(phi)*x + torch.cos(theta)*torch.sin(phi)*y + torch.sin(theta)*z
     rotated_y = -torch.sin(phi)*x + torch.cos(phi)*y
-    rotated_z = -torch.sin(theta)*torch.cos(phi)*x - torch.sin(theta)*torch.sin(phi)*y+ torch.cos(theta)*z
+    rotated_z = -torch.sin(theta)*torch.cos(phi)*x - torch.sin(theta)*torch.sin(phi)*y + torch.cos(theta)*z
 
     rot_lon = torch.atan2(rotated_y, rotated_x)
     rot_lat = torch.arcsin(rotated_z)

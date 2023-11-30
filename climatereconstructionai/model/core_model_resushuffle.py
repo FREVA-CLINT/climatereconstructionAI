@@ -5,16 +5,16 @@ import math
     
   
 class res_net_block(nn.Module):
-    def __init__(self, in_channels, out_channels,  k_size=3, batch_norm=True, with_reduction=False):
+    def __init__(self, in_channels, out_channels,  k_size=3, batch_norm=True, with_reduction=False, groups=1):
         super().__init__()
 
         padding = k_size // 2
         stride = 2 if with_reduction else 1
 
-        self.conv1 = nn.Conv2d(in_channels, out_channels, stride=stride, padding=padding, kernel_size=k_size, padding_mode='replicate')
+        self.conv1 = nn.Conv2d(in_channels, out_channels, stride=stride, padding=padding, kernel_size=k_size, padding_mode='replicate',groups=groups)
         self.conv2 = nn.Conv2d(out_channels, out_channels, stride=1, padding=padding, kernel_size=k_size, padding_mode='replicate')
 
-        self.reduction = nn.Conv2d(in_channels, out_channels, stride=stride, padding=0, kernel_size=1)
+        self.reduction = nn.Conv2d(in_channels, out_channels, stride=stride, padding=0, kernel_size=1,groups=groups)
 
         self.bn1 = nn.BatchNorm2d(out_channels) if batch_norm else nn.Identity()
         self.bn2 = nn.BatchNorm2d(out_channels) if batch_norm else nn.Identity()
@@ -33,14 +33,14 @@ class res_net_block(nn.Module):
         
 
 class res_blocks(nn.Module): 
-    def __init__(self,  n_blocks, in_channels, out_channels, k_size=3, with_reduction=True, batch_norm=True):
+    def __init__(self,  n_blocks, in_channels, out_channels, k_size=3, with_reduction=True, batch_norm=True, groups=1):
         super().__init__()
 
         self.res_block1 = res_net_block(in_channels, out_channels,  k_size=k_size)
         
         self.res_net_blocks = nn.ModuleList()
         for n in range(n_blocks-1):
-            self.res_net_blocks.append(res_net_block(out_channels, out_channels, k_size=k_size, batch_norm=batch_norm))
+            self.res_net_blocks.append(res_net_block(out_channels, out_channels, k_size=k_size, batch_norm=batch_norm, groups=groups))
 
         self.max_pool = nn.MaxPool2d(kernel_size=2) if with_reduction else nn.Identity()
 
@@ -53,13 +53,13 @@ class res_blocks(nn.Module):
         return self.max_pool(x)
 
 class encoder(nn.Module): 
-    def __init__(self, n_levels, n_blocks, in_channels, u_net_channels, k_size=3, k_size_in=7, batch_norm=True, full_res=True):
+    def __init__(self, n_levels, n_blocks, in_channels,  u_net_channels, k_size=3, k_size_in=7, batch_norm=True, full_res=True ,n_groups=1):
         super().__init__()
 
         padding_in = k_size_in // 2
 
         if not full_res:
-            self.in_layer = nn.Sequential(nn.Conv2d(in_channels, u_net_channels, stride=1, padding=padding_in, kernel_size=k_size_in, padding_mode='replicate'),
+            self.in_layer = nn.Sequential(nn.Conv2d(in_channels, u_net_channels, stride=1, padding=padding_in, kernel_size=k_size_in, padding_mode='replicate', groups=n_groups),
                                         nn.BatchNorm2d(u_net_channels),
                                         nn.SiLU())
         else:
@@ -73,7 +73,8 @@ class encoder(nn.Module):
             else:
                 in_channels_block = u_net_channels*(2**(n-1))
                 out_channels_block = u_net_channels*(2**(n))
-            self.layers.append(res_blocks(n_blocks, in_channels_block, out_channels_block, k_size=k_size, batch_norm=batch_norm))
+
+            self.layers.append(res_blocks(n_blocks, in_channels_block, out_channels_block, k_size=k_size, batch_norm=batch_norm, groups=n_groups))
         
     def forward(self, x):
         outputs = []
@@ -132,13 +133,13 @@ class decoder(nn.Module):
         return x
 
 class ResUNet(nn.Module): 
-    def __init__(self, upcale_factor, n_blocks_unet, n_res_blocks, model_dim_unet, in_channels, out_channels, batch_norm=True, k_size=3, full_res=True):
+    def __init__(self, upcale_factor, n_blocks_unet, n_res_blocks, model_dim_unet, in_channels, out_channels, batch_norm=True, k_size=3, full_res=True, n_groups=1):
         super().__init__()
 
-        self.encoder = encoder(n_blocks_unet, n_res_blocks, in_channels, model_dim_unet, k_size, 5, batch_norm=batch_norm, full_res=full_res)
+        self.encoder = encoder(n_blocks_unet, n_res_blocks, in_channels, model_dim_unet, k_size, 5, batch_norm=batch_norm, full_res=full_res, n_groups=n_groups)
 
         out_channels_unet = upcale_factor**2*out_channels
-        self.decoder = decoder(n_blocks_unet, n_res_blocks, model_dim_unet, out_channels_unet, k_size=k_size)
+        self.decoder = decoder(n_blocks_unet, n_res_blocks, model_dim_unet, out_channels, k_size=k_size)
 
         self.pixel_shuffle = nn.PixelShuffle(upcale_factor) if upcale_factor >1 else nn.Identity()
     
@@ -164,15 +165,21 @@ class core_ResUNet(psm.pyramid_step_model):
         model_dim_core = model_settings['model_dim_core']
         depth = model_settings["depth_core"]
         batch_norm = model_settings["batch_norm"]
-        full_res = True if 'full_res' not in model_settings.keys() else model_settings['full_res']
-        
+
+        full_res = True if 'full_res' not in model_settings.keys() else model_settings['grouped']
+        grouped = False if 'grouped' not in model_settings.keys() else model_settings['grouped']
+
         self.time_dim= False
 
         if model_settings['gauss']:
             output_dim *=2
 
+        if grouped:
+            n_groups = input_dim
+        else:
+            n_groups = 1
         upcale_factor = model_settings['n_regular'][1] // model_settings['n_regular'][0]
-        self.core_model = ResUNet(upcale_factor, depth, n_blocks, model_dim_core, input_dim, output_dim, batch_norm=batch_norm, full_res=full_res)
+        self.core_model = ResUNet(upcale_factor, depth, n_blocks, model_dim_core, input_dim, output_dim, batch_norm=batch_norm, full_res=full_res, n_groups=n_groups)
 
         if load_pretrained:
             self.check_pretrained(model_dir_check=self.model_settings['model_dir'])

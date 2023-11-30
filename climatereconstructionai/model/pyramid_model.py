@@ -145,7 +145,7 @@ class pyramid_model(nn.Module):
         step_model_settings = pysm.load_settings(local_model_specs)
 
         if not local_model_specs_is_file:
-            step_model_settings['model_dir_pretrained'] = self.model_settings["local_model"]
+            step_model_settings['pretrained_path'] = self.model_settings["local_model"]
 
         if step_model_settings['model'] =='crai':
             self.local_model = cmc.CoreCRAI(step_model_settings)
