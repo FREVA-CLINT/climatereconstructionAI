@@ -135,7 +135,7 @@ def batch_coords(coords, n_q):
     return indices_tot, cs2_m
 
 
-class nh_spa_mapper_simple2(nn.Module):
+class quant_discretizer(nn.Module):
     def __init__(self, min_val, max_val, n) -> None: 
         super().__init__()
 
@@ -177,68 +177,6 @@ class nh_spa_mapper_simple2(nn.Module):
         x = x.view(b,n,nf,n1,n2)
 
         return x
-
-
-class nh_spa_mapper_simple(nn.Module):
-    def __init__(self, nh, model_dim, dropout=0, PE=None, polar=False, nh_batch_size=-1) -> None: 
-        super().__init__()
-
-        self.nh = nh
-        self.md_nh = model_dim // nh
-
-        self.nn_layer = helpers.nn_layer(nh, both_dims=False, batch_size=nh_batch_size)
-
-        self.polar=polar
-
-        self.PE = PE
-
-        self.k_proj = nn.Sequential(nn.Linear(self.md_nh*self.nh, self.nh, bias=True))
-        
-        self.softm = nn.Softmax(dim=-1)
-
-        self.v_proj = nn.Identity()
-        
-        self.mlp_layer_nh = nn.Identity()
-
-        self.pe_dropout = nn.Dropout(dropout) if PE is not None else nn.Identity()
-
-        self.norm1 = nn.LayerNorm(self.md_nh)
-
-    def forward(self, x, coords_target, coords_source, d_mat=None, return_debug=False):
-        
-        pos_enc = None 
-
-        #get nearest neighbours
-        x_nh, _, cs_nh = self.nn_layer(x, coords_target, coords_source, d_mat=d_mat, skip_self=False)
-
-        if self.polar:
-            d_mat, phi = helpers.to_polar(cs_nh[:,0,:,:], cs_nh[:,1,:,:])
-            cs_nh = torch.stack((d_mat,phi),dim=1)
-
-        b, t, nh, e = x_nh.shape
-        batched = cs_nh.shape[0] == b
-        
-        pe = self.pe_dropout(self.PE(cs_nh, batched=batched))
-       
-        k = self.norm1(pe).reshape(b*t,nh,self.md_nh)
-
-        k = self.k_proj(k.reshape(b*t,self.nh*self.md_nh))
-        k = self.softm(k).unsqueeze(dim=-1)
-
-        x_nh = x_nh.reshape(b*t,nh,e)
-        x_nh = x_nh*k
-
-        x = x_nh.sum(dim=1).view(b,t,e)
-
-
-        if return_debug:
-            pos_enc = pe
-            debug_information = {"atts": att.detach(),
-                                 "pos_encs":pos_enc}
-            
-            return x, debug_information
-        else:
-            return x
 
         
 class nu_grid_sample(nn.Module):
@@ -311,42 +249,19 @@ class input_net(nn.Module):
     def __init__(self, model_settings):
         super().__init__()
 
-        model_dim = model_settings["model_dim"]
-        ff_dim = model_settings["ff_dim"]
-        nh = model_settings["nh"]
-
         self.spatial_dim_var_dict = model_settings['spatial_dims_var_source']
 
         n_mappers = model_settings['n_input_groups']
-        
-        nh_batch_size = -1 if 'nh_batch_size' not in model_settings.keys() else model_settings['nh_batch_size']
-
-        polar = model_settings['polar']
-
-        model_dim_nh = model_dim // nh
-        ff_dim_nh = ff_dim // nh
-
-        if model_settings['abs_pe']:
-            self.abs_pe = helpers.RelativePositionEmbedder_mlp(model_dim, ff_dim, transform=model_settings['transform'])
-        else:
-            self.abs_pe = None
-
-        PE = helpers.RelativePositionEmbedder_mlp(model_dim_nh, ff_dim_nh, transform=model_settings['transform'], polar=polar)
 
         self.nh_mapping = nn.ModuleList()
 
         for n in range(n_mappers):
             self.nh_mapping.append(
-                nh_spa_mapper_simple2(model_settings['range_region_source_rad'][0], model_settings['range_region_source_rad'][1], model_settings['n_regular'][0])
+                quant_discretizer(model_settings['range_region_source_rad'][0], model_settings['range_region_source_rad'][1], model_settings['n_regular'][0])
             )    
 
 
-    def forward(self, x: dict, coords_source: dict, coords_source_reg):
-
-        if self.abs_pe is not None:
-            batched = coords_source.shape[0] == x.shape[0]
-            ape_enc = self.dropout_ape_s(self.APE(coords_source, batched=batched))
-            x = x + ape_enc
+    def forward(self, x: dict, coords_source: dict):
 
         x_spatial_dims = []
         nh_mapping_iter = 0
@@ -572,13 +487,7 @@ class pyramid_step_model(nn.Module):
         self.model_settings['range_region_target_rad'] = self.range_region_target_rad
         self.model_settings['grid_size_in'] = self.grid_size_in
         self.model_settings['grid_size_out'] = self.grid_size_out
-       
-        c_range_lr = torch.linspace(self.range_region_source_rad[0], self.range_region_source_rad[1], self.n_in)
 
-        lon_lr = c_range_lr.view(-1,1).repeat(self.n_in,1)
-        lat_lr = c_range_lr.view(-1,1).repeat(1, self.n_in).view(-1,1)
-
-        self.reg_coords_lr = nn.Parameter(torch.stack((lon_lr, lat_lr)).squeeze(), requires_grad=False)
 
 
     # -> high-level models first, cache results, then fusion

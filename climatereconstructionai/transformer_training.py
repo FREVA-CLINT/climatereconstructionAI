@@ -30,6 +30,21 @@ class L1Loss(nn.Module):
         loss = self.loss(output[:,:,:,0],target)
         return loss
 
+class norm_L1Loss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.loss = torch.nn.L1Loss()
+
+    def forward(self, output, target):
+        b,n,c,g = output.shape
+        output = (output[:,:,:,0] - output[:,:,:,0].mean(dim=1))/output[:,:,:,0].std(dim=1)
+        target = (target - target.mean(dim=1))/target.std(dim=1)
+
+        loss = self.loss(output,target)
+        return loss
+    
+
+
 class DictLoss(nn.Module):
     def __init__(self, loss_fcn):
         super().__init__()
@@ -166,7 +181,8 @@ def train(model, training_settings, model_hparams={}):
                                 sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
                                 norm_stats_save_path=training_settings['model_dir'],
                                 lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
-                                rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False)
+                                rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False,
+                                norm_lvl=training_settings['norm_lvl'] if 'norm_lvl' in training_settings else 0.05)
     
     dataset_val = NetCDFLoader_lazy(source_files_val, 
                                 target_files_val,
@@ -186,7 +202,8 @@ def train(model, training_settings, model_hparams={}):
                                 rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False,
                                 sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
                                 lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
-                                rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False)
+                                rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False,
+                                norm_lvl=training_settings['norm_lvl'] if 'norm_lvl' in training_settings else 0.05)
     
 
     
