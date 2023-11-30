@@ -5,7 +5,7 @@ import math
     
   
 class res_net_block(nn.Module):
-    def __init__(self, in_channels, out_channels,  k_size=3, batch_norm=True, with_reduction=False, groups=1):
+    def __init__(self, in_channels, out_channels, k_size=3, batch_norm=True, with_reduction=False, groups=1):
         super().__init__()
 
         padding = k_size // 2
@@ -71,8 +71,8 @@ class encoder(nn.Module):
                 in_channels_block = u_net_channels if not full_res else in_channels
                 out_channels_block = u_net_channels if not full_res else u_net_channels
             else:
-                in_channels_block = u_net_channels*(2**(n-1))
-                out_channels_block = u_net_channels*(2**(n))
+                in_channels_block = u_net_channels*(4**(n-1))
+                out_channels_block = u_net_channels*(4**(n))
 
             self.layers.append(res_blocks(n_blocks, in_channels_block, out_channels_block, k_size=k_size, batch_norm=batch_norm, groups=n_groups))
         
@@ -107,18 +107,42 @@ class decoder_block(nn.Module):
         x = self.res_block(x)
 
         return x
-    
+
+class decoder_block_shuffle(nn.Module):
+    def __init__(self, in_channels, out_channels, k_size=3, with_skip=True):
+        super().__init__()
+  
+        #self.res_block_up = res_net_block(in_channels, in_channels//2, k_size=k_size, batch_norm=False)
+        self.up = nn.PixelShuffle(2)
+
+        self.with_skip=with_skip
+        if not self.with_skip:
+            in_channels = out_channels
+
+        self.res_block = res_net_block(out_channels*2, out_channels,  k_size=k_size, batch_norm=False)
+
+    def forward(self, x, skip_channels=None):
+
+        x = self.up(x)
+     #   x = self.res_block_up(x)
+
+        if self.with_skip:
+            x = torch.concat((x, skip_channels), dim=1)
+      
+        x = self.res_block(x)
+
+        return x
 
 class decoder(nn.Module):
-    def __init__(self, n_blocks_unet, n_res_blocks, u_net_channels, out_channels, k_size=3):
+    def __init__(self, n_blocks_unet, u_net_channels, out_channels, k_size=3):
         super().__init__()
 
         self.decoder_blocks = nn.ModuleList()
         for n in range(n_blocks_unet-1, 0,-1):
-            in_channels_block = u_net_channels*(2**(n))
-            out_channels_block = u_net_channels*(2**(n-1))
+            in_channels_block = u_net_channels*(4**(n))
+            out_channels_block = u_net_channels*(4**(n-1))
 
-            self.decoder_blocks.append(decoder_block(in_channels_block, out_channels_block, k_size=k_size, with_skip=True))      
+            self.decoder_blocks.append(decoder_block_shuffle(in_channels_block, out_channels_block, k_size=k_size, with_skip=True))      
         
         self.out_layer = nn.Conv2d(out_channels_block, out_channels, stride=1, padding=1, kernel_size=k_size, padding_mode='replicate')
 
@@ -138,8 +162,7 @@ class ResUNet(nn.Module):
 
         self.encoder = encoder(n_blocks_unet, n_res_blocks, in_channels, model_dim_unet, k_size, 5, batch_norm=batch_norm, full_res=full_res, n_groups=n_groups)
 
-        out_channels_unet = upcale_factor**2*out_channels
-        self.decoder = decoder(n_blocks_unet, n_res_blocks, model_dim_unet, out_channels, k_size=k_size)
+        self.decoder = decoder(n_blocks_unet, model_dim_unet, out_channels, k_size=k_size)
 
         self.pixel_shuffle = nn.PixelShuffle(upcale_factor) if upcale_factor >1 else nn.Identity()
     

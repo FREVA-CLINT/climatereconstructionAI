@@ -394,7 +394,7 @@ class pyramid_step_model(nn.Module):
         
     def forward(self, x, coords_source, coords_target):
         
-        x = self.input_net(x, coords_source, self.reg_coords_lr)
+        x = self.input_net(x, coords_source)
 
         x_res = x
 
