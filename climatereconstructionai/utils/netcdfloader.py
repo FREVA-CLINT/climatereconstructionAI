@@ -99,10 +99,6 @@ def load_netcdf(data_paths, data_types, keep_dss=False, mask=False):
         ndata = len(data_paths)
         assert ndata == len(data_types)
         dss, data, lengths, sizes = zip(*[nc_loadchecker(data_paths[i], data_types[i]) for i in range(ndata)])
-        new_data = data[0]
-        for i in range(ndata-1):
-            new_data += data[i]
-        data = new_data
 
         if cfg.flip_dims and not mask:
             for dim in cfg.flip_dims:
@@ -129,11 +125,21 @@ class NetCDFLoader(Dataset):
         self.remap_data = remap_data
 
         for (data_name, data_type), data_dirs in data_dir_dict.items():
-            xr_dss, dir_data, self.img_length, self.img_sizes = load_netcdf(data_dirs,
-                                                                            len(data_dirs)*[data_type],
-                                                                            keep_dss=True)
+            data = []
+            xr_dss = None
+            for data_dir in data_dirs:
+                if xr_dss:
+                    dir_data, _, self.img_sizes = load_netcdf([data_dir],
+                                                                            [data_type])
+                else:
+                    xr_dss, dir_data, _, self.img_sizes = load_netcdf([data_dir],
+                                                                                    [data_type],
+                                                                                    keep_dss=True)
+                data.append(np.concatenate(dir_data))
+            data = np.concatenate(data)
+            self.img_length = len(data)
             self.xr_dss.append(xr_dss)
-            self.img_data.append(dir_data)
+            self.img_data.append(data)
             self.data_types.append(data_type)
         if mask_dir_dict:
             for (mask_name, mask_type), mask_dirs in mask_dir_dict.items():
@@ -149,7 +155,6 @@ class NetCDFLoader(Dataset):
         self.img_mean, self.img_std, self.img_znorm = img_normalization(self.img_data)
 
         self.bounds = bnd_normalization(self.img_mean, self.img_std, train_stats)
-
         if self.remap_data:
             _, x, y = self.remap_data.split("_")
             self.img_sizes = ((int(x), int(y)),)
