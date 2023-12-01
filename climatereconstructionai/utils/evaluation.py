@@ -181,9 +181,9 @@ def create_outputs(data_dict, eval_path, output_names, data_stats, xr_dss, i_mod
             if cfg.cut_max is not None:
                 data_dict[cname][:, j, :, :][data_dict[cname][:, j, :, :] > cfg.cut_max] = cfg.cut_max
 
-            if cfg.reverse_width:
-                data_dict[cname] = torch.flip(data_dict[cname], dims=[2])
             if cfg.reverse_height:
+                data_dict[cname] = torch.flip(data_dict[cname], dims=[2])
+            if cfg.reverse_width:
                 data_dict[cname] = torch.flip(data_dict[cname], dims=[3])
 
             ds[data_type] = xr.DataArray(data_dict[cname].to(torch.device('cpu')).detach().numpy()[:, j, :, :],
