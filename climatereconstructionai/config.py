@@ -321,4 +321,6 @@ def set_evaluate_args(arg_file=None, prog_func=None):
                             help="Set all values smaller than this to value")
     arg_parser.add_argument('--cut-max', type=float, default=None,
                             help="Set all values greater than this to value")
+    arg_parser.add_argument('--reverse-width', action='store_true', help="Revers order of width-axis")
+    arg_parser.add_argument('--reverse-height', action='store_true', help="Revers order of height-axis")
     global_args(arg_parser, arg_file, prog_func)
