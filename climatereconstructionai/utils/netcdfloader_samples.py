@@ -34,12 +34,12 @@ class InfiniteSampler(Sampler):
                 order = np.random.permutation(n_samples) 
                 i = 0
 
-def get_moments(data, type, level=0.05):
+def get_moments(data, type, level=0.9):
 
     if type == 'quantile':
-        moments = (np.quantile((data), 1-level).astype(float), np.quantile((data), level).astype(float))
+        moments = (np.quantile((data), ((1-level), level)).astype(float))
 
-    if type == 'quantile_abs':
+    elif type == 'quantile_abs':
         q = np.quantile(np.abs(data), level).astype(float)
         moments = (q,q)
 
