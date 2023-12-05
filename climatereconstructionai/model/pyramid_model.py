@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 from torch import multiprocessing
 import xarray as xr
+import math
 from .. import transformer_training as trainer
 
 import climatereconstructionai.model.transformer_helpers as helpers
@@ -78,22 +79,44 @@ class pyramid_model(nn.Module):
             else:
                 radius_inc = self.model_settings["radius_inc"]
 
-            ds_source = xr.load_dataset(self.model_settings["data_file_source"])
-            self.relations_source, self.radius_region_source_km = self.get_relations(ds_source, self.model_settings['variables_source'], parent_coords, radius_region_source_km, radius_inc)
-
             if "data_file_target" in self.model_settings.keys() and self.model_settings['data_file_target']!=self.model_settings["data_file_source"]:
                 ds_target = xr.load_dataset(self.model_settings["data_file_target"])
-                self.relations_target, self.radius_region_target_km = self.get_relations(ds_target, self.model_settings['variables_target'], parent_coords, radius_region_target_km, radius_inc)
+                self.relations_target, self.radius_region_target_km = self.get_relations(ds_target, 
+                                                                                         self.model_settings['variables_target'], 
+                                                                                         parent_coords, 
+                                                                                         radius_region_target_km, 
+                                                                                         radius_inc, 
+                                                                                         min_overlap=self.model_settings['min_overlap_regions'])
+
+                ds_source = xr.load_dataset(self.model_settings["data_file_source"])
+                self.relations_source, self.radius_region_source_km = self.get_relations(ds_source, 
+                                                                                         self.model_settings['variables_source'], 
+                                                                                         parent_coords, 
+                                                                                         self.radius_region_target_km*math.sqrt(2), 
+                                                                                         radius_inc,
+                                                                                         min_overlap=0)
             else:
-                self.relations_target = self.relations_source
-                self.radius_region_target_km = radius_region_target_km
+                ds_source = xr.load_dataset(self.model_settings["data_file_source"])
+                self.relations_target, self.radius_region_target_km = self.get_relations(ds_source, 
+                                                                                         self.model_settings['variables_target'], 
+                                                                                         parent_coords, 
+                                                                                         radius_region_target_km, 
+                                                                                         radius_inc, 
+                                                                                         min_overlap=self.model_settings['min_overlap_regions'])
+                
+                self.relations_source, self.radius_region_source_km = self.get_relations(ds_source, 
+                                                                                         self.model_settings['variables_source'], 
+                                                                                         parent_coords, 
+                                                                                         self.radius_region_target_km*math.sqrt(2), 
+                                                                                         radius_inc,
+                                                                                         min_overlap=0)
 
             torch.save(self.relations_source, self.relation_fp_source)
             torch.save(self.relations_target, self.relation_fp_target)
     
 
 
-    def get_relations(self, ds, variables, parent_coords, radius_region_km, radius_inc):
+    def get_relations(self, ds, variables, parent_coords, radius_region_km, radius_inc, min_overlap=1):
 
         ds_dict = gu.prepare_coordinates_ds_dict({0: {'ds': ds}},[0], variables)
         child_coords_spatial_dims = ds_dict[0]['spatial_dims']
@@ -105,7 +128,7 @@ class pyramid_model(nn.Module):
         for spatial_dim, coords in child_coords_spatial_dims.items():
             child_coords = torch.stack(tuple(coords['coords'].values()),dim=0)
 
-            relation_dict, radius_region_km = gu.get_parent_child_indices(parent_coords, child_coords, radius_region_km, radius_inc, min_overlap=self.model_settings["min_overlap_regions"], batch_size=self.model_settings['relation_batch_size'])
+            relation_dict, radius_region_km = gu.get_parent_child_indices(parent_coords, child_coords, radius_region_km, radius_inc, min_overlap=min_overlap, batch_size=self.model_settings['relation_batch_size'])
 
             rel_coords_children = gu.get_relative_coordinates_grids(parent_coords, child_coords, relation_dict, relative_to='parents', batch_size=self.model_settings['relation_batch_size'])
             rel_coords_parents = gu.get_relative_coordinates_grids(parent_coords, child_coords, relation_dict, relative_to='children', batch_size=self.model_settings['relation_batch_size'])

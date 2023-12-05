@@ -262,7 +262,7 @@ def get_parent_child_indices(parent_coords: torch.tensor, child_coords: torch.te
 
         c_indices, counts = p_c_indices.unique(return_counts=True)
         
-        if (len(c_indices) == len(child_coords[0])) and (counts.min() > min_overlap):
+        if (len(c_indices) == len(child_coords[0])) and (counts.min() >= min_overlap):
             converged = True
             print(f'converged at iteration {n_iter} radius of {radius_km}km with min_overlap={counts.min()}, max_overlap={counts.max()}')
         else:
