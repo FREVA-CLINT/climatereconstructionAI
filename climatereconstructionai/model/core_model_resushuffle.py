@@ -116,7 +116,6 @@ class decoder_block_shuffle(nn.Module):
     def __init__(self, out_channels, k_size=3, with_skip=True, batch_norm=False):
         super().__init__()
   
-        #self.res_block_up = res_net_block(in_channels, in_channels//2, k_size=k_size, batch_norm=False)
         self.up = nn.PixelShuffle(2)
 
         self.with_skip=with_skip
@@ -126,7 +125,6 @@ class decoder_block_shuffle(nn.Module):
     def forward(self, x, skip_channels=None):
 
         x = self.up(x)
-     #   x = self.res_block_up(x)
 
         if self.with_skip:
             x = torch.concat((x, skip_channels), dim=1)

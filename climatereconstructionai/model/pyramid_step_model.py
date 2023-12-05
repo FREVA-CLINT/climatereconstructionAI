@@ -401,7 +401,7 @@ class pyramid_step_model(nn.Module):
 
         x = self.input_net(x, coords_source)
 
-        x_res = x
+        x_reg_lr = x
 
         if not isinstance(self.core_model, nn.Identity):
             x = self.norm(x)
@@ -416,6 +416,7 @@ class pyramid_step_model(nn.Module):
             else:
                 x = x.permute(0,-2,-1,1)
             
+            x_reg_hr = x
             coords_target_hr = scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])
             x = self.output_net_post(x, coords_target_hr)
         else:
@@ -427,8 +428,8 @@ class pyramid_step_model(nn.Module):
         if self.predict_residual and not isinstance(self.core_model, nn.Identity):
             coords_target_lr = scale_coords(coords_target, self.range_region_source_rad[0], self.range_region_source_rad[1])
 
-            x_res = x_res.permute(0,-2,-1,1)
-            x_pre = self.output_net_pre(x_res[:,:,:,list(self.output_res_indices.values())], coords_target_lr)
+            x_reg_lr = x_reg_lr.permute(0,-2,-1,1)
+            x_pre = self.output_net_pre(x_reg_lr[:,:,:,list(self.output_res_indices.values())], coords_target_lr)
 
             for var in self.output_res_indices.keys():
                 if self.use_gnlll:
@@ -441,7 +442,7 @@ class pyramid_step_model(nn.Module):
         if norm:
             x = self.normalize(x, denorm=True)
 
-        return x, x_res
+        return x, x_reg_lr, x_reg_hr
 
     def check_model_dir(self):
         self.model_dir = self.model_settings['model_dir']

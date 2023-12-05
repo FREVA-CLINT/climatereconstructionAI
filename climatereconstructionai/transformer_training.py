@@ -30,34 +30,59 @@ class L1Loss(nn.Module):
         loss = self.loss(output[:,:,:,0],target)
         return loss
 
-class norm_L1Loss(nn.Module):
+class L1Loss_rel(nn.Module):
     def __init__(self):
         super().__init__()
         self.loss = torch.nn.L1Loss()
 
     def forward(self, output, target):
-        b,n,c,g = output.shape
-        output = (output[:,:,:,0] - output[:,:,:,0].mean(dim=1))/output[:,:,:,0].std(dim=1)
-        target = (target - target.mean(dim=1))/target.std(dim=1)
-
-        loss = self.loss(output,target)
+        abs_loss = ((output[:,:,:,0] - target)/target).abs()
+        loss = abs_loss.clamp(max=1)
+        loss = loss.mean()
         return loss
     
+class TVLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
 
+    def forward(self, output_hr):
+        
+        loss = (output_hr[:,1:] - output_hr[:,:-1]).abs().mean() + (output_hr[:,:,1:] - output_hr[:,:,:-1]).abs().mean()
+
+        return loss
+
+class TVLoss_rel(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, output_hr):
+        
+        rel_diff1 = ((output_hr[:,1:] - output_hr[:,:-1])/output_hr[:,1:]).abs()
+        rel_diff1 = rel_diff1.clamp(max=1)
+
+        rel_diff2 = ((output_hr[:,:,1:] - output_hr[:,:,:-1])/output_hr[:,:,1:]).abs()
+        rel_diff2 = rel_diff2.clamp(max=1)
+
+        loss = (rel_diff1.mean() + rel_diff2.mean())
+
+        return loss
 
 class DictLoss(nn.Module):
-    def __init__(self, loss_fcn):
+    def __init__(self, loss_fcn_list, factor_list):
         super().__init__()
-        self.loss_fcn = loss_fcn
+        self.loss_fcns = loss_fcn_list
+        self.factor_list = factor_list
 
     def forward(self, output, target):
         loss_dict = {}
         total_loss = 0
 
-        for var in output.keys():
-            loss = self.loss_fcn(output[var], target[var])
-            loss_dict[var] = loss.item()
-            total_loss+=loss
+        for k, loss_fcn in enumerate(self.loss_fcns):
+            f = self.factor_list[k]
+            for var in output.keys():
+                loss = f*loss_fcn(output[var], target[var])
+                loss_dict[var] = loss.item()
+                total_loss+=loss
 
         return total_loss, loss_dict
 
@@ -217,13 +242,28 @@ def train(model, training_settings, model_settings={}):
 
     model = model.to(device)
 
-
+    loss_fcns = []
+    factors = []
     if training_settings["gauss_loss"]:
-        loss_fcn = GaussLoss()
+        loss_fcns.append(GaussLoss())
+        factors.append(1)
     else:
-        loss_fcn = L1Loss()
+        loss_fcns.append(L1Loss_rel())
+        factors.append(1)
 
-    dict_loss_fcn = DictLoss(loss_fcn)
+    if "lambda_l1_rel" in training_settings.keys() and training_settings["lambda_l1_rel"]>0:
+        factors.append(training_settings["lambda_l1_rel"])
+        loss_fcns.append(L1Loss_rel())
+
+    if "lambda_tv_loss_rel" in training_settings.keys() and training_settings["lambda_tv_loss_rel"]>0:
+        f_tv = training_settings["lambda_tv_loss_rel"]
+        loss_fcn_reg = TVLoss_rel()
+
+    elif "lambda_tv_loss" in training_settings.keys() and training_settings["lambda_tv_loss"]>0:
+        f_tv = training_settings["lambda_tv_loss"]
+        loss_fcn_reg = TVLoss()
+
+    dict_loss_fcn = DictLoss(loss_fcns, factors)
 
    
     early_stop = early_stopping.early_stopping(training_settings['early_stopping_delta'], training_settings['early_stopping_patience'])
@@ -254,11 +294,16 @@ def train(model, training_settings, model_settings={}):
 
         source, target, coords_source, coords_target = [dict_to_device(x, device) for x in next(iterator_train)]
 
-        output = model(source, coords_source, coords_target)[0]
+        output,_, output_reg_hr = model(source, coords_source, coords_target)
 
         optimizer.zero_grad()
 
         loss, train_loss_dict = dict_loss_fcn(output, target)
+
+        if "tv_loss" in training_settings.keys() and training_settings['tv_loss']:
+            reg_loss = f_tv*loss_fcn_reg(output_reg_hr)
+            loss += reg_loss
+            train_loss_dict['reg_loss'] = reg_loss.item()
 
         loss.backward()
 
@@ -279,7 +324,7 @@ def train(model, training_settings, model_settings={}):
                 source, target, coords_source, coords_target = [dict_to_device(x, device) for x in next(iterator_val)]
 
                 with torch.no_grad():
-                    output, output_reg = model(source, coords_source, coords_target)
+                    output, output_reg_lr, output_reg_hr = model(source, coords_source, coords_target)
 
                     loss, val_loss_dict = dict_loss_fcn(output, target)
 
@@ -297,7 +342,8 @@ def train(model, training_settings, model_settings={}):
                 torch.save(coords_source,os.path.join(log_dir,'coords_source.pt'))
                 torch.save(coords_target,os.path.join(log_dir,'coords_target.pt'))
                 torch.save(output, os.path.join(log_dir,'output.pt'))
-                torch.save(output_reg, os.path.join(log_dir,'output_reg.pt'))
+                torch.save(output_reg_hr, os.path.join(log_dir,'output_reg_hr.pt'))
+                torch.save(output_reg_lr, os.path.join(log_dir,'output_reg_lr.pt'))
                 torch.save(target, os.path.join(log_dir,'target.pt'))
                 torch.save(source, os.path.join(log_dir,'source.pt'))
                 np.savetxt(os.path.join(log_dir,'losses_val.txt'),np.array(val_losses_save))
