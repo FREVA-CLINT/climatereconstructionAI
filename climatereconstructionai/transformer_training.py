@@ -248,7 +248,7 @@ def train(model, training_settings, model_settings={}):
         loss_fcns.append(GaussLoss())
         factors.append(1)
     else:
-        loss_fcns.append(L1Loss_rel())
+        loss_fcns.append(L1Loss())
         factors.append(1)
 
     if "lambda_l1_rel" in training_settings.keys() and training_settings["lambda_l1_rel"]>0:

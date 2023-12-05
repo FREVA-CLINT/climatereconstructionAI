@@ -259,7 +259,7 @@ class input_net(nn.Module):
 
         for n in range(n_mappers):
             self.nh_mapping.append(
-                quant_discretizer(model_settings['range_region_source_rad'][0], model_settings['range_region_source_rad'][1], model_settings['n_regular'][0])
+                quant_discretizer(model_settings['range_region_target_rad'][0], model_settings['range_region_target_rad'][1], model_settings['n_regular'][0])
             )    
 
 
@@ -426,7 +426,7 @@ class pyramid_step_model(nn.Module):
             x = self.output_net_post(x[:,:,:,list(self.output_res_indices.values())], coords_target_hr)
         
         if self.predict_residual and not isinstance(self.core_model, nn.Identity):
-            coords_target_lr = scale_coords(coords_target, self.range_region_source_rad[0], self.range_region_source_rad[1])
+            coords_target_lr = scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])
 
             x_reg_lr = x_reg_lr.permute(0,-2,-1,1)
             x_pre = self.output_net_pre(x_reg_lr[:,:,:,list(self.output_res_indices.values())], coords_target_lr)
