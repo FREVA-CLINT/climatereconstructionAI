@@ -81,7 +81,7 @@ class DictLoss(nn.Module):
             f = self.factor_list[k]
             for var in output.keys():
                 loss = f*loss_fcn(output[var], target[var])
-                loss_dict[var] = loss.item()
+                loss_dict[f'{var}_{str(loss_fcn._get_name())}'] = loss.item()
                 total_loss+=loss
 
         return total_loss, loss_dict
@@ -255,13 +255,16 @@ def train(model, training_settings, model_settings={}):
         factors.append(training_settings["lambda_l1_rel"])
         loss_fcns.append(L1Loss_rel())
 
+    calc_reg_loss=False
     if "lambda_tv_loss_rel" in training_settings.keys() and training_settings["lambda_tv_loss_rel"]>0:
         f_tv = training_settings["lambda_tv_loss_rel"]
         loss_fcn_reg = TVLoss_rel()
+        calc_reg_loss=True
 
     elif "lambda_tv_loss" in training_settings.keys() and training_settings["lambda_tv_loss"]>0:
         f_tv = training_settings["lambda_tv_loss"]
         loss_fcn_reg = TVLoss()
+        calc_reg_loss=True
 
     dict_loss_fcn = DictLoss(loss_fcns, factors)
 
@@ -300,7 +303,7 @@ def train(model, training_settings, model_settings={}):
 
         loss, train_loss_dict = dict_loss_fcn(output, target)
 
-        if "tv_loss" in training_settings.keys() and training_settings['tv_loss']:
+        if calc_reg_loss:
             reg_loss = f_tv*loss_fcn_reg(output_reg_hr)
             loss += reg_loss
             train_loss_dict['reg_loss'] = reg_loss.item()
@@ -328,6 +331,11 @@ def train(model, training_settings, model_settings={}):
 
                     loss, val_loss_dict = dict_loss_fcn(output, target)
 
+                    if calc_reg_loss:
+                        reg_loss = f_tv*loss_fcn_reg(output_reg_hr)
+                        loss += reg_loss
+                        val_loss_dict['reg_loss'] = reg_loss.item()
+
                     val_loss_dict['total'] = loss.item()
 
                 val_losses.append(list(val_loss_dict.values()))
@@ -335,7 +343,7 @@ def train(model, training_settings, model_settings={}):
             val_loss = torch.tensor(val_losses).mean(dim=0)
             val_loss = dict(zip(train_loss_dict.keys(), val_loss))
 
-            val_losses_save.append(val_loss['total'])
+            val_losses_save.append(val_loss_dict['total'])
             debug_dict = {}
             if training_settings['save_debug']:
                 torch.save(debug_dict, os.path.join(log_dir,'debug_dict.pt'))
