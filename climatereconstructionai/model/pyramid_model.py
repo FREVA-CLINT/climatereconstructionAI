@@ -51,7 +51,7 @@ class pyramid_model(nn.Module):
         else:
             if os.path.isfile(self.relation_fp_source):
                 self.pre_computed_relations = True 
-
+    
         with open(model_settings, 'w') as f:
             json.dump(self.model_settings, f, indent=4)
 
@@ -155,11 +155,19 @@ class pyramid_model(nn.Module):
         local_model_settings['spatial_dims_var_source'] = self.relations_source['spatial_dims_var']
         local_model_settings['spatial_dims_var_target'] = self.relations_target['spatial_dims_var']
 
-        local_model_settings['radius_region_source_km'] = self.relations_source['radius_region_km']
-        local_model_settings['radius_region_target_km'] = self.relations_target['radius_region_km']
+        local_model_settings['radius_region_source_km'] = self.radius_region_source_km
+        local_model_settings['radius_region_target_km'] = self.radius_region_target_km
+
+        self.model_settings['radius_region_source_km'] = self.radius_region_source_km
+        self.model_settings['radius_region_target_km'] = self.radius_region_target_km
 
         with open(os.path.join(self.local_model_dir,"domain.json"),"w+") as f:
             json.dump(local_model_settings, f, indent=4)   
+
+
+        model_settings = os.path.join(self.model_dir,'model_settings.json')
+        with open(model_settings, 'w') as f:
+            json.dump(self.model_settings, f, indent=4)
 
     def load_step_models(self):
      
