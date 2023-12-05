@@ -10,6 +10,7 @@ import torch
 import xarray as xr
 from torch.utils.data import Dataset, Sampler
 from .grid_utils import generate_region, PositionCalculator, get_coord_dict_from_var, get_coords_as_tensor, invert_dict, rotate_coord_system
+from .normalizer import normalizer
 
 class InfiniteSampler(Sampler):
     def __init__(self, num_samples, data_source=None):
@@ -33,63 +34,22 @@ class InfiniteSampler(Sampler):
                 order = np.random.permutation(n_samples) 
                 i = 0
 
-def calc_stats(data, level=0.05):
-    stat_dict = {
-        "min": data.min(),
-        "max": data.max(),
-        str(level): np.quantile((data), level),
-        str(1-level): np.quantile((data), 1-level),
-        f'{str(1-level)}_abs': np.quantile(np.abs(data), 1-level),
-        "mean":data.mean(),
-        "std":data.std()
-    }
-    for key, value in stat_dict.items():
-        stat_dict[key] = float(value)
-    return stat_dict
+def get_moments(data, type, level=0.05):
 
+    if type == 'quantile':
+        moments = (np.quantile((data), 1-level).astype(float), np.quantile((data), level).astype(float))
 
-class normalizer(torch.nn.Module):
-    def __init__(self, stat_dict, type="quantile_abs", level=0.05):
-        super().__init__()
+    if type == 'quantile_abs':
+        q = np.quantile(np.abs(data), level).astype(float)
+        moments = (q,q)
 
-        self.state_dict = stat_dict
+    elif type == 'min_max':
+        moments = (data.min().astype(float), data.max().astype(float))
+    else:
+        moments = (data.mean().astype(float), data.std().astype(float))
+    
+    return moments
 
-        if type == 'quantile':
-            self.norm_fcn = norm_min_max
-            self.level = level
-            self.moments = (str(level), str(1-level))
-
-        if type == 'quantile_abs':
-            self.norm_fcn = norm_max
-            self.level = level
-            self.moments = (f'{str(1-level)}_abs', f'{str(1-level)}_abs')
-
-        elif type == 'min_max':
-            self.norm_fcn = norm_min_max
-            self.moments = ("min", "max")
-
-        else:
-            self.norm_fcn = norm_mean_std
-            self.moments = ("mean", "std")
-
-
-    def __call__(self, data):
-        for var, data_var in data.items():
-             stats = (self.state_dict[var][self.moments[0]], self.state_dict[var][self.moments[1]])
-             data[var] = self.norm_fcn(data_var, stats)[0]
-        return data
-
-def norm_max(data, moments):
-    data = (data)/(moments[1])
-    return data, moments  
-
-def norm_min_max(data, moments):
-    data = (data-moments[0])/(moments[1] - moments[0])
-    return data, moments
-
-def norm_mean_std(data, moments):
-    data = (data-moments[0])/(moments[1])
-    return data, moments
 
 
 class FiniteSampler(Sampler):
@@ -156,15 +116,23 @@ def save_sample(ds, time_index, spatial_dims_dict, save_path):
 
     ds_save.to_netcdf(save_path)
 
-def get_stats(files, variable, level, n_sample=None):
+def get_stats(files, variable, norm_dict, n_sample=None):
     if (n_sample is not None) and (n_sample < len(files)):
         file_indices = np.random.randint(0,len(files), (n_sample,))
     else:
         file_indices = np.arange(len(files))
     
-    data = np.concatenate([xr.load_dataset(file_index)[variable].values.flatten() for file_index in np.array(files)[file_indices]])
+    if variable == "uv":
+        variables = ["u", "v"]
+    else:
+        variables = [variable]
+    
+    data = []
+    for file_index in np.array(files)[file_indices]:
+        ds = xr.load_dataset(file_index)
+        data += [ds[variable].values.flatten() for variable in variables]
 
-    return calc_stats(data, level=level)
+    return get_moments(np.concatenate(data), norm_dict["type"], level=norm_dict["level"])
 
 
 class NetCDFLoader_lazy(Dataset):
@@ -172,10 +140,8 @@ class NetCDFLoader_lazy(Dataset):
                  files_target, 
                  variables_source, 
                  variables_target,
-                 apply_img_norm=False, 
-                 normalize_data=True, 
+                 normalization,
                  random_region=None, 
-                 stat_dict=None, 
                  p_dropout_source=0,
                  p_dropout_target=0,
                  sampling_mode='mixed', 
@@ -187,10 +153,8 @@ class NetCDFLoader_lazy(Dataset):
                  index_offset_target=0,
                  rel_coords=False,
                  sample_for_norm=-1,
-                 norm_stats_save_path='',
                  lazy_load=False,
-                 rotate_cs=False,
-                 norm_lvl=0.05):
+                 rotate_cs=False):
         
         super(NetCDFLoader_lazy, self).__init__()
         
@@ -198,8 +162,7 @@ class NetCDFLoader_lazy(Dataset):
         self.random = random.Random()
         self.variables_source = variables_source
         self.variables_target = variables_target
-        self.apply_img_norm = apply_img_norm
-        self.normalize_data = normalize_data
+        self.normalization = normalization
         self.p_dropout_source = p_dropout_source
         self.p_dropout_target = p_dropout_target
         self.sampling_mode = sampling_mode
@@ -212,10 +175,8 @@ class NetCDFLoader_lazy(Dataset):
         self.index_offset_target = index_offset_target
         self.rel_coords=rel_coords
         self.sample_for_norm = sample_for_norm
-        self.norm_stats_save_path = norm_stats_save_path
         self.lazy_load=lazy_load
         self.rotate_cs = rotate_cs
-        self.norm_lvl = norm_lvl
 
         self.flatten=False
 
@@ -240,31 +201,22 @@ class NetCDFLoader_lazy(Dataset):
         _, _, seeds, self.n_dict_source = self.get_coordinates(ds_source, self.dims_variables_source, p_drop=p_dropout_source, seeds=start_seeds)
         _, _, _, self.n_dict_target = self.get_coordinates(ds_target, self.dims_variables_target, seeds=seeds, p_drop=p_dropout_target)
 
-        if self.normalize_data:
-            if stat_dict is None:
-                self.stat_dict = {}
+    
+        for var, norm_dict in normalization.items():
+            if len(norm_dict["moments"])==0:
+                var_check = "u" if var == "uv" else var
+                files = []
+                if var_check in self.variables_source:
+                    files+=list(files_source)
+                if var_check in self.variables_target:
+                    files+=list(files_target)
 
-                unique_variables = np.unique(np.array(self.variables_source + self.variables_target))
-            
-                for var in unique_variables:
-                    files = []
-                    if var in self.variables_source:
-                        files+=list(files_source)
-                    if var in self.variables_target:
-                        files+=list(files_target)
+                norm_dict["moments"] = get_stats(files, var, norm_dict, self.sample_for_norm)
+        
+        self.norm_dict = normalization
+        self.normalizer = normalizer(self.norm_dict)
 
-                    self.stat_dict[var] = get_stats(files, var, norm_lvl, self.sample_for_norm)
-                
-                with open(os.path.join(self.norm_stats_save_path,"norm_stats.json"),"w+") as f:
-                    json.dump(self.stat_dict,f, indent=4)
-
-            else:
-                self.stat_dict=stat_dict
-
-            self.normalizer = normalizer(self.stat_dict, level=self.norm_lvl)
-        else:
-            self.stat_dict = None
-
+        
 
 
     def get_coordinates(self, ds, dims_variables_dict, seeds=[], n_drop_dict={}, p_drop=0):
@@ -470,16 +422,9 @@ class NetCDFLoader_lazy(Dataset):
         data_source, rel_coords_source = self.get_data(ds_source, index, self.dims_variables_source, seeds)
         data_target, rel_coords_target = self.get_data(ds_target, index_target, self.dims_variables_target, seeds)
 
-        if self.normalize_data:
+        if self.normalization is not None:
             data_source = self.normalizer(data_source)
             data_target = self.normalizer(data_target)
-
-        if self.apply_img_norm:  
-            stats = [calc_stats(data) for data in data_source.values()]
-            stat_dict = dict(zip(self.variables_source,stats))
-            norm = normalizer(stat_dict, level=self.norm_lvl)
-            data_source = norm(data_source)
-            data_target = norm(data_target)
 
         return data_source, data_target, rel_coords_source, rel_coords_target
 

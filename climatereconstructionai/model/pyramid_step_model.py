@@ -12,6 +12,7 @@ import climatereconstructionai.model.transformer_helpers as helpers
 
 from ..utils.io import load_ckpt, load_model
 from ..utils import grid_utils as gu
+from ..utils.normalizer import normalizer
 
 def get_buckets_1d_batched(coords, n_q=2, equal_size=True):
 
@@ -129,8 +130,8 @@ def batch_coords(coords, n_q):
     cs2 = cs2.view(b,2,n1,n2,n)
 
     cs2_m = cs2.median(dim=-1).values
-    cs2_s = cs2.min(dim=-1).values
-    cs2_e = cs2.max(dim=-1).values
+    #cs2_s = cs2.min(dim=-1).values
+    #cs2_e = cs2.max(dim=-1).values
 
     return indices_tot, cs2_m
 
@@ -148,7 +149,7 @@ class quant_discretizer(nn.Module):
 
 
     def forward(self, x, coords_source):
-        
+                
         n = x.shape[1]
         n_q = int((x.shape[1] // self.n_c)**0.5)
         n_q = self.min_nq if n_q < self.min_nq else n_q
@@ -354,7 +355,7 @@ class output_net(nn.Module):
 
 
 class pyramid_step_model(nn.Module):
-    def __init__(self, model_settings, load_pretrained=False):
+    def __init__(self, model_settings):
         super().__init__()
         
         self.model_settings = load_settings(model_settings, 'model')
@@ -389,11 +390,14 @@ class pyramid_step_model(nn.Module):
 
         self.check_model_dir()
 
-        self.norm = nn.LayerNorm(len(self.model_settings["variables_source"])) if self.model_settings["norm_pre_core"] else nn.Identity()
+        self.norm = nn.LayerNorm([self.model_settings['n_regular'][1], self.model_settings['n_regular'][1]], elementwise_affine=True) if self.model_settings["norm_pre_core"] else nn.Identity()
         
         
-    def forward(self, x, coords_source, coords_target):
+    def forward(self, x, coords_source, coords_target, norm=False):
         
+        if norm:
+            x = self.normalize(x)
+
         x = self.input_net(x, coords_source)
 
         x_res = x
@@ -433,6 +437,8 @@ class pyramid_step_model(nn.Module):
                 else:
                     x[var] = x[var] + x_pre[var]
         
+        if norm:
+            x = self.normalize(x, denorm=True)
 
         return x, x_res
 
@@ -450,19 +456,11 @@ class pyramid_step_model(nn.Module):
         with open(model_settings_path, 'w') as f:
             json.dump(self.model_settings, f, indent=4)
 
-        norm_stats_file = os.path.join(self.model_dir,'norm_stats.json')
-        if os.path.isfile(norm_stats_file):
-            self.norm_stats_file = norm_stats_file
-        else:
-            self.norm_stats_file = ''
 
     def set_training_configuration(self, train_settings=None):
         self.train_settings = load_settings(train_settings, id='train')
 
         self.train_settings['log_dir'] = os.path.join(self.model_dir, 'logs')
-
-        if len(self.train_settings['norm_stats'])==0:
-            self.train_settings['norm_stats'] = self.norm_stats_file
 
         with open(os.path.join(self.model_dir,'train_settings.json'), 'w') as f:
             json.dump(self.train_settings, f, indent=4)
@@ -488,7 +486,8 @@ class pyramid_step_model(nn.Module):
         self.model_settings['grid_size_in'] = self.grid_size_in
         self.model_settings['grid_size_out'] = self.grid_size_out
 
-
+    def set_normalizer(self):
+        self.normalize = normalizer(self.model_settings['normalization'])
 
     # -> high-level models first, cache results, then fusion
     def apply_serial(self):

@@ -12,7 +12,7 @@ class res_net_block(nn.Module):
         stride = 2 if with_reduction else 1
 
         self.conv1 = nn.Conv2d(in_channels, out_channels, stride=stride, padding=padding, kernel_size=k_size, padding_mode='replicate',groups=groups)
-        self.conv2 = nn.Conv2d(out_channels, out_channels, stride=1, padding=padding, kernel_size=k_size, padding_mode='replicate')
+        self.conv2 = nn.Conv2d(out_channels, out_channels, stride=1, padding=padding, kernel_size=k_size, padding_mode='replicate',groups=groups)
 
         self.reduction = nn.Conv2d(in_channels, out_channels, stride=stride, padding=0, kernel_size=1,groups=groups)
 
@@ -36,45 +36,49 @@ class res_blocks(nn.Module):
     def __init__(self,  n_blocks, in_channels, out_channels, k_size=3, with_reduction=True, batch_norm=True, groups=1):
         super().__init__()
 
-        self.res_block1 = res_net_block(in_channels, out_channels,  k_size=k_size)
-        
         self.res_net_blocks = nn.ModuleList()
-        for n in range(n_blocks-1):
+
+        self.res_net_blocks.append(res_net_block(in_channels, out_channels, k_size=k_size, batch_norm=batch_norm, groups=groups))
+        
+        for _ in range(n_blocks-1):
             self.res_net_blocks.append(res_net_block(out_channels, out_channels, k_size=k_size, batch_norm=batch_norm, groups=groups))
 
         self.max_pool = nn.MaxPool2d(kernel_size=2) if with_reduction else nn.Identity()
 
     def forward(self,x):
-        x = self.res_block1(x)
-
         for layer in self.res_net_blocks:
             x = layer(x)
 
         return self.max_pool(x)
 
 class encoder(nn.Module): 
-    def __init__(self, n_levels, n_blocks, in_channels,  u_net_channels, k_size=3, k_size_in=7, batch_norm=True, full_res=True ,n_groups=1):
+    def __init__(self, n_levels, n_blocks, in_channels,  u_net_channels, hw, k_size=3, k_size_in=7, batch_norm=True, full_res=True ,n_groups=1):
         super().__init__()
 
         padding_in = k_size_in // 2
 
         if not full_res:
-            self.in_layer = nn.Sequential(nn.Conv2d(in_channels, u_net_channels, stride=1, padding=padding_in, kernel_size=k_size_in, padding_mode='replicate', groups=n_groups),
-                                        nn.BatchNorm2d(u_net_channels),
+            bn = nn.BatchNorm2d(u_net_channels*n_groups) if batch_norm else nn.Identity()
+            self.in_layer = nn.Sequential(nn.Conv2d(in_channels, u_net_channels*n_groups, stride=1, padding=padding_in, kernel_size=k_size_in, padding_mode='replicate', groups=n_groups),
+                                        bn,
                                         nn.SiLU())
         else:
-            self.in_layer = nn.Identity()
+            if n_groups > 1:
+                self.in_layer = res_net_block(in_channels, u_net_channels*n_groups, k_size=k_size_in, batch_norm=batch_norm, groups=n_groups)
+            else:
+                self.in_layer = nn.Identity()
 
         self.layers = nn.ModuleList()
         for n in range(n_levels):
             if n==0:
-                in_channels_block = u_net_channels if not full_res else in_channels
-                out_channels_block = u_net_channels if not full_res else u_net_channels
+                in_channels_block = u_net_channels*n_groups if (n_groups>1 or not full_res) else in_channels
+                out_channels_block = u_net_channels 
             else:
-                in_channels_block = u_net_channels*(4**(n-1))
+                n_groups=1
+                in_channels_block = out_channels_block
                 out_channels_block = u_net_channels*(4**(n))
 
-            self.layers.append(res_blocks(n_blocks, in_channels_block, out_channels_block, k_size=k_size, batch_norm=batch_norm, groups=n_groups))
+            self.layers.append(res_blocks(n_blocks, in_channels_block, out_channels_block, k_size=k_size, batch_norm=batch_norm, groups=1))
         
     def forward(self, x):
         outputs = []
@@ -157,11 +161,10 @@ class decoder(nn.Module):
         return x
 
 class ResUNet(nn.Module): 
-    def __init__(self, upcale_factor, n_blocks_unet, n_res_blocks, model_dim_unet, in_channels, out_channels, batch_norm=True, k_size=3, full_res=True, n_groups=1):
+    def __init__(self, upcale_factor, n_blocks_unet, n_res_blocks, model_dim_unet, in_channels, out_channels, hw, batch_norm=True, k_size=3, full_res=True, n_groups=1):
         super().__init__()
 
-        self.encoder = encoder(n_blocks_unet, n_res_blocks, in_channels, model_dim_unet, k_size, 5, batch_norm=batch_norm, full_res=full_res, n_groups=n_groups)
-
+        self.encoder = encoder(n_blocks_unet, n_res_blocks, in_channels, model_dim_unet, hw, k_size, 5, batch_norm=batch_norm, full_res=full_res, n_groups=n_groups)
         self.decoder = decoder(n_blocks_unet, model_dim_unet, out_channels, k_size=k_size)
 
         self.pixel_shuffle = nn.PixelShuffle(upcale_factor) if upcale_factor >1 else nn.Identity()
@@ -175,8 +178,8 @@ class ResUNet(nn.Module):
 
 
 class core_ResUNet(psm.pyramid_step_model): 
-    def __init__(self, model_settings, load_pretrained=False):
-        super().__init__(model_settings, load_pretrained=load_pretrained)
+    def __init__(self, model_settings):
+        super().__init__(model_settings)
         
         model_settings = self.model_settings
 
@@ -189,7 +192,7 @@ class core_ResUNet(psm.pyramid_step_model):
         depth = model_settings["depth_core"]
         batch_norm = model_settings["batch_norm"]
 
-        full_res = True if 'full_res' not in model_settings.keys() else model_settings['grouped']
+        full_res = True if 'full_res' not in model_settings.keys() else model_settings['full_res']
         grouped = False if 'grouped' not in model_settings.keys() else model_settings['grouped']
 
         self.time_dim= False
@@ -201,11 +204,10 @@ class core_ResUNet(psm.pyramid_step_model):
             n_groups = input_dim
         else:
             n_groups = 1
-        upcale_factor = model_settings['n_regular'][1] // model_settings['n_regular'][0]
-        self.core_model = ResUNet(upcale_factor, depth, n_blocks, model_dim_core, input_dim, output_dim, batch_norm=batch_norm, full_res=full_res, n_groups=n_groups)
+        hw = model_settings['n_regular'][0]
+        upcale_factor = model_settings['n_regular'][1] // hw
 
-        if load_pretrained:
-            self.check_pretrained(model_dir_check=self.model_settings['model_dir'])
+        self.core_model = ResUNet(upcale_factor, depth, n_blocks, model_dim_core, input_dim, output_dim, hw, batch_norm=batch_norm, full_res=full_res, n_groups=n_groups)
 
         if "pretrained_path" in self.model_settings.keys():
             self.check_pretrained(model_dir_check=self.model_settings['pretrained_path'])

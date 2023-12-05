@@ -101,7 +101,7 @@ def check_get_data_files(list_or_path, root_path = '', train_or_val='train'):
     return data_paths
 
 
-def train(model, training_settings, model_hparams={}):
+def train(model, training_settings, model_settings={}):
  
     torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -119,7 +119,7 @@ def train(model, training_settings, model_hparams={}):
     writer = twriter_t.writer(log_dir)
 
     device = training_settings['device']
-    writer.set_hparams(model_hparams)
+    writer.set_hparams(model_settings)
 
     if 'random_region' not in training_settings.keys():
         random_region = None
@@ -142,11 +142,6 @@ def train(model, training_settings, model_hparams={}):
                                             root_path = training_settings['root_dir'], 
                                             train_or_val='val')      
 
-    if len(training_settings["norm_stats"]) > 0:
-        with open(training_settings["norm_stats"],'r') as file:
-            stat_dict = json.load(file)
-    else:
-        stat_dict = None
 
     if 'save_samples_path' in training_settings and len(training_settings['save_samples_path'])>0:
         sample_dir_train = os.path.join(training_settings['save_samples_path'], 'train')
@@ -166,10 +161,8 @@ def train(model, training_settings, model_hparams={}):
                                 target_files_train,
                                 training_settings['variables_source'],
                                 training_settings['variables_target'],
+                                model_settings['normalization'],
                                 random_region=random_region,
-                                apply_img_norm=training_settings['apply_img_norm'],
-                                normalize_data=training_settings['normalize_data'],
-                                stat_dict=stat_dict,
                                 p_dropout_source=training_settings['p_dropout_source'],
                                 p_dropout_target=training_settings['p_dropout_target'],
                                 sampling_mode=training_settings['sampling_mode'],
@@ -179,19 +172,15 @@ def train(model, training_settings, model_hparams={}):
                                 index_offset_target=training_settings['index_offset_target'] if 'index_offset_target' in training_settings else 0,
                                 rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False,
                                 sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
-                                norm_stats_save_path=training_settings['model_dir'],
                                 lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
-                                rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False,
-                                norm_lvl=training_settings['norm_lvl'] if 'norm_lvl' in training_settings else 0.05)
+                                rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False)
     
     dataset_val = NetCDFLoader_lazy(source_files_val, 
                                 target_files_val,
                                 training_settings['variables_source'],
                                 training_settings['variables_target'],
+                                dataset_train.norm_dict,
                                 random_region=random_region,
-                                apply_img_norm=training_settings['apply_img_norm'],
-                                normalize_data=training_settings['normalize_data'],
-                                stat_dict=dataset_train.stat_dict if stat_dict is None else stat_dict,
                                 p_dropout_source=training_settings['p_dropout_source'],
                                 p_dropout_target=training_settings['p_dropout_target'],
                                 sampling_mode=training_settings['sampling_mode'],
@@ -202,8 +191,7 @@ def train(model, training_settings, model_hparams={}):
                                 rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False,
                                 sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
                                 lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
-                                rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False,
-                                norm_lvl=training_settings['norm_lvl'] if 'norm_lvl' in training_settings else 0.05)
+                                rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False)
     
 
     
@@ -221,7 +209,11 @@ def train(model, training_settings, model_hparams={}):
                                     pin_memory=True if device == 'cuda' else False,
                                     pin_memory_device=device))
     
-    train_stats = dataset_train.stat_dict
+
+    model_settings['normalization'] = dataset_train.norm_dict
+    model_settings_path = os.path.join(model_settings['model_dir'],'model_settings.json')
+    with open(model_settings_path, 'w') as f:
+        json.dump(model_settings, f, indent=4)
 
     model = model.to(device)
 
@@ -321,14 +313,14 @@ def train(model, training_settings, model_hparams={}):
 
 
         if n_iter % training_settings['save_model_interval'] == 0:
-            save_ckpt('{:s}/{:d}.pth'.format(ckpt_dir, n_iter), train_stats,
+            save_ckpt('{:s}/{:d}.pth'.format(ckpt_dir, n_iter), dataset_train.norm_dict,
                       [(str(n_iter), n_iter, model, optimizer)])
 
         if training_settings['early_stopping'] and early_stop.terminate:
             model = early_stop.best_model
             break
 
-    save_ckpt('{:s}/best.pth'.format(ckpt_dir), train_stats,
+    save_ckpt('{:s}/best.pth'.format(ckpt_dir), dataset_train.norm_dict,
               [(str(n_iter), n_iter, early_stop.best_model, optimizer)])
 
     writer.close()

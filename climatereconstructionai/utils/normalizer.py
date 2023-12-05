@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from torchvision import transforms
 from .. import config as cfg
 
@@ -41,3 +42,53 @@ def bnd_normalization(img_mean, img_std, train_stats):
         k += 1
 
     return bounds
+
+class normalizer(torch.nn.Module):
+    def __init__(self, norm_dict):
+        super().__init__()
+
+        self.norm_dict = norm_dict
+
+        self.norm_fcn_dict = {
+            'quantile':norm_min_max,
+            'quantile_abs':norm_max,
+            'min_max':norm_max,
+            'normal':norm_mean_std,
+        }
+       
+        if 'uv' in norm_dict.keys():
+            self.uniform_norm_uv = True
+        else:
+            self.uniform_norm_uv = False
+
+    def __call__(self, data, denorm=False):
+        for var, data_var in data.items():
+            if self.uniform_norm_uv and (var=='u' or var=='v'):
+                var_lookup = 'uv'
+            else:
+                var_lookup= var
+            moments = self.norm_dict[var_lookup]['moments']
+            norm_fcn = self.norm_fcn_dict[self.norm_dict[var_lookup]['type']]
+            data[var] = norm_fcn(data_var, moments, denorm)
+        return data
+
+def norm_max(data, moments, denorm=False):
+    if denorm:
+        data = data*moments[1]
+    else:
+        data = (data)/(moments[1])
+    return data 
+
+def norm_min_max(data, moments, denorm=False):
+    if denorm:
+        data = (data+moments[0])*(moments[1] - moments[0])
+    else:
+        data = (data-moments[0])/(moments[1] - moments[0])
+    return data
+
+def norm_mean_std(data, moments, denorm=False):
+    if denorm:
+        data = (data+moments[0])*(moments[1])
+    else:
+        data = (data-moments[0])/(moments[1])
+    return data

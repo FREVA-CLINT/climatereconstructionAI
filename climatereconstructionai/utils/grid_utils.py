@@ -275,15 +275,18 @@ def get_parent_child_indices(parent_coords: torch.tensor, child_coords: torch.te
     c_p_distances = [[] for _ in range(len(child_coords[0]))]
     c_p_indices = [[] for _ in range(len(child_coords[0]))]
     c_p_indices_rel = [[] for _ in range(len(child_coords[0]))]
-    
+    p_indices_rel = [[] for _ in range(len(parent_coords[0]))]
+
 
     for p_index, c_indices in enumerate(p_c_indices):
 
         for c_index_rel, c_index in enumerate(list(c_indices)):
+            p_indices_rel[p_index].append(len(c_p_indices[c_index]))
             c_p_indices[c_index].append(p_index)
             c_p_indices_rel[c_index].append(c_index_rel)
             c_p_distances[c_index].append(pc_distance[p_index, c_index_rel])
-            
+    
+    p_indices_rel = torch.tensor(p_indices_rel)
 
     c_p_indices_pad = c_p_indices
     c_p_indices_rel_pad = c_p_indices_rel
@@ -319,9 +322,13 @@ def get_parent_child_indices(parent_coords: torch.tensor, child_coords: torch.te
         c_p_indices_rel_pad[c_index] = torch.tensor(c_p_indices_rel_pad[c_index]) if not torch.is_tensor(c_p_indices_rel_pad[c_index]) else c_p_indices_rel_pad[c_index]
         c_p_indices_pad[c_index] = torch.tensor(c_p_indices_pad[c_index]) if not torch.is_tensor(c_p_indices_pad[c_index]) else c_p_indices_pad[c_index]
     
-    indices = {'children': p_c_indices,
-               'children_idx': torch.stack(c_p_indices_rel_pad),
-              'parents':torch.stack(c_p_indices_pad)}
+    children_idx = torch.stack(c_p_indices_rel_pad)
+    parents = torch.stack(c_p_indices_pad)
+
+
+    indices = {'c_of_p': torch.stack((p_c_indices, p_indices_rel), dim=0),
+               'p_of_c': torch.stack((parents, children_idx), dim=0)}
+    
 
     return indices, radius_km
 
@@ -329,11 +336,11 @@ def get_parent_child_indices(parent_coords: torch.tensor, child_coords: torch.te
 def get_relative_coordinates_grids(parent_coords, child_coords, relation_dict, relative_to="parents", batch_size=-1):
 
     if relative_to == 'children':
-        coords_in_regions = [parent_coords[0][relation_dict['parents']], parent_coords[1][relation_dict['parents']]]
+        coords_in_regions = [parent_coords[0][relation_dict['p_of_c'][0]], parent_coords[1][relation_dict['p_of_c'][0]]]
         region_center_coords = child_coords
 
     else:
-        coords_in_regions = [child_coords[0][relation_dict['children']], child_coords[1][relation_dict['children']]]
+        coords_in_regions = [child_coords[0][relation_dict['c_of_p'][0]], child_coords[1][relation_dict['c_of_p'][0]]]
         region_center_coords = parent_coords
     
     return get_relative_coordinates_regions(coords_in_regions, region_center_coords, batch_size=batch_size)

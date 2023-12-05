@@ -3,6 +3,7 @@ import os
 import copy
 import torch
 import torch.nn as nn
+from torch import multiprocessing
 import xarray as xr
 from .. import transformer_training as trainer
 
@@ -152,22 +153,9 @@ class pyramid_model(nn.Module):
         
         elif step_model_settings['model'] =='shuffle':
             self.local_model = cms.core_ResUNet(step_model_settings)
-        
-        if not local_model_specs_is_file:
-            self.norm_stats_file = os.path.join(local_model_specs,'norm_stats.json')
-            norm_stats_file_local = os.path.join(self.local_model_dir, 'norm_stats.json')
-            
-            if os.path.isfile(norm_stats_file_local):
-                with open(norm_stats_file_local,'r') as file:
-                    self.norm_stats = json.load(file)
-            else:
-                if os.path.isfile(self.norm_stats_file):
 
-                    with open(self.norm_stats_file,'r') as file:
-                        self.norm_stats = json.load(file)
-
-                    with open(os.path.join(self.local_model_dir,"norm_stats.json"),"w+") as f:
-                        json.dump(self.norm_stats,f, indent=4)    
+        self.local_model.eval()
+        self.local_model.set_normalizer()
         
 
     def check_grid_file(self):
@@ -203,35 +191,50 @@ class pyramid_model(nn.Module):
         batch_indices = torch.stack(torch.arange(n_regions).chunk(n_chunks, dim=0),dim=0)
 
         spatial_dim_coords_batched = {}
-        spatial_dim_indices_batched = {}
-        spatial_dim_indices_rel = {}
-        spatial_dim_indices = {}
-        spatial_dim_p_indices = {}
+        c_of_p_batched = {}
+        p_of_c_batched = {}
 
         for spatial_dim in spatial_dims:
             coords = relations_dict[spatial_dim]['rel_coords_children'][:,:,-2:].transpose(-2,-1).float()
-            indices = relations_dict[spatial_dim]['indices']['children']
-            c_indices_rel = relations_dict[spatial_dim]['indices']['children_idx'].to(device)
-            p_indices = relations_dict[spatial_dim]['indices']['parents'].to(device)
-
-            spatial_dim_indices[spatial_dim] = indices[batch_indices].to(device)
-
-            spatial_dim_indices_batched[spatial_dim] = indices[batch_indices].to(device)
             spatial_dim_coords_batched[spatial_dim] = coords[batch_indices].to(device)
 
-            spatial_dim_indices_rel[spatial_dim] = c_indices_rel[spatial_dim_indices[spatial_dim]].to(device)
-            spatial_dim_p_indices[spatial_dim] = p_indices[spatial_dim_indices[spatial_dim]].to(device)
+            c_of_p = relations_dict[spatial_dim]['indices']['c_of_p'][:,batch_indices].to(device)
+            c_of_p_batched[spatial_dim] = c_of_p
+          #  p_of_c_batched[spatial_dim] = relations_dict[spatial_dim]['indices']['p_of_c'][:,batch_indices].to(device)
 
         spatial_dim_coords_batched = dl_to_ld(spatial_dim_coords_batched)
-        spatial_dim_indices_batched = dl_to_ld(spatial_dim_indices)
+       # c_of_p_batched = c_of_p_batched
+       # p_of_c_batched = dl_to_ld(p_of_c_batched)
 
-        return spatial_dim_indices, spatial_dim_coords_batched, spatial_dim_indices_batched, spatial_dim_indices_rel, spatial_dim_p_indices
+        return c_of_p_batched, spatial_dim_coords_batched
     
+    def apply_batch(self, x_source, coords_source, coords_target):
+        with torch.no_grad():
+            output_batch = self.local_model(x_source, coords_source, coords_target, norm=True)[0]
+        return output_batch
 
-    def apply(self, x, ts=-1, batch_size=-1, device='cpu'):
 
-        indices_source, coords_source_batches, indices_source_batches,_,_ = self.get_batches_coords(self.relations_source, batch_size, device=device)
-        indices_target, coords_target_batches, _, _, _ = self.get_batches_coords(self.relations_target, batch_size, device=device)
+    def inference_worker(self, input_queue, output_queue):
+        running = True
+        while running:
+            input_data = input_queue.get()
+            if input_data is None:
+                running = False
+            else:
+                x_source, coords_source, coords_target, batch_idx = input_data
+
+                with torch.no_grad():
+                    output_batch = self.local_model(x_source, coords_source, coords_target, norm=True)[0]
+                output_queue.put((output_batch, batch_idx))
+   
+
+
+    def apply(self, x, ts=-1, batch_size=-1, num_workers=1, device='cpu'):
+
+        c_of_p_batched_source, coords_source_batches = self.get_batches_coords(self.relations_source, batch_size, device=device)
+        c_of_p_batched_target, coords_target_batches = self.get_batches_coords(self.relations_target, batch_size, device=device)
+
+        n_batches = len(coords_source_batches)
 
         spatial_dims_source = list(self.relations_source['spatial_dims_var'].keys())
         spatial_dims_target = list(self.relations_target['spatial_dims_var'].keys())
@@ -239,40 +242,63 @@ class pyramid_model(nn.Module):
         data_source = {}
         for spatial_dim in spatial_dims_source:
             for variable in self.relations_source['spatial_dims_var'][spatial_dim]:
-                data = torch.tensor(x[variable].values[[ts]]).squeeze().to(device)[indices_source[spatial_dim]].unsqueeze(dim=-1)
-                data_source[variable] = (data - self.norm_stats[variable]['q_05'])/(self.norm_stats[variable]['q_95'] - self.norm_stats[variable]['q_05'])
+                data_source[variable] = torch.tensor(x[variable].values[[ts]]).squeeze().to(device)[c_of_p_batched_source[spatial_dim][0]].unsqueeze(dim=-1)
 
         data_source_batched = dl_to_ld(data_source)
 
-        data_output_regions = {}
-        for spatial_dim in spatial_dims_target:
-            for variable in self.relations_target['spatial_dims_var'][spatial_dim]:
-                data_output_regions[variable] = torch.zeros_like(indices_target[spatial_dim], dtype=torch.float)
+        input_queue = multiprocessing.Queue()
+        output_queue = multiprocessing.Queue()
 
-        for batch_idx in range(len(indices_source_batches)):
+        for batch_idx in range(n_batches):
             coords_source_batch = coords_source_batches[batch_idx]
             coords_target_batch = coords_target_batches[batch_idx]
             data_source_batch = data_source_batched[batch_idx]
+           
+            input_queue.put((data_source_batch, coords_source_batch, coords_target_batch, batch_idx))
 
-            with torch.no_grad():
-                output_batch = self.local_model(data_source_batch, coords_source_batch, coords_target_batch)[0]
+        workers = [multiprocessing.Process(target=self.inference_worker, args=(input_queue, output_queue)) for _ in range(num_workers)]
+        for worker in workers:
+            worker.start()
+
+        for _ in workers: 
+            input_queue.put(None)
+        
+        for worker in workers:
+            worker.join()
+   
+        outputs = [output_queue.get() for _ in range(n_batches)]
+
+        data_output_std = {}
+        if outputs[0][0][list(self.relations_target['spatial_dims_var'].values())[0][0]].shape[-1]>1:
+            get_std = True
+        else:
+            get_std = False
+
+        data_output = {}
+        for spatial_dim in spatial_dims_target:
+            for variable in self.relations_target['spatial_dims_var'][spatial_dim]:
+                dims = (c_of_p_batched_target[spatial_dim][0].max()+1, c_of_p_batched_target[spatial_dim][1].max()+1)
+                data_output[variable] = torch.zeros(dims, dtype=torch.float)
+                if get_std:
+                    data_output_std[variable] = torch.zeros(dims, dtype=torch.float)
+
+        for output, batch_idx in outputs:
             
-            for variable, data in output_batch.items():
-                
-                data = (data).detach().cpu()*(self.norm_stats[variable]['q_95'] - self.norm_stats[variable]['q_05']) + self.norm_stats[variable]['q_05']
-                data_output_regions[variable][batch_idx] = data[:,:,0,0]
+            for variable, spatial_dim in  self.relations_target['var_spatial_dims'].items():
+              
+                indices = c_of_p_batched_target[spatial_dim][:,batch_idx]
 
+                data = output[variable][:,:,0]
+                b,n,c = data.shape
 
-        for variable, spatial_dim in  self.relations_target['var_spatial_dims'].items():
-            which_regions = self.relations_target[spatial_dim]['indices']['parents']
-            which_idx_in_region = self.relations_target[spatial_dim]['indices']['children_idx']
+                data = data.view(b*n,c)
+   
+                data_output[variable][indices.view(2,b*n)[0],indices.view(2,b*n)[1]] = data[:,0]
 
-            data = data_output_regions[variable]
-            b,n,c = data.shape
-            data = data.view(b*n,c)
-            data_output_regions[variable]=data[which_regions, which_idx_in_region].mean(dim=-1).numpy()
-            
-        return data_output_regions
+                if get_std:
+                    data_output_std[variable][indices.view(2,b*n)[0],indices.view(2,b*n)[1]] = data[:,1]
+        
+        return data_output, data_output_std
 
         # work through global data and then average - parameters?
     def train_(self, train_settings, pretrain=False):
@@ -306,6 +332,7 @@ class pyramid_model(nn.Module):
             self.__init__(model_settings)
 
         trainer.train(self, self.train_settings, self.model_settings)
+
 
 def load_settings(dict_or_file, id='model'):
     if isinstance(dict_or_file, dict):
