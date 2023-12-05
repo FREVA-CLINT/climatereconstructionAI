@@ -48,7 +48,7 @@ def get_moments(data, type, level=0.9):
     else:
         moments = (data.mean().astype(float), data.std().astype(float))
     
-    return moments
+    return tuple(moments)
 
 
 

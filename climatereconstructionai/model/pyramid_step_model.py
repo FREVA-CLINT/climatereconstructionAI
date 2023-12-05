@@ -140,8 +140,8 @@ class quant_discretizer(nn.Module):
     def __init__(self, min_val, max_val, n) -> None: 
         super().__init__()
 
-        self.min_nq = 4
-
+        self.min_nq = 5
+        self.n_min = 4
         self.min_val = min_val
         self.max_val = max_val
         self.n = n
@@ -150,8 +150,10 @@ class quant_discretizer(nn.Module):
     def forward(self, x, coords_source):
                 
         n = x.shape[1]
-        n_q = int((x.shape[1] // self.n_c)**0.5)
+
+        n_q = int((x.shape[1] // self.n_min)**0.5)
         n_q = self.min_nq if n_q < self.min_nq else n_q
+        n_q = self.n if n_q > self.n else n_q
         f = (self.n // n_q) + 1
 
         coords = coords_source
