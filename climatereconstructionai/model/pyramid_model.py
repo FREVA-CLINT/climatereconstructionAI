@@ -244,21 +244,14 @@ class pyramid_model(nn.Module):
             output_batch = self.local_model(x_source, coords_source, coords_target, norm=True)[0]
         return output_batch
 
+ 
+    def process_batch(self, batch):
+        x_source, coords_source, coords_target, batch_idx = batch
 
-    def inference_worker(self, input_queue, output_queue):
-        running = True
-        while running:
-            input_data = input_queue.get()
-            if input_data is None:
-                running = False
-            else:
-                x_source, coords_source, coords_target, batch_idx = input_data
+        with torch.no_grad():
+            output_batch = self.local_model(x_source, coords_source, coords_target, norm=True)[0]
 
-                with torch.no_grad():
-                    output_batch = self.local_model(x_source, coords_source, coords_target, norm=True)[0]
-                output_queue.put((output_batch, batch_idx))
-   
-
+        return output_batch, batch_idx
 
     def apply(self, x, ts=-1, batch_size=-1, num_workers=1, device='cpu'):
 
@@ -276,28 +269,20 @@ class pyramid_model(nn.Module):
                 data_source[variable] = torch.tensor(x[variable].values[[ts]]).squeeze().to(device)[c_of_p_batched_source[spatial_dim][0]].unsqueeze(dim=-1)
 
         data_source_batched = dl_to_ld(data_source)
-
-        input_queue = multiprocessing.Queue()
-        output_queue = multiprocessing.Queue()
-
+        batches = []
         for batch_idx in range(n_batches):
             coords_source_batch = coords_source_batches[batch_idx]
             coords_target_batch = coords_target_batches[batch_idx]
             data_source_batch = data_source_batched[batch_idx]
            
-            input_queue.put((data_source_batch, coords_source_batch, coords_target_batch, batch_idx))
+            batches.append((data_source_batch, coords_source_batch, coords_target_batch, batch_idx))
 
-        workers = [multiprocessing.Process(target=self.inference_worker, args=(input_queue, output_queue)) for _ in range(num_workers)]
-        for worker in workers:
-            worker.start()
+        pool = multiprocessing.Pool(processes=num_workers)
+        outputs = pool.map(self.process_batch, batches)
 
-        for _ in workers: 
-            input_queue.put(None)
-        
-        for worker in workers:
-            worker.join()
-   
-        outputs = [output_queue.get() for _ in range(n_batches)]
+        pool.close()
+        pool.join()
+
 
         data_output_std = {}
         if outputs[0][0][list(self.relations_target['spatial_dims_var'].values())[0][0]].shape[-1]>1:
