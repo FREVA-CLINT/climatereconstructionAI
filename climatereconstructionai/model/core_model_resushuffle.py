@@ -49,7 +49,7 @@ class res_blocks(nn.Module):
         for layer in self.res_net_blocks:
             x = layer(x)
 
-        return self.max_pool(x)
+        return self.max_pool(x), x
 
 class encoder(nn.Module): 
     def __init__(self, n_levels, n_blocks, in_channels,  u_net_channels, k_size=3, k_size_in=7, batch_norm=True, full_res=True ,n_groups=1):
@@ -78,14 +78,15 @@ class encoder(nn.Module):
                 in_channels_block = out_channels_block
                 out_channels_block = u_net_channels*(4**(n))
 
-            self.layers.append(res_blocks(n_blocks, in_channels_block, out_channels_block, k_size=k_size, batch_norm=batch_norm, groups=1))
+            reduction = False if n == n_levels-1 else True
+            self.layers.append(res_blocks(n_blocks, in_channels_block, out_channels_block, k_size=k_size, batch_norm=batch_norm, groups=1, with_reduction=reduction))
         
     def forward(self, x):
         outputs = []
         x = self.in_layer(x)
         for layer in self.layers:
-            x = layer(x)
-            outputs.append(x)
+            x, x_skip = layer(x)
+            outputs.append(x_skip)
         return x, outputs
 
 
@@ -149,8 +150,8 @@ class decoder(nn.Module):
     def forward(self, x, skip_channels):
 
         for k, layer in enumerate(self.decoder_blocks):
-            skip_channel = skip_channels[-(k+2)]  
-            x = layer(x, skip_channel)
+            x_skip = skip_channels[-(k+2)]  
+            x = layer(x, x_skip)
 
         x = self.out_layer(x)
 
