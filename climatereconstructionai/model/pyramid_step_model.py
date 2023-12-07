@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 
 from .. import transformer_training as trainer
+from torchvision.transforms import GaussianBlur
 
 import climatereconstructionai.model.transformer_helpers as helpers
 
@@ -53,7 +54,7 @@ def get_field(n_output, coords, source, f=8):
     b,n1,n2,c,nf = source.shape
     source_v = source.view(b,n1,n2,-1)
 
-    coords_inter = torch.nn.functional.interpolate(coords, scale_factor=f, mode="bilinear", align_corners=True)
+    coords_inter = torch.nn.functional.interpolate(coords, scale_factor=f, mode="bicubic", align_corners=True)
     source_inter = torch.nn.functional.interpolate(source_v.permute(0,-1,1,2), scale_factor=f, mode="bicubic", align_corners=True)
     source_inter = source_inter.view(b,c,nf,source_inter.shape[-2],source_inter.shape[-1])
 
@@ -140,8 +141,10 @@ class quant_discretizer(nn.Module):
     def __init__(self, min_val, max_val, n) -> None: 
         super().__init__()
 
-        self.min_nq = 5
-        self.n_min = 4
+        self.min_nq = 16
+        self.min_f = 4
+        self.n_min = 8
+
         self.min_val = min_val
         self.max_val = max_val
         self.n = n
@@ -155,6 +158,7 @@ class quant_discretizer(nn.Module):
         n_q = self.min_nq if n_q < self.min_nq else n_q
         n_q = self.n if n_q > self.n else n_q
         f = (self.n // n_q) + 1
+        f = self.min_f if f < self.min_f else f
 
         coords = coords_source
         data = x
@@ -262,6 +266,7 @@ class input_net(nn.Module):
                 quant_discretizer(model_settings['range_region_target_rad'][0], model_settings['range_region_target_rad'][1], model_settings['n_regular'][0])
             )    
 
+        self.gaussian_blur = GaussianBlur(5, sigma=0.3)
 
     def forward(self, x: dict, coords_source: dict):
 
@@ -275,6 +280,8 @@ class input_net(nn.Module):
 
         x = x.mean(dim=1)
 
+        x = self.gaussian_blur(x)
+
         return x
     
 def normal(x, mu, s):
@@ -285,6 +292,8 @@ def scale_coords(coords, mn, mx):
     coords_scaled = {}
     for spatial_dim, coords_ in coords.items():
         coords_scaled[spatial_dim] = (coords_ - mn)/(mx - mn)
+        if coords_scaled[spatial_dim].max()>1 or coords_scaled[spatial_dim].min()<0:
+            pass
         coords_scaled[spatial_dim] = torch.clamp(coords_scaled[spatial_dim], min=0, max=1)
     return coords_scaled
 
@@ -420,6 +429,7 @@ class pyramid_step_model(nn.Module):
             coords_target_hr = scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])
             x = self.output_net_post(x, coords_target_hr)
         else:
+            x_reg_hr = x
             x = x.permute(0,-2,-1,1)
 
             coords_target_hr = scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])

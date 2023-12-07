@@ -86,7 +86,8 @@ class pyramid_model(nn.Module):
                                                                                          parent_coords, 
                                                                                          radius_region_target_km, 
                                                                                          radius_inc, 
-                                                                                         min_overlap=self.model_settings['min_overlap_regions'])
+                                                                                         min_overlap=self.model_settings['min_overlap_regions'],
+                                                                                         rotate_cs=self.model_settings['rotate_cs'])
 
                 ds_source = xr.load_dataset(self.model_settings["data_file_source"])
                 self.relations_source, self.radius_region_source_km = self.get_relations(ds_source, 
@@ -94,7 +95,8 @@ class pyramid_model(nn.Module):
                                                                                          parent_coords, 
                                                                                          self.radius_region_target_km*math.sqrt(2), 
                                                                                          radius_inc,
-                                                                                         min_overlap=0)
+                                                                                         min_overlap=0,
+                                                                                         rotate_cs=self.model_settings['rotate_cs'])
             else:
                 ds_source = xr.load_dataset(self.model_settings["data_file_source"])
                 self.relations_target, self.radius_region_target_km = self.get_relations(ds_source, 
@@ -102,21 +104,23 @@ class pyramid_model(nn.Module):
                                                                                          parent_coords, 
                                                                                          radius_region_target_km, 
                                                                                          radius_inc, 
-                                                                                         min_overlap=self.model_settings['min_overlap_regions'])
+                                                                                         min_overlap=self.model_settings['min_overlap_regions'],
+                                                                                         rotate_cs=self.model_settings['rotate_cs'])
                 
                 self.relations_source, self.radius_region_source_km = self.get_relations(ds_source, 
                                                                                          self.model_settings['variables_source'], 
                                                                                          parent_coords, 
                                                                                          self.radius_region_target_km*math.sqrt(2), 
                                                                                          radius_inc,
-                                                                                         min_overlap=0)
+                                                                                         min_overlap=0,
+                                                                                         rotate_cs=self.model_settings['rotate_cs'])
 
             torch.save(self.relations_source, self.relation_fp_source)
             torch.save(self.relations_target, self.relation_fp_target)
     
 
 
-    def get_relations(self, ds, variables, parent_coords, radius_region_km, radius_inc, min_overlap=1):
+    def get_relations(self, ds, variables, parent_coords, radius_region_km, radius_inc, min_overlap=1, rotate_cs=False, max_lat=None):
 
         ds_dict = gu.prepare_coordinates_ds_dict({0: {'ds': ds}},[0], variables)
         child_coords_spatial_dims = ds_dict[0]['spatial_dims']
@@ -130,8 +134,8 @@ class pyramid_model(nn.Module):
 
             relation_dict, radius_region_km = gu.get_parent_child_indices(parent_coords, child_coords, radius_region_km, radius_inc, min_overlap=min_overlap, batch_size=self.model_settings['relation_batch_size'])
 
-            rel_coords_children = gu.get_relative_coordinates_grids(parent_coords, child_coords, relation_dict, relative_to='parents', batch_size=self.model_settings['relation_batch_size'])
-            rel_coords_parents = gu.get_relative_coordinates_grids(parent_coords, child_coords, relation_dict, relative_to='children', batch_size=self.model_settings['relation_batch_size'])
+            rel_coords_children = gu.get_relative_coordinates_grids(parent_coords, child_coords, relation_dict, relative_to='parents', batch_size=self.model_settings['relation_batch_size'], rotate_cs=rotate_cs)
+            rel_coords_parents = gu.get_relative_coordinates_grids(parent_coords, child_coords, relation_dict, relative_to='children', batch_size=self.model_settings['relation_batch_size'], rotate_cs=rotate_cs)
 
             relations[spatial_dim] = {
                 'indices': relation_dict,

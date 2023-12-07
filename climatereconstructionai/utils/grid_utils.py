@@ -333,7 +333,7 @@ def get_parent_child_indices(parent_coords: torch.tensor, child_coords: torch.te
     return indices, radius_km
 
 
-def get_relative_coordinates_grids(parent_coords, child_coords, relation_dict, relative_to="parents", batch_size=-1):
+def get_relative_coordinates_grids(parent_coords, child_coords, relation_dict, relative_to="parents", batch_size=-1, rotate_cs=False):
 
     if relative_to == 'children':
         coords_in_regions = [parent_coords[0][relation_dict['p_of_c'][0]], parent_coords[1][relation_dict['p_of_c'][0]]]
@@ -343,10 +343,10 @@ def get_relative_coordinates_grids(parent_coords, child_coords, relation_dict, r
         coords_in_regions = [child_coords[0][relation_dict['c_of_p'][0]], child_coords[1][relation_dict['c_of_p'][0]]]
         region_center_coords = parent_coords
     
-    return get_relative_coordinates_regions(coords_in_regions, region_center_coords, batch_size=batch_size)
+    return get_relative_coordinates_regions(coords_in_regions, region_center_coords, batch_size=batch_size, rotate_cs=rotate_cs)
 
 
-def get_relative_coordinates_regions(coords_in_regions, region_center_coords, batch_size=-1):
+def get_relative_coordinates_regions(coords_in_regions, region_center_coords, batch_size=-1, rotate_cs=False):
 
     PosCalc = PositionCalculator(batch_size)
 
@@ -354,11 +354,16 @@ def get_relative_coordinates_regions(coords_in_regions, region_center_coords, ba
 
     for p in range(coords_in_regions[0].shape[0]):
 
-        dist, phi, dlon, dlat = PosCalc(coords_in_regions[0][[p]].T, coords_in_regions[1][[p]].T,
-                                        (region_center_coords[0][p]).view(1,1),
-                                        (region_center_coords[1][p]).view(1,1),
-                                        ((region_center_coords[0][p]).view(1,1),
-                                        (region_center_coords[1][p]).view(1,1)))
+        if rotate_cs:
+            dist, phi, dlon, dlat = PosCalc(coords_in_regions[0][[p]].T, coords_in_regions[1][[p]].T,
+                                            (region_center_coords[0][p]).view(1,1),
+                                            (region_center_coords[1][p]).view(1,1),
+                                            ((region_center_coords[0][p]).view(1,1),
+                                            (region_center_coords[1][p]).view(1,1)))
+        else:
+            dist, phi, dlon, dlat = PosCalc(coords_in_regions[0][[p]].T, coords_in_regions[1][[p]].T,
+                                            (region_center_coords[0][p]).view(1,1),
+                                            (region_center_coords[1][p]).view(1,1))
         
         rel_coords.append(torch.stack([dist, phi, dlon, dlat],axis=0))
 
