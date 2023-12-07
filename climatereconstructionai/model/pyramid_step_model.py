@@ -274,12 +274,11 @@ class input_net(nn.Module):
         nh_mapping_iter = 0
         for spatial_dim, vars in self.spatial_dim_var_dict.items():
             data = torch.concat([x[var] for var in vars], dim=-1)
-            x_spatial_dims.append(self.nh_mapping[nh_mapping_iter](data, coords_source[spatial_dim]))
+            data_out = self.nh_mapping[nh_mapping_iter](data, coords_source[spatial_dim])
+            data_out = data_out.mean(dim=1)
+            x_spatial_dims.append(data_out)
             nh_mapping_iter += 1
         x = torch.concat(x_spatial_dims, dim=-1)
-
-        x = x.mean(dim=1)
-
         x = self.gaussian_blur(x)
 
         return x
