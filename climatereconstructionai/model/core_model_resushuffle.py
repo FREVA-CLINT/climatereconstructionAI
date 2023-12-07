@@ -11,10 +11,10 @@ class res_net_block(nn.Module):
         padding = k_size // 2
         stride = 2 if with_reduction else 1
 
-        self.conv1 = nn.Conv2d(in_channels, out_channels, stride=stride, padding=padding, kernel_size=k_size, padding_mode='replicate',groups=groups, bias=False)
-        self.conv2 = nn.Conv2d(out_channels, out_channels, stride=1, padding=padding, kernel_size=k_size, padding_mode='replicate',groups=groups, bias=False)
+        self.conv1 = nn.Conv2d(in_channels, out_channels, stride=stride, padding=padding, kernel_size=k_size, padding_mode='replicate',groups=groups, bias=True)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, stride=1, padding=padding, kernel_size=k_size, padding_mode='replicate',groups=groups, bias=True)
 
-        self.reduction = nn.Conv2d(in_channels, out_channels, stride=stride, padding=0, kernel_size=1,groups=groups, bias=False)
+        self.reduction = nn.Conv2d(in_channels, out_channels, stride=stride, padding=0, kernel_size=1,groups=groups, bias=True)
 
         self.bn1 = nn.BatchNorm2d(out_channels) if batch_norm else nn.Identity()
         self.bn2 = nn.BatchNorm2d(out_channels) if batch_norm else nn.Identity()
@@ -59,7 +59,7 @@ class encoder(nn.Module):
 
         if not full_res:
             bn = nn.BatchNorm2d(u_net_channels*n_groups) if batch_norm else nn.Identity()
-            self.in_layer = nn.Sequential(nn.Conv2d(in_channels, u_net_channels*n_groups, stride=1, padding=padding_in, kernel_size=k_size_in, padding_mode='replicate', groups=n_groups, bias=False),
+            self.in_layer = nn.Sequential(nn.Conv2d(in_channels, u_net_channels*n_groups, stride=1, padding=padding_in, kernel_size=k_size_in, padding_mode='replicate', groups=n_groups, bias=True),
                                         bn,
                                         nn.SiLU())
         else:
@@ -145,7 +145,7 @@ class decoder(nn.Module):
 
             self.decoder_blocks.append(decoder_block_shuffle(out_channels_block, k_size=k_size, with_skip=True, batch_norm=batch_norm))      
         
-        self.out_layer = nn.Conv2d(out_channels_block, out_channels, stride=1, padding=1, kernel_size=k_size, padding_mode='replicate', bias=False)
+        self.out_layer = nn.Conv2d(out_channels_block, out_channels, stride=1, padding=1, kernel_size=k_size, padding_mode='replicate', bias=True)
 
     def forward(self, x, skip_channels):
 
