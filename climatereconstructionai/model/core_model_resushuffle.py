@@ -16,8 +16,8 @@ class res_net_block(nn.Module):
 
         self.reduction = nn.Conv2d(in_channels, out_channels, stride=stride, padding=0, kernel_size=1,groups=groups, bias=True)
 
-        self.bn1 = nn.BatchNorm2d(out_channels) if batch_norm else nn.Identity()
-        self.bn2 = nn.BatchNorm2d(out_channels) if batch_norm else nn.Identity()
+        self.bn1 = nn.BatchNorm2d(out_channels, affine=True) if batch_norm else nn.Identity()
+        self.bn2 = nn.BatchNorm2d(out_channels, affine=True) if batch_norm else nn.Identity()
         self.activation2 = nn.SiLU()
         self.activation1 = nn.SiLU()
 
