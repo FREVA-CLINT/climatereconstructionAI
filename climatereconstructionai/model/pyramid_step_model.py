@@ -54,7 +54,7 @@ def get_field(n_output, coords, source, f=8):
     b,n1,n2,c,nf = source.shape
     source_v = source.view(b,n1,n2,-1)
 
-    coords_inter = torch.nn.functional.interpolate(coords, scale_factor=f, mode="bicubic", align_corners=True)
+    coords_inter = torch.nn.functional.interpolate(coords, scale_factor=f, mode="bilinear", align_corners=True)
     source_inter = torch.nn.functional.interpolate(source_v.permute(0,-1,1,2), scale_factor=f, mode="bicubic", align_corners=True)
     source_inter = source_inter.view(b,c,nf,source_inter.shape[-2],source_inter.shape[-1])
 

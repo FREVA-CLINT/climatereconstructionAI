@@ -243,12 +243,6 @@ class pyramid_model(nn.Module):
 
         return c_of_p_batched, spatial_dim_coords_batched
     
-    def apply_batch(self, x_source, coords_source, coords_target):
-        with torch.no_grad():
-            output_batch = self.local_model(x_source, coords_source, coords_target, norm=True)[0]
-        return output_batch
-
- 
     def process_batch(self, batch):
         x_source, coords_source, coords_target, batch_idx = batch
 
@@ -258,7 +252,8 @@ class pyramid_model(nn.Module):
         return output_batch, batch_idx
 
     def apply(self, x, ts=-1, batch_size=-1, num_workers=1, device='cpu'):
-
+        multiprocessing.set_start_method('forkserver')
+        
         c_of_p_batched_source, coords_source_batches = self.get_batches_coords(self.relations_source, batch_size, device=device)
         c_of_p_batched_target, coords_target_batches = self.get_batches_coords(self.relations_target, batch_size, device=device)
 
