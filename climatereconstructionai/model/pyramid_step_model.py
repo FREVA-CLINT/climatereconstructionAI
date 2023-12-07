@@ -278,7 +278,7 @@ class input_net(nn.Module):
             data_out = data_out.mean(dim=1)
             x_spatial_dims.append(data_out)
             nh_mapping_iter += 1
-        x = torch.concat(x_spatial_dims, dim=-1)
+        x = torch.concat(x_spatial_dims, dim=1)
         x = self.gaussian_blur(x)
 
         return x
