@@ -17,8 +17,10 @@ class GaussLoss(nn.Module):
         super().__init__()
         self.Gauss = torch.nn.GaussianNLLLoss()
 
-    def forward(self, output, target):
-        loss =  self.Gauss(output[:,:,:,0],target,output[:,:,:,1])
+    def forward(self, output, target, non_valid_mask):
+        output_valid = output[~non_valid_mask]
+        target_valid = target[~non_valid_mask]
+        loss =  self.Gauss(output_valid[:,:,:,0],target_valid,output_valid[:,:,:,1])
         return loss
 
 class L1Loss(nn.Module):
@@ -26,8 +28,10 @@ class L1Loss(nn.Module):
         super().__init__()
         self.loss = torch.nn.L1Loss()
 
-    def forward(self, output, target):
-        loss = self.loss(output[:,:,:,0],target)
+    def forward(self, output, target, non_valid_mask):
+        output_valid = output[~non_valid_mask,:,0]
+        target_valid = target[~non_valid_mask]
+        loss = self.loss(output_valid,target_valid)
         return loss
 
 class L1Loss_rel(nn.Module):
@@ -73,14 +77,15 @@ class DictLoss(nn.Module):
         self.loss_fcns = loss_fcn_list
         self.factor_list = factor_list
 
-    def forward(self, output, target):
+
+    def forward(self, output, target, non_valid_mask):
         loss_dict = {}
         total_loss = 0
 
         for k, loss_fcn in enumerate(self.loss_fcns):
             f = self.factor_list[k]
             for var in output.keys():
-                loss = f*loss_fcn(output[var], target[var])
+                loss = f*loss_fcn(output[var], target[var], non_valid_mask[var])
                 loss_dict[f'{var}_{str(loss_fcn._get_name())}'] = loss.item()
                 total_loss+=loss
 
@@ -297,11 +302,11 @@ def train(model, training_settings, model_settings={}):
 
         source, target, coords_source, coords_target = [dict_to_device(x, device) for x in next(iterator_train)]
 
-        output,_, output_reg_hr = model(source, coords_source, coords_target)
+        output,_, output_reg_hr, non_valid_mask = model(source, coords_source, coords_target)
 
         optimizer.zero_grad()
 
-        loss, train_loss_dict = dict_loss_fcn(output, target)
+        loss, train_loss_dict = dict_loss_fcn(output, target, non_valid_mask)
 
         if calc_reg_loss:
             reg_loss = f_tv*loss_fcn_reg(output_reg_hr)
@@ -327,9 +332,9 @@ def train(model, training_settings, model_settings={}):
                 source, target, coords_source, coords_target = [dict_to_device(x, device) for x in next(iterator_val)]
 
                 with torch.no_grad():
-                    output, output_reg_lr, output_reg_hr = model(source, coords_source, coords_target)
+                    output, output_reg_lr, output_reg_hr, non_valid_mask = model(source, coords_source, coords_target)
 
-                    loss, val_loss_dict = dict_loss_fcn(output, target)
+                    loss, val_loss_dict = dict_loss_fcn(output, target, non_valid_mask)
 
                     if calc_reg_loss:
                         reg_loss = f_tv*loss_fcn_reg(output_reg_hr)

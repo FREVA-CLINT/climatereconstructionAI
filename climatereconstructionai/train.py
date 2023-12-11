@@ -12,7 +12,6 @@ from . import config as cfg
 from .loss import get_loss
 from .metrics.get_metrics import get_metrics
 from .model.net import CRAINet
-
 from .utils import twriter, early_stopping
 from .utils.evaluation import create_snapshot_image
 from .utils.io import load_ckpt, load_model, save_ckpt
@@ -56,19 +55,21 @@ def train(arg_file=None):
     
     iterator_train = iter(DataLoader(dataset_train, batch_size=cfg.batch_size,
                                      sampler=InfiniteSampler(len(dataset_train)),
-                                     num_workers=cfg.n_threads, 
-                                     pin_memory=True if cfg.device != 'cpu' else False,
-                                     pin_memory_device=cfg.device))
-
+                                     num_workers=cfg.n_threads))
     iterator_val = iter(DataLoader(dataset_val, batch_size=cfg.batch_size,
                                    sampler=InfiniteSampler(len(dataset_val)),
-                                   num_workers=cfg.n_threads,
-                                   pin_memory=True if cfg.device != 'cpu' else False,
-                                   pin_memory_device=cfg.device))
+                                   num_workers=cfg.n_threads))
 
     steady_mask = load_steadymask(cfg.mask_dir, cfg.steady_masks, cfg.data_types, cfg.device)
 
     image_sizes = dataset_train.img_sizes
+
+    img_size_source = image_sizes[0]
+    if len(image_sizes)==1:
+        img_size_target = img_size_source
+    else:
+        img_size_target = image_sizes[1]
+
     if cfg.conv_factor is None:
         cfg.conv_factor = max(image_sizes[0])
 
@@ -76,31 +77,25 @@ def train(arg_file=None):
 
     # define network model
     if len(image_sizes) - cfg.n_target_data > 1:
-        model = CRAINet(img_size_source=image_sizes[0],
-                        img_size_target=image_sizes[1],
+        model = CRAINet(img_size_source=img_size_source,
+                        img_size_target=img_size_target,
                         enc_dec_layers=cfg.encoding_layers[0],
                         pool_layers=cfg.pooling_layers[0],
                         in_channels=cfg.n_channel_steps,
                         out_channels=cfg.out_channels,
-                        fusion_img_size=cfg.image_sizes[1],
+                        fusion_img_size=img_size_target,
                         fusion_enc_layers=cfg.encoding_layers[1],
                         fusion_pool_layers=cfg.pooling_layers[1],
                         fusion_in_channels=(len(image_sizes) - 1 - cfg.n_target_data) * cfg.n_channel_steps,
                         bounds=dataset_train.bounds).to(cfg.device)
     else:
-        model = CRAINet(img_size_source=image_sizes[0],
-                        img_size_target=image_sizes[1],
+        model = CRAINet(img_size_source=img_size_source,
+                        img_size_target=img_size_target,
                         enc_dec_layers=cfg.encoding_layers[0],
                         pool_layers=cfg.pooling_layers[0],
                         in_channels=cfg.n_channel_steps,
                         out_channels=cfg.out_channels,
                         bounds=dataset_train.bounds).to(cfg.device)
-
-    ds_source = dataset_train.xr_dss[0][1]
-    ds_target = dataset_train.xr_dss[1][1]
-
-    loss_fcn = torch.nn.L1Loss()
-    model = net_grid(ds_source, ds_target, cfg.data_types[0])
 
     # define learning rate
     if cfg.finetune:
@@ -110,7 +105,7 @@ def train(arg_file=None):
         lr = cfg.lr
 
     early_stop = early_stopping.early_stopping()
-    loss_comp = get_loss.LossComputation(cfg.lambda_dict).to(cfg.device)
+    loss_comp = get_loss.LossComputation(cfg.lambda_dict)
 
     # define optimizer and loss functions
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
@@ -148,17 +143,12 @@ def train(arg_file=None):
         # train model
         model.train()
         image, mask, gt = [x.to(cfg.device) for x in next(iterator_train)[:3]]
-        b,t,c,h,w = image.shape
-        mask = torch.ones_like(gt)
-        output_t, output, mask = model(image, mask)
+        output, mask = model(image, mask)
 
-       # train_loss = loss_comp(mask, steady_mask, output, gt)
+        train_loss = loss_comp(mask, steady_mask, output, gt)
 
         optimizer.zero_grad()
-        loss = loss_fcn(output_t.view(b,c,-1), gt.view(b,c,-1))
-        loss.backward()
-        train_loss = {'total': loss.item(), 'valid': loss.item()}
-
+        train_loss['total'].backward()
         optimizer.step()
 
         if (cfg.log_interval and n_iter % cfg.log_interval == 0):
@@ -169,12 +159,8 @@ def train(arg_file=None):
             for _ in range(cfg.n_iters_val):
                 image, mask, gt = [x.to(cfg.device) for x in next(iterator_val)[:3]]
                 with torch.no_grad():
-                    output_t, output, mask = model(image, mask)
-                    loss = loss_fcn(output_t.view(b,c,-1), gt.view(b,c,-1))
-                    val_loss = {'total': loss, 'valid': loss}
-
-                #val_losses.append(list(loss_comp(mask, steady_mask, output, gt).values()))
-                val_losses.append(list(val_loss.values()))
+                    output, mask = model(image, mask)
+                val_losses.append(list(loss_comp(mask, steady_mask, output, gt).values()))
 
             val_loss = torch.tensor(val_losses).mean(dim=0)
             val_loss = dict(zip(train_loss.keys(), val_loss))

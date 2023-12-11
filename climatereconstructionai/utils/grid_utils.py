@@ -247,14 +247,14 @@ def get_grid_relations(grids, coord_dict, regional=True, radius_regions_km=None,
     return grid_data
 
 
-def get_parent_child_indices(parent_coords: torch.tensor, child_coords: torch.tensor, radius_km: float, radius_inc_km: float, in_deg=False, min_overlap=1, max_overlap=5, batch_size=-1):
+def get_parent_child_indices(parent_coords: torch.tensor, child_coords: torch.tensor, radius_km: float, radius_inc_km: float, in_deg=False, min_overlap=1, max_overlap=5, batch_size=-1, rotate_cs=False):
 
     n_iter = 0
     converged = False
 
     while not converged:
 
-        pc_distance, p_c_indices, _, _ = get_regions(child_coords[0], child_coords[1], parent_coords[0], parent_coords[1], radius_region=radius_km, in_deg=in_deg, batch_size=batch_size)
+        pc_distance, p_c_indices, _, _ = get_regions(child_coords[0], child_coords[1], parent_coords[0], parent_coords[1], radius_region=radius_km, in_deg=in_deg, batch_size=batch_size, rotate_cs=rotate_cs)
 
         # relative to parents
         pc_distance = pc_distance.T
@@ -381,8 +381,7 @@ def get_regions(lons, lats, seeds_lon, seeds_lat, radius_region=None, n_points=N
 
     if rect:
         Pos_calc = PositionCalculator(batch_size=batch_size)
-        d_mat, phi, dlon, dlat = Pos_calc(lons, lats, seeds_lon, seeds_lat)
-
+        d_mat, phi, dlon, dlat  = Pos_calc(lons, lats, seeds_lon, seeds_lat)[0].T
         region_indices_lon = dlon.median(dim=0).values.abs()*radius_earth <= radius_region 
         region_indices_lat = dlat.median(dim=0).values.abs()*radius_earth <= radius_region 
 
@@ -397,7 +396,7 @@ def get_regions(lons, lats, seeds_lon, seeds_lat, radius_region=None, n_points=N
 
     else:
         Pos_calc = PositionCalculator(batch_size=batch_size)
-
+   
         d_mat = Pos_calc(lons, lats, seeds_lon, seeds_lat)[0].T
 
         if batch_size != -1 and batch_size <= d_mat.shape[-1]:

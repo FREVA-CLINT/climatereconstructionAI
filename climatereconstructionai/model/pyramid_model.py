@@ -247,13 +247,13 @@ class pyramid_model(nn.Module):
         x_source, coords_source, coords_target, batch_idx = batch
 
         with torch.no_grad():
-            output_batch = self.local_model(x_source, coords_source, coords_target, norm=True)[0]
+            output_batch, _, _, non_valid_mask = self.local_model(x_source, coords_source, coords_target, norm=True)
 
-        return output_batch, batch_idx
+        return output_batch, non_valid_mask, batch_idx
 
     def apply(self, x, ts=-1, batch_size=-1, num_workers=1, device='cpu'):
         multiprocessing.set_start_method('forkserver')
-        
+
         c_of_p_batched_source, coords_source_batches = self.get_batches_coords(self.relations_source, batch_size, device=device)
         c_of_p_batched_target, coords_target_batches = self.get_batches_coords(self.relations_target, batch_size, device=device)
 
@@ -297,13 +297,16 @@ class pyramid_model(nn.Module):
                 if get_std:
                     data_output_std[variable] = torch.zeros(dims, dtype=torch.float)
 
-        for output, batch_idx in outputs:
+        for output, non_valid_mask, batch_idx in outputs:
             
             for variable, spatial_dim in  self.relations_target['var_spatial_dims'].items():
               
                 indices = c_of_p_batched_target[spatial_dim][:,batch_idx]
 
                 data = output[variable][:,:,0]
+                mask = non_valid_mask[variable]
+                data[mask] = 0
+                
                 b,n,c = data.shape
 
                 data = data.view(b*n,c)

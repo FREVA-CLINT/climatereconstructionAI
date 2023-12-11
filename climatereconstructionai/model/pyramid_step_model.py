@@ -289,12 +289,20 @@ def normal(x, mu, s):
 
 def scale_coords(coords, mn, mx):
     coords_scaled = {}
+    non_valid = {}
+
     for spatial_dim, coords_ in coords.items():
         coords_scaled[spatial_dim] = (coords_ - mn)/(mx - mn)
-        if coords_scaled[spatial_dim].max()>1 or coords_scaled[spatial_dim].min()<0:
+        non_valid[spatial_dim] = torch.logical_or(
+            torch.logical_or(coords_scaled[spatial_dim][:,0]>1, 
+                             coords_scaled[spatial_dim][:,0]<0),
+            torch.logical_or(coords_scaled[spatial_dim][:,1]>1, 
+                             coords_scaled[spatial_dim][:,1]<0))
+
+        if non_valid[spatial_dim].any():
             pass
         coords_scaled[spatial_dim] = torch.clamp(coords_scaled[spatial_dim], min=0, max=1)
-    return coords_scaled
+    return coords_scaled, non_valid
 
 
 class interpolation_net(nn.Module):
@@ -338,9 +346,10 @@ class output_net(nn.Module):
             total_dim_output *=2
 
 
-    def forward(self, x, coords_target):
+    def forward(self, x, coords_target, non_valid_mask=None):
         
         data_out = {}
+        non_valid_mask_var = {}
 
         x = torch.split(x, self.output_dims, dim=-1)
 
@@ -358,9 +367,11 @@ class output_net(nn.Module):
             
             data_out.update(dict(zip(vars, torch.split(data, 1, dim=2))))
 
+            if non_valid_mask is not None:
+                non_valid_mask_var.update(dict(zip(vars, [non_valid_mask[spatial_dim]]*len(vars))))
             idx += 1
 
-        return data_out
+        return data_out, non_valid_mask_var
 
 
 class pyramid_step_model(nn.Module):
@@ -425,20 +436,20 @@ class pyramid_step_model(nn.Module):
                 x = x.permute(0,-2,-1,1)
             
             x_reg_hr = x
-            coords_target_hr = scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])
-            x = self.output_net_post(x, coords_target_hr)
+            coords_target_hr, non_valid = scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])
+            x, non_valid = self.output_net_post(x, coords_target_hr, non_valid)
         else:
             x_reg_hr = x
             x = x.permute(0,-2,-1,1)
 
-            coords_target_hr = scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])
-            x = self.output_net_post(x[:,:,:,list(self.output_res_indices.values())], coords_target_hr)
+            coords_target_hr, non_valid = scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])
+            x, non_valid = self.output_net_post(x[:,:,:,list(self.output_res_indices.values())], coords_target_hr, non_valid)
         
         if self.predict_residual and not isinstance(self.core_model, nn.Identity):
-            coords_target_lr = scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])
+            coords_target_lr = scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])[0]
 
             x_reg_lr = x_reg_lr.permute(0,-2,-1,1)
-            x_pre = self.output_net_pre(x_reg_lr[:,:,:,list(self.output_res_indices.values())], coords_target_lr)
+            x_pre = self.output_net_pre(x_reg_lr[:,:,:,list(self.output_res_indices.values())], coords_target_lr)[0]
 
             for var in self.output_res_indices.keys():
                 if self.use_gnlll:
@@ -451,7 +462,7 @@ class pyramid_step_model(nn.Module):
         if norm:
             x = self.normalize(x, denorm=True)
 
-        return x, x_reg_lr, x_reg_hr
+        return x, x_reg_lr, x_reg_hr, non_valid
 
     def check_model_dir(self):
         self.model_dir = self.model_settings['model_dir']
