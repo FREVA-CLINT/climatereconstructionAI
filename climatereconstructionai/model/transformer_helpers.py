@@ -9,6 +9,35 @@ import scipy.interpolate as inter
 radius_earth = 6371
 
 
+class ConvSelfAttention(nn.Module):
+    def __init__(self, in_channel, hw, n_heads=1):
+        super().__init__()
+
+        self.n_heads = n_heads
+
+        self.norm = nn.LayerNorm([in_channel, hw, hw])
+        self.qkv = nn.Conv2d(in_channel, in_channel * 3, 1, bias=False)
+        self.out = nn.Conv2d(in_channel, in_channel, 1)
+
+    def forward(self, input):
+        b, c, h, w = input.shape
+
+        n_heads = self.n_heads
+        head_dim = c // self.n_heads
+
+        norm = self.norm(input)
+        qkv = self.qkv(norm).view(b, n_heads, head_dim * 3, h, w)
+        q, k, v = qkv.chunk(3, dim=2)  
+
+        out = scaled_dot_product_rpe_swin(q, k, v)[0]
+
+        out = self.out(out.view(b, c, h, w))
+
+        return out + input
+
+
+       
+
 def scaled_dot_product_rpe(q, k, v, a_k, a_v):
     # with relative position embeddings by shaw et al. (2018)
 
