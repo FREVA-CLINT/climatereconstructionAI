@@ -20,7 +20,7 @@ class GaussLoss(nn.Module):
     def forward(self, output, target, non_valid_mask):
         output_valid = output[~non_valid_mask]
         target_valid = target[~non_valid_mask]
-        loss =  self.Gauss(output_valid[:,:,:,0],target_valid,output_valid[:,:,:,1])
+        loss =  self.Gauss(output_valid[:,:,0],target_valid,output_valid[:,:,1])
         return loss
 
 class L1Loss(nn.Module):
