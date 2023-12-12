@@ -20,7 +20,7 @@ class early_stopping():
 
         self.patience = patience
 
-        self.patience_ar = np.zeros((self.patience,))
+        self.patience_ar = np.zeros((int(self.patience),))
 
         self.terminate = False
         self.best_loss = False

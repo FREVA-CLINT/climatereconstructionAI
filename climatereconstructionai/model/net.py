@@ -25,7 +25,7 @@ class CRAINet(nn.Module):
     def __init__(self, img_size_source, img_size_target, enc_dec_layers=4, pool_layers=4, in_channels=1, out_channels=1,
                  conv_factor=16,fusion_img_size=None, fusion_enc_layers=None, fusion_pool_layers=None, fusion_in_channels=0,
                  bounds=None, n_filters=None, skip_layers=True, upsampling_mode='linear',attention=False, n_channel_steps=1, predict_residual=True,
-                 recurrent_steps=0, lstm_steps=0, gru_steps=0, dropout=0):
+                 recurrent_steps=0, lstm_steps=0, gru_steps=0, dropout=0, pixel_shuffle=False):
 
         super().__init__()
 
@@ -39,6 +39,10 @@ class CRAINet(nn.Module):
         self.lstm_steps = lstm_steps
         self.gru_steps = gru_steps
         self.in_channels = in_channels
+
+        if 'gauss' in cfg.lambda_dict:
+            out_channels = out_channels*2
+        
         self.out_channels = out_channels
 
         # initialize channel inputs and outputs and image size for encoder and decoder
@@ -104,6 +108,11 @@ class CRAINet(nn.Module):
             if i == self.net_depth - 1:
                 activation = None
                 bias = True
+                if hasattr(cfg, 'lambda_dict'):
+                    if 'gauss' in cfg.lambda_dict:
+                        if cfg.lambda_dict['gauss']>0:
+                            activation = GaussActivation()
+                            bias = True
             else:
                 activation = nn.LeakyReLU()
                 bias = False
@@ -127,8 +136,8 @@ class CRAINet(nn.Module):
             input_mask = torch.ones_like(input, device=input.device)
             output_mask=False
 
-        input = self.upsample(input[:,0]).unsqueeze(dim=1)
-        input_mask = self.upsample(input_mask[:,0]).unsqueeze(dim=1)
+        input = torch.stack([self.upsample(input[:,k]) for k in range(cfg.n_recurrent_steps)],dim=1)
+        input_mask = torch.stack([self.upsample(input_mask[:,k]) for k in range(cfg.n_recurrent_steps)],dim=1)
 
         if self.predict_residual:
             input_base = input.clone()

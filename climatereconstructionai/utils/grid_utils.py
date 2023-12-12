@@ -381,7 +381,7 @@ def get_regions(lons, lats, seeds_lon, seeds_lat, radius_region=None, n_points=N
 
     if rect:
         Pos_calc = PositionCalculator(batch_size=batch_size)
-        d_mat, phi, dlon, dlat  = Pos_calc(lons, lats, seeds_lon, seeds_lat)[0].T
+        d_mat, phi, dlon, dlat  = Pos_calc(lons, lats, seeds_lon, seeds_lat)
         region_indices_lon = dlon.median(dim=0).values.abs()*radius_earth <= radius_region 
         region_indices_lat = dlat.median(dim=0).values.abs()*radius_earth <= radius_region 
 
@@ -420,7 +420,7 @@ def get_regions(lons, lats, seeds_lon, seeds_lat, radius_region=None, n_points=N
                 n_points = indices.shape[0]
             else:     
                 distances, indices = torch.topk(d_mat_chunk, k=n_points, dim=0, largest=False)
-                distances *= radius_earth*2
+                distances *= radius_earth
 
             distances_regions.append(distances)
             indices_regions.append(indices)
@@ -634,7 +634,7 @@ def generate_region(coords, range_lon=None, range_lat=None, n_points=None, radiu
 
     distances_regions, indices_regions, lons_regions, lats_regions = get_regions(coords['lon'], coords['lat'], seeds_lon, seeds_lat, radius_region=radius, n_points=n_points, in_deg=True, rect=rect)
     n_points = len(distances_regions)
-    radius = (distances_regions.max()/2)
+    radius = distances_regions.max()
 
     out_dict = {'distances': distances_regions,
                 'indices': indices_regions,

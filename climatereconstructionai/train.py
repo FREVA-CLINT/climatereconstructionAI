@@ -87,7 +87,8 @@ def train(arg_file=None):
                         fusion_enc_layers=cfg.encoding_layers[1],
                         fusion_pool_layers=cfg.pooling_layers[1],
                         fusion_in_channels=(len(image_sizes) - 1 - cfg.n_target_data) * cfg.n_channel_steps,
-                        bounds=dataset_train.bounds).to(cfg.device)
+                        bounds=dataset_train.bounds,
+                        upsampling_mode=cfg.upsampling_mode).to(cfg.device)
     else:
         model = CRAINet(img_size_source=img_size_source,
                         img_size_target=img_size_target,
@@ -95,7 +96,8 @@ def train(arg_file=None):
                         pool_layers=cfg.pooling_layers[0],
                         in_channels=cfg.n_channel_steps,
                         out_channels=cfg.out_channels,
-                        bounds=dataset_train.bounds).to(cfg.device)
+                        bounds=dataset_train.bounds,
+                        upsampling_mode=cfg.upsampling_mode).to(cfg.device)
 
     # define learning rate
     if cfg.finetune:
