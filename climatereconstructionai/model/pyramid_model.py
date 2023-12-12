@@ -35,6 +35,7 @@ class pyramid_model(nn.Module):
         if "local_model" in self.model_settings.keys():
             self.load_step_models()
 
+        self.mp_set = False
         # for outputting the patch file
         #self.check_grid_file()
 
@@ -252,7 +253,11 @@ class pyramid_model(nn.Module):
         return output_batch, non_valid_mask, batch_idx
 
     def apply(self, x, ts=-1, batch_size=-1, num_workers=1, device='cpu'):
-        multiprocessing.set_start_method('forkserver')
+
+        if not self.mp_set:
+            multiprocessing.set_start_method('forkserver')
+            self.mp_set = True
+        
 
         c_of_p_batched_source, coords_source_batches = self.get_batches_coords(self.relations_source, batch_size, device=device)
         c_of_p_batched_target, coords_target_batches = self.get_batches_coords(self.relations_target, batch_size, device=device)
@@ -306,7 +311,7 @@ class pyramid_model(nn.Module):
                 data = output[variable][:,:,0]
                 mask = non_valid_mask[variable]
                 data[mask] = 0
-                
+
                 b,n,c = data.shape
 
                 data = data.view(b*n,c)
