@@ -475,7 +475,6 @@ def train(model, training_settings, model_settings={}):
                     output, output_reg_lr, output_reg_hr, non_valid_mask = model(source, coords_source, coords_target)
 
                     if calc_vort:
-                        spatial_dim_uv = [k for k,v in model.model_settings['spatial_dims_var_target'].items() if 'u' in v][0]
                         uv_dim_indices = target_indices[spatial_dim_uv]
                         output, non_valid_mask_vort, coords_vort = add_vorticity(vort_calc, output, uv_dim_indices)
                         non_valid_mask['vort'] = non_valid_mask_vort
