@@ -409,6 +409,8 @@ def train(model, training_settings, model_settings={}):
     lr_scheduler = CosineWarmupScheduler(optimizer, training_settings["T_warmup"], training_settings['max_iter'])
 
     start_iter = 0
+    
+    spatial_dim_var_target = model.model_settings['spatial_dims_var_target']
 
     if training_settings['multi_gpus']:
         model = torch.nn.DataParallel(model)
@@ -435,7 +437,7 @@ def train(model, training_settings, model_settings={}):
         optimizer.zero_grad()
 
         if calc_vort:
-            spatial_dim_uv = [k for k,v in model.model_settings['spatial_dims_var_target'].items() if 'u' in v][0]
+            spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
             uv_dim_indices = target_indices[spatial_dim_uv]
             output, non_valid_mask_vort, _ = add_vorticity(vort_calc, output, uv_dim_indices)
             non_valid_mask['vort'] = non_valid_mask_vort
