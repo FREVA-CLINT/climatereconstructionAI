@@ -200,14 +200,15 @@ class DictLoss(nn.Module):
         self.factor_list = factor_list
 
 
-    def forward(self, output, target, non_valid_mask):
+    def forward(self, output, target, non_valid_mask, lambdas):
         loss_dict = {}
         total_loss = 0
 
         for k, loss_fcn in enumerate(self.loss_fcns):
             f = self.factor_list[k]
             for var in output.keys():
-                loss = f*loss_fcn(output[var], target[var], non_valid_mask[var])
+                lambda_var = lambdas[var]
+                loss = lambda_var*f*loss_fcn(output[var], target[var], non_valid_mask[var])
                 loss_dict[f'{var}_{str(loss_fcn._get_name())}'] = loss.item()
                 total_loss+=loss
 
@@ -413,6 +414,12 @@ def train(model, training_settings, model_settings={}):
     
     spatial_dim_var_target = model.model_settings['spatial_dims_var_target']
 
+    if 'lambdas' in training_settings.keys():
+        lambdas = training_settings['lambdas']
+    else:
+        vars = model.model_settings['variables_target']
+        lambdas = dict(zip(vars, [1]*len(vars)))
+
     if training_settings['multi_gpus']:
         model = torch.nn.DataParallel(model)
 
@@ -421,6 +428,7 @@ def train(model, training_settings, model_settings={}):
     train_losses_save = []
     val_losses_save = []
     lrs = []
+
     for i in pbar:
      
         n_iter = i + 1
@@ -446,7 +454,7 @@ def train(model, training_settings, model_settings={}):
             if 'vort' not in target.keys():
                 target = add_vorticity(vort_calc, target, uv_dim_indices)[0]
 
-        loss, train_loss_dict = dict_loss_fcn(output, target, non_valid_mask)
+        loss, train_loss_dict = dict_loss_fcn(output, target, non_valid_mask, lambdas)
 
         if calc_reg_loss:
             reg_loss = f_tv*loss_fcn_reg(output_reg_hr)
@@ -482,7 +490,7 @@ def train(model, training_settings, model_settings={}):
                         if 'vort' not in target.keys():
                             target = add_vorticity(vort_calc, target, uv_dim_indices)[0]
 
-                    loss, val_loss_dict = dict_loss_fcn(output, target, non_valid_mask)
+                    loss, val_loss_dict = dict_loss_fcn(output, target, non_valid_mask, lambdas)
 
                     if calc_reg_loss:
                         reg_loss = f_tv*loss_fcn_reg(output_reg_hr)
