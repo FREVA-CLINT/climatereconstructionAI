@@ -15,7 +15,8 @@ from .utils.netcdfloader_samples import NetCDFLoader_lazy, InfiniteSampler
 
 class vorticity_calculator():
     def __init__(self, grid_file_path, device='cpu') -> None:
-
+        
+        self.device=device
         dset = netcdf.Dataset(grid_file_path)
 
         self.zonal_normal_primal_edge = torch.from_numpy(dset['zonal_normal_primal_edge'][:].data).to(device)
@@ -82,11 +83,11 @@ class vorticity_calculator():
         n_edges_global = self.zonal_normal_primal_edge.shape[-1]
         n_vertices_global = self.edges_of_vertex.shape[0]
 
-        global_edge_indices_b = global_edge_indices + (torch.arange(b)*n_edges_global).view(b,1)
+        global_edge_indices_b = global_edge_indices + (torch.arange(b, device=self.device)*n_edges_global).view(b,1)
         global_edge_indices_b_red = global_edge_indices_b.unique(return_counts=True)[1].max()>1
 
         v_indices = self.edge_vertices[:,global_edge_indices].transpose(0,1).reshape(b,-1)
-        v_indices_b = v_indices + (torch.arange(b)*n_vertices_global).view(b,1)
+        v_indices_b = v_indices + (torch.arange(b, device=self.device)*n_vertices_global).view(b,1)
 
         u_global = torch.zeros((b*n_edges_global))
         v_global = torch.zeros((b*n_edges_global))
