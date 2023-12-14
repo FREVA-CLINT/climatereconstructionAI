@@ -7,10 +7,131 @@ import json
 import torch.multiprocessing
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import netCDF4 as netcdf
 
 from .utils import twriter_t, early_stopping
 from .utils.io import save_ckpt
 from .utils.netcdfloader_samples import NetCDFLoader_lazy, InfiniteSampler
+
+class vorticity_calculator():
+    def __init__(self, grid_file_path, device='cpu') -> None:
+
+        dset = netcdf.Dataset(grid_file_path)
+
+        self.zonal_normal_primal_edge = torch.from_numpy(dset['zonal_normal_primal_edge'][:].data).to(device)
+        self.meridional_normal_primal_edge = torch.from_numpy(dset['meridional_normal_primal_edge'][:].data).to(device)
+        self.edges_of_vertex = torch.from_numpy(dset['edges_of_vertex'][:].data.T-1).clamp(min=0).long().to(device)
+        self.dual_edge_length = torch.from_numpy(dset['dual_edge_length'][:].data).to(device)
+        self.edge_vertices = torch.from_numpy(dset['edge_vertices'][:].data).long().to(device)-1
+
+        self.dual_area = torch.tensor(dset['dual_area'][:].data, device=device)
+
+        edge_dual_normal_cartesian_x = dset['edge_dual_normal_cartesian_x'][:].data
+        edge_dual_normal_cartesian_y = dset['edge_dual_normal_cartesian_y'][:].data
+        edge_dual_normal_cartesian_z = dset['edge_dual_normal_cartesian_z'][:].data
+
+        edge_middle_cartesian_x = dset['edge_middle_cartesian_x'][:].data
+        edge_middle_cartesian_y = dset['edge_middle_cartesian_y'][:].data
+        edge_middle_cartesian_z = dset['edge_middle_cartesian_z'][:].data
+
+        cartesian_x_vertices = dset['cartesian_x_vertices'][:].data
+        cartesian_y_vertices = dset['cartesian_y_vertices'][:].data
+        cartesian_z_vertices = dset['cartesian_z_vertices'][:].data
+
+        cartesian_vertices = torch.tensor([cartesian_x_vertices,cartesian_y_vertices,
+                                            cartesian_z_vertices]).T
+
+        edge_dual_normal_cartesian = torch.tensor([edge_dual_normal_cartesian_x,edge_dual_normal_cartesian_y,
+                                            edge_dual_normal_cartesian_z]).T
+
+        edge_middle_cartesian = torch.tensor([edge_middle_cartesian_x,edge_middle_cartesian_y,
+                                        edge_middle_cartesian_z]).T
+
+
+        self.nout = edge_middle_cartesian[self.edges_of_vertex]-cartesian_vertices[:,np.newaxis,:]
+        self.signorient = torch.sign((self.nout*edge_dual_normal_cartesian[self.edges_of_vertex]).sum(axis=-1))
+
+        self.nout = self.nout.to(device)
+        self.signorient = self.signorient.to(device)
+        self.coords_v = torch.stack([torch.tensor(dset['vlon'][:].data, device=device), torch.tensor(dset['vlat'][:].data, device=device)])
+        dset.close()
+
+    def get_vorticity(self, normalVelocity):
+        vort = ((normalVelocity*self.dual_edge_length)[self.edges_of_vertex]*self.signorient).sum(axis=-1)/self.dual_area
+        return vort
+    
+
+    def get_vorticity_from_uv(self, u, v):
+        normalVectorx = self.zonal_normal_primal_edge
+        normalVectory = self.meridional_normal_primal_edge
+
+        normalVelocity = u * normalVectorx + v * normalVectory
+
+        return self.get_vorticity(normalVelocity)
+    
+
+    def get_vorticity_from_ds(self, ds, ts):
+        u = torch.from_numpy(ds['u'][:].data[ts,0].astype(np.float32))
+        v = torch.from_numpy(ds['v'][:].data[ts,0].astype(np.float32))
+
+        return self.get_vorticity_from_uv(u,v)
+    
+
+    def get_vorticity_from_edge_indices(self, global_edge_indices, u, v):
+        b,n = global_edge_indices.shape
+        n_edges_global = self.zonal_normal_primal_edge.shape[-1]
+        n_vertices_global = self.edges_of_vertex.shape[0]
+
+        global_edge_indices_b = global_edge_indices + (torch.arange(b)*n_edges_global).view(b,1)
+        global_edge_indices_b_red = global_edge_indices_b.unique(return_counts=True)[1].max()>1
+
+        v_indices = self.edge_vertices[:,global_edge_indices].transpose(0,1).reshape(b,-1)
+        v_indices_b = v_indices + (torch.arange(b)*n_vertices_global).view(b,1)
+
+        u_global = torch.zeros((b*n_edges_global))
+        v_global = torch.zeros((b*n_edges_global))
+        u_global[global_edge_indices_b.view(-1)] = u.view(-1)
+        v_global[global_edge_indices_b.view(-1)] = v.view(-1)
+        u_global = u_global.view(b,n_edges_global)
+        v_global = v_global.view(b,n_edges_global)
+
+        unique, inverse, counts = torch.unique(v_indices_b, return_counts=True, return_inverse=True)
+        non_valid = unique[(counts!=6)]
+        mask = torch.isin(v_indices_b, non_valid)
+       # valid_b = torch.bucketize(valid, (torch.arange(b)*n_vertices_global))
+       # n_valid = valid_b.unique(return_counts=True)[1]
+
+        v_indices_fov = v_indices_b
+        self.v_indices_fov = v_indices_fov
+
+        normalVelocity = u_global*self.zonal_normal_primal_edge + v_global*self.meridional_normal_primal_edge
+
+        edges_of_vertex = self.edges_of_vertex[v_indices]
+        normalVelocity_con = torch.gather(normalVelocity, dim=1, index=edges_of_vertex.view(b,-1))
+        normalVelocity_con = normalVelocity_con.view(b,-1,6)
+        #normalVelocity_con = normalVelocity[torch.from_numpy(self.edges_of_vertex[v_indices_fov])]
+
+        edge_length_con = self.dual_edge_length[edges_of_vertex]
+
+        signorient_con = self.signorient[v_indices]
+
+        dual_area_con = self.dual_area[v_indices]
+
+        vort = ((normalVelocity_con*edge_length_con)*signorient_con).sum(axis=-1)/dual_area_con
+
+        vort = vort.view(b,-1,1,1)
+
+        coords_v = self.coords_v[:,v_indices].transpose(1,0)
+        return vort, coords_v, mask
+
+def add_vorticity(vort_cal, tensor_dict, global_edge_indices):
+    u = tensor_dict['u']
+    v = tensor_dict['v']
+
+    u = u[:,:,:,0] if u.dim()==4 else u
+    v = v[:,:,:,0] if v.dim()==4 else v
+    tensor_dict['vort'], coords_vort, non_valid_mask = vort_cal.get_vorticity_from_edge_indices(global_edge_indices, u, v)
+    return tensor_dict, non_valid_mask, coords_vort
 
 class GaussLoss(nn.Module):
     def __init__(self):
@@ -29,8 +150,8 @@ class L1Loss(nn.Module):
         self.loss = torch.nn.L1Loss()
 
     def forward(self, output, target, non_valid_mask):
-        output_valid = output[~non_valid_mask,:,0]
-        target_valid = target[~non_valid_mask]
+        output_valid = output[~non_valid_mask,:,0].squeeze()
+        target_valid = target[~non_valid_mask].squeeze()
         loss = self.loss(output_valid,target_valid)
         return loss
 
@@ -246,6 +367,13 @@ def train(model, training_settings, model_settings={}):
         json.dump(model_settings, f, indent=4)
 
     model = model.to(device)
+    
+    calc_vort=False
+    if 'vort_loss' in training_settings.keys() and training_settings['vort_loss']:
+        if 'grid_file' in training_settings.keys() and len(training_settings['grid_file']):
+            calc_vort=True
+            vort_calc = vorticity_calculator(training_settings['grid_file'])
+
 
     loss_fcns = []
     factors = []
@@ -300,11 +428,20 @@ def train(model, training_settings, model_settings={}):
 
         model.train()
 
-        source, target, coords_source, coords_target = [dict_to_device(x, device) for x in next(iterator_train)]
+        source, target, coords_source, coords_target, target_indices = [dict_to_device(x, device) for x in next(iterator_train)]
 
         output,_, output_reg_hr, non_valid_mask = model(source, coords_source, coords_target)
 
         optimizer.zero_grad()
+
+        if calc_vort:
+            spatial_dim_uv = [k for k,v in model.model_settings['spatial_dims_var_target'].items() if 'u' in v][0]
+            uv_dim_indices = target_indices[spatial_dim_uv]
+            output, non_valid_mask_vort, _ = add_vorticity(vort_calc, output, uv_dim_indices)
+            non_valid_mask['vort'] = non_valid_mask_vort
+
+            if 'vort' not in target.keys():
+                target = add_vorticity(vort_calc, target, uv_dim_indices)[0]
 
         loss, train_loss_dict = dict_loss_fcn(output, target, non_valid_mask)
 
@@ -329,10 +466,19 @@ def train(model, training_settings, model_settings={}):
 
             for _ in range(training_settings['n_iters_val']):
 
-                source, target, coords_source, coords_target = [dict_to_device(x, device) for x in next(iterator_val)]
+                source, target, coords_source, coords_target, target_indices = [dict_to_device(x, device) for x in next(iterator_val)]
 
                 with torch.no_grad():
                     output, output_reg_lr, output_reg_hr, non_valid_mask = model(source, coords_source, coords_target)
+
+                    if calc_vort:
+                        spatial_dim_uv = [k for k,v in model.model_settings['spatial_dims_var_target'].items() if 'u' in v][0]
+                        uv_dim_indices = target_indices[spatial_dim_uv]
+                        output, non_valid_mask_vort, coords_vort = add_vorticity(vort_calc, output, uv_dim_indices)
+                        non_valid_mask['vort'] = non_valid_mask_vort
+
+                        if 'vort' not in target.keys():
+                            target = add_vorticity(vort_calc, target, uv_dim_indices)[0]
 
                     loss, val_loss_dict = dict_loss_fcn(output, target, non_valid_mask)
 
@@ -354,6 +500,7 @@ def train(model, training_settings, model_settings={}):
                 torch.save(debug_dict, os.path.join(log_dir,'debug_dict.pt'))
                 torch.save(coords_source,os.path.join(log_dir,'coords_source.pt'))
                 torch.save(coords_target,os.path.join(log_dir,'coords_target.pt'))
+                torch.save(coords_vort,os.path.join(log_dir,'coords_vort.pt'))
                 torch.save(output, os.path.join(log_dir,'output.pt'))
                 torch.save(output_reg_hr, os.path.join(log_dir,'output_reg_hr.pt'))
                 torch.save(output_reg_lr, os.path.join(log_dir,'output_reg_lr.pt'))

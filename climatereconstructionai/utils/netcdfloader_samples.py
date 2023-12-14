@@ -365,7 +365,7 @@ class NetCDFLoader_lazy(Dataset):
             save_path_target = os.path.join(self.save_sample_path, os.path.basename(file_path_target).replace('.nc', f'_{float(seeds[0]):.3f}_{float(seeds[1]):.3f}_target.nc'))
             ds_target.to_netcdf(save_path_target)
 
-        return ds_source, ds_target, seeds
+        return ds_source, ds_target, seeds, spatial_dim_indices_target
 
 
     def get_data(self, ds, index, dims_variables_dict, seeds):
@@ -417,7 +417,7 @@ class NetCDFLoader_lazy(Dataset):
         elif self.sampling_mode=='paired':
             target_file = self.files_target[source_index]
 
-        ds_source, ds_target, seeds = self.get_files(source_file, file_path_target=target_file)
+        ds_source, ds_target, seeds, spatial_dim_indices = self.get_files(source_file, file_path_target=target_file)
 
         data_source, rel_coords_source = self.get_data(ds_source, index, self.dims_variables_source, seeds)
         data_target, rel_coords_target = self.get_data(ds_target, index_target, self.dims_variables_target, seeds)
@@ -426,7 +426,7 @@ class NetCDFLoader_lazy(Dataset):
             data_source = self.normalizer(data_source)
             data_target = self.normalizer(data_target)
 
-        return data_source, data_target, rel_coords_source, rel_coords_target
+        return data_source, data_target, rel_coords_source, rel_coords_target, spatial_dim_indices
 
     def __len__(self):
         return self.num_datapoints_time
