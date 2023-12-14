@@ -372,7 +372,7 @@ def train(model, training_settings, model_settings={}):
     if 'vort_loss' in training_settings.keys() and training_settings['vort_loss']:
         if 'grid_file' in training_settings.keys() and len(training_settings['grid_file']):
             calc_vort=True
-            vort_calc = vorticity_calculator(training_settings['grid_file'])
+            vort_calc = vorticity_calculator(training_settings['grid_file'], device=device)
 
 
     loss_fcns = []
