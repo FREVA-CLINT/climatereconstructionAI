@@ -489,7 +489,8 @@ def train(model, training_settings, model_settings={}):
 
                         if 'vort' not in target.keys():
                             target = add_vorticity(vort_calc, target, uv_dim_indices)[0]
-
+                    else:
+                        coords_vort = None
                     loss, val_loss_dict = dict_loss_fcn(output, target, non_valid_mask, lambdas)
 
                     if calc_reg_loss:
