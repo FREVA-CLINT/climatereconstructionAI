@@ -89,8 +89,8 @@ class vorticity_calculator():
         v_indices = self.edge_vertices[:,global_edge_indices].transpose(0,1).reshape(b,-1)
         v_indices_b = v_indices + (torch.arange(b, device=self.device)*n_vertices_global).view(b,1)
 
-        u_global = torch.zeros((b*n_edges_global))
-        v_global = torch.zeros((b*n_edges_global))
+        u_global = torch.zeros((b*n_edges_global),device=self.device)
+        v_global = torch.zeros((b*n_edges_global),device=self.device)
         u_global[global_edge_indices_b.view(-1)] = u.view(-1)
         v_global[global_edge_indices_b.view(-1)] = v.view(-1)
         u_global = u_global.view(b,n_edges_global)
