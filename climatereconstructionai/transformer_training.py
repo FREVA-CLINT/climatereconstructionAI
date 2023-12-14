@@ -39,16 +39,16 @@ class vorticity_calculator():
         cartesian_z_vertices = dset['cartesian_z_vertices'][:].data
 
         cartesian_vertices = torch.tensor([cartesian_x_vertices,cartesian_y_vertices,
-                                            cartesian_z_vertices]).T
+                                            cartesian_z_vertices],device=device).T
 
         edge_dual_normal_cartesian = torch.tensor([edge_dual_normal_cartesian_x,edge_dual_normal_cartesian_y,
-                                            edge_dual_normal_cartesian_z]).T
+                                            edge_dual_normal_cartesian_z],device=device).T
 
         edge_middle_cartesian = torch.tensor([edge_middle_cartesian_x,edge_middle_cartesian_y,
-                                        edge_middle_cartesian_z]).T
+                                        edge_middle_cartesian_z],device=device).T
 
-
-        self.nout = edge_middle_cartesian[self.edges_of_vertex]-cartesian_vertices[:,np.newaxis,:]
+        
+        self.nout = edge_middle_cartesian[self.edges_of_vertex]-cartesian_vertices.unsqueeze(dim=1)
         self.signorient = torch.sign((self.nout*edge_dual_normal_cartesian[self.edges_of_vertex]).sum(axis=-1))
 
         self.nout = self.nout.to(device)
