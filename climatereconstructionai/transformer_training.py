@@ -517,6 +517,8 @@ def train(model, training_settings, model_settings={}):
                 torch.save(output_reg_lr, os.path.join(log_dir,'output_reg_lr.pt'))
                 torch.save(target, os.path.join(log_dir,'target.pt'))
                 torch.save(source, os.path.join(log_dir,'source.pt'))
+                if "vort" in non_valid_mask.keys():
+                    torch.save(non_valid_mask["vort"], os.path.join(log_dir,'non_valid_mask_vort.pt'))
                 np.savetxt(os.path.join(log_dir,'losses_val.txt'),np.array(val_losses_save))
                 np.savetxt(os.path.join(log_dir,'losses_train.txt'),np.array(train_losses_save))
                 np.savetxt(os.path.join(log_dir,'lrs.txt'),np.array(lrs))
