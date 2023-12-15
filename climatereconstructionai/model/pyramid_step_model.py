@@ -306,12 +306,12 @@ def scale_coords(coords, mn, mx):
 
 
 class interpolation_net(nn.Module):
-    def __init__(self, model_settings):
+    def __init__(self, s, nh, n):
         super().__init__()
 
-        self.sample = nu_grid_sample(n_res=model_settings['interpolation_sample_pts'],
-                                      s=model_settings['interpolation_std'],
-                                      nh=model_settings["interpolation_nh"])
+        self.sample = nu_grid_sample(n_res=n,
+                                      s=s,
+                                      nh=nh)
 
 
     def forward(self, x, coords_target):
@@ -325,11 +325,11 @@ class interpolation_net(nn.Module):
         return x
 
 class output_net(nn.Module):
-    def __init__(self, model_settings, use_gnlll=False):
+    def __init__(self, model_settings, s, nh, n, use_gnlll=False):
         super().__init__()
 
         self.use_gnlll = use_gnlll
-        self.grid_to_target = interpolation_net(model_settings)
+        self.grid_to_target = interpolation_net(s, nh, n)
 
         self.n_output_groups = model_settings['n_output_groups']
         self.output_dims = model_settings['output_dims']
@@ -406,10 +406,16 @@ class pyramid_step_model(nn.Module):
         self.input_net = input_net(self.model_settings)
         
         model_settings_pre = self.model_settings
-        model_settings_pre["interpolation_std"] = 2
-        model_settings_pre["interpolation_nh"] = 10
-        self.output_net_pre = output_net(model_settings_pre, use_gnlll=False)
-        self.output_net_post = output_net(self.model_settings, use_gnlll=self.use_gnlll)
+
+        self.output_net_pre = output_net(model_settings_pre,
+                                         2, 10, model_settings_pre["interpolation_sample_pts"], 
+                                         use_gnlll=False)
+        
+        self.output_net_post = output_net(self.model_settings,
+                                          model_settings_pre["interpolation_std"],
+                                          model_settings_pre["interpolation_nh"],
+                                          model_settings_pre["interpolation_sample_pts"],
+                                          use_gnlll=self.use_gnlll)
 
         self.check_model_dir()
 
