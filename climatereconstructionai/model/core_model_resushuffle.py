@@ -165,7 +165,7 @@ class decoder(nn.Module):
 
             self.decoder_blocks.append(decoder_block_shuffle(hw, n_blocks, out_channels_block, k_size=k_size, with_skip=True, batch_norm=batch_norm, dropout=dropout))      
         
-        self.out_layer = res_blocks(hw, n_blocks, out_channels_block, out_channels, k_size=k_size, batch_norm=False, groups=1, with_reduction=False, dropout=dropout, with_att=False)
+        self.out_layer = res_blocks(int(hw), n_blocks, out_channels_block, out_channels, k_size=k_size, batch_norm=False, groups=1, with_reduction=False, dropout=dropout, with_att=True)
 
     def forward(self, x, skip_channels):
 
