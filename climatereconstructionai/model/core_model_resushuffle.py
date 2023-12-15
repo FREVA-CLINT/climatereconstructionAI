@@ -165,7 +165,7 @@ class decoder(nn.Module):
 
             self.decoder_blocks.append(decoder_block_shuffle(hw, n_blocks, out_channels_block, k_size=k_size, with_skip=True, batch_norm=batch_norm, dropout=dropout))      
         
-        self.out_layer = nn.Conv2d(out_channels_block, out_channels, stride=1, padding=1, kernel_size=k_size, padding_mode='replicate', bias=True)
+        self.out_layer = res_blocks(hw, n_blocks, out_channels_block, out_channels, k_size=k_size, batch_norm=False, groups=1, with_reduction=False, dropout=dropout, with_att=False)
 
     def forward(self, x, skip_channels):
 
@@ -173,7 +173,7 @@ class decoder(nn.Module):
             x_skip = skip_channels[-(k+2)]  
             x = layer(x, x_skip)
 
-        x = self.out_layer(x)
+        x = self.out_layer(x)[0]
 
         return x
 
@@ -194,6 +194,7 @@ class ResUNet(nn.Module):
         super().__init__()
 
         upcale_factor = hw_out // hw_in
+        out_channels = out_channels*upcale_factor**2
 
         self.encoder = encoder(hw_in, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, 5, batch_norm=batch_norm, full_res=full_res, n_groups=n_groups, dropout=dropout)
         self.decoder = decoder(hw_in, n_levels, n_res_blocks, model_dim_unet, out_channels, k_size=k_size, batch_norm=False, dropout=dropout)
