@@ -6,7 +6,7 @@ import math
     
   
 class res_net_block(nn.Module):
-    def __init__(self, hw, in_channels, out_channels, k_size=3, batch_norm=True, with_reduction=False, groups=1, dropout=0, with_att=False):
+    def __init__(self, hw, in_channels, out_channels, k_size=3, batch_norm=True, with_reduction=False, groups=1, dropout=0, with_att=False, with_res=True):
         super().__init__()
 
         padding = k_size // 2
@@ -15,7 +15,9 @@ class res_net_block(nn.Module):
         self.conv1 = nn.Conv2d(in_channels, out_channels, stride=stride, padding=padding, kernel_size=k_size, padding_mode='replicate',groups=groups, bias=True)
         self.conv2 = nn.Conv2d(out_channels, out_channels, stride=1, padding=padding, kernel_size=k_size, padding_mode='replicate',groups=groups, bias=True)
 
-        self.reduction = nn.Conv2d(in_channels, out_channels, stride=stride, padding=0, kernel_size=1,groups=groups, bias=True)
+        if with_res:
+            self.reduction = nn.Conv2d(in_channels, out_channels, stride=stride, padding=0, kernel_size=1,groups=groups, bias=True)
+        self.with_res = with_res
 
         self.bn1 = nn.BatchNorm2d(out_channels, affine=True) if batch_norm else nn.Identity()
         self.bn2 = nn.BatchNorm2d(out_channels, affine=True) if batch_norm else nn.Identity()
@@ -31,14 +33,19 @@ class res_net_block(nn.Module):
             self.att = helpers.ConvSelfAttention(out_channels, hw, n_heads=4)
 
     def forward(self, x):
-        x_res = self.reduction(x)
+        if self.with_res:
+            x_res = self.reduction(x)
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.activation1(x)
         x = self.dropout1(x)
         x = self.conv2(x)
         x = self.bn2(x)
-        x = self.activation2(x + x_res)
+
+        if self.with_res:
+            x = x + x_res
+
+        x = self.activation2(x)
         x = self.dropout2(x)
 
         if self.with_att:
@@ -47,15 +54,15 @@ class res_net_block(nn.Module):
         
 
 class res_blocks(nn.Module): 
-    def __init__(self, hw, n_blocks, in_channels, out_channels, k_size=3, with_reduction=True, batch_norm=True, groups=1, dropout=0, with_att=False):
+    def __init__(self, hw, n_blocks, in_channels, out_channels, k_size=3, with_reduction=True, batch_norm=True, groups=1, dropout=0, with_att=False, with_res=True):
         super().__init__()
 
         self.res_net_blocks = nn.ModuleList()
 
-        self.res_net_blocks.append(res_net_block(hw, in_channels, out_channels, k_size=k_size, batch_norm=batch_norm, groups=groups, dropout=dropout, with_att=with_att))
+        self.res_net_blocks.append(res_net_block(hw, in_channels, out_channels, k_size=k_size, batch_norm=batch_norm, groups=groups, dropout=dropout, with_att=with_att, with_res=with_res))
         
         for _ in range(n_blocks-1):
-            self.res_net_blocks.append(res_net_block(hw, out_channels, out_channels, k_size=k_size, batch_norm=batch_norm, groups=groups, dropout=dropout, with_att=False))
+            self.res_net_blocks.append(res_net_block(hw, out_channels, out_channels, k_size=k_size, batch_norm=batch_norm, groups=groups, dropout=dropout, with_att=False, with_res=with_res))
 
         self.max_pool = nn.MaxPool2d(kernel_size=2) if with_reduction else nn.Identity()
 
@@ -78,7 +85,7 @@ class encoder(nn.Module):
                                         nn.SiLU())
         else:
             if n_groups > 1:
-                self.in_layer = res_net_block(hw_in, in_channels, u_net_channels*n_groups, k_size=k_size_in, batch_norm=batch_norm, groups=n_groups, dropout=dropout)
+                self.in_layer = res_net_block(hw_in, in_channels, u_net_channels*n_groups, k_size=k_size_in, batch_norm=batch_norm, groups=n_groups, dropout=dropout, with_res=False)
             else:
                 self.in_layer = nn.Identity()
 
@@ -104,32 +111,6 @@ class encoder(nn.Module):
             outputs.append(x_skip)
         return x, outputs
 
-
-class decoder_block(nn.Module):
-    def __init__(self, n_blocks, in_channels, out_channels, k_size=3, with_skip=True, dropout=0):
-        super().__init__()
-
-        self.trans_conv = nn.Sequential(nn.ConvTranspose2d(in_channels, out_channels, kernel_size=4, stride=2, padding=1))
-        
-        self.with_skip=with_skip
-        if not self.with_skip:
-            in_channels = out_channels
-
-       # self.res_block = res_net_block(out_channels*2, out_channels,  k_size=k_size, batch_norm=False, dropout=dropout)
-
-        self.res_blocks = res_blocks(n_blocks, out_channels*2, out_channels, k_size=k_size, batch_norm=False, groups=1, with_reduction=False, dropout=dropout)
-
-    def forward(self, x, skip_channels=None):
-
-        x = self.trans_conv(x)
-
-        if self.with_skip:
-            x = torch.concat((x, skip_channels), dim=1)
-
-        x = self.res_blocks(x)[0]
-
-        return x
-
 class decoder_block_shuffle(nn.Module):
     def __init__(self, hw, n_blocks, in_channels, out_channels, k_size=3, with_skip=True, batch_norm=False, dropout=0):
         super().__init__()
@@ -140,7 +121,7 @@ class decoder_block_shuffle(nn.Module):
 
         #self.res_block = res_net_block(out_channels*2, out_channels,  k_size=k_size, batch_norm=batch_norm, dropout=dropout)
 
-        self.res_blocks = res_blocks(hw, n_blocks, in_channels, out_channels, k_size=k_size, batch_norm=False, groups=1, with_reduction=False, dropout=dropout)
+        self.res_blocks = res_blocks(hw, n_blocks, in_channels, out_channels, k_size=k_size, batch_norm=False, groups=1, with_reduction=False, dropout=dropout, with_res=True)
 
     def forward(self, x, skip_channels=None):
 
@@ -170,8 +151,9 @@ class decoder(nn.Module):
         out_channels_block = out_channels_block // upcale_factor**2
 
         self.upscale = nn.PixelShuffle(upcale_factor) if upcale_factor >1 else nn.Identity()
-        self.out_layer = res_blocks(int(hw), n_blocks, out_channels_block, out_channels, k_size=k_size, batch_norm=False, groups=n_groups, with_reduction=False, dropout=dropout, with_att=False)
+        #self.out_layer = res_blocks(int(hw), n_blocks, out_channels_block, out_channels, k_size=k_size, batch_norm=False, groups=n_groups, with_reduction=False, dropout=dropout, with_att=False)
 
+        self.out_layer = res_net_block(hw_in, out_channels_block, out_channels, k_size=k_size, batch_norm=batch_norm, groups=n_groups, dropout=dropout, with_res=False, with_att=False, with_reduction=False)
     def forward(self, x, skip_channels):
 
         for k, layer in enumerate(self.decoder_blocks):
@@ -179,7 +161,7 @@ class decoder(nn.Module):
             x = layer(x, x_skip)
 
         x = self.upscale(x)
-        x = self.out_layer(x)[0]
+        x = self.out_layer(x)
 
         return x
 
