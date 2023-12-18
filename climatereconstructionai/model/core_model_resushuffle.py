@@ -167,12 +167,12 @@ class mid(nn.Module):
         return x
 
 class ResUNet(nn.Module): 
-    def __init__(self, hw_in, hw_out, n_levels, n_res_blocks, model_dim_unet, in_channels, out_channels, batch_norm=True, k_size=3, full_res=True, in_groups=1, out_groups=1, dropout=0):
+    def __init__(self, hw_in, hw_out, n_levels, n_res_blocks, model_dim_unet, in_channels, out_channels, batch_norm=True, k_size=3, in_groups=1, out_groups=1, dropout=0):
         super().__init__()
 
         upcale_factor = hw_out // hw_in
 
-        self.encoder = encoder(hw_in, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, 5, batch_norm=batch_norm, full_res=full_res, n_groups=in_groups, dropout=dropout)
+        self.encoder = encoder(hw_in, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, 5, batch_norm=batch_norm, n_groups=in_groups, dropout=dropout)
         self.decoder = decoder(hw_in, n_levels, n_res_blocks, model_dim_unet, out_channels, upcale_factor=upcale_factor, k_size=k_size, batch_norm=False, dropout=dropout, n_groups=out_groups)
 
         hw_mid = hw_in//(2**(n_levels-1))
@@ -202,7 +202,6 @@ class core_ResUNet(psm.pyramid_step_model):
         batch_norm = model_settings["batch_norm"]
 
         dropout = 0 if 'dropout' not in model_settings.keys() else model_settings['dropout']
-        full_res = True if 'full_res' not in model_settings.keys() else model_settings['full_res']
         grouped = False if 'grouped' not in model_settings.keys() else model_settings['grouped']
 
         self.time_dim= False
@@ -218,7 +217,7 @@ class core_ResUNet(psm.pyramid_step_model):
         hw_in = model_settings['n_regular'][0]
         hw_out = model_settings['n_regular'][1]
 
-        self.core_model = ResUNet(hw_in, hw_out, depth, n_blocks, model_dim_core, input_dim, output_dim, batch_norm=batch_norm, full_res=full_res, in_groups=in_groups, out_groups=out_groups, dropout=dropout)
+        self.core_model = ResUNet(hw_in, hw_out, depth, n_blocks, model_dim_core, input_dim, output_dim, batch_norm=batch_norm, in_groups=in_groups, out_groups=out_groups, dropout=dropout)
 
         if "pretrained_path" in self.model_settings.keys():
             self.check_pretrained(model_dir_check=self.model_settings['pretrained_path'])
