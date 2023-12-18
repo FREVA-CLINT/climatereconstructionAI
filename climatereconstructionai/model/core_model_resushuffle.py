@@ -28,7 +28,7 @@ class res_net_block(nn.Module):
 
         self.with_att = with_att
         if with_att:
-            self.att = helpers.ConvSelfAttention(out_channels, hw)
+            self.att = helpers.ConvSelfAttention(out_channels, hw, n_heads=4)
 
     def forward(self, x):
         x_res = self.reduction(x)
@@ -131,7 +131,7 @@ class decoder_block(nn.Module):
         return x
 
 class decoder_block_shuffle(nn.Module):
-    def __init__(self, hw, n_blocks, out_channels, k_size=3, with_skip=True, batch_norm=False, dropout=0):
+    def __init__(self, hw, n_blocks, in_channels, out_channels, k_size=3, with_skip=True, batch_norm=False, dropout=0):
         super().__init__()
   
         self.up = nn.PixelShuffle(2)
@@ -140,7 +140,7 @@ class decoder_block_shuffle(nn.Module):
 
         #self.res_block = res_net_block(out_channels*2, out_channels,  k_size=k_size, batch_norm=batch_norm, dropout=dropout)
 
-        self.res_blocks = res_blocks(hw, n_blocks, out_channels*2, out_channels, k_size=k_size, batch_norm=False, groups=1, with_reduction=False, dropout=dropout)
+        self.res_blocks = res_blocks(hw, n_blocks, in_channels, out_channels, k_size=k_size, batch_norm=False, groups=1, with_reduction=False, dropout=dropout)
 
     def forward(self, x, skip_channels=None):
 
@@ -154,18 +154,23 @@ class decoder_block_shuffle(nn.Module):
         return x
 
 class decoder(nn.Module):
-    def __init__(self, hw_in, n_levels, n_blocks, u_net_channels, out_channels, k_size=3, batch_norm=False, dropout=0):
+    def __init__(self, hw_in, n_levels, n_blocks, u_net_channels, out_channels, upcale_factor=1, k_size=3, batch_norm=False, dropout=0, n_groups=1):
         super().__init__()
 
         self.decoder_blocks = nn.ModuleList()
         for n in range(n_levels-1, 0,-1):
-            in_channels_block = u_net_channels*(4**(n))
             out_channels_block = u_net_channels*(4**(n-1))
+            in_channels_block = out_channels_block*2
             hw = hw_in/(2**(n-1))
 
-            self.decoder_blocks.append(decoder_block_shuffle(hw, n_blocks, out_channels_block, k_size=k_size, with_skip=True, batch_norm=batch_norm, dropout=dropout))      
+            if n==1:
+                out_channels_block = out_channels*upcale_factor**2
+            self.decoder_blocks.append(decoder_block_shuffle(hw, n_blocks, in_channels_block, out_channels_block, k_size=k_size, with_skip=True, batch_norm=batch_norm, dropout=dropout))      
         
-        self.out_layer = res_blocks(int(hw), n_blocks, out_channels_block, out_channels, k_size=k_size, batch_norm=False, groups=1, with_reduction=False, dropout=dropout, with_att=True)
+        out_channels_block = out_channels_block // upcale_factor**2
+
+        self.upscale = nn.PixelShuffle(upcale_factor) if upcale_factor >1 else nn.Identity()
+        self.out_layer = res_blocks(int(hw), n_blocks, out_channels_block, out_channels, k_size=k_size, batch_norm=False, groups=n_groups, with_reduction=False, dropout=dropout, with_att=False)
 
     def forward(self, x, skip_channels):
 
@@ -173,6 +178,7 @@ class decoder(nn.Module):
             x_skip = skip_channels[-(k+2)]  
             x = layer(x, x_skip)
 
+        x = self.upscale(x)
         x = self.out_layer(x)[0]
 
         return x
@@ -194,22 +200,18 @@ class ResUNet(nn.Module):
         super().__init__()
 
         upcale_factor = hw_out // hw_in
-        out_channels = out_channels*upcale_factor**2
 
         self.encoder = encoder(hw_in, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, 5, batch_norm=batch_norm, full_res=full_res, n_groups=n_groups, dropout=dropout)
-        self.decoder = decoder(hw_in, n_levels, n_res_blocks, model_dim_unet, out_channels, k_size=k_size, batch_norm=False, dropout=dropout)
+        self.decoder = decoder(hw_in, n_levels, n_res_blocks, model_dim_unet, out_channels, upcale_factor=upcale_factor, k_size=k_size, batch_norm=False, dropout=dropout, n_groups=n_groups)
 
         hw_mid = hw_in//(2**(n_levels-1))
         self.mid = mid(hw_mid, n_res_blocks, model_dim_unet*(4**(n_levels-1)), with_att=True)
 
-        self.pixel_shuffle = nn.PixelShuffle(upcale_factor) if upcale_factor >1 else nn.Identity()
-    
 
     def forward(self, x):
         x, layer_outputs = self.encoder(x)
         x = self.mid(x)
         x = self.decoder(x, layer_outputs)
-        x = self.pixel_shuffle(x)
         return x
 
 
