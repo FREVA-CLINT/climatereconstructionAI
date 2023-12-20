@@ -662,9 +662,9 @@ class grid_interpolator(nn.Module):
             self.x_grid, self.y_grid = x_grid, y_grid
 
     def forward(self, data, coords):
-        
+        device = data.device
         data = data.cpu()
         x,y = coords.cpu()
         grid_z = griddata((x, y), data, (self.x_grid, self.y_grid), method=self.method)
 
-        return torch.tensor(grid_z, device=data.device)
+        return torch.tensor(grid_z, device=device)
