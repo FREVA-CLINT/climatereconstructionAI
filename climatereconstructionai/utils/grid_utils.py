@@ -3,6 +3,8 @@ import torch.nn as nn
 import xarray as xr
 import numpy as np
 
+from scipy.interpolate import griddata
+
 radius_earth= 6371
 
 def distance_on_sphere(lon1,lat1,lon2,lat2):
@@ -646,3 +648,22 @@ def generate_region(coords, range_lon=None, range_lat=None, n_points=None, radiu
 
 
     return out_dict
+
+
+class grid_interpolator(nn.Module):
+    def __init__(self, x_grid, y_grid, method='nearest'):
+        super().__init__()
+
+        self.method = method
+
+        if len(x_grid.shape)<2:
+            self.x_grid, self.y_grid = np.meshgrid(x_grid, y_grid)
+        else:
+            self.x_grid, self.y_grid = x_grid, y_grid
+
+    def forward(self, data, coords):
+   
+        x,y = coords
+        grid_z = griddata((x, y), data, (self.x_grid, self.y_grid), method=self.method)
+
+        return torch.tensor(grid_z, device=data.device)

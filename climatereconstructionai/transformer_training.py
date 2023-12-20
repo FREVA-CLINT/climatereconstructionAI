@@ -162,7 +162,7 @@ class L1Loss_rel(nn.Module):
         self.loss = torch.nn.L1Loss()
 
     def forward(self, output, target):
-        abs_loss = ((output[:,:,:,0] - target)/target).abs()
+        abs_loss = ((output[:,:,:,0] - target)/(target+1e-10)).abs()
         loss = abs_loss.clamp(max=1)
         loss = loss.mean()
         return loss
@@ -419,6 +419,11 @@ def train(model, training_settings, model_settings={}):
     else:
         vars = model.model_settings['variables_target']
         lambdas = dict(zip(vars, [1]*len(vars)))
+    
+    if 'fine_tuning' in training_settings.keys():
+        fine_tuning = training_settings['fine_tuning']
+    else:
+        fine_tuning = False
 
     if training_settings['multi_gpus']:
         model = torch.nn.DataParallel(model)
@@ -441,7 +446,7 @@ def train(model, training_settings, model_settings={}):
 
         source, target, coords_source, coords_target, target_indices = [dict_to_device(x, device) for x in next(iterator_train)]
 
-        output,_, output_reg_hr, non_valid_mask = model(source, coords_source, coords_target)
+        output,_, output_reg_hr, non_valid_mask = model(source, coords_source, coords_target,fine_tuning=fine_tuning)
 
         optimizer.zero_grad()
 

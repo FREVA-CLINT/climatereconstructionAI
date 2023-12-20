@@ -460,8 +460,7 @@ class nn_layer(nn.Module):
 
         return x_bs, indices, cs
 
-
-class interpolator(nn.Module):
+class lin_interpolator(nn.Module):
     def __init__(self,device):
         super().__init__()
 

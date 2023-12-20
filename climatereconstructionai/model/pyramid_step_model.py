@@ -3,6 +3,7 @@ import os
 import copy
 import xarray as xr
 import math
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -251,6 +252,7 @@ class nu_grid_sample(nn.Module):
 
         return x
     
+
 class input_net(nn.Module):
     def __init__(self, model_settings):
         super().__init__()
@@ -324,6 +326,30 @@ class interpolation_net(nn.Module):
 
         return x
 
+class interpolator(nn.Module):
+    def __init__(self, model_settings):
+        super().__init__()
+
+        self.spatial_dim_var_dict = model_settings['spatial_dims_var_source']
+        x = y = np.linspace(model_settings['range_region_target_rad'][0],
+                            model_settings['range_region_target_rad'][1],
+                            model_settings['n_regular'][0])
+        
+        self.inter = gu.grid_interpolator(x,y)
+
+    def forward(self, x, coords_source):
+
+        x_spatial_dims = []
+        nh_mapping_iter = 0
+        for spatial_dim, vars in self.spatial_dim_var_dict.items():
+            for var in vars:
+                data = x[var]
+                data_out = torch.stack([self.inter(data[idx,:,0], coords_source[spatial_dim][idx]) for idx in range(data.shape[0])])
+                x_spatial_dims.append(data_out)
+            nh_mapping_iter += 1
+        x = torch.stack(x_spatial_dims, dim=1)
+        return x
+
 class output_net(nn.Module):
     def __init__(self, model_settings, s, nh, n, use_gnlll=False):
         super().__init__()
@@ -373,7 +399,6 @@ class output_net(nn.Module):
 
         return data_out, non_valid_mask_var
 
-
 class pyramid_step_model(nn.Module):
     def __init__(self, model_settings):
         super().__init__()
@@ -408,7 +433,7 @@ class pyramid_step_model(nn.Module):
         model_settings_pre = self.model_settings
 
         self.output_net_pre = output_net(model_settings_pre,
-                                         2, 10, model_settings_pre["interpolation_sample_pts"], 
+                                         0.5, 10, model_settings_pre["interpolation_sample_pts"], 
                                          use_gnlll=False)
         
         self.output_net_post = output_net(self.model_settings,
@@ -416,18 +441,23 @@ class pyramid_step_model(nn.Module):
                                           model_settings_pre["interpolation_nh"],
                                           model_settings_pre["interpolation_sample_pts"],
                                           use_gnlll=self.use_gnlll)
+        
+        self.interpolator = interpolator(self.model_settings)
 
         self.check_model_dir()
 
         self.norm = nn.LayerNorm([self.model_settings['n_regular'][1], self.model_settings['n_regular'][1]], elementwise_affine=True) if self.model_settings["norm_pre_core"] else nn.Identity()
         
         
-    def forward(self, x, coords_source, coords_target, norm=False):
+    def forward(self, x, coords_source, coords_target, norm=False, fine_tuning=False):
         
         if norm:
             x = self.normalize(x)
 
-        x = self.input_net(x, coords_source)
+        if not fine_tuning and self.training:
+            x = self.input_net(x, coords_source)
+        else:
+            x = self.interpolator(x, coords_source)
 
         x_reg_lr = x
 
