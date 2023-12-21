@@ -108,7 +108,7 @@ def infill(model, dataset, eval_path, output_names, data_stats, xr_dss, i_model)
 
         if split == 0 and cfg.create_graph:
             writer = SummaryWriter(log_dir=cfg.log_dir)
-            writer.add_graph(model, [data_dict["image"], data_dict["mask"], data_dict["gt"]])
+            writer.add_graph(model, [data_dict["image"], data_dict["mask"]])
             writer.close()
 
         # get results from trained network
