@@ -1,4 +1,5 @@
 --device cpu --batch-size 3
+--n-threads 4
 --data-root-dir data/
 --mask-dir data/
 --log-dir tests/out/training/logs/
