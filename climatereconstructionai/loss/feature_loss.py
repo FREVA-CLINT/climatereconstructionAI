@@ -10,14 +10,15 @@ class FeatureLoss(nn.Module):
         self.l1 = nn.L1Loss()
         self.extractor = extractor
 
-    def forward(self, mask, output, gt):
+    def forward(self, data_dict):
         loss_dict = {
             'prc': 0.0,
             'style': 0.0,
         }
 
-        # create output_comp
-        output_comp = mask * gt + (1 - mask) * output
+        output_comp = data_dict['comp']
+        output = data_dict['output']
+        gt = data_dict['gt']
 
         # calculate loss for all channels
         for channel in range(output.shape[1]):

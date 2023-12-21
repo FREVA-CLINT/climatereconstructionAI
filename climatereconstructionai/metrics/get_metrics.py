@@ -4,12 +4,7 @@ import torch
 import torchmetrics.image as t_metrics
 
 from .. import config as cfg
-from ..loss.feature_loss import FeatureLoss
-from ..loss.hole_loss import HoleLoss
-from ..loss.total_variation_loss import TotalVariationLoss
-from ..loss.valid_loss import ValidLoss
-from ..utils.featurizer import VGG16FeatureExtractor
-
+from ..loss import get_loss
 
 @torch.no_grad()
 def get_metrics(img_mask, loss_mask, output, gt, setname):
@@ -38,53 +33,38 @@ def get_metrics(img_mask, loss_mask, output, gt, setname):
         }
     }
 
-    mask = img_mask[:, cfg.recurrent_steps, cfg.gt_channels, :, :]
-
-    if loss_mask is not None:
-        mask += loss_mask
-        mask[mask < 0] = 0
-        mask[mask > 1] = 1
-        assert ((mask == 0) | (mask == 1)).all(), "Not all values in mask are zeros or ones!"
 
     metric_dict = {}
-    if setname == 'train':
-        metrics = cfg.train_metrics
-    elif setname == 'val':
-        metrics = cfg.val_metrics
-    elif setname == 'test':
-        metrics = cfg.test_metrics
+    metrics = cfg.val_metrics
+
+    loss_metric_dict = dict(zip(metrics,[1]*len(metrics)))
+    if 'feature' in metrics:
+        loss_metric_dict.update(dict(zip(['style', 'prc'],[1,1])))
+
+    loss_comp = get_loss.LossComputation(loss_metric_dict)
+
+    loss_metrics = loss_comp(img_mask, loss_mask, output, gt)
+    loss_metrics['total'] = loss_metrics['total'].item()
 
     for metric in metrics:
         settings = metric_settings[metric]
 
         if 'valid' in metric:
-            val_loss = ValidLoss().to(cfg.device)
-            metric_output = val_loss(mask, output[:, cfg.recurrent_steps, :, :, :],
-                                     gt[:, cfg.recurrent_steps, cfg.gt_channels, :, :])
-            metric_dict[f'metric/{setname}/valid'] = metric_output['valid']
+            metric_dict[f'metric/{setname}/valid'] = loss_metrics['valid']
 
         elif 'hole' in metric:
-            val_loss = HoleLoss().to(cfg.device)
-            metric_output = val_loss(mask, output[:, cfg.recurrent_steps, :, :, :],
-                                     gt[:, cfg.recurrent_steps, cfg.gt_channels, :, :])
-            metric_dict[f'metric/{setname}/hole'] = metric_output['hole']
+            metric_dict[f'metric/{setname}/hole'] = loss_metrics['hole']
 
         elif 'tv' in metric:
-            val_loss = TotalVariationLoss().to(cfg.device)
-            metric_output = val_loss(mask, output[:, cfg.recurrent_steps, :, :, :],
-                                     gt[:, cfg.recurrent_steps, cfg.gt_channels, :, :])
-            metric_dict[f'metric/{setname}/tv'] = metric_output['tv']
+            metric_dict[f'metric/{setname}/tv'] = loss_metrics['tv']
 
         elif 'feature' in metric:
-            feat_loss = FeatureLoss(VGG16FeatureExtractor()).to(cfg.device)
-            metric_output = feat_loss(mask, output[:, cfg.recurrent_steps, :, :, :],
-                                      gt[:, cfg.recurrent_steps, cfg.gt_channels, :, :])
-            metric_dict[f'metric/{setname}/style'] = metric_output['style']
-            metric_dict[f'metric/{setname}/prc'] = metric_output['prc']
+            metric_dict[f'metric/{setname}/style'] = loss_metrics['style']
+            metric_dict[f'metric/{setname}/prc'] = loss_metrics['prc']
 
         else:
-            metric_outputs = calculate_metric(metric, mask, output[:, cfg.recurrent_steps, :, :, :],
-                                              gt[:, cfg.recurrent_steps, cfg.gt_channels, :, :],
+            data = get_loss.prepare_data_dict(img_mask, loss_mask, output, gt, ['mask','output','gt'])
+            metric_outputs = calculate_metric(metric, data['mask'], data['output'], data['gt'],
                                               torchmetrics_settings=settings['torchmetric_settings'])
 
             if len(metric_outputs) > 1:

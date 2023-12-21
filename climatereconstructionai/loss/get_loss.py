@@ -8,58 +8,71 @@ from .. import config as cfg
 from ..utils.featurizer import VGG16FeatureExtractor
 
 
-class ModularizedFunction(torch.nn.Module):
-    def __init__(self, forward_op):
-        super().__init__()
-        self.forward_op = forward_op
+def prepare_data_dict(img_mask, loss_mask, output, gt, tensor_keys):
+    data_dict = dict(zip(list(tensor_keys),[None]*len(tensor_keys)))
 
-    def forward(self, *args, **kwargs):
-        return self.forward_op(*args, **kwargs)
+    mask = img_mask
+    loss_mask = img_mask
+    if loss_mask is not None:
+        mask += loss_mask
+        mask[mask < 0] = 0
+        mask[mask > 1] = 1
+        assert ((mask == 0) | (mask == 1)).all(), "Not all values in mask are zeros or ones!"
 
+    output = output[:, cfg.recurrent_steps, :, :, :]
+    mask = mask[:, cfg.recurrent_steps, :, :, :]
+    gt = gt[:, cfg.recurrent_steps, cfg.gt_channels, :, :]
 
-class CriterionParallel(torch.nn.Module):
-    def __init__(self, criterion):
-        super().__init__()
-        if not isinstance(criterion, torch.nn.Module):
-            criterion = ModularizedFunction(criterion)
-        self.criterion = torch.nn.DataParallel(criterion)
+    data_dict['mask'] = mask
+    data_dict['output'] = output
+    data_dict['gt'] = gt
 
-    def forward(self, *args, **kwargs):
-        multi_dict = self.criterion(*args, **kwargs)
-        for key in multi_dict.keys():
-            multi_dict[key] = multi_dict[key].mean()
-        return multi_dict
+    if 'comp' in tensor_keys:
+        data_dict['comp'] = mask * gt + (1 - mask) * output
+
+    return data_dict
 
 
 class loss_criterion(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, lambda_dict):
         super().__init__()
 
-        self.criterions = torch.nn.ModuleDict()
+        self.criterions = []
+        self.tensors = ['output', 'gt', 'mask']
+        style_added = False
 
-        for loss, lambda_ in cfg.lambda_dict.items():
+        for loss, lambda_ in lambda_dict.items():
             if lambda_ > 0:
-                if loss == 'style' or loss == 'prc':
-                    criterion = FeatureLoss(VGG16FeatureExtractor()).to(cfg.device)
+                if (loss == 'style' or loss == 'prc') and not style_added:
+                    self.criterions.append(FeatureLoss(VGG16FeatureExtractor()).to(cfg.device))
+                    self.tensors.append('comp')
+                    style_added = True
+
                 elif loss == 'valid':
-                    criterion = ValidLoss().to(cfg.device)
+                    self.criterions.append(ValidLoss().to(cfg.device))
+                    self.tensors.append('valid')
+
                 elif loss == 'hole':
-                    criterion = HoleLoss().to(cfg.device)
+                    self.criterions.append(HoleLoss().to(cfg.device))
+                    self.tensors.append('hole')
+
                 elif loss == 'tv':
-                    criterion = TotalVariationLoss().to(cfg.device)
+                    self.criterions.append(TotalVariationLoss().to(cfg.device))
+                    if 'comp' not in self.tensors:
+                        self.tensors.append('comp')
 
-                if criterion not in self.criterions.values():
-                    self.criterions[loss] = criterion
 
-    def forward(self, mask, output, gt):
+    def forward(self, img_mask, loss_mask, output, gt):
+
+        data_dict = prepare_data_dict(img_mask, loss_mask, output, gt, self.tensors)
 
         loss_dict = {}
-        for _, criterion in self.criterions.items():
-            loss_dict.update(criterion(mask, output, gt))
+        for criterion in self.criterions:
+            loss_dict.update(criterion(data_dict))
 
         loss_dict["total"] = 0
         for loss, lambda_value in cfg.lambda_dict.items():
-            if lambda_value > 0:
+            if lambda_value > 0 and loss in loss_dict.keys():
                 loss_w_lambda = loss_dict[loss] * lambda_value
                 loss_dict["total"] += loss_w_lambda
                 loss_dict[loss] = loss_w_lambda.item()
@@ -67,28 +80,14 @@ class loss_criterion(torch.nn.Module):
         return loss_dict
 
 
-class LossComputation():
-    def __init__(self):
+class LossComputation(torch.nn.Module):
+    def __init__(self, lambda_dict):
         super().__init__()
         if cfg.multi_gpus:
-            self.criterion = CriterionParallel(loss_criterion())
+            self.criterion = torch.nn.DataParallel(loss_criterion(lambda_dict))
         else:
-            self.criterion = loss_criterion()
+            self.criterion = loss_criterion(lambda_dict)
 
-    def get_loss(self, img_mask, loss_mask, output, gt):
-
-        mask = img_mask[:, cfg.recurrent_steps, cfg.gt_channels, :, :]
-
-        if cfg.n_target_data != 0:
-            mask = torch.ones_like(mask)
-
-        if loss_mask is not None:
-            mask += loss_mask
-            mask[mask < 0] = 0
-            mask[mask > 1] = 1
-            assert ((mask == 0) | (mask == 1)).all(), "Not all values in mask are zeros or ones!"
-
-        loss_dict = self.criterion(mask, output[:, cfg.recurrent_steps, :, :, :],
-                                   gt[:, cfg.recurrent_steps, cfg.gt_channels, :, :])
-
+    def forward(self, img_mask, loss_mask, output, gt):
+        loss_dict = self.criterion(img_mask, loss_mask, output ,gt)
         return loss_dict

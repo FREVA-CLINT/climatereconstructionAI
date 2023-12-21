@@ -93,7 +93,7 @@ def train(arg_file=None):
         lr = cfg.lr
 
     early_stop = early_stopping.early_stopping()
-    loss_comp = get_loss.LossComputation()
+    loss_comp = get_loss.LossComputation(cfg.lambda_dict)
 
     # define optimizer and loss functions
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
@@ -133,7 +133,7 @@ def train(arg_file=None):
         image, mask, gt = [x.to(cfg.device) for x in next(iterator_train)[:3]]
         output = model(image, mask)
 
-        train_loss = loss_comp.get_loss(mask, steady_mask, output, gt)
+        train_loss = loss_comp(mask, steady_mask, output, gt)
 
         optimizer.zero_grad()
         train_loss['total'].backward()
@@ -148,7 +148,7 @@ def train(arg_file=None):
                 image, mask, gt = [x.to(cfg.device) for x in next(iterator_val)[:3]]
                 with torch.no_grad():
                     output = model(image, mask)
-                val_losses.append(list(loss_comp.get_loss(mask, steady_mask, output, gt).values()))
+                val_losses.append(list(loss_comp(mask, steady_mask, output, gt).values()))
 
             val_loss = torch.tensor(val_losses).mean(dim=0)
             val_loss = dict(zip(train_loss.keys(), val_loss))
