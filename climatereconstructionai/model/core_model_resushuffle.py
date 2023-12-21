@@ -165,9 +165,31 @@ class mid(nn.Module):
         x = self.res_blocks(x)[0]
 
         return x
+    
+
+class res_conn(nn.Module):
+    def __init__(self, indices, upcale_factor=1):
+        super().__init__()
+
+        out_channels = len(indices)
+       # out_channels_res = out_channels * upcale_factor**2
+
+        self.indices = indices
+
+        if upcale_factor>1:
+            self.up = nn.Upsample(scale_factor=upcale_factor, mode='bicubic', align_corners=True)
+        else:
+            self.up = nn.Identity()
+
+    def forward(self, x):
+
+        x = self.up(x[:,self.indices,:,:])
+
+        return x
+
 
 class ResUNet(nn.Module): 
-    def __init__(self, hw_in, hw_out, n_levels, n_res_blocks, model_dim_unet, in_channels, out_channels, batch_norm=True, k_size=3, in_groups=1, out_groups=1, dropout=0):
+    def __init__(self, hw_in, hw_out, n_levels, n_res_blocks, model_dim_unet, in_channels, out_channels, res_indices, batch_norm=True, k_size=3, in_groups=1, out_groups=1, dropout=0):
         super().__init__()
 
         upcale_factor = hw_out // hw_in
@@ -175,14 +197,19 @@ class ResUNet(nn.Module):
         self.encoder = encoder(hw_in, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, 5, batch_norm=batch_norm, n_groups=in_groups, dropout=dropout)
         self.decoder = decoder(hw_in, n_levels, n_res_blocks, model_dim_unet, out_channels, upcale_factor=upcale_factor, k_size=k_size, batch_norm=False, dropout=dropout, n_groups=out_groups)
 
+        self.input_res = res_conn(res_indices, upcale_factor=upcale_factor)
+
         hw_mid = hw_in//(2**(n_levels-1))
         self.mid = mid(hw_mid, n_res_blocks, model_dim_unet*(4**(n_levels-1)), with_att=True)
 
+        #self.out_block = res_blocks(hw_out, n_res_blocks, out_channels, out_channels, k_size=k_size, batch_norm=False, groups=1, with_reduction=False, dropout=dropout, with_att=False)
 
     def forward(self, x):
+        x_res = self.input_res(x)
         x, layer_outputs = self.encoder(x)
         x = self.mid(x)
         x = self.decoder(x, layer_outputs)
+        x = x + x_res#self.out_block(x_res)[0]
         return x
 
 
@@ -217,7 +244,13 @@ class core_ResUNet(psm.pyramid_step_model):
         hw_in = model_settings['n_regular'][0]
         hw_out = model_settings['n_regular'][1]
 
-        self.core_model = ResUNet(hw_in, hw_out, depth, n_blocks, model_dim_core, input_dim, output_dim, batch_norm=batch_norm, in_groups=in_groups, out_groups=out_groups, dropout=dropout)
+        res_indices = []
+        for var_target in self.model_settings['variables_target']:
+            var_in_source = [k for k, var_source in enumerate(self.model_settings['variables_source']) if var_source==var_target]
+            if len(var_in_source)==1:
+                res_indices.append(var_in_source[0])
+
+        self.core_model = ResUNet(hw_in, hw_out, depth, n_blocks, model_dim_core, input_dim, output_dim, res_indices, batch_norm=batch_norm, in_groups=in_groups, out_groups=out_groups, dropout=dropout)
 
         if "pretrained_path" in self.model_settings.keys():
             self.check_pretrained(model_dir_check=self.model_settings['pretrained_path'])
