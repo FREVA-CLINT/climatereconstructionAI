@@ -43,6 +43,9 @@ def evaluate(arg_file=None, prog_func=None):
         if data_stats is None:
             if cfg.normalize_data:
                 print("* Warning! Using mean and std from current data.")
+                if cfg.n_target_data != 0:
+                    print("* Warning! Mean and std from target data will be used to renormalize output."
+                          " Mean and std from training data can be used with use_train_stats option.")
             data_stats = {"mean": dataset_val.img_mean, "std": dataset_val.img_std}
 
         image_sizes = dataset_val.img_sizes
