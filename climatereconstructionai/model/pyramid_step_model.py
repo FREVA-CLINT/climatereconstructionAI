@@ -528,7 +528,7 @@ class pyramid_step_model(nn.Module):
     def set_training_configuration(self, train_settings=None):
         self.train_settings = load_settings(train_settings, id='train')
 
-        self.train_settings['log_dir'] = os.path.join(self.model_dir, 'logs')
+        self.train_settings['log_dir'] = self.log_dir
 
         with open(os.path.join(self.model_dir,'train_settings.json'), 'w') as f:
             json.dump(self.train_settings, f, indent=4)
