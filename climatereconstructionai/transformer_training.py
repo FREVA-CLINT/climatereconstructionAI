@@ -13,7 +13,6 @@ from .utils import twriter_t, early_stopping
 from .utils.io import save_ckpt
 from .utils.netcdfloader_samples import NetCDFLoader_lazy, InfiniteSampler
 #from .utils.grid_utils import grid_interpolator
-from .model.pyramid_step_model import interpolator
 
 class vorticity_calculator():
     def __init__(self, grid_file_path, device='cpu') -> None:
@@ -156,20 +155,6 @@ class L1Loss(nn.Module):
         output_valid = output[~non_valid_mask,:,0].squeeze()
         target_valid = target[~non_valid_mask].squeeze()
         loss = self.loss(output_valid,target_valid)
-        return loss
-
-class RegLoss(nn.Module):
-    def __init__(self, model_settings):
-        super().__init__()
-        self.loss = torch.nn.L1Loss()
-        
-        self.inter = interpolator(model_settings)
-
-    def forward(self, output, target, coords_target):
-        
-        output_reg = self.inter(output, coords_target)
-        target_reg = self.inter(target, coords_target)
-        loss = torch.nn.L1Loss(output_reg, target_reg)
         return loss
 
 class L1Loss_rel(nn.Module):
