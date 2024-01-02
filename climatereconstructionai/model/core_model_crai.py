@@ -10,8 +10,8 @@ from climatereconstructionai.model.net import CRAINet
 
 
 class CoreCRAI(psm.pyramid_step_model):
-    def __init__(self, model_settings, load_pretrained=False) -> None: 
-        super().__init__(model_settings,load_pretrained=load_pretrained)
+    def __init__(self, model_settings, model_dir=None) -> None: 
+        super().__init__(model_settings, model_dir=model_dir)
 
         model_settings = self.model_settings
 
@@ -36,9 +36,6 @@ class CoreCRAI(psm.pyramid_step_model):
                         upsampling_mode='bicubic',
                         predict_residual=False,
                         dropout=dropout)
-
-        if load_pretrained:
-            self.check_pretrained(model_dir_check=self.model_settings['model_dir'])
 
         if "pretrained_path" in self.model_settings.keys():
             self.check_pretrained(model_dir_check=self.model_settings['pretrained_path'])

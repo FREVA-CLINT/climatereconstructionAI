@@ -17,15 +17,18 @@ from ..utils.io import load_ckpt
 from ..utils import grid_utils as gu
 
 class pyramid_model(nn.Module):
-    def __init__(self, model_settings):
+    def __init__(self, model_settings, model_dir=None):
         super().__init__()
-
+        
         self.fusion_modules = None
         self.pre_computed_relations = False
-    
-        self.model_settings = load_settings(model_settings, id='model')
-        self.model_dir = self.model_settings['model_dir']
 
+        self.model_settings = load_settings(model_settings, id='model')
+
+        if model_dir is not None:
+            self.model_settings['model_dir'] = model_dir
+
+        self.model_dir = self.model_settings['model_dir']
         self.check_model_dir()
 
         self.check_load_relations()

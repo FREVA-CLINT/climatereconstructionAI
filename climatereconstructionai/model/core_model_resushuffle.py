@@ -199,6 +199,8 @@ class ResUNet(nn.Module):
 
         self.input_res = res_conn(res_indices, upcale_factor=upcale_factor)
 
+        self.add_indices = torch.arange(len(res_indices)) * (out_channels // len(res_indices))
+
         hw_mid = hw_in//(2**(n_levels-1))
         self.mid = mid(hw_mid, n_res_blocks, model_dim_unet*(4**(n_levels-1)), with_att=True)
 
@@ -209,13 +211,13 @@ class ResUNet(nn.Module):
         x, layer_outputs = self.encoder(x)
         x = self.mid(x)
         x = self.decoder(x, layer_outputs)
-        x = x + x_res#self.out_block(x_res)[0]
+        x[:,self.add_indices] = x[:,self.add_indices] + x_res#self.out_block(x_res)[0]
         return x
 
 
 class core_ResUNet(psm.pyramid_step_model): 
-    def __init__(self, model_settings):
-        super().__init__(model_settings)
+    def __init__(self, model_settings, model_dir=None):
+        super().__init__(model_settings, model_dir=model_dir)
         
         model_settings = self.model_settings
 

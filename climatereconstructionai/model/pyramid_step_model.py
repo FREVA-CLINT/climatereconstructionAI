@@ -400,12 +400,15 @@ class output_net(nn.Module):
         return data_out, non_valid_mask_var
 
 class pyramid_step_model(nn.Module):
-    def __init__(self, model_settings):
+    def __init__(self, model_settings, model_dir=None):
         super().__init__()
         
         self.model_settings = load_settings(model_settings, 'model')
         if 'domain' in self.model_settings.keys():
             self.model_settings.update(load_settings(self.model_settings['domain'], 'model'))
+
+        if model_dir is not None:
+            self.model_settings['model_dir'] = model_dir
 
         self.fusion_modules = None
 
