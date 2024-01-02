@@ -12,6 +12,8 @@ import netCDF4 as netcdf
 from .utils import twriter_t, early_stopping
 from .utils.io import save_ckpt
 from .utils.netcdfloader_samples import NetCDFLoader_lazy, InfiniteSampler
+#from .utils.grid_utils import grid_interpolator
+from .model.pyramid_step_model import interpolator
 
 class vorticity_calculator():
     def __init__(self, grid_file_path, device='cpu') -> None:
@@ -154,6 +156,20 @@ class L1Loss(nn.Module):
         output_valid = output[~non_valid_mask,:,0].squeeze()
         target_valid = target[~non_valid_mask].squeeze()
         loss = self.loss(output_valid,target_valid)
+        return loss
+
+class RegLoss(nn.Module):
+    def __init__(self, model_settings):
+        super().__init__()
+        self.loss = torch.nn.L1Loss()
+        
+        self.inter = interpolator(model_settings)
+
+    def forward(self, output, target, coords_target):
+        
+        output_reg = self.inter(output, coords_target)
+        target_reg = self.inter(target, coords_target)
+        loss = torch.nn.L1Loss(output_reg, target_reg)
         return loss
 
 class L1Loss_rel(nn.Module):
@@ -371,10 +387,20 @@ def train(model, training_settings, model_settings={}):
     model = model.to(device)
     
     calc_vort=False
-    if 'vort_loss' in training_settings.keys() and training_settings['vort_loss']:
-        if 'grid_file' in training_settings.keys() and len(training_settings['grid_file']):
-            calc_vort=True
-            vort_calc = vorticity_calculator(training_settings['grid_file'], device=device)
+    if 'lambdas' in training_settings.keys():
+        lambdas = training_settings['lambdas']
+    else:
+        vars = model.model_settings['variables_target']
+        lambdas = dict(zip(vars, [1]*len(vars)))
+    
+    if 'vort' in lambdas.keys() and lambdas['vort']>0:
+        calc_vort=True
+ 
+    if calc_vort and 'grid_file' in training_settings.keys() and len(training_settings['grid_file']):
+        calc_vort = True
+        vort_calc = vorticity_calculator(training_settings['grid_file'], device=device)
+    else:
+        calc_vort = False
 
 
     loss_fcns = []
@@ -403,6 +429,7 @@ def train(model, training_settings, model_settings={}):
 
     dict_loss_fcn = DictLoss(loss_fcns, factors)
 
+  #  reg_loss_fcn = RegLoss(model_settings)
    
     early_stop = early_stopping.early_stopping(training_settings['early_stopping_delta'], training_settings['early_stopping_patience'])
     
@@ -413,12 +440,6 @@ def train(model, training_settings, model_settings={}):
     start_iter = 0
     
     spatial_dim_var_target = model.model_settings['spatial_dims_var_target']
-
-    if 'lambdas' in training_settings.keys():
-        lambdas = training_settings['lambdas']
-    else:
-        vars = model.model_settings['variables_target']
-        lambdas = dict(zip(vars, [1]*len(vars)))
     
     if 'fine_tuning' in training_settings.keys():
         fine_tuning = training_settings['fine_tuning']
@@ -466,6 +487,7 @@ def train(model, training_settings, model_settings={}):
             loss += reg_loss
             train_loss_dict['reg_loss'] = reg_loss.item()
 
+     #   loss += reg_loss_fcn(output, target, coords_target)
         loss.backward()
 
         train_losses_save.append(loss.item())
