@@ -512,7 +512,11 @@ class pyramid_step_model(nn.Module):
         model_settings_path = os.path.join(self.model_dir,'model_settings.json')
 
         self.ckpt_dir = os.path.join(self.model_dir, 'ckpt')
-        self.log_dir = os.path.join(self.model_dir, 'log')
+
+        if 'log_dir' not in self.model_settings.keys():
+            self.log_dir = os.path.join(self.model_dir, 'log')
+        else:
+            self.log_dir = self.model_settings['log_dir']
 
         if not os.path.isdir(self.model_dir):
             os.makedirs(self.model_dir)
