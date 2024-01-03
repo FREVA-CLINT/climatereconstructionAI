@@ -659,4 +659,4 @@ class grid_interpolator(nn.Module):
         x,y = coords.cpu()
         grid_z = griddata((x, y), data, (self.x_grid, self.y_grid), method=self.method)
 
-        return torch.tensor(grid_z, device=device)
+        return torch.tensor(grid_z, device=device).float()
