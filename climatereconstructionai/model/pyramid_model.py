@@ -251,7 +251,7 @@ class pyramid_model(nn.Module):
         x_source, coords_source, coords_target, batch_idx = batch
 
         with torch.no_grad():
-            output_batch, _, _, non_valid_mask = self.local_model(x_source, coords_source, coords_target, norm=True)
+            output_batch, _, _, non_valid_mask = self.local_model(x_source, coords_source, coords_target, norm=True, fine_tuning=True)
 
         return output_batch, non_valid_mask, batch_idx
 
