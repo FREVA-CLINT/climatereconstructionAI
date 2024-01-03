@@ -327,15 +327,13 @@ def get_parent_child_indices(parent_coords: torch.tensor, child_coords: torch.te
     children_idx = torch.stack(c_p_indices_rel_pad)
     parents = torch.stack(c_p_indices_pad)
 
-
     indices = {'c_of_p': torch.stack((p_c_indices, p_indices_rel), dim=0),
                'p_of_c': torch.stack((parents, children_idx), dim=0)}
     
-
     return indices, radius_km
 
 
-def get_relative_coordinates_grids(parent_coords, child_coords, relation_dict, relative_to="parents", batch_size=-1, rotate_cs=False):
+def get_relative_coordinates_grids(parent_coords, child_coords, relation_dict, relative_to="parents", batch_size=-1):
 
     if relative_to == 'children':
         coords_in_regions = [parent_coords[0][relation_dict['p_of_c'][0]], parent_coords[1][relation_dict['p_of_c'][0]]]
@@ -345,10 +343,10 @@ def get_relative_coordinates_grids(parent_coords, child_coords, relation_dict, r
         coords_in_regions = [child_coords[0][relation_dict['c_of_p'][0]], child_coords[1][relation_dict['c_of_p'][0]]]
         region_center_coords = parent_coords
     
-    return get_relative_coordinates_regions(coords_in_regions, region_center_coords, batch_size=batch_size, rotate_cs=rotate_cs)
+    return get_relative_coordinates_regions(coords_in_regions, region_center_coords, batch_size=batch_size)
 
 
-def get_relative_coordinates_regions(coords_in_regions, region_center_coords, batch_size=-1, rotate_cs=False):
+def get_relative_coordinates_regions(coords_in_regions, region_center_coords, batch_size=-1):
 
     PosCalc = PositionCalculator(batch_size)
 
@@ -356,16 +354,10 @@ def get_relative_coordinates_regions(coords_in_regions, region_center_coords, ba
 
     for p in range(coords_in_regions[0].shape[0]):
 
-        if rotate_cs:
-            dist, phi, dlon, dlat = PosCalc(coords_in_regions[0][[p]].T, coords_in_regions[1][[p]].T,
-                                            (region_center_coords[0][p]).view(1,1),
-                                            (region_center_coords[1][p]).view(1,1),
-                                            ((region_center_coords[0][p]).view(1,1),
-                                            (region_center_coords[1][p]).view(1,1)))
-        else:
-            dist, phi, dlon, dlat = PosCalc(coords_in_regions[0][[p]].T, coords_in_regions[1][[p]].T,
-                                            (region_center_coords[0][p]).view(1,1),
-                                            (region_center_coords[1][p]).view(1,1))
+        dist, phi, dlon, dlat = PosCalc(coords_in_regions[0][[p]].T, 
+                                        coords_in_regions[1][[p]].T,
+                                        (region_center_coords[0][p]).view(1,1),
+                                        (region_center_coords[1][p]).view(1,1))
         
         rel_coords.append(torch.stack([dist, phi, dlon, dlat],axis=0))
 
@@ -374,12 +366,16 @@ def get_relative_coordinates_regions(coords_in_regions, region_center_coords, ba
     return rel_coords
 
 
-def get_regions(lons, lats, seeds_lon, seeds_lat, radius_region=None, n_points=None ,in_deg=True, rect=False, batch_size=-1):
+def get_regions(lons, lats, seeds_lon, seeds_lat, radius_region=None, n_points=None ,in_deg=True, rect=False, batch_size=-1, rotate_cs=False):
 
     
     if in_deg:
         seeds_lon = torch.deg2rad(seeds_lon)
         seeds_lat = torch.deg2rad(seeds_lat)
+
+    #if rotate_cs:
+    #    lons, lats = rotate_coord_system(lons, lats, seeds_lon, seeds_lat)
+    #    seeds_lon = seeds_lat = torch.tensor([0.]).view(-1,1)
 
     if rect:
         Pos_calc = PositionCalculator(batch_size=batch_size)
@@ -437,16 +433,19 @@ def get_regions(lons, lats, seeds_lon, seeds_lat, radius_region=None, n_points=N
     return distances_regions, indices_regions, lons_regions, lats_regions
 
 
-def rotate_coord_system(lons: torch.tensor, lats: torch.tensor, rotation_lon: float, rotation_lat:float):
+def rotate_coord_system(lons: torch.tensor, lats: torch.tensor, rotation_lon: torch.tensor, rotation_lat: torch.tensor):
 
     theta = torch.tensor(rotation_lat) if not torch.is_tensor(rotation_lat) else rotation_lat
     phi = torch.tensor(rotation_lon) if not torch.is_tensor(rotation_lon) else rotation_lon
 
-    x = torch.cos(lons)* torch.cos(lats)
-    y = torch.sin(lons)* torch.cos(lats)
-    z = torch.sin(lats)
+    theta = theta.view(-1,1)
+    phi = phi.view(-1,1)
 
-    rotated_x =  torch.cos(theta)*torch.cos(phi)*x + torch.cos(theta)*torch.sin(phi)*y + torch.sin(theta)*z
+    x = (torch.cos(lons) * torch.cos(lats)).view(1,-1)
+    y = (torch.sin(lons) * torch.cos(lats)).view(1,-1)
+    z = (torch.sin(lats)).view(1,-1)
+
+    rotated_x =  torch.cos(theta)*torch.cos(phi) * x + torch.cos(theta)*torch.sin(phi)*y + torch.sin(theta)*z
     rotated_y = -torch.sin(phi)*x + torch.cos(phi)*y
     rotated_z = -torch.sin(theta)*torch.cos(phi)*x - torch.sin(theta)*torch.sin(phi)*y + torch.cos(theta)*z
 
@@ -455,21 +454,16 @@ def rotate_coord_system(lons: torch.tensor, lats: torch.tensor, rotation_lon: fl
 
     return rot_lon, rot_lat
 
-
 class PositionCalculator(nn.Module):
     def __init__(self, batch_size=-1):
         super().__init__()
         self.batch_size = batch_size
 
-    def forward(self, lons, lats, lons_t=None, lats_t=None, rotation_center=None):
+    def forward(self, lons, lats, lons_t, lats_t):
 
-        if rotation_center is not None:
-            lons, lats = rotate_coord_system(lons, lats, float(rotation_center[0]), float(rotation_center[1]))
-            lons_t, lats_t = rotate_coord_system(lons_t, lats_t, float(rotation_center[0]), float(rotation_center[1]))
-            
         lons = lons.view(1,(lons).numel())
         lats = lats.view(1,(lats).numel())
-
+       
         if self.batch_size != -1 and self.batch_size <= lons.shape[-1]:
             n_chunks = lons.shape[-1] // self.batch_size 
         else:
@@ -478,33 +472,30 @@ class PositionCalculator(nn.Module):
         lons_chunks = lons.chunk(n_chunks, dim=-1)
         lats_chunks = lats.chunk(n_chunks, dim=-1)
 
+        lons_t = lons_t.view(len(lons_t),1)
+        lats_t = lats_t.view(len(lats_t),1)
+
         d_lons = []
         d_lats = []
         d_mat = []
         phis = []
+
+        lons_lats_rot = torch.zeros_like(lats_t)
+
         for chunk_idx in range(len(lons_chunks)):
             lons_chunk = lons_chunks[chunk_idx]
             lats_chunk = lats_chunks[chunk_idx]
+            lons_chunk, lats_chunk = rotate_coord_system(lons_chunk, lats_chunk, lons_t, lats_t)
 
-            if lons_t is None:
-                lons_t=lons_chunk.transpose(1,0)
-                lats_t=lats_chunk.transpose(1,0)
+            d_lats_chunk = distance_on_sphere(lons_chunk, lats_chunk, lons_chunk, lons_lats_rot)
+            d_lons_chunk = distance_on_sphere(lons_chunk, lats_chunk, lons_lats_rot, lats_chunk)
 
-                d_lons_chunk = distance_on_sphere(lons_chunk,lats_chunk,lons_t,lats_t.transpose(0,1))
-                d_lats_chunk = distance_on_sphere(lons_chunk,lats_chunk,lons_t.transpose(0,1),lats_t)
-            else:
-                lons_t = lons_t.view(len(lons_t),1)
-                lats_t = lats_t.view(len(lats_t),1)
-
-                d_lats_chunk = distance_on_sphere(lons_chunk, lats_chunk, lons_chunk, lats_t)
-                d_lons_chunk = distance_on_sphere(lons_chunk, lats_chunk, lons_t, lats_chunk)
-
-            sgn = torch.sign(lats_chunk - lats_t)
-            sgn[(lats_chunk - lats_t).abs()/torch.pi>1] = sgn[(lats_chunk - lats_t).abs()/torch.pi>1]*-1
+            sgn = torch.sign(lats_chunk)
+            sgn[(lats_chunk ).abs()/torch.pi>1] = sgn[(lats_chunk).abs()/torch.pi>1]*-1
             d_lats_s = d_lats_chunk*sgn
 
-            sgn = torch.sign(lons_chunk - lons_t)
-            sgn[(lons_chunk - lons_t).abs()/torch.pi>1] = sgn[(lons_chunk - lons_t).abs()/torch.pi>1]*-1
+            sgn = torch.sign(lons_chunk )
+            sgn[(lons_chunk).abs()/torch.pi>1] = sgn[(lons_chunk).abs()/torch.pi>1]*-1
             d_lons_s = d_lons_chunk*sgn
 
             d_lons.append(d_lons_s)
@@ -519,6 +510,7 @@ class PositionCalculator(nn.Module):
         phis = torch.concat(phis, dim=-1)
 
         return d_mat, phis, d_lons, d_lats
+    
     
 
 
@@ -624,7 +616,7 @@ class random_region_generator_multi():
     
 
 
-def generate_region(coords, range_lon=None, range_lat=None, n_points=None, radius=None, locations=[], batch_size=1, rect=False):
+def generate_region(coords, range_lon=None, range_lat=None, n_points=None, radius=None, locations=[], batch_size=1, rect=False, rotate_cs=False):
 
     if len(locations)==0:
         seeds_lon = torch.randint(range_lon[0],range_lon[1], size=(batch_size,1))
@@ -634,7 +626,7 @@ def generate_region(coords, range_lon=None, range_lat=None, n_points=None, radiu
         seeds_lat = locations[1]
 
 
-    distances_regions, indices_regions, lons_regions, lats_regions = get_regions(coords['lon'], coords['lat'], seeds_lon, seeds_lat, radius_region=radius, n_points=n_points, in_deg=True, rect=rect)
+    distances_regions, indices_regions, lons_regions, lats_regions = get_regions(coords['lon'], coords['lat'], seeds_lon, seeds_lat, radius_region=radius, n_points=n_points, in_deg=True, rect=rect, rotate_cs=rotate_cs)
     n_points = len(distances_regions)
     radius = distances_regions.max()
 

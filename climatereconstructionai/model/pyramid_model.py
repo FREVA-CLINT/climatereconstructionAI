@@ -136,10 +136,10 @@ class pyramid_model(nn.Module):
         for spatial_dim, coords in child_coords_spatial_dims.items():
             child_coords = torch.stack(tuple(coords['coords'].values()),dim=0)
 
-            relation_dict, radius_region_km = gu.get_parent_child_indices(parent_coords, child_coords, radius_region_km, radius_inc, min_overlap=min_overlap, batch_size=self.model_settings['relation_batch_size'])
+            relation_dict, radius_region_km = gu.get_parent_child_indices(parent_coords, child_coords, radius_region_km, radius_inc, min_overlap=min_overlap, batch_size=self.model_settings['relation_batch_size'], rotate_cs=rotate_cs)
 
-            rel_coords_children = gu.get_relative_coordinates_grids(parent_coords, child_coords, relation_dict, relative_to='parents', batch_size=self.model_settings['relation_batch_size'], rotate_cs=rotate_cs)
-            rel_coords_parents = gu.get_relative_coordinates_grids(parent_coords, child_coords, relation_dict, relative_to='children', batch_size=self.model_settings['relation_batch_size'], rotate_cs=rotate_cs)
+            rel_coords_children = gu.get_relative_coordinates_grids(parent_coords, child_coords, relation_dict, relative_to='parents', batch_size=self.model_settings['relation_batch_size'])
+            rel_coords_parents = gu.get_relative_coordinates_grids(parent_coords, child_coords, relation_dict, relative_to='children', batch_size=self.model_settings['relation_batch_size'])
 
             relations[spatial_dim] = {
                 'indices': relation_dict,

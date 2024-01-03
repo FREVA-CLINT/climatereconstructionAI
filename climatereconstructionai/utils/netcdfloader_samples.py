@@ -154,7 +154,9 @@ class NetCDFLoader_lazy(Dataset):
                  rel_coords=False,
                  sample_for_norm=-1,
                  lazy_load=False,
-                 rotate_cs=False):
+                 rotate_cs=False,
+                 interpolation_size_s=None,
+                 interpolation_size_t=None):
         
         super(NetCDFLoader_lazy, self).__init__()
         
@@ -177,6 +179,8 @@ class NetCDFLoader_lazy(Dataset):
         self.sample_for_norm = sample_for_norm
         self.lazy_load=lazy_load
         self.rotate_cs = rotate_cs
+        self.interpolation_size_s = interpolation_size_s
+        self.interpolation_size_t = interpolation_size_t
 
         self.flatten=False
 
@@ -219,7 +223,7 @@ class NetCDFLoader_lazy(Dataset):
         
 
 
-    def get_coordinates(self, ds, dims_variables_dict, seeds=[], n_drop_dict={}, p_drop=0):
+    def get_coordinates(self, ds, dims_variables_dict, seeds=[], n_drop_dict={}, p_drop=0, rotate_cs=False):
 
         spatial_dim_indices = {}
         rel_coords_dict = {} 
@@ -248,14 +252,16 @@ class NetCDFLoader_lazy(Dataset):
                                               n_points=n_points, 
                                               radius=radius, batch_size=self.random_region['batch_size'], 
                                               locations=seeds, 
-                                              rect=rect)
-
+                                              rect=rect,
+                                              rotate_cs=rotate_cs)
+                
+                coords = torch.stack([region_dict['lon'],region_dict['lat']], dim=0)
                 seeds = region_dict['locations']
-
-                indices = region_dict['indices'].squeeze()
-            
+                global_indices = region_dict['indices'].squeeze()
             else:
-                indices = torch.arange(coords.shape[1])
+                global_indices = torch.arange(coords.shape[1])
+
+            indices = torch.arange(coords.shape[1])
             
             if len(n_drop_dict) > 0 and spatial_dim in n_drop_dict.keys():
                 n_drop = n_drop_dict[spatial_dim]
@@ -271,19 +277,20 @@ class NetCDFLoader_lazy(Dataset):
                 indices = indices[torch.randperm(len(indices-1))[:n_drop]]
 
             coords = coords[:,indices]
+            global_indices = global_indices[indices]
 
             if not self.rel_coords:
                 coords = {'lon': coords[0], 'lat': coords[1]}
 
                 if len(seeds)==[]:
-                    rel_coords, _  = self.get_rel_coords(coords, [coords[0].median(), coords[1].median()], rotate_cs=self.rotate_cs)
+                    rel_coords, _  = self.get_rel_coords(coords, [coords[0].median(), coords[1].median()], rotated_cs=rotate_cs)
                 else:
-                    rel_coords, _  = self.get_rel_coords(coords, [seeds[0].deg2rad(), seeds[1].deg2rad()], rotate_cs=self.rotate_cs)  
+                    rel_coords, _  = self.get_rel_coords(coords, [seeds[0].deg2rad(), seeds[1].deg2rad()], rotated_cs=rotate_cs)  
 
             else:
                 rel_coords = coords
 
-            spatial_dim_indices[spatial_dim] = indices
+            spatial_dim_indices[spatial_dim] = global_indices
             rel_coords_dict[spatial_dim] = rel_coords.squeeze()
 
         return spatial_dim_indices, rel_coords_dict, seeds, n_drop_dict
@@ -326,12 +333,12 @@ class NetCDFLoader_lazy(Dataset):
         return ds_return
     
 
-    def get_rel_coords(self, coords, seeds, rotate_cs=False):
+    def get_rel_coords(self, coords, seeds, rotated_cs=False):
         
-        if rotate_cs:
-            distances, _, d_lons_s, d_lats_s = self.PosCalc(coords['lon'], coords['lat'], (seeds[0]), (seeds[1]), rotation_center=(seeds[0],seeds[1]))
-        else:
-            distances, _, d_lons_s, d_lats_s = self.PosCalc(coords['lon'], coords['lat'], (seeds[0]), (seeds[1]))
+        if rotated_cs:
+            seeds = (torch.tensor([0.]).view(-1,1),torch.tensor([0.]).view(-1,1))
+        
+        distances, _, d_lons_s, d_lats_s = self.PosCalc(coords['lon'], coords['lat'], (seeds[0]), (seeds[1]))
         
         return torch.stack([d_lons_s.float().T, d_lats_s.float().T],dim=0), distances
     
@@ -351,8 +358,8 @@ class NetCDFLoader_lazy(Dataset):
             else:
                 ds_target = xr.load_dataset(file_path_target)
 
-        spatial_dim_indices_source, rel_coords_dict_source, seeds, _ = self.get_coordinates(ds_source, self.dims_variables_source, n_drop_dict=self.n_dict_source)
-        spatial_dim_indices_target, rel_coords_dict_target, _, _ = self.get_coordinates(ds_target, self.dims_variables_target, seeds=seeds, n_drop_dict=self.n_dict_target)
+        spatial_dim_indices_source, rel_coords_dict_source, seeds, _ = self.get_coordinates(ds_source, self.dims_variables_source, n_drop_dict=self.n_dict_source, rotate_cs=self.rotate_cs)
+        spatial_dim_indices_target, rel_coords_dict_target, _, _ = self.get_coordinates(ds_target, self.dims_variables_target, seeds=seeds, n_drop_dict=self.n_dict_target, rotate_cs=self.rotate_cs)
 
         ds_source = self.apply_spatial_dim_indices(ds_source, self.dims_variables_source, spatial_dim_indices_source, rel_coords_dict=rel_coords_dict_source)
         ds_target = self.apply_spatial_dim_indices(ds_target, self.dims_variables_target, spatial_dim_indices_target, rel_coords_dict=rel_coords_dict_target)
