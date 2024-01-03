@@ -249,14 +249,14 @@ def get_grid_relations(grids, coord_dict, regional=True, radius_regions_km=None,
     return grid_data
 
 
-def get_parent_child_indices(parent_coords: torch.tensor, child_coords: torch.tensor, radius_km: float, radius_inc_km: float, in_deg=False, min_overlap=1, max_overlap=5, batch_size=-1, rotate_cs=False):
+def get_parent_child_indices(parent_coords: torch.tensor, child_coords: torch.tensor, radius_km: float, radius_inc_km: float, in_deg=False, min_overlap=1, max_overlap=5, batch_size=-1):
 
     n_iter = 0
     converged = False
 
     while not converged:
 
-        pc_distance, p_c_indices, _, _ = get_regions(child_coords[0], child_coords[1], parent_coords[0], parent_coords[1], radius_region=radius_km, in_deg=in_deg, batch_size=batch_size, rotate_cs=rotate_cs)
+        pc_distance, p_c_indices, _, _ = get_regions(child_coords[0], child_coords[1], parent_coords[0], parent_coords[1], radius_region=radius_km, in_deg=in_deg, batch_size=batch_size)
 
         # relative to parents
         pc_distance = pc_distance.T
@@ -366,7 +366,7 @@ def get_relative_coordinates_regions(coords_in_regions, region_center_coords, ba
     return rel_coords
 
 
-def get_regions(lons, lats, seeds_lon, seeds_lat, radius_region=None, n_points=None ,in_deg=True, rect=False, batch_size=-1, rotate_cs=False):
+def get_regions(lons, lats, seeds_lon, seeds_lat, radius_region=None, n_points=None ,in_deg=True, rect=False, batch_size=-1, return_rotated_coords=False):
 
     
     if in_deg:
@@ -395,7 +395,12 @@ def get_regions(lons, lats, seeds_lon, seeds_lat, radius_region=None, n_points=N
     else:
         Pos_calc = PositionCalculator(batch_size=batch_size)
    
-        d_mat = Pos_calc(lons, lats, seeds_lon, seeds_lat)[0].T
+        d_mat, _, d_lons, d_lats = Pos_calc(lons, lats, seeds_lon, seeds_lat)
+
+        d_mat = d_mat.T
+
+        if return_rotated_coords:
+            lons, lats = d_lons, d_lats
 
         if batch_size != -1 and batch_size <= d_mat.shape[-1]:
             n_chunks = torch.tensor(d_mat.shape).max() // batch_size 
@@ -616,7 +621,7 @@ class random_region_generator_multi():
     
 
 
-def generate_region(coords, range_lon=None, range_lat=None, n_points=None, radius=None, locations=[], batch_size=1, rect=False, rotate_cs=False):
+def generate_region(coords, range_lon=None, range_lat=None, n_points=None, radius=None, locations=[], batch_size=1, rect=False, return_rotated_coords=False):
 
     if len(locations)==0:
         seeds_lon = torch.randint(range_lon[0],range_lon[1], size=(batch_size,1))
@@ -626,7 +631,7 @@ def generate_region(coords, range_lon=None, range_lat=None, n_points=None, radiu
         seeds_lat = locations[1]
 
 
-    distances_regions, indices_regions, lons_regions, lats_regions = get_regions(coords['lon'], coords['lat'], seeds_lon, seeds_lat, radius_region=radius, n_points=n_points, in_deg=True, rect=rect, rotate_cs=rotate_cs)
+    distances_regions, indices_regions, lons_regions, lats_regions = get_regions(coords['lon'], coords['lat'], seeds_lon, seeds_lat, radius_region=radius, n_points=n_points, in_deg=True, rect=rect, return_rotated_coords=return_rotated_coords)
     n_points = len(distances_regions)
     radius = distances_regions.max()
 

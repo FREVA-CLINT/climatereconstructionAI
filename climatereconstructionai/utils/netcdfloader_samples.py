@@ -253,11 +253,12 @@ class NetCDFLoader_lazy(Dataset):
                                               radius=radius, batch_size=self.random_region['batch_size'], 
                                               locations=seeds, 
                                               rect=rect,
-                                              rotate_cs=rotate_cs)
+                                              return_rotated_coords=rotate_cs)
                 
                 coords = torch.stack([region_dict['lon'],region_dict['lat']], dim=0)
                 seeds = region_dict['locations']
                 global_indices = region_dict['indices'].squeeze()
+                
             else:
                 global_indices = torch.arange(coords.shape[1])
 
@@ -279,19 +280,19 @@ class NetCDFLoader_lazy(Dataset):
             coords = coords[:,indices]
             global_indices = global_indices[indices]
 
-            if not self.rel_coords:
-                coords = {'lon': coords[0], 'lat': coords[1]}
+            #if not self.rel_coords:
+            #    coords = {'lon': coords[0], 'lat': coords[1]}
 
-                if len(seeds)==[]:
-                    rel_coords, _  = self.get_rel_coords(coords, [coords[0].median(), coords[1].median()], rotated_cs=rotate_cs)
-                else:
-                    rel_coords, _  = self.get_rel_coords(coords, [seeds[0].deg2rad(), seeds[1].deg2rad()], rotated_cs=rotate_cs)  
+            #    if len(seeds)==[]:
+            #        rel_coords, _  = self.get_rel_coords(coords, [coords[0].median(), coords[1].median()], rotated_cs=rotate_cs)
+            #    else:
+            #        rel_coords, _  = self.get_rel_coords(coords, [seeds[0].deg2rad(), seeds[1].deg2rad()], rotated_cs=rotate_cs)  
 
-            else:
-                rel_coords = coords
+            #else:
+            #    rel_coords = coords
 
             spatial_dim_indices[spatial_dim] = global_indices
-            rel_coords_dict[spatial_dim] = rel_coords.squeeze()
+            rel_coords_dict[spatial_dim] = coords.squeeze()
 
         return spatial_dim_indices, rel_coords_dict, seeds, n_drop_dict
 
