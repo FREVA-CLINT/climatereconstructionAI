@@ -327,7 +327,7 @@ def train(model, training_settings, model_settings={}):
         with open(os.path.join(sample_dir_train,'norm_dict.json'), 'r') as f:
             norm_dict = json.load(f)
 
-        norm_dict = model_settings['normalization']
+        model_settings['normalization'] = norm_dict
     else:
 
         dataset_train = NetCDFLoader_lazy(source_files_train, 
@@ -373,14 +373,14 @@ def train(model, training_settings, model_settings={}):
                                     range_target=model_settings['range_region_target_rad'])       
 
         model_settings['normalization'] = norm_dict = dataset_train.norm_dict
-        model_settings_path = os.path.join(model_settings['model_dir'],'model_settings.json')
-        with open(model_settings_path, 'w') as f:
-            json.dump(model_settings, f, indent=4)
 
         if len(sample_dir_train)>0:
             with open(os.path.join(sample_dir_train,'norm_dict.json'), 'w') as f:
                 json.dump(norm_dict, f, indent=4)
 
+    model_settings_path = os.path.join(model_settings['model_dir'],'model_settings.json')
+    with open(model_settings_path, 'w') as f:
+        json.dump(model_settings, f, indent=4)
 
     iterator_train = iter(DataLoader(dataset_train,
                                     batch_size=batch_size,

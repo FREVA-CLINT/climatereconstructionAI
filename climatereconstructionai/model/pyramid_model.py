@@ -255,7 +255,7 @@ class pyramid_model(nn.Module):
         x_source, coords_source, coords_target, batch_idx = batch
 
         with torch.no_grad():
-            output_batch, _, _, non_valid_mask = self.local_model(x_source, coords_source, coords_target, norm=True, fine_tuning=True)
+            output_batch, _, _, non_valid_mask = self.local_model(x_source, coords_target, coords_source=coords_source, norm=True)
 
         return output_batch, non_valid_mask, batch_idx
 
@@ -290,13 +290,12 @@ class pyramid_model(nn.Module):
 
         pool = multiprocessing.Pool(processes=num_workers)
         outputs = pool.map(self.process_batch, batches)
-
         pool.close()
         pool.join()
 
 
         data_output_std = {}
-        if outputs[0][0][list(self.relations_target['spatial_dims_var'].values())[0][0]].shape[-1]>1:
+        if outputs[0][0][list(self.relations_target['spatial_dims_var'].values())[0][0]].shape[2]>1:
             get_std = True
         else:
             get_std = False
@@ -315,7 +314,7 @@ class pyramid_model(nn.Module):
               
                 indices = c_of_p_batched_target[spatial_dim][:,batch_idx]
 
-                data = output[variable][:,:,0]
+                data = output[variable][:,0].transpose(-1,-2)
                 mask = non_valid_mask[variable]
                 data[mask] = 0
 
