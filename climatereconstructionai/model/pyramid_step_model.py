@@ -307,7 +307,7 @@ def scale_coords(coords, mn, mx):
     return coords_scaled, non_valid
 
 
-class interpolation_net(nn.Module):
+class interpolation_net():
     def __init__(self, s, nh, n):
         super().__init__()
 
@@ -316,7 +316,7 @@ class interpolation_net(nn.Module):
                                       nh=nh)
 
 
-    def forward(self, x, coords_target):
+    def sample_coords(self, x, coords_target):
 
         x = x.permute(0,3,1,2)
 
@@ -383,7 +383,7 @@ class output_net(nn.Module):
         for spatial_dim, vars in self.spatial_dim_var_dict.items():
   
             data = x[idx]
-            data = self.grid_to_target(data, coords_target[spatial_dim])
+            data = self.grid_to_target.sample_coords(data, coords_target[spatial_dim])
 
             if self.use_gnlll:
                 data = torch.split(data, len(vars), dim=-1)
