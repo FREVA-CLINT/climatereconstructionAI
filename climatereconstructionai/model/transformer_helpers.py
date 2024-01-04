@@ -484,32 +484,25 @@ class lin_interpolator(nn.Module):
 def normal(x, mu, s):
     return torch.exp(-0.5*((x-mu)/s)**2)/(s*torch.tensor(math.sqrt(2*math.pi)))
 
-class nu_grid_sampler():
+class nu_grid_sampler(nn.Module):
 
-    def __init__(self, n_res=90, s=0.5, nh=5, device='cpu'):
+    def __init__(self, n_res=90, s=0.5, nh=5):
         super().__init__()
 
         nh_m = ((nh-1)/2) + 0.5
 
-        self.pixel_offset_normal = torch.linspace(nh_m, -nh_m, n_res).to(device)
-        self.pixel_offset_indices = torch.linspace(-(nh-1)//2, (nh-1)//2, nh).to(device)
-
-        self.device = device
+        self.pixel_offset_normal = nn.Parameter(torch.linspace(nh_m, -nh_m, n_res),requires_grad=False)
+        self.pixel_offset_indices = nn.Parameter(torch.linspace(-(nh-1)//2, (nh-1)//2, nh),requires_grad=False)
 
         self.s = s
         self.n_res = n_res
         self.nh = nh
         self.softmax2d = nn.Softmax2d()
 
-    def __call__(self, x, coords):
+    def forward(self, x, coords):
         b, n, nc = coords.shape
         _, c, nx, ny = x.shape
 
-        if x.device != self.device:
-            self.pixel_offset_normal = self.pixel_offset_normal.to(x.device)
-            self.pixel_offset_indices = self.pixel_offset_indices.to(x.device)
-            self.device= x.device
-            
         positionsx = (coords[:,:,1])*(x.shape[-2]-1)
         positionsy = (coords[:,:,0])*(x.shape[-1]-1)    
 
