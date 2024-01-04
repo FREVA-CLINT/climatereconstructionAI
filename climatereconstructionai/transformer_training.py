@@ -160,10 +160,14 @@ class L1Loss(nn.Module):
 class L1Loss_rel(nn.Module):
     def __init__(self):
         super().__init__()
-        self.loss = torch.nn.L1Loss()
+        self.loss = torch.nn.MSELoss()
 
-    def forward(self, output, target):
-        abs_loss = ((output[:,:,:,0] - target)/(target+1e-10)).abs()
+    def forward(self, output, target, non_valid_mask):
+
+        output_valid = output[~non_valid_mask,:,0].squeeze()
+        target_valid = target[~non_valid_mask].squeeze()
+
+        abs_loss = ((output_valid - target_valid)/(target_valid+1e-10)).abs()
         loss = abs_loss.clamp(max=1)
         loss = loss.mean()
         return loss
@@ -184,10 +188,10 @@ class TVLoss_rel(nn.Module):
 
     def forward(self, output_hr):
         
-        rel_diff1 = ((output_hr[:,1:] - output_hr[:,:-1])/output_hr[:,1:]).abs()
+        rel_diff1 = ((output_hr[:,1:] - output_hr[:,:-1])/(output_hr[:,1:]+1e-10)).abs()
         rel_diff1 = rel_diff1.clamp(max=1)
 
-        rel_diff2 = ((output_hr[:,:,1:] - output_hr[:,:,:-1])/output_hr[:,:,1:]).abs()
+        rel_diff2 = ((output_hr[:,:,1:] - output_hr[:,:,:-1])/(output_hr[:,:,1:]+1e-10)).abs()
         rel_diff2 = rel_diff2.clamp(max=1)
 
         loss = (rel_diff1.mean() + rel_diff2.mean())
