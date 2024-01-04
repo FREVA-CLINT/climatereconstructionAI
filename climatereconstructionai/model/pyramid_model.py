@@ -185,7 +185,11 @@ class pyramid_model(nn.Module):
         step_model_settings = pysm.load_settings(local_model_specs)
 
         if not local_model_specs_is_file:
-            step_model_settings['pretrained_path'] = self.model_settings["local_model"]
+            if 'log_dir' in step_model_settings.keys():
+                step_model_settings['pretrained_path'] = step_model_settings["log_dir"]
+            else:
+                step_model_settings['pretrained_path'] = os.path.join(self.model_settings["local_model"],'logs')
+
 
         if step_model_settings['model'] =='crai':
             self.local_model = cmc.CoreCRAI(step_model_settings)
@@ -258,7 +262,7 @@ class pyramid_model(nn.Module):
     def apply(self, x, ts=-1, batch_size=-1, num_workers=1, device='cpu'):
 
         if not self.mp_set:
-            multiprocessing.set_start_method('forkserver')
+            multiprocessing.set_start_method('spawn')
             self.mp_set = True
         
 

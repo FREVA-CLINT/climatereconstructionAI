@@ -255,4 +255,4 @@ class core_ResUNet(psm.pyramid_step_model):
         self.core_model = ResUNet(hw_in, hw_out, depth, n_blocks, model_dim_core, input_dim, output_dim, res_indices, batch_norm=batch_norm, in_groups=in_groups, out_groups=out_groups, dropout=dropout)
 
         if "pretrained_path" in self.model_settings.keys():
-            self.check_pretrained(model_dir_check=self.model_settings['pretrained_path'])
+            self.check_pretrained(log_dir_check=self.model_settings['pretrained_path'])

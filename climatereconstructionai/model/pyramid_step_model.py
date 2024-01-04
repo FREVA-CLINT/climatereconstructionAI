@@ -514,7 +514,7 @@ class pyramid_step_model(nn.Module):
         self.ckpt_dir = os.path.join(self.model_dir, 'ckpt')
 
         if 'log_dir' not in self.model_settings.keys():
-            self.log_dir = os.path.join(self.model_dir, 'log')
+            self.log_dir = os.path.join(self.model_dir, 'logs')
         else:
             self.log_dir = self.model_settings['log_dir']
 
@@ -597,7 +597,7 @@ class pyramid_step_model(nn.Module):
             self.set_training_configuration(self.train_settings)
 
         if pretrain_subdir is not None:
-            self.check_pretrained(os.path.join(self.model_dir, pretrain_subdir))
+            self.check_pretrained(os.path.join(self.model_dir, pretrain_subdir, 'logs'))
 
         train_settings = self.train_settings
 
@@ -619,10 +619,10 @@ class pyramid_step_model(nn.Module):
             trainer.no_train(self, train_settings, self.model_settings)
 
 
-    def check_pretrained(self, model_dir_check=''):
+    def check_pretrained(self, log_dir_check=''):
 
-        if len(model_dir_check)>0:
-            ckpt_dir = os.path.join(model_dir_check,'logs','ckpts')
+        if len(log_dir_check)>0:
+            ckpt_dir = os.path.join(log_dir_check, 'ckpts')
             weights_path = os.path.join(ckpt_dir, 'best.pth')
             if not os.path.isfile(weights_path):
                 weights_paths = [f for f in os.listdir(ckpt_dir) if 'pth' in f]
