@@ -27,16 +27,18 @@ def bnd_normalization(img_mean, img_std):
     bounds = np.ones((cfg.out_channels, 2)) * np.inf
 
     if cfg.n_target_data == 0:
-        mean_val, std_val = img_mean[:cfg.out_channels], img_std[:cfg.out_channels]
+        mean_val, std_val = img_mean[:cfg.n_output_data], img_std[:cfg.n_output_data]
     else:
         mean_val, std_val = img_mean[-cfg.n_target_data:], img_std[-cfg.n_target_data:]
 
     k = 0
     for bound in (cfg.min_bounds, cfg.max_bounds):
-        bounds[:, k] = bound
 
-        if cfg.normalize_data:
-            bounds[:, k] = (bounds[:, k] - mean_val) / std_val
+        for i in range(cfg.n_output_data):
+            idx = range(i * cfg.n_pred_steps, (i + 1) * cfg.n_pred_steps)
+            bounds[idx, k] = bound[i]
+            if cfg.normalize_data:
+                bounds[idx, k] = (bounds[idx, k] - mean_val[i]) / std_val[i]
 
         k += 1
 

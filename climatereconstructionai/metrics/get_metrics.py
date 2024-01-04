@@ -7,7 +7,7 @@ from .. import config as cfg
 from ..loss import get_loss
 
 @torch.no_grad()
-def get_metrics(img_mask, loss_mask, output, gt, setname):
+def get_metrics(mask, output, gt, setname):
     metric_settings = {
         'valid': {},
         'hole': {},
@@ -43,7 +43,7 @@ def get_metrics(img_mask, loss_mask, output, gt, setname):
 
     loss_comp = get_loss.LossComputation(loss_metric_dict)
 
-    loss_metrics = loss_comp(img_mask, loss_mask, output, gt)
+    loss_metrics = loss_comp(mask, output, gt)
     loss_metrics['total'] = loss_metrics['total'].item()
 
     for metric in metrics:
@@ -63,7 +63,7 @@ def get_metrics(img_mask, loss_mask, output, gt, setname):
             metric_dict[f'metric/{setname}/prc'] = loss_metrics['prc']
 
         else:
-            data = get_loss.prepare_data_dict(img_mask, loss_mask, output, gt, ['mask','output','gt'])
+            data = get_loss.prepare_data_dict(mask, output, gt, ['mask','output','gt'])
             metric_outputs = calculate_metric(metric, data['mask'], data['output'], data['gt'],
                                               torchmetrics_settings=settings['torchmetric_settings'])
 

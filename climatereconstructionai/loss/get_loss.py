@@ -8,27 +8,15 @@ from .. import config as cfg
 from ..utils.featurizer import VGG16FeatureExtractor
 
 
-def prepare_data_dict(img_mask, loss_mask, output, gt, tensor_keys):
+def prepare_data_dict(mask, output, gt, tensor_keys):
     data_dict = dict(zip(list(tensor_keys),[None]*len(tensor_keys)))
 
-    mask = img_mask
-    loss_mask = img_mask
-    if loss_mask is not None:
-        mask += loss_mask
-        mask[mask < 0] = 0
-        mask[mask > 1] = 1
-        assert ((mask == 0) | (mask == 1)).all(), "Not all values in mask are zeros or ones!"
-
-    output = output[:, cfg.recurrent_steps, :, :, :]
-    mask = mask[:, cfg.recurrent_steps, :, :, :]
-    gt = gt[:, cfg.recurrent_steps, cfg.gt_channels, :, :]
-
-    data_dict['mask'] = mask
-    data_dict['output'] = output
-    data_dict['gt'] = gt
+    data_dict['mask'] = mask[:, 0]
+    data_dict['output'] = output[:, cfg.recurrent_steps]
+    data_dict['gt'] = gt[:, 0]
 
     if 'comp' in tensor_keys:
-        data_dict['comp'] = mask * gt + (1 - mask) * output
+        data_dict['comp'] = data_dict['mask'] * data_dict['gt'] + (1 - data_dict['mask']) * data_dict['output']
 
     return data_dict
 
@@ -62,9 +50,9 @@ class loss_criterion(torch.nn.Module):
                         self.tensors.append('comp')
 
 
-    def forward(self, img_mask, loss_mask, output, gt):
+    def forward(self, mask, output, gt):
 
-        data_dict = prepare_data_dict(img_mask, loss_mask, output, gt, self.tensors)
+        data_dict = prepare_data_dict(mask, output, gt, self.tensors)
 
         loss_dict = {}
         for criterion in self.criterions:
@@ -88,6 +76,6 @@ class LossComputation(torch.nn.Module):
         else:
             self.criterion = loss_criterion(lambda_dict)
 
-    def forward(self, img_mask, loss_mask, output, gt):
-        loss_dict = self.criterion(img_mask, loss_mask, output ,gt)
+    def forward(self, mask, output, gt):
+        loss_dict = self.criterion(mask, output ,gt)
         return loss_dict

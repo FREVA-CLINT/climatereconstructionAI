@@ -15,11 +15,14 @@ def load_steadymask(path, mask_names, data_types, device):
     if mask_names is None:
         return None
     else:
-        assert len(mask_names) == cfg.out_channels
         if cfg.n_target_data == 0:
-            steady_mask = load_netcdf(path, mask_names, data_types[:cfg.out_channels])[0]
+            assert len(mask_names) == cfg.n_output_data
+            steady_mask = load_netcdf(path, mask_names, data_types[:cfg.n_output_data])[0]
         else:
+            assert len(mask_names) == cfg.n_target_data
             steady_mask = load_netcdf(path, mask_names, data_types[-cfg.n_target_data:])[0]
+
+        # XXX need to increase steady_mask by n_pred_steps
         # stack + squeeze ensures that it works with steady masks with one timestep or no timestep
         return torch.stack([torch.from_numpy(np.array(mask)).to(device) for mask in steady_mask]).squeeze()
 
@@ -82,12 +85,13 @@ def nc_loadchecker(filename, data_type):
     else:
         data = ds1[data_type].values
 
-    dims = ds1[data_type].dims
+    dims = list(ds1[data_type].dims)
     coords = {key: ds1[data_type].coords[key] for key in ds1[data_type].coords if key != "time"}
     ds1 = ds1.drop_vars(ds1.keys())
-    ds1 = ds1.drop_dims("time")
+    if "time" in dims:
+        ds1 = ds1.drop_dims("time")
 
-    return [ds, ds1, dims, coords], data, data.shape[0], data.shape[1:]
+    return {"ds": ds, "ds1": ds1, "dims": dims, "coords": coords}, data, data.shape[0], data.shape[1:]
 
 
 def load_netcdf(path, data_names, data_types, keep_dss=False):
@@ -109,7 +113,8 @@ def load_netcdf(path, data_names, data_types, keep_dss=False):
 
 
 class NetCDFLoader(Dataset):
-    def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, time_steps, train_stats=None):
+    def __init__(self, data_root, img_names, mask_root, mask_names, split, data_types, time_steps, steady_masks,
+                 train_stats=None):
 
         super(NetCDFLoader, self).__init__()
 
@@ -145,6 +150,8 @@ class NetCDFLoader(Dataset):
         self.img_mean, self.img_std, self.img_znorm = img_normalization(self.img_data, train_stats)
 
         self.bounds = bnd_normalization(self.img_mean, self.img_std)
+
+        self.steady_mask = load_steadymask(mask_root, steady_masks, data_types, cfg.device)
 
     def load_data(self, ind_data, img_indices, mask_indices):
 
@@ -183,10 +190,25 @@ class NetCDFLoader(Dataset):
 
         return images, masks
 
+    def create_out_mask(self, mask, i):
+
+        out_mask = mask[cfg.out_steps]
+        if cfg.n_target_data > 0 or cfg.n_pred_steps > 1:
+            out_mask[:] = 1.
+
+        if self.steady_mask is not None:
+            out_mask += self.steady_mask[i]
+            out_mask[out_mask < 0] = 0
+            out_mask[out_mask > 1] = 1
+            assert ((out_mask == 0) | (out_mask == 1)).all(), "Not all values in mask are zeros or ones!"
+
+        return out_mask
+
     def __getitem__(self, index):
 
         images = []
-        masks = []
+        in_masks = []
+        out_masks = []
         masked = []
         ndata = len(self.data_types)
 
@@ -195,18 +217,23 @@ class NetCDFLoader(Dataset):
             image, mask = self.get_single_item(i, index, cfg.shuffle_masks)
 
             if i >= ndata - cfg.n_target_data:
-                images.append(image)
+                images.append(image[cfg.out_steps])
+                out_masks.append(self.create_out_mask(mask, i))
             else:
                 if cfg.n_target_data == 0:
-                    images.append(image)
-                masks.append(mask)
-                masked.append(image * mask)
+                    images.append(image[cfg.out_steps])
+                    out_masks.append(self.create_out_mask(mask, i))
+                in_masks.append(mask[cfg.in_steps])
+                masked.append(image[cfg.in_steps] * mask[cfg.in_steps])
 
         if cfg.channel_steps:
-            return torch.cat(masked, dim=0).transpose(0, 1), torch.cat(masks, dim=0) \
-                .transpose(0, 1), torch.cat(images, dim=0).transpose(0, 1), index
+            return torch.cat(masked, dim=0).transpose(0, 1), torch.cat(in_masks, dim=0).transpose(0, 1), \
+                   torch.cat(out_masks[:cfg.n_output_data], dim=0).transpose(0, 1), \
+                   torch.cat(images[:cfg.n_output_data], dim=0).transpose(0, 1), index
         else:
-            return torch.cat(masked, dim=1), torch.cat(masks, dim=1), torch.cat(images, dim=1), index
+            return torch.cat(masked, dim=1), torch.cat(in_masks, dim=1), \
+                   torch.cat(out_masks[:cfg.n_output_data], dim=0).transpose(0, 1), \
+                   torch.cat(images[:cfg.n_output_data], dim=0).transpose(0, 1), index
 
     def __len__(self):
         return self.img_length

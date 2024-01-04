@@ -76,6 +76,54 @@ def set_lambdas():
     if lambda_loss is not None:
         lambda_dict.update(lambda_loss)
 
+def set_steps(evaluate=False):
+
+    assert sum(bool(x) for x in [lstm_steps, gru_steps, channel_steps]) < 2, \
+        "lstm, gru and channel options are mutually exclusive"
+
+    global recurrent_steps, n_recurrent_steps
+    global time_steps
+    time_steps = [0, 0]
+    if lstm_steps:
+        time_steps = lstm_steps
+        recurrent_steps = lstm_steps[0]
+    elif gru_steps:
+        time_steps = gru_steps
+        recurrent_steps = gru_steps[0]
+    else:
+        recurrent_steps = 0
+
+    n_recurrent_steps = sum(time_steps) + 1
+
+    global n_channel_steps, gt_channels
+    if channel_steps:
+        time_steps = channel_steps
+        n_channel_steps = sum(channel_steps) + 1
+        gt_channels = [i * n_channel_steps + channel_steps[0] for i in range(n_output_data)]
+    else:
+        n_channel_steps = 1
+        gt_channels = [0 for i in range(n_output_data)]
+
+    global in_steps, out_steps, n_pred_steps, pred_timestep, out_channels
+
+    n_time_steps = sum(time_steps) + 1
+    pred_timestep = list(range(-pred_steps[0], pred_steps[1] + 1))
+    n_pred_steps = len(pred_timestep)
+
+    if evaluate:
+        in_steps = range(0, n_time_steps)
+        out_steps = [time_steps[0]]
+        out_channels = n_output_data * n_pred_steps
+    else:
+        in_step = max(pred_steps[0] - time_steps[0], 0)
+        in_steps = range(in_step, in_step + n_time_steps)
+        interval = [max(time_steps[i], pred_steps[i]) for i in range(2)]
+        out_steps = range(interval[0] - pred_steps[0], interval[0] + pred_steps[1] + 1)
+        time_steps = interval
+
+        out_channels = n_output_data * len(out_steps)
+
+    assert len(time_steps) == 2
 
 def global_args(parser, arg_file=None, prog_func=None):
     import torch
@@ -109,33 +157,18 @@ def global_args(parser, arg_file=None, prog_func=None):
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
-    global recurrent_steps
-    global n_recurrent_steps
-    global time_steps
-    time_steps = [0, 0]
-    if lstm_steps:
-        recurrent_steps = lstm_steps[0]
-        time_steps = lstm_steps
-    elif gru_steps:
-        recurrent_steps = gru_steps[0]
-        time_steps = gru_steps
-    else:
-        recurrent_steps = 0
+    global n_output_data
+    if n_target_data > 0:
+        n_output_data = n_target_data
 
-    n_recurrent_steps = sum(time_steps) + 1
+    global min_bounds, max_bounds
+    if len(min_bounds) == 1:
+        min_bounds = [min_bounds[0] for i in range(n_output_data)]
+    if len(max_bounds) == 1:
+        max_bounds = [max_bounds[0] for i in range(n_output_data)]
 
-    global n_channel_steps
-    global gt_channels
-
-    n_channel_steps = 1
-    gt_channels = [0 for i in range(out_channels)]
-    if channel_steps:
-        time_steps = channel_steps
-        n_channel_steps = sum(channel_steps) + 1
-        for i in range(out_channels):
-            gt_channels[i] = (i + 1) * channel_steps[0] + i * (channel_steps[1] + 1)
-
-    assert len(time_steps) == 2
+    assert len(min_bounds) == n_output_data
+    assert len(max_bounds) == n_output_data
 
     return args
 
@@ -165,6 +198,8 @@ def set_common_args():
                             help="Comma separated number of considered sequences for lstm: past_steps,future_steps")
     arg_parser.add_argument('--gru-steps', type=int_list, default=None,
                             help="Comma separated number of considered sequences for gru: past_steps,future_steps")
+    arg_parser.add_argument('--pred-steps', type=int_list, default=[0,0],
+                            help="Comma separated number of considered sequences for pred: past_steps,future_steps")
     arg_parser.add_argument('--encoding-layers', type=int_list, default='3',
                             help="Number of encoding layers in the CNN")
     arg_parser.add_argument('--pooling-layers', type=int_list, default='0', help="Number of pooling layers in the CNN")
@@ -172,7 +207,7 @@ def set_common_args():
     arg_parser.add_argument('--weights', type=str, default=None, help="Initialization weight")
     arg_parser.add_argument('--steady-masks', type=str_list, default=None,
                             help="Comma separated list of netCDF files containing a single mask to be applied "
-                                 "to all timesteps. The number of steady-masks must be the same as out-channels")
+                                 "to all timesteps. The number of steady-masks must be the same as n-output-data")
     arg_parser.add_argument('--loop-random-seed', type=int, default=None,
                             help="Random seed for iteration loop")
     arg_parser.add_argument('--cuda-random-seed', type=int, default=None,
@@ -191,7 +226,7 @@ def set_common_args():
     arg_parser.add_argument('--normalize-data', action='store_true',
                             help="Normalize the input climate data to 0 mean and 1 std")
     arg_parser.add_argument('--n-filters', type=int, default=None, help="Number of filters for the first/last layer")
-    arg_parser.add_argument('--out-channels', type=int, default=1, help="Number of channels for the output data")
+    arg_parser.add_argument('--n-output-data', type=int, default=1, help="Number of output data")
     arg_parser.add_argument('--dataset-name', type=str, default=None, help="Name of the dataset for format checking")
     arg_parser.add_argument('--min-bounds', type=float_list, default="-inf",
                             help="Comma separated list of values defining the permitted lower-bound of output values")
@@ -252,6 +287,7 @@ def set_train_args(arg_file=None):
                             help="Number of batch iterations used to average the validation loss")
 
     args = global_args(arg_parser, arg_file)
+    set_steps()
 
     global passed_args
     passed_args = get_passed_arguments(args, arg_parser)
@@ -290,3 +326,5 @@ def set_evaluate_args(arg_file=None, prog_func=None):
     arg_parser.add_argument('-f', '--load-from-file', type=str, action=LoadFromFile,
                             help="Load all the arguments from a text file")
     global_args(arg_parser, arg_file, prog_func)
+    set_steps(evaluate=True)
+    assert len(eval_names) == n_output_data
