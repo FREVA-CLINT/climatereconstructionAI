@@ -11,8 +11,7 @@ import netCDF4 as netcdf
 
 from .utils import twriter_t, early_stopping
 from .utils.io import save_ckpt
-from .utils.netcdfloader_samples import NetCDFLoader_lazy, InfiniteSampler
-#from .utils.grid_utils import grid_interpolator
+from .utils.netcdfloader_samples import NetCDFLoader_lazy, InfiniteSampler, SampleLoader
 
 class vorticity_calculator():
     def __init__(self, grid_file_path, device='cpu') -> None:
@@ -141,9 +140,9 @@ class GaussLoss(nn.Module):
         self.Gauss = torch.nn.GaussianNLLLoss()
 
     def forward(self, output, target, non_valid_mask):
-        output_valid = output[~non_valid_mask]
-        target_valid = target[~non_valid_mask]
-        loss =  self.Gauss(output_valid[:,:,0],target_valid,output_valid[:,:,1])
+        output_valid = output[:,0].transpose(-2,-1)[~non_valid_mask]
+        target_valid = target[~non_valid_mask].squeeze()
+        loss =  self.Gauss(output_valid[:,0],target_valid,output_valid[:,1])
         return loss
 
 class L1Loss(nn.Module):
@@ -152,7 +151,7 @@ class L1Loss(nn.Module):
         self.loss = torch.nn.L1Loss()
 
     def forward(self, output, target, non_valid_mask):
-        output_valid = output[~non_valid_mask,:,0].squeeze()
+        output_valid = output[:,0,0][~non_valid_mask]
         target_valid = target[~non_valid_mask].squeeze()
         loss = self.loss(output_valid,target_valid)
         return loss
@@ -163,10 +162,8 @@ class L1Loss_rel(nn.Module):
         self.loss = torch.nn.MSELoss()
 
     def forward(self, output, target, non_valid_mask):
-
-        output_valid = output[~non_valid_mask,:,0].squeeze()
+        output_valid = output[:,0,0][~non_valid_mask]
         target_valid = target[~non_valid_mask].squeeze()
-
         abs_loss = ((output_valid - target_valid)/(target_valid+1e-10)).abs()
         loss = abs_loss.clamp(max=1)
         loss = loss.mean()
@@ -236,6 +233,15 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
             lr_factor *= epoch * 1.0 / self.warmup
         return lr_factor
 
+def data_to_device(d, device):
+    if isinstance(d, dict):
+        return dict_to_device(d, device)
+    
+    elif torch.is_tensor(d):
+        return d.to(device)
+    else:
+        return None
+
 def dict_to_device(d, device):
     for key, value in d.items():
         d[key] = value.to(device)
@@ -301,9 +307,9 @@ def train(model, training_settings, model_settings={}):
                                             train_or_val='val')      
 
 
-    if 'save_samples_path' in training_settings and len(training_settings['save_samples_path'])>0:
-        sample_dir_train = os.path.join(training_settings['save_samples_path'], 'train')
-        sample_dir_val = os.path.join(training_settings['save_samples_path'], 'val')
+    if 'save_tensor_samples_path' in training_settings and len(training_settings['save_tensor_samples_path'])>0:
+        sample_dir_train = os.path.join(training_settings['save_tensor_samples_path'], 'train')
+        sample_dir_val = os.path.join(training_settings['save_tensor_samples_path'], 'val')
 
         if not os.path.exists(sample_dir_train):
             os.makedirs(sample_dir_train)
@@ -314,51 +320,74 @@ def train(model, training_settings, model_settings={}):
         sample_dir_train=''
         sample_dir_val=''
 
+    if 'train_on_samples' in training_settings.keys() and training_settings['train_on_samples']:
+        dataset_train = SampleLoader(sample_dir_train)
+        dataset_val = SampleLoader(sample_dir_val)
+       
+        with open(os.path.join(sample_dir_train,'norm_dict.json'), 'r') as f:
+            norm_dict = json.load(f)
 
-    dataset_train = NetCDFLoader_lazy(source_files_train, 
-                                target_files_train,
-                                training_settings['variables_source'],
-                                training_settings['variables_target'],
-                                model_settings['normalization'],
-                                random_region=random_region,
-                                p_dropout_source=training_settings['p_dropout_source'],
-                                p_dropout_target=training_settings['p_dropout_target'],
-                                sampling_mode=training_settings['sampling_mode'],
-                                save_sample_path=sample_dir_train,
-                                coordinate_pert=training_settings['coordinate_pertubation'],
-                                index_range_source=training_settings['index_range_source'] if 'index_range_source' in training_settings else None,
-                                index_offset_target=training_settings['index_offset_target'] if 'index_offset_target' in training_settings else 0,
-                                rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False,
-                                sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
-                                lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
-                                rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False)
-    
-    dataset_val = NetCDFLoader_lazy(source_files_val, 
-                                target_files_val,
-                                training_settings['variables_source'],
-                                training_settings['variables_target'],
-                                dataset_train.norm_dict,
-                                random_region=random_region,
-                                p_dropout_source=training_settings['p_dropout_source'],
-                                p_dropout_target=training_settings['p_dropout_target'],
-                                sampling_mode=training_settings['sampling_mode'],
-                                save_sample_path=sample_dir_val,
-                                coordinate_pert=0,
-                                index_range_source=training_settings['index_range_source'] if 'index_range_source' in training_settings else None,
-                                index_offset_target=training_settings['index_offset_target'] if 'index_offset_target' in training_settings else 0,
-                                rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False,
-                                sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
-                                lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
-                                rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False)
-    
+        norm_dict = model_settings['normalization']
+    else:
 
-    
+        dataset_train = NetCDFLoader_lazy(source_files_train, 
+                                    target_files_train,
+                                    training_settings['variables_source'],
+                                    training_settings['variables_target'],
+                                    model_settings['normalization'],
+                                    random_region=random_region,
+                                    p_dropout_source=training_settings['p_dropout_source'],
+                                    p_dropout_target=training_settings['p_dropout_target'],
+                                    sampling_mode=training_settings['sampling_mode'],
+                                    save_nc_sample_path='',
+                                    save_tensor_sample_path=sample_dir_train,
+                                    coordinate_pert=training_settings['coordinate_pertubation'],
+                                    index_range_source=training_settings['index_range_source'] if 'index_range_source' in training_settings else None,
+                                    index_offset_target=training_settings['index_offset_target'] if 'index_offset_target' in training_settings else 0,
+                                    rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False,
+                                    sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
+                                    lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
+                                    rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False,
+                                    interpolation_size_s=model_settings['n_regular'][0],
+                                    range_target=model_settings['range_region_target_rad'])
+        
+        dataset_val = NetCDFLoader_lazy(source_files_val, 
+                                    target_files_val,
+                                    training_settings['variables_source'],
+                                    training_settings['variables_target'],
+                                    dataset_train.norm_dict,
+                                    random_region=random_region,
+                                    p_dropout_source=training_settings['p_dropout_source'],
+                                    p_dropout_target=training_settings['p_dropout_target'],
+                                    sampling_mode=training_settings['sampling_mode'],
+                                    save_nc_sample_path='',
+                                    save_tensor_sample_path=sample_dir_val,
+                                    coordinate_pert=0,
+                                    index_range_source=training_settings['index_range_source'] if 'index_range_source' in training_settings else None,
+                                    index_offset_target=training_settings['index_offset_target'] if 'index_offset_target' in training_settings else 0,
+                                    rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False,
+                                    sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
+                                    lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
+                                    rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False,
+                                    interpolation_size_s=model_settings['n_regular'][0],
+                                    range_target=model_settings['range_region_target_rad'])       
+
+        model_settings['normalization'] = norm_dict = dataset_train.norm_dict
+        model_settings_path = os.path.join(model_settings['model_dir'],'model_settings.json')
+        with open(model_settings_path, 'w') as f:
+            json.dump(model_settings, f, indent=4)
+
+        if len(sample_dir_train)>0:
+            with open(os.path.join(sample_dir_train,'norm_dict.json'), 'w') as f:
+                json.dump(norm_dict, f, indent=4)
+
+
     iterator_train = iter(DataLoader(dataset_train,
-                                     batch_size=batch_size,
-                                     sampler=InfiniteSampler(len(dataset_train)),
-                                     num_workers=training_settings['n_workers'], 
-                                     pin_memory=True if device == 'cuda' else False,
-                                     pin_memory_device=device))
+                                    batch_size=batch_size,
+                                    sampler=InfiniteSampler(len(dataset_train)),
+                                    num_workers=training_settings['n_workers'], 
+                                    pin_memory=True if device == 'cuda' else False,
+                                    pin_memory_device=device))
 
     iterator_val = iter(DataLoader(dataset_val,
                                     batch_size=batch_size,
@@ -367,12 +396,6 @@ def train(model, training_settings, model_settings={}):
                                     pin_memory=True if device == 'cuda' else False,
                                     pin_memory_device=device))
     
-
-    model_settings['normalization'] = dataset_train.norm_dict
-    model_settings_path = os.path.join(model_settings['model_dir'],'model_settings.json')
-    with open(model_settings_path, 'w') as f:
-        json.dump(model_settings, f, indent=4)
-
     model = model.to(device)
     
     calc_vort=False
@@ -430,11 +453,6 @@ def train(model, training_settings, model_settings={}):
     
     spatial_dim_var_target = model.model_settings['spatial_dims_var_target']
     
-    if 'fine_tuning' in training_settings.keys():
-        fine_tuning = training_settings['fine_tuning']
-    else:
-        fine_tuning = False
-
     if training_settings['multi_gpus']:
         model = torch.nn.DataParallel(model)
 
@@ -454,9 +472,9 @@ def train(model, training_settings, model_settings={}):
 
         model.train()
 
-        source, target, coords_source, coords_target, target_indices = [dict_to_device(x, device) for x in next(iterator_train)]
+        source, target, coords_source, coords_target, target_indices = [data_to_device(x, device) for x in next(iterator_train)]
 
-        output,_, output_reg_hr, non_valid_mask = model(source, coords_source, coords_target,fine_tuning=fine_tuning)
+        output,_, output_reg_hr, non_valid_mask = model(source, coords_target, coords_source=coords_source)
 
         optimizer.zero_grad()
 
@@ -493,10 +511,10 @@ def train(model, training_settings, model_settings={}):
 
             for _ in range(training_settings['n_iters_val']):
 
-                source, target, coords_source, coords_target, target_indices = [dict_to_device(x, device) for x in next(iterator_val)]
+                source, target, coords_source, coords_target, target_indices = [data_to_device(x, device) for x in next(iterator_val)]
 
                 with torch.no_grad():
-                    output, output_reg_lr, output_reg_hr, non_valid_mask = model(source, coords_source, coords_target)
+                    output, output_reg_lr, output_reg_hr, non_valid_mask = model(source, coords_target, coords_source=coords_source)
 
                     if calc_vort:
                         uv_dim_indices = target_indices[spatial_dim_uv]
@@ -548,14 +566,14 @@ def train(model, training_settings, model_settings={}):
 
 
         if n_iter % training_settings['save_model_interval'] == 0:
-            save_ckpt('{:s}/{:d}.pth'.format(ckpt_dir, n_iter), dataset_train.norm_dict,
+            save_ckpt('{:s}/{:d}.pth'.format(ckpt_dir, n_iter), norm_dict,
                       [(str(n_iter), n_iter, model, optimizer)])
 
         if training_settings['early_stopping'] and early_stop.terminate:
             model = early_stop.best_model
             break
 
-    save_ckpt('{:s}/best.pth'.format(ckpt_dir), dataset_train.norm_dict,
+    save_ckpt('{:s}/best.pth'.format(ckpt_dir), norm_dict,
               [(str(n_iter), n_iter, early_stop.best_model, optimizer)])
 
     writer.close()

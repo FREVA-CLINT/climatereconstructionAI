@@ -624,8 +624,8 @@ class random_region_generator_multi():
 def generate_region(coords, range_lon=None, range_lat=None, n_points=None, radius=None, locations=[], batch_size=1, rect=False, return_rotated_coords=False):
 
     if len(locations)==0:
-        seeds_lon = torch.randint(range_lon[0],range_lon[1], size=(batch_size,1))
-        seeds_lat = torch.randint(range_lat[0],range_lat[1], size=(batch_size,1))
+        seeds_lon = (range_lon[1] - range_lon[0]) * torch.rand(size=(batch_size,1))+range_lon[0]
+        seeds_lat = (range_lat[1] - range_lat[0]) * torch.rand(size=(batch_size,1))+range_lat[0]
     else:
         seeds_lon = locations[0]
         seeds_lat = locations[1]

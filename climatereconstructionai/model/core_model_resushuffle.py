@@ -172,7 +172,6 @@ class res_conn(nn.Module):
         super().__init__()
 
         out_channels = len(indices)
-       # out_channels_res = out_channels * upcale_factor**2
 
         self.indices = indices
 

@@ -3,8 +3,10 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 
 import scipy.interpolate as inter
+from ..utils import grid_utils as gu
 
 radius_earth = 6371
 
@@ -477,3 +479,323 @@ class lin_interpolator(nn.Module):
             out_tensor[sample_idx] = torch.tensor(LinInter(coord_target[0].cpu(), coord_target[1].cpu()))
 
         return out_tensor.to(self.device)
+    
+
+def normal(x, mu, s):
+    return torch.exp(-0.5*((x-mu)/s)**2)/(s*torch.tensor(math.sqrt(2*math.pi)))
+
+class nu_grid_sampler():
+
+    def __init__(self, n_res=90, s=0.5, nh=5, device='cpu'):
+        super().__init__()
+
+        nh_m = ((nh-1)/2) + 0.5
+
+        self.pixel_offset_normal = torch.linspace(nh_m, -nh_m, n_res).to(device)
+        self.pixel_offset_indices = torch.linspace(-(nh-1)//2, (nh-1)//2, nh).to(device)
+
+        self.device = device
+
+        self.s = s
+        self.n_res = n_res
+        self.nh = nh
+        self.softmax2d = nn.Softmax2d()
+
+    def __call__(self, x, coords):
+        b, n, nc = coords.shape
+        _, c, nx, ny = x.shape
+
+        if x.device != self.device:
+            self.pixel_offset_normal = self.pixel_offset_normal.to(x.device)
+            self.pixel_offset_indices = self.pixel_offset_indices.to(x.device)
+            self.device= x.device
+            
+        positionsx = (coords[:,:,1])*(x.shape[-2]-1)
+        positionsy = (coords[:,:,0])*(x.shape[-1]-1)    
+
+        #fine grid for normal distribution
+        p_x_o = positionsx.round().view(b,n,1) - self.pixel_offset_normal.view(1,-1)
+        p_y_o = positionsy.round().view(b,n,1) - self.pixel_offset_normal.view(1,-1)
+
+        p_x_o = torch.clamp(p_x_o, min=0, max=x.shape[-2])
+        p_y_o = torch.clamp(p_y_o, min=0, max=x.shape[-2])
+
+        weights_x = normal(p_x_o, positionsx.view(b,n,1), self.s)
+        weights_y = normal(p_y_o, positionsy.view(b,n,1), self.s)
+
+        weights_x = weights_x.reshape(x.shape[0], n, self.nh, self.n_res//self.nh).sum(axis=-1)
+        weights_y = weights_y.reshape(x.shape[0], n, self.nh, self.n_res//self.nh).sum(axis=-1)
+
+        weights_2d = torch.matmul(weights_x.view(b, n, self.nh, 1), weights_y.view(b,n,1,self.nh))
+        weights_2d = weights_2d/weights_2d.view(b,n,self.nh*self.nh).sum(dim=-1).view(b,n,1,1)
+        
+        #course grid for pixel locations
+        p_x_o = positionsx.round().view(b,n,1) - self.pixel_offset_indices.view(1,-1)
+        p_y_o = positionsy.round().view(b,n,1) - self.pixel_offset_indices.view(1,-1)
+
+        p_x_o = torch.clamp(p_x_o.round(), min=0, max=x.shape[-2]-1).long()
+        p_y_o = torch.clamp(p_y_o.round(), min=0, max=x.shape[-2]-1).long()
+
+        p_x_o = p_x_o.unsqueeze(dim=-1).repeat(1,1,1,self.nh)
+        p_y_o = p_y_o.unsqueeze(dim=-2).repeat(1,1,self.nh,1)
+
+        p_x_o = p_x_o.view(b,n*self.nh**2)
+        p_y_o = p_y_o.view(b,n*self.nh**2)
+
+        x = x.permute(2,3,0,1)[p_x_o, p_y_o]
+        x = x.permute(0,2,1,-1)
+
+        diag_m = torch.arange(b, device=x.device).long()
+        x = x[diag_m, diag_m]
+        x = x.permute(0,-1,1)
+
+        x = x.view(b,c,n,self.nh,self.nh)
+
+        x = x*weights_2d.unsqueeze(dim=1)
+
+        x = x.view(b, c, n, self.nh**2).sum(dim=-1)
+
+        return x
+        
+def scale_coords(coords, mn, mx):
+    coords_scaled = {}
+    non_valid = {}
+
+    for spatial_dim, coords_ in coords.items():
+        coords_scaled[spatial_dim] = (coords_ - mn)/(mx - mn)
+        non_valid[spatial_dim] = torch.logical_or(
+            torch.logical_or(coords_scaled[spatial_dim][:,0]>1, 
+                            coords_scaled[spatial_dim][:,0]<0),
+            torch.logical_or(coords_scaled[spatial_dim][:,1]>1, 
+                            coords_scaled[spatial_dim][:,1]<0))
+
+        if non_valid[spatial_dim].any():
+            pass
+        coords_scaled[spatial_dim] = torch.clamp(coords_scaled[spatial_dim], min=0, max=1)
+    return coords_scaled, non_valid
+
+
+def get_buckets_1d_batched(coords, n_q=2, equal_size=True):
+
+    if equal_size: 
+        keep =  coords.shape[-1] - coords.shape[-1] % (n_q)
+        coords = coords[:,:keep]
+
+    b,n = coords.shape
+
+    offset = coords.shape[0]*torch.arange(coords.shape[0], device=coords.device).view(-1,1)
+    coords = coords + offset
+
+    quants = torch.linspace(1/n_q, 1-1/n_q, n_q-1, device=coords.device)
+    qs = coords.quantile(quants, dim=-1)
+
+    o_b = (coords.shape[0]+1)/2
+    boundaries = torch.concat((offset.T-o_b, qs, offset.T+o_b))
+    
+    buckets = torch.bucketize(coords.flatten(), boundaries.flatten().sort().values, right=True)
+
+    qs = qs - offset.T
+
+    offset_buckets = boundaries.shape[0]*torch.arange(qs.shape[1], device=coords.device).view(-1,1)+1
+    
+    buckets = buckets.reshape(b,n) - offset_buckets
+
+    idx_sort = buckets.argsort(dim=1) 
+    
+    indices = torch.stack(idx_sort.chunk(n_q, dim=-1),dim=1)
+
+    return indices, qs, buckets
+
+
+def get_field(n_output, coords, source, f=8):
+    
+    x = y = torch.linspace(0, 1, n_output, device=coords.device)
+        
+    b,n1,n2,c,nf = source.shape
+    source_v = source.view(b,n1,n2,-1)
+
+    coords_inter = torch.nn.functional.interpolate(coords, scale_factor=f, mode="bilinear", align_corners=True)
+    source_inter = torch.nn.functional.interpolate(source_v.permute(0,-1,1,2), scale_factor=f, mode="bicubic", align_corners=True)
+    source_inter = source_inter.view(b,c,nf,source_inter.shape[-2],source_inter.shape[-1])
+
+
+    dev0 = ((coords_inter[:,[0]].unsqueeze(dim=-1) - x.view(1,-1))).abs()
+
+    _, ind0 = dev0.min(dim=2)
+
+    index_c = ind0.transpose(-2,-1).repeat(1,2,1,1)
+    coords_inter0 = torch.gather(coords_inter, dim=2, index=index_c)
+
+    source_inter = torch.gather(source_inter.mean(dim=1), dim=2, index=ind0.transpose(-2,-1).repeat(1,nf,1,1))
+
+    dev1 = ((coords_inter0[:,[1]].unsqueeze(dim=-1) - y.view(1,-1))).abs()
+    _, ind = dev1.min(dim=3)
+
+    source_inter = torch.gather(source_inter, dim=3, index=ind.repeat(1,nf,1,1))
+
+    return source_inter.transpose(-2,-1)
+
+
+
+def scale_coords_pad(coords, min_val, max_val):
+    c0 = coords[:,0]
+    c1 = coords[:,1]
+ 
+    scaled_c0 = (c0 - min_val)/(max_val-min_val)
+    scaled_c1 = (c1 - min_val)/(max_val-min_val)
+
+    mn0,mx0 = scaled_c0.min(dim=1).values, scaled_c0.max(dim=1).values
+    mn1,mx1 = scaled_c1.min(dim=-1).values, scaled_c1.max(dim=-1).values
+
+    zero_t = mn0.unsqueeze(dim=1) - 0.5
+    one_t = mx0.unsqueeze(dim=1) + 0.5
+    scaled_c0 = torch.concat((zero_t, scaled_c0, one_t),dim=1)
+    scaled_c0 = torch.concat((scaled_c0[:,:,[0]], scaled_c0, scaled_c0[:,:,[-1]]),dim=2)
+
+
+    zero_t = mn1.unsqueeze(dim=2) - 0.5
+    one_t = mx1.unsqueeze(dim=2) + 0.5
+    scaled_c1 = torch.concat((zero_t,scaled_c1, one_t),dim=2)
+    scaled_c1 = torch.concat((scaled_c1[:,[0]], scaled_c1, scaled_c1[:,[-1]]),dim=1)
+
+    return torch.stack((scaled_c0, scaled_c1), dim=1)
+
+
+
+def batch_coords(coords, n_q):
+
+    indices1, _, _ = get_buckets_1d_batched(coords[:,0], n_q, equal_size=True)
+
+    c = coords[:,0]
+    c1 = coords[:,1]
+
+    b,nb,n = indices1.shape
+
+    cs0 = torch.gather(c, dim=1, index=indices1.view(b,-1))
+    cs0 = cs0.view(b,nb,n)
+    cs1 = torch.gather(c1, dim=1, index=indices1.view(b,-1))
+    cs1 = cs1.view(b,nb,n)
+
+    b,n1,n = cs1.shape
+    indices, _, _ = get_buckets_1d_batched(cs1.view(b*n1,n), n_q, equal_size=True)
+    indices2 = indices.view(b,n1,n_q,-1)
+
+    b,n1,n2,n = indices2.shape
+    cs1_new = torch.gather(cs1, dim=2, index=indices2.view(b,n1,-1))
+    cs1_new = cs1_new.view(b,n1,n2,n)
+
+    cs0_new = torch.gather(cs0, dim=2, index=indices2.view(b,n1,-1))
+    cs0_new = cs0_new.view(b,n1,n2,n)
+
+
+    indices_tot = torch.gather(indices1, dim=-1, index=indices2.view(b,n1,n2*n)).view(b,n1,n2,n)
+    cs2 = torch.gather(coords, dim=2, index=indices_tot.view(b,1,-1).repeat(1,2,1))
+    cs2 = cs2.view(b,2,n1,n2,n)
+
+    cs2_m = cs2.median(dim=-1).values
+    #cs2_s = cs2.min(dim=-1).values
+    #cs2_e = cs2.max(dim=-1).values
+
+    return indices_tot, cs2_m
+
+
+class quant_discretizer():
+    def __init__(self, min_val, max_val, n) -> None: 
+        super().__init__()
+
+        self.min_nq = 16
+        self.min_f = 4
+        self.n_min = 8
+
+        self.min_val = min_val
+        self.max_val = max_val
+        self.n = n
+
+    def __call__(self, x, coords_source):
+                
+        n = x.shape[1]
+
+        n_q = int((x.shape[1] // self.n_min)**0.5)
+        n_q = self.min_nq if n_q < self.min_nq else n_q
+        n_q = self.n if n_q > self.n else n_q
+        f = (self.n // n_q) + 1
+        f = self.min_f if f < self.min_f else f
+
+        coords = coords_source
+        data = x
+
+        indices, cm = batch_coords(coords, n_q=n_q)
+        b,n1,n2,n = indices.shape
+
+        data_buckets  = torch.gather(data, dim=1, index=indices.view(b,-1,1).repeat(1,1,data.shape[-1]))
+        data_buckets = data_buckets.view(b,n1,n2,n,data.shape[-1])
+
+        scaled_m = scale_coords_pad(cm, self.min_val, self.max_val)
+
+        data = torch.concat((data_buckets[:,:,[0]], data_buckets, data_buckets[:,:,[-1]]),dim=2)
+        data = torch.concat((data[:,[0]], data, data[:,[-1]]),dim=1)
+
+        b,n1,n2,n,nf = data.shape
+        data = data.view(b,n1,n2,1,n*nf)
+
+        x = get_field(self.n, scaled_m, data, f=f)
+
+        b,_,n1,n2 = x.shape
+        x = x.view(b,n,nf,n1,n2)
+
+        return x
+    
+
+class unstructured_to_reg_qdiscretizer():
+    def __init__(self, output_dim, coord_range):
+        super().__init__()
+
+        self.discretizer = quant_discretizer(coord_range[0], coord_range[1], output_dim)
+
+
+    def __call__(self, x: dict, coords_source: dict, spatial_dim_var_dict: dict):
+
+        x_spatial_dims = []
+
+        for spatial_dim, vars in spatial_dim_var_dict.items():
+            data = torch.concat([x[var] for var in vars], dim=-1)
+            data_out = self.discretizer(data, coords_source[spatial_dim])
+            data_out = data_out.mean(dim=1)
+            x_spatial_dims.append(data_out)
+        x = torch.concat(x_spatial_dims, dim=1)
+
+        return x
+
+
+class unstructured_to_reg_interpolator():
+    def __init__(self, output_dim, coord_range):
+        super().__init__()
+
+        x = y = np.linspace(coord_range[0],
+                            coord_range[1],
+                            output_dim)
+        
+        self.inter = gu.grid_interpolator(x,y)
+
+    def __call__(self, x, coords_source, spatial_dim_var_dict):
+
+        x_spatial_dims = []
+        nh_mapping_iter = 0
+        for spatial_dim, vars in spatial_dim_var_dict.items():
+            for var in vars:
+                data = x[var]
+
+                if coords_source[spatial_dim].dim()>2:
+                    data_out = torch.stack([self.inter(data[idx,:,0], coords_source[spatial_dim][idx]) for idx in range(data.shape[0])])
+                else:
+                    data_out = self.inter(data[:,0], coords_source[spatial_dim])
+
+                x_spatial_dims.append(data_out)
+            nh_mapping_iter += 1
+
+        if coords_source[spatial_dim].dim()>2:
+            x = torch.stack(x_spatial_dims, dim=1)
+        else:
+            x = torch.stack(x_spatial_dims, dim=0)
+
+        return x

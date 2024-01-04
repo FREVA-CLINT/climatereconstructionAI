@@ -9,7 +9,8 @@ import numpy as np
 import torch
 import xarray as xr
 from torch.utils.data import Dataset, Sampler
-from .grid_utils import generate_region, PositionCalculator, get_coord_dict_from_var, get_coords_as_tensor, invert_dict, rotate_coord_system
+from .grid_utils import generate_region, PositionCalculator, get_coord_dict_from_var, get_coords_as_tensor, invert_dict
+from climatereconstructionai.model.transformer_helpers import unstructured_to_reg_interpolator
 from .normalizer import normalizer
 
 class InfiniteSampler(Sampler):
@@ -148,7 +149,8 @@ class NetCDFLoader_lazy(Dataset):
                  n_points_s=None, 
                  n_points_t=None, 
                  coordinate_pert=0,
-                 save_sample_path='',
+                 save_nc_sample_path='',
+                 save_tensor_sample_path='',
                  index_range_source=None,
                  index_offset_target=0,
                  rel_coords=False,
@@ -156,12 +158,12 @@ class NetCDFLoader_lazy(Dataset):
                  lazy_load=False,
                  rotate_cs=False,
                  interpolation_size_s=None,
-                 interpolation_size_t=None):
+                 interpolation_size_t=None,
+                 range_target=None):
         
         super(NetCDFLoader_lazy, self).__init__()
         
         self.PosCalc = PositionCalculator()
-        self.random = random.Random()
         self.variables_source = variables_source
         self.variables_target = variables_target
         self.normalization = normalization
@@ -172,7 +174,8 @@ class NetCDFLoader_lazy(Dataset):
         self.n_points_s = n_points_s
         self.n_points_t = n_points_t
         self.coordinate_pert = coordinate_pert
-        self.save_sample_path = save_sample_path
+        self.save_nc_sample_path = save_nc_sample_path
+        self.save_tensor_sample_path = save_tensor_sample_path
         self.index_range_source=index_range_source
         self.index_offset_target = index_offset_target
         self.rel_coords=rel_coords
@@ -181,6 +184,7 @@ class NetCDFLoader_lazy(Dataset):
         self.rotate_cs = rotate_cs
         self.interpolation_size_s = interpolation_size_s
         self.interpolation_size_t = interpolation_size_t
+        self.range_target = range_target
 
         self.flatten=False
 
@@ -220,7 +224,17 @@ class NetCDFLoader_lazy(Dataset):
         self.norm_dict = normalization
         self.normalizer = normalizer(self.norm_dict)
 
+        if self.interpolation_size_s is not None:
+            self.input_mapper_s = unstructured_to_reg_interpolator(
+                self.interpolation_size_s,
+                range_target
+                )
         
+        if self.interpolation_size_t is not None:
+            self.input_mapper_t = unstructured_to_reg_interpolator(
+                self.interpolation_size_t,
+                range_target
+                )
 
 
     def get_coordinates(self, ds, dims_variables_dict, seeds=[], n_drop_dict={}, p_drop=0, rotate_cs=False):
@@ -365,12 +379,12 @@ class NetCDFLoader_lazy(Dataset):
         ds_source = self.apply_spatial_dim_indices(ds_source, self.dims_variables_source, spatial_dim_indices_source, rel_coords_dict=rel_coords_dict_source)
         ds_target = self.apply_spatial_dim_indices(ds_target, self.dims_variables_target, spatial_dim_indices_target, rel_coords_dict=rel_coords_dict_target)
 
-        if len(self.save_sample_path)>0:
+        if len(self.save_nc_sample_path)>0:
             
-            save_path_source = os.path.join(self.save_sample_path, os.path.basename(file_path_source).replace('.nc', f'_{float(seeds[0]):.3f}_{float(seeds[1]):.3f}_source.nc'))
+            save_path_source = os.path.join(self.save_nc_sample_path, os.path.basename(file_path_source).replace('.nc', f'_{float(seeds[0]):.3f}_{float(seeds[1]):.3f}_source.nc'))
             ds_source.to_netcdf(save_path_source)
 
-            save_path_target = os.path.join(self.save_sample_path, os.path.basename(file_path_target).replace('.nc', f'_{float(seeds[0]):.3f}_{float(seeds[1]):.3f}_target.nc'))
+            save_path_target = os.path.join(self.save_nc_sample_path, os.path.basename(file_path_target).replace('.nc', f'_{float(seeds[0]):.3f}_{float(seeds[1]):.3f}_target.nc'))
             ds_target.to_netcdf(save_path_target)
 
         return ds_source, ds_target, seeds, spatial_dim_indices_target
@@ -434,7 +448,42 @@ class NetCDFLoader_lazy(Dataset):
             data_source = self.normalizer(data_source)
             data_target = self.normalizer(data_target)
 
+        if self.interpolation_size_s is not None:
+            data_source = self.input_mapper_s(data_source, rel_coords_source, self.dims_variables_source['spatial_dims_var'])
+            rel_coords_source = dict(zip(rel_coords_source.keys(),[torch.empty(0) for _ in rel_coords_source.values()]))
+
+        if self.interpolation_size_t is not None:
+            data_target = self.input_mapper_t(data_target, rel_coords_target, self.dims_variables_target['spatial_dims_var'])
+            rel_coords_target = dict(zip(rel_coords_target.keys(),[torch.empty(0) for _ in rel_coords_target.values()]))
+
+        if len(self.save_tensor_sample_path)>0:
+            save_path = os.path.join(self.save_tensor_sample_path, os.path.basename(source_file).replace('.nc', f'_{float(seeds[0]):.3f}_{float(seeds[1]):.3f}.pt'))
+            torch.save([data_source, data_target, rel_coords_source, rel_coords_target, spatial_dim_indices], save_path)
+
         return data_source, data_target, rel_coords_source, rel_coords_target, spatial_dim_indices
 
     def __len__(self):
         return self.num_datapoints_time
+
+
+class SampleLoader(Dataset):
+    def __init__(self, root_dir):
+        self.root_dir = root_dir
+        self.file_list = os.listdir(root_dir)
+
+    def __len__(self):
+        return len(self.file_list)
+
+    def __getitem__(self, idx):
+        valid_file = False
+
+        while not valid_file:
+            path = os.path.join(self.root_dir, self.file_list[idx])
+            if os.path.isfile(path):
+                try:
+                    data = torch.load(path, map_location='cpu')
+                    valid_file=True
+                except:
+                    idx = torch.randint(0,len(self.file_list), size=(1,))
+
+        return data

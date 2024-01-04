@@ -16,347 +16,17 @@ from ..utils.io import load_ckpt, load_model
 from ..utils import grid_utils as gu
 from ..utils.normalizer import normalizer
 
-def get_buckets_1d_batched(coords, n_q=2, equal_size=True):
-
-    if equal_size: 
-        keep =  coords.shape[-1] - coords.shape[-1] % (n_q)
-        coords = coords[:,:keep]
-
-    b,n = coords.shape
-
-    offset = coords.shape[0]*torch.arange(coords.shape[0], device=coords.device).view(-1,1)
-    coords = coords + offset
-
-    quants = torch.linspace(1/n_q, 1-1/n_q, n_q-1, device=coords.device)
-    qs = coords.quantile(quants, dim=-1)
-
-    o_b = (coords.shape[0]+1)/2
-    boundaries = torch.concat((offset.T-o_b, qs, offset.T+o_b))
-    
-    buckets = torch.bucketize(coords.flatten(), boundaries.flatten().sort().values, right=True)
-
-    qs = qs - offset.T
-
-    offset_buckets = boundaries.shape[0]*torch.arange(qs.shape[1], device=coords.device).view(-1,1)+1
-    
-    buckets = buckets.reshape(b,n) - offset_buckets
-
-    idx_sort = buckets.argsort(dim=1) 
-    
-    indices = torch.stack(idx_sort.chunk(n_q, dim=-1),dim=1)
-
-    return indices, qs, buckets
-
-
-def get_field(n_output, coords, source, f=8):
-    
-    x = y = torch.linspace(0, 1, n_output, device=coords.device)
-        
-    b,n1,n2,c,nf = source.shape
-    source_v = source.view(b,n1,n2,-1)
-
-    coords_inter = torch.nn.functional.interpolate(coords, scale_factor=f, mode="bilinear", align_corners=True)
-    source_inter = torch.nn.functional.interpolate(source_v.permute(0,-1,1,2), scale_factor=f, mode="bicubic", align_corners=True)
-    source_inter = source_inter.view(b,c,nf,source_inter.shape[-2],source_inter.shape[-1])
-
-
-    dev0 = ((coords_inter[:,[0]].unsqueeze(dim=-1) - x.view(1,-1))).abs()
-
-    _, ind0 = dev0.min(dim=2)
-
-    index_c = ind0.transpose(-2,-1).repeat(1,2,1,1)
-    coords_inter0 = torch.gather(coords_inter, dim=2, index=index_c)
-
-    source_inter = torch.gather(source_inter.mean(dim=1), dim=2, index=ind0.transpose(-2,-1).repeat(1,nf,1,1))
-
-    dev1 = ((coords_inter0[:,[1]].unsqueeze(dim=-1) - y.view(1,-1))).abs()
-    _, ind = dev1.min(dim=3)
-
-    source_inter = torch.gather(source_inter, dim=3, index=ind.repeat(1,nf,1,1))
-
-    return source_inter.transpose(-2,-1)
-
-
-def scale_coords2(coords, min_val, max_val):
-    c0 = coords[:,0]
-    c1 = coords[:,1]
  
-    scaled_c0 = (c0 - min_val)/(max_val-min_val)
-    scaled_c1 = (c1 - min_val)/(max_val-min_val)
-
-    mn0,mx0 = scaled_c0.min(dim=1).values, scaled_c0.max(dim=1).values
-    mn1,mx1 = scaled_c1.min(dim=-1).values, scaled_c1.max(dim=-1).values
-
-    zero_t = mn0.unsqueeze(dim=1) - 0.5
-    one_t = mx0.unsqueeze(dim=1) + 0.5
-    scaled_c0 = torch.concat((zero_t, scaled_c0, one_t),dim=1)
-    scaled_c0 = torch.concat((scaled_c0[:,:,[0]], scaled_c0, scaled_c0[:,:,[-1]]),dim=2)
-
-
-    zero_t = mn1.unsqueeze(dim=2) - 0.5
-    one_t = mx1.unsqueeze(dim=2) + 0.5
-    scaled_c1 = torch.concat((zero_t,scaled_c1, one_t),dim=2)
-    scaled_c1 = torch.concat((scaled_c1[:,[0]], scaled_c1, scaled_c1[:,[-1]]),dim=1)
-
-    return torch.stack((scaled_c0, scaled_c1), dim=1)
-
-
-def batch_coords(coords, n_q):
-
-    indices1, _, _ = get_buckets_1d_batched(coords[:,0], n_q, equal_size=True)
-
-    c = coords[:,0]
-    c1 = coords[:,1]
-
-    b,nb,n = indices1.shape
-
-    cs0 = torch.gather(c, dim=1, index=indices1.view(b,-1))
-    cs0 = cs0.view(b,nb,n)
-    cs1 = torch.gather(c1, dim=1, index=indices1.view(b,-1))
-    cs1 = cs1.view(b,nb,n)
-
-    b,n1,n = cs1.shape
-    indices, _, _ = get_buckets_1d_batched(cs1.view(b*n1,n), n_q, equal_size=True)
-    indices2 = indices.view(b,n1,n_q,-1)
-
-    b,n1,n2,n = indices2.shape
-    cs1_new = torch.gather(cs1, dim=2, index=indices2.view(b,n1,-1))
-    cs1_new = cs1_new.view(b,n1,n2,n)
-
-    cs0_new = torch.gather(cs0, dim=2, index=indices2.view(b,n1,-1))
-    cs0_new = cs0_new.view(b,n1,n2,n)
-
-
-    indices_tot = torch.gather(indices1, dim=-1, index=indices2.view(b,n1,n2*n)).view(b,n1,n2,n)
-    cs2 = torch.gather(coords, dim=2, index=indices_tot.view(b,1,-1).repeat(1,2,1))
-    cs2 = cs2.view(b,2,n1,n2,n)
-
-    cs2_m = cs2.median(dim=-1).values
-    #cs2_s = cs2.min(dim=-1).values
-    #cs2_e = cs2.max(dim=-1).values
-
-    return indices_tot, cs2_m
-
-
-class quant_discretizer(nn.Module):
-    def __init__(self, min_val, max_val, n) -> None: 
-        super().__init__()
-
-        self.min_nq = 16
-        self.min_f = 4
-        self.n_min = 8
-
-        self.min_val = min_val
-        self.max_val = max_val
-        self.n = n
-
-
-    def forward(self, x, coords_source):
-                
-        n = x.shape[1]
-
-        n_q = int((x.shape[1] // self.n_min)**0.5)
-        n_q = self.min_nq if n_q < self.min_nq else n_q
-        n_q = self.n if n_q > self.n else n_q
-        f = (self.n // n_q) + 1
-        f = self.min_f if f < self.min_f else f
-
-        coords = coords_source
-        data = x
-
-        indices, cm = batch_coords(coords, n_q=n_q)
-        b,n1,n2,n = indices.shape
-
-        data_buckets  = torch.gather(data, dim=1, index=indices.view(b,-1,1).repeat(1,1,data.shape[-1]))
-        data_buckets = data_buckets.view(b,n1,n2,n,data.shape[-1])
-
-        scaled_m = scale_coords2(cm, self.min_val, self.max_val)
-
-        data = torch.concat((data_buckets[:,:,[0]], data_buckets, data_buckets[:,:,[-1]]),dim=2)
-        data = torch.concat((data[:,[0]], data, data[:,[-1]]),dim=1)
-
-        b,n1,n2,n,nf = data.shape
-        data = data.view(b,n1,n2,1,n*nf)
-
-        x = get_field(self.n, scaled_m, data, f=f)
-
-        b,_,n1,n2 = x.shape
-        x = x.view(b,n,nf,n1,n2)
-
-        return x
-
-        
-class nu_grid_sample(nn.Module):
-    
-    def __init__(self, n_res=90, s=0.5, nh=5):
-        super().__init__()
-
-        nh_m = ((nh-1)/2) + 0.5
-
-        self.pixel_offset_normal = nn.Parameter(torch.linspace(nh_m, -nh_m, n_res), requires_grad=False)
-        self.pixel_offset_indices = nn.Parameter(torch.linspace(-(nh-1)//2, (nh-1)//2, nh).int(), requires_grad=False)
-
-        self.s = s
-        self.n_res = n_res
-        self.nh = nh
-        self.softmax2d = nn.Softmax2d()
-
-    def forward(self, x, coords):
-        b, n, nc = coords.shape
-        _, c, nx, ny = x.shape
-
-        positionsx = (coords[:,:,1])*(x.shape[-2]-1)
-        positionsy = (coords[:,:,0])*(x.shape[-1]-1)    
-
-        #fine grid for normal distribution
-        p_x_o = positionsx.round().view(b,n,1) - self.pixel_offset_normal.view(1,-1)
-        p_y_o = positionsy.round().view(b,n,1) - self.pixel_offset_normal.view(1,-1)
-
-        p_x_o = torch.clamp(p_x_o, min=0, max=x.shape[-2])
-        p_y_o = torch.clamp(p_y_o, min=0, max=x.shape[-2])
-
-        weights_x = normal(p_x_o, positionsx.view(b,n,1), self.s)
-        weights_y = normal(p_y_o, positionsy.view(b,n,1), self.s)
-
-        weights_x = weights_x.reshape(x.shape[0], n, self.nh, self.n_res//self.nh).sum(axis=-1)
-        weights_y = weights_y.reshape(x.shape[0], n, self.nh, self.n_res//self.nh).sum(axis=-1)
-
-        weights_2d = torch.matmul(weights_x.view(b, n, self.nh, 1), weights_y.view(b,n,1,self.nh))
-        weights_2d = weights_2d/weights_2d.view(b,n,self.nh*self.nh).sum(dim=-1).view(b,n,1,1)
-        
-        #course grid for pixel locations
-        p_x_o = positionsx.round().view(b,n,1) - self.pixel_offset_indices.view(1,-1)
-        p_y_o = positionsy.round().view(b,n,1) - self.pixel_offset_indices.view(1,-1)
-
-        p_x_o = torch.clamp(p_x_o.round(), min=0, max=x.shape[-2]-1).long()
-        p_y_o = torch.clamp(p_y_o.round(), min=0, max=x.shape[-2]-1).long()
-
-        p_x_o = p_x_o.unsqueeze(dim=-1).repeat(1,1,1,self.nh)
-        p_y_o = p_y_o.unsqueeze(dim=-2).repeat(1,1,self.nh,1)
-
-        p_x_o = p_x_o.view(b,n*self.nh**2)
-        p_y_o = p_y_o.view(b,n*self.nh**2)
-
-        x = x.permute(2,3,0,1)[p_x_o, p_y_o]
-        x = x.permute(0,2,1,-1)
-
-        diag_m = torch.arange(b, device=x.device).long()
-        x = x[diag_m, diag_m]
-        x = x.permute(0,-1,1)
-
-        x = x.view(b,c,n,self.nh,self.nh)
-
-        x = x*weights_2d.unsqueeze(dim=1)
-
-        x = x.view(b, c, n, self.nh**2).sum(dim=-1)
-
-        return x
-    
-
-class input_net(nn.Module):
-    def __init__(self, model_settings):
-        super().__init__()
-
-        self.spatial_dim_var_dict = model_settings['spatial_dims_var_source']
-
-        n_mappers = model_settings['n_input_groups']
-
-        self.nh_mapping = nn.ModuleList()
-
-        for n in range(n_mappers):
-            self.nh_mapping.append(
-                quant_discretizer(model_settings['range_region_target_rad'][0], model_settings['range_region_target_rad'][1], model_settings['n_regular'][0])
-            )    
-
-        self.gaussian_blur = GaussianBlur(5, sigma=0.3)
-
-    def forward(self, x: dict, coords_source: dict):
-
-        x_spatial_dims = []
-        nh_mapping_iter = 0
-        for spatial_dim, vars in self.spatial_dim_var_dict.items():
-            data = torch.concat([x[var] for var in vars], dim=-1)
-            data_out = self.nh_mapping[nh_mapping_iter](data, coords_source[spatial_dim])
-            data_out = data_out.mean(dim=1)
-            x_spatial_dims.append(data_out)
-            nh_mapping_iter += 1
-        x = torch.concat(x_spatial_dims, dim=1)
-        x = self.gaussian_blur(x)
-
-        return x
-    
-def normal(x, mu, s):
-    return torch.exp(-0.5*((x-mu)/s)**2)/(s*torch.tensor(math.sqrt(2*math.pi)))
-
-
-def scale_coords(coords, mn, mx):
-    coords_scaled = {}
-    non_valid = {}
-
-    for spatial_dim, coords_ in coords.items():
-        coords_scaled[spatial_dim] = (coords_ - mn)/(mx - mn)
-        non_valid[spatial_dim] = torch.logical_or(
-            torch.logical_or(coords_scaled[spatial_dim][:,0]>1, 
-                             coords_scaled[spatial_dim][:,0]<0),
-            torch.logical_or(coords_scaled[spatial_dim][:,1]>1, 
-                             coords_scaled[spatial_dim][:,1]<0))
-
-        if non_valid[spatial_dim].any():
-            pass
-        coords_scaled[spatial_dim] = torch.clamp(coords_scaled[spatial_dim], min=0, max=1)
-    return coords_scaled, non_valid
-
-
-class interpolation_net():
-    def __init__(self, s, nh, n):
-        super().__init__()
-
-        self.sample = nu_grid_sample(n_res=n,
-                                      s=s,
-                                      nh=nh)
-
-
-    def sample_coords(self, x, coords_target):
-
-        x = x.permute(0,3,1,2)
-
-        x = self.sample(x, coords_target.transpose(-2,-1))
-
-        x = x.permute(0,-1,1)
-
-        return x
-
-class interpolator(nn.Module):
-    def __init__(self, model_settings):
-        super().__init__()
-
-        self.spatial_dim_var_dict = model_settings['spatial_dims_var_source']
-        x = y = np.linspace(model_settings['range_region_target_rad'][0],
-                            model_settings['range_region_target_rad'][1],
-                            model_settings['n_regular'][0])
-        
-        self.inter = gu.grid_interpolator(x,y)
-
-    def forward(self, x, coords_source):
-
-        x_spatial_dims = []
-        nh_mapping_iter = 0
-        for spatial_dim, vars in self.spatial_dim_var_dict.items():
-            for var in vars:
-                data = x[var]
-                data_out = torch.stack([self.inter(data[idx,:,0], coords_source[spatial_dim][idx]) for idx in range(data.shape[0])])
-                x_spatial_dims.append(data_out)
-            nh_mapping_iter += 1
-        x = torch.stack(x_spatial_dims, dim=1)
-        return x
-
 class output_net(nn.Module):
     def __init__(self, model_settings, s, nh, n, use_gnlll=False):
         super().__init__()
 
         self.use_gnlll = use_gnlll
-        self.grid_to_target = interpolation_net(s, nh, n)
 
+        self.grid_to_target_sampler = helpers.nu_grid_sampler(n_res=n,
+                                      s=s,
+                                      nh=nh)
+        
         self.n_output_groups = model_settings['n_output_groups']
         self.output_dims = model_settings['output_dims']
         self.spatial_dim_var_dict = model_settings['spatial_dims_var_target']
@@ -377,21 +47,22 @@ class output_net(nn.Module):
         data_out = {}
         non_valid_mask_var = {}
 
-        x = torch.split(x, self.output_dims, dim=-1)
+        x = torch.split(x, self.output_dims, dim=1)
 
         idx = 0
         for spatial_dim, vars in self.spatial_dim_var_dict.items():
   
             data = x[idx]
-            data = self.grid_to_target.sample_coords(data, coords_target[spatial_dim])
+
+            data = self.grid_to_target_sampler(data, coords_target[spatial_dim].permute(0,2,1))
 
             if self.use_gnlll:
-                data = torch.split(data, len(vars), dim=-1)
-                data = torch.stack((self.activation_mu(data[0]), nn.functional.softplus(data[1])), dim=-1)
+                data = torch.split(data, len(vars), dim=1)
+                data = torch.stack((self.activation_mu(data[0]), nn.functional.softplus(data[1])), dim=2)
             else:
-                data = self.activation_mu(data).unsqueeze(dim=-1)
+                data = self.activation_mu(data).unsqueeze(dim=2)
             
-            data_out.update(dict(zip(vars, torch.split(data, 1, dim=2))))
+            data_out.update(dict(zip(vars, torch.split(data, 1, dim=1))))
 
             if non_valid_mask is not None:
                 non_valid_mask_var.update(dict(zip(vars, [non_valid_mask[spatial_dim]]*len(vars))))
@@ -426,12 +97,10 @@ class pyramid_step_model(nn.Module):
 
         self.predict_residual = self.model_settings['predict_residual']
         self.use_gnlll = self.model_settings['gauss']
-        # core models operate on grids
+        
         self.core_model = nn.Identity()
         
         self.create_grids()
-        
-        self.input_net = input_net(self.model_settings)
         
         model_settings_pre = self.model_settings
 
@@ -445,50 +114,40 @@ class pyramid_step_model(nn.Module):
                                           model_settings_pre["interpolation_sample_pts"],
                                           use_gnlll=self.use_gnlll)
         
-        self.interpolator = interpolator(self.model_settings)
-
         self.check_model_dir()
 
-        self.norm = nn.LayerNorm([self.model_settings['n_regular'][1], self.model_settings['n_regular'][1]], elementwise_affine=True) if self.model_settings["norm_pre_core"] else nn.Identity()
+        if 'input_type' not in self.model_settings.keys():
+            self.set_input_mapper(mode='interpolation')
+        else:
+            self.set_input_mapper(mode=self.model_settings['input_type'])
+     
         
-        
-    def forward(self, x, coords_source, coords_target, norm=False, fine_tuning=False):
+    def forward(self, x, coords_target, coords_source=None, norm=False):
         
         if norm:
             x = self.normalize(x)
 
-        if not fine_tuning and self.training:
-            x = self.input_net(x, coords_source)
-        else:
-            x = self.interpolator(x, coords_source)
+        if self.input_mapper is not None:
+            x = self.input_mapper(x, coords_source, self.model_settings['spatial_dims_var_source'])
 
         x_reg_lr = x
 
         if not isinstance(self.core_model, nn.Identity):
-            x = self.norm(x)
-
-            if self.time_dim:
-                x = x.unsqueeze(dim=1)
 
             x = self.core_model(x)
-
-            if self.time_dim:
-                x = x[:,0].permute(0,-2,-1,1)            
-            else:
-                x = x.permute(0,-2,-1,1)
             
             x_reg_hr = x
-            coords_target_hr, non_valid = scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])
+            coords_target_hr, non_valid = helpers.scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])
             x, non_valid = self.output_net_post(x, coords_target_hr, non_valid)
         else:
             x_reg_hr = x
             x = x.permute(0,-2,-1,1)
 
-            coords_target_hr, non_valid = scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])
+            coords_target_hr, non_valid = helpers.scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])
             x, non_valid = self.output_net_post(x[:,:,:,list(self.output_res_indices.values())], coords_target_hr, non_valid)
         
         if self.predict_residual and not isinstance(self.core_model, nn.Identity):
-            coords_target_lr = scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])[0]
+            coords_target_lr = helpers.scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])[0]
 
             x_reg_lr = x_reg_lr.permute(0,-2,-1,1)
             x_pre = self.output_net_pre(x_reg_lr[:,:,:,list(self.output_res_indices.values())], coords_target_lr)[0]
@@ -557,6 +216,22 @@ class pyramid_step_model(nn.Module):
     def set_normalizer(self):
         self.normalize = normalizer(self.model_settings['normalization'])
 
+    def set_input_mapper(self, mode=None):
+        if mode is None:
+            self.input_mapper = None
+
+        elif mode == 'quantdiscretizer':
+            self.input_mapper = helpers.unstructured_to_reg_qdiscretizer(
+                self.model_settings['n_regular'][0],
+                self.model_settings['range_region_target_rad']
+            )
+
+        elif mode == 'interpolation': 
+            self.input_mapper = helpers.unstructured_to_reg_interpolator(
+                self.model_settings['n_regular'][0],
+                self.model_settings['range_region_target_rad']
+            )
+
     # -> high-level models first, cache results, then fusion
     def apply_serial(self):
         pass
@@ -612,6 +287,8 @@ class pyramid_step_model(nn.Module):
         train_settings["variables_source"] = self.model_settings["variables_source"]
         train_settings["variables_target"] = self.model_settings["variables_target"]
         train_settings['model_dir'] = self.model_dir
+
+        self.set_input_mapper(mode=None)
 
         if optimization:
             trainer.train(self, train_settings, self.model_settings)
