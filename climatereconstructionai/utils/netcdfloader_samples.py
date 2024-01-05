@@ -498,8 +498,10 @@ class SampleLoader(Dataset):
 
     def __getitem__(self, idx):
         valid_file = False
+        self.file_list = os.listdir(self.root_dir)
 
         while not valid_file:
+            idx = torch.randint(0,len(self.file_list), size=(1,))
             path = os.path.join(self.root_dir, self.file_list[idx])
             if os.path.isfile(path):
                 try:
