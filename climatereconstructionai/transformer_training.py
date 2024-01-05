@@ -401,7 +401,7 @@ def train(model, training_settings, model_settings={}):
     iterator_val = iter(DataLoader(dataset_val,
                                     batch_size=batch_size,
                                     sampler=InfiniteSampler(len(dataset_val)),
-                                    num_workers=training_settings['n_workers'], 
+                                    num_workers=training_settings['n_workers'] if 'n_workers_val' not in training_settings.keys() else training_settings['n_workers_val'], 
                                     pin_memory=True if device == 'cuda' else False,
                                     pin_memory_device=device))
     
