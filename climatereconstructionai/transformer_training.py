@@ -357,7 +357,7 @@ def train(model, training_settings, model_settings={}):
                                     rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False,
                                     interpolation_size_s=model_settings['n_regular'][0],
                                     range_target=model_settings['range_region_target_rad'],
-                                    interpolation_method=model_settings['interpolation_method'] if 'interpolation_method' in model_settings else 'linear')
+                                    interpolation_method=model_settings['interpolation_method'] if 'interpolation_method' in model_settings else 'nearest')
         
         dataset_val = NetCDFLoader_lazy(source_files_val, 
                                     target_files_val,
@@ -379,7 +379,7 @@ def train(model, training_settings, model_settings={}):
                                     rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False,
                                     interpolation_size_s=model_settings['n_regular'][0],
                                     range_target=model_settings['range_region_target_rad'],
-                                    interpolation_method=model_settings['interpolation_method'] if 'interpolation_method' in model_settings else 'linear')
+                                    interpolation_method=model_settings['interpolation_method'] if 'interpolation_method' in model_settings else 'nearest')
 
         model_settings['normalization'] = norm_dict = dataset_train.norm_dict
 
