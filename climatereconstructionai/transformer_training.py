@@ -146,9 +146,12 @@ class GaussLoss(nn.Module):
         return loss
 
 class L1Loss(nn.Module):
-    def __init__(self):
+    def __init__(self, loss='l1'):
         super().__init__()
-        self.loss = torch.nn.L1Loss()
+        if loss=='l1':
+            self.loss = torch.nn.L1Loss()
+        else:
+            self.loss = torch.nn.MSELoss()
 
     def forward(self, output, target, non_valid_mask):
         output_valid = output[:,0,0][~non_valid_mask]
@@ -430,7 +433,10 @@ def train(model, training_settings, model_settings={}):
         loss_fcns.append(GaussLoss())
         factors.append(1)
     else:
-        loss_fcns.append(L1Loss())
+        if "loss" in training_settings.keys() and training_settings['loss']=="l2":
+            loss_fcns.append(L1Loss(loss='l2'))
+        else:
+            loss_fcns.append(L1Loss(loss='l1'))    
         factors.append(1)
 
     if "lambda_l1_rel" in training_settings.keys() and training_settings["lambda_l1_rel"]>0:
