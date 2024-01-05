@@ -761,14 +761,14 @@ class unstructured_to_reg_qdiscretizer():
 
 
 class unstructured_to_reg_interpolator():
-    def __init__(self, output_dim, coord_range):
+    def __init__(self, output_dim, coord_range, method='linear'):
         super().__init__()
 
         x = y = np.linspace(coord_range[0],
                             coord_range[1],
                             output_dim)
         
-        self.inter = gu.grid_interpolator(x,y)
+        self.inter = gu.grid_interpolator(x,y, method=method)
 
     def __call__(self, x, coords_source, spatial_dim_var_dict):
 

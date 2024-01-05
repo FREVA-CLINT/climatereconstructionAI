@@ -321,8 +321,15 @@ def train(model, training_settings, model_settings={}):
         sample_dir_val=''
 
     if 'train_on_samples' in training_settings.keys() and training_settings['train_on_samples']:
-        dataset_train = SampleLoader(sample_dir_train)
-        dataset_val = SampleLoader(sample_dir_val)
+
+        with open(os.path.join(sample_dir_train, 'dims_var_target.json'), 'r') as f:
+            dims_variables_target = json.load(f)
+
+        with open(os.path.join(sample_dir_train, 'dims_var_source.json'), 'r') as f:
+            dims_variables_source = json.load(f)
+
+        dataset_train = SampleLoader(sample_dir_train, dims_variables_source, dims_variables_target)
+        dataset_val = SampleLoader(sample_dir_val, dims_variables_source, dims_variables_target)
        
         with open(os.path.join(sample_dir_train,'norm_dict.json'), 'r') as f:
             norm_dict = json.load(f)
@@ -349,7 +356,8 @@ def train(model, training_settings, model_settings={}):
                                     lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
                                     rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False,
                                     interpolation_size_s=model_settings['n_regular'][0],
-                                    range_target=model_settings['range_region_target_rad'])
+                                    range_target=model_settings['range_region_target_rad'],
+                                    interpolation_method=model_settings['interpolation_method'] if 'interpolation_method' in model_settings else 'linear')
         
         dataset_val = NetCDFLoader_lazy(source_files_val, 
                                     target_files_val,
@@ -370,7 +378,8 @@ def train(model, training_settings, model_settings={}):
                                     lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
                                     rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False,
                                     interpolation_size_s=model_settings['n_regular'][0],
-                                    range_target=model_settings['range_region_target_rad'])       
+                                    range_target=model_settings['range_region_target_rad'],
+                                    interpolation_method=model_settings['interpolation_method'] if 'interpolation_method' in model_settings else 'linear')
 
         model_settings['normalization'] = norm_dict = dataset_train.norm_dict
 

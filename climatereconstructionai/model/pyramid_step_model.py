@@ -229,7 +229,8 @@ class pyramid_step_model(nn.Module):
         elif mode == 'interpolation': 
             self.input_mapper = helpers.unstructured_to_reg_interpolator(
                 self.model_settings['n_regular'][0],
-                self.model_settings['range_region_target_rad']
+                self.model_settings['range_region_target_rad'],
+                method=self.model_settings['interpolation_method'] if 'interpolation_method' in self.model_settings else 'nearest' 
             )
 
     # -> high-level models first, cache results, then fusion

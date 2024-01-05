@@ -159,7 +159,8 @@ class NetCDFLoader_lazy(Dataset):
                  rotate_cs=False,
                  interpolation_size_s=None,
                  interpolation_size_t=None,
-                 range_target=None):
+                 range_target=None,
+                 interpolation_method='nearest'):
         
         super(NetCDFLoader_lazy, self).__init__()
         
@@ -185,6 +186,7 @@ class NetCDFLoader_lazy(Dataset):
         self.interpolation_size_s = interpolation_size_s
         self.interpolation_size_t = interpolation_size_t
         self.range_target = range_target
+        self.interpolation_method = interpolation_method
 
         self.flatten=False
 
@@ -227,13 +229,15 @@ class NetCDFLoader_lazy(Dataset):
         if self.interpolation_size_s is not None:
             self.input_mapper_s = unstructured_to_reg_interpolator(
                 self.interpolation_size_s,
-                range_target
+                range_target,
+                method=interpolation_method
                 )
         
         if self.interpolation_size_t is not None:
             self.input_mapper_t = unstructured_to_reg_interpolator(
                 self.interpolation_size_t,
-                range_target
+                range_target,
+                method=interpolation_method
                 )
 
 
@@ -460,6 +464,15 @@ class NetCDFLoader_lazy(Dataset):
             save_path = os.path.join(self.save_tensor_sample_path, os.path.basename(source_file).replace('.nc', f'_{float(seeds[0]):.3f}_{float(seeds[1]):.3f}.pt'))
             torch.save([data_source, data_target, rel_coords_source, rel_coords_target, spatial_dim_indices], save_path)
 
+            dict_file = os.path.join(self.save_tensor_sample_path,'dims_var_source.json')
+            
+            if not os.path.isfile(dict_file):
+                with open(os.path.join(self.save_tensor_sample_path,'dims_var_source.json'), 'w') as f:
+                    json.dump(self.dims_variables_source, f, indent=4)
+
+                with open(os.path.join(self.save_tensor_sample_path,'dims_var_target.json'), 'w') as f:
+                    json.dump(self.dims_variables_target, f, indent=4)
+
         return data_source, data_target, rel_coords_source, rel_coords_target, spatial_dim_indices
 
     def __len__(self):
@@ -467,9 +480,18 @@ class NetCDFLoader_lazy(Dataset):
 
 
 class SampleLoader(Dataset):
-    def __init__(self, root_dir):
+    def __init__(self, root_dir, dims_variables_source, dims_variables_target):
         self.root_dir = root_dir
         self.file_list = os.listdir(root_dir)
+        sample_path = os.path.join(self.root_dir, self.file_list[0])
+        _, _, coords_source, coords_target, target_indices = torch.load(sample_path, map_location='cpu')
+
+        self.n_dict_source = dict(zip(coords_source.keys(),[val.shape[-1] for val in coords_source.values()]))
+        self.n_dict_target = dict(zip(coords_target.keys(),[val.shape[-1] for val in coords_target.values()]))
+        
+        self.dims_variables_source = dims_variables_source
+        self.dims_variables_target = dims_variables_target
+   
 
     def __len__(self):
         return len(self.file_list)
@@ -485,5 +507,29 @@ class SampleLoader(Dataset):
                     valid_file=True
                 except:
                     idx = torch.randint(0,len(self.file_list), size=(1,))
+
+        source, target, coords_source, coords_target, target_indices = data
+
+        n_dict_source_sample = dict(zip(coords_source.keys(),[val.shape[-1] for val in coords_source.values()]))
+        n_dict_target_sample = dict(zip(coords_target.keys(),[val.shape[-1] for val in coords_target.values()]))
+
+        for spatial_dim, n_pts_sample in n_dict_target_sample.items():
+            n_pts = self.n_dict_target[spatial_dim]
+
+            if n_pts_sample > n_pts:
+                indices = torch.randperm(n_pts)
+
+            elif n_pts_sample < n_pts:
+                indices = torch.randperm(n_pts_sample-1)[:(n_pts - n_pts_sample)]
+                indices = torch.concat((torch.arange(n_pts_sample), indices))
+            
+            else:
+                indices = torch.arange(n_pts_sample)
+
+            for var in self.dims_variables_target['spatial_dims_var'][spatial_dim]:
+                target[var] = target[var][indices]
+
+            target_indices[spatial_dim] = target_indices[spatial_dim][indices]
+            coords_target[spatial_dim] = coords_target[spatial_dim][:,indices]
 
         return data

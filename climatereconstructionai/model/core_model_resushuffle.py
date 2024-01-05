@@ -176,7 +176,7 @@ class res_conn(nn.Module):
         self.indices = indices
 
         if upcale_factor>1:
-            self.up = nn.Upsample(scale_factor=upcale_factor, mode='bicubic', align_corners=True)
+            self.up = nn.Upsample(scale_factor=upcale_factor, mode='bicubic', align_corners=False)
         else:
             self.up = nn.Identity()
 
