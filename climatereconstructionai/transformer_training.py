@@ -120,7 +120,7 @@ class physics_calculator():
 
         vort = ((normalVelocity_con*edge_length_con)*signorient_con).sum(axis=-1)/dual_area_con
 
-        vort = vort.view(b,-1,1,1)
+        vort = vort.view(b,1,1,-1)
 
         coords_v = self.coords_v[:,v_indices].transpose(1,0)
         return vort, coords_v, mask
@@ -129,8 +129,8 @@ def add_vorticity(vort_cal, tensor_dict, global_edge_indices):
     u = tensor_dict['u']
     v = tensor_dict['v']
 
-    u = u[:,:,:,0] if u.dim()==4 else u
-    v = v[:,:,:,0] if v.dim()==4 else v
+    u = u[:,0,0] if u.dim()==4 else u
+    v = v[:,0,0] if v.dim()==4 else v
     tensor_dict['vort'], coords_vort, non_valid_mask = vort_cal.get_vorticity_from_edge_indices(global_edge_indices, u, v)
     return tensor_dict, non_valid_mask, coords_vort
 
@@ -170,7 +170,7 @@ class L1Loss(nn.Module):
 
     def forward(self, output, target, non_valid_mask):
         output_valid = output[:,0,0][~non_valid_mask]
-        target_valid = target[~non_valid_mask].squeeze()
+        target_valid = target.squeeze()[~non_valid_mask].squeeze()
         loss = self.loss(output_valid,target_valid)
         return loss
 
