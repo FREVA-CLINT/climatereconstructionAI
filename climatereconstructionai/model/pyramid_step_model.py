@@ -95,9 +95,9 @@ class pyramid_step_model(nn.Module):
             if len(var_in_source)==1:
                 self.output_res_indices[var_target] = var_in_source[0]
 
-        self.predict_residual = self.model_settings['predict_residual']
+        self.residual_in_core = self.model_settings['residual_in_core']
         self.use_gnlll = self.model_settings['gauss']
-        
+
         self.core_model = nn.Identity()
         
         self.create_grids()
@@ -123,7 +123,7 @@ class pyramid_step_model(nn.Module):
      
         
     def forward(self, x, coords_target, coords_source=None, norm=False):
-        
+    
         if norm:
             x = self.normalize(x)
 
@@ -137,20 +137,17 @@ class pyramid_step_model(nn.Module):
             x = self.core_model(x)
             
             x_reg_hr = x
-            coords_target_hr, non_valid = helpers.scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])
-            x, non_valid = self.output_net_post(x, coords_target_hr, non_valid)
+            coords_target_hr, non_valid = helpers.scale_coords(coords_target, self.range_region_target_radx, rngy=self.range_region_target_rady)
+            x, non_valid_var = self.output_net_post(x, coords_target_hr, non_valid)
+
         else:
             x_reg_hr = x
-            x = x.permute(0,-2,-1,1)
+            coords_target_hr, non_valid = helpers.scale_coords(coords_target, self.range_region_target_radx, rngy=self.range_region_target_rady)
+            x, non_valid_var = self.output_net_post(x[:,list(self.output_res_indices.values()),:,:], coords_target_hr, non_valid)
 
-            coords_target_hr, non_valid = helpers.scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])
-            x, non_valid = self.output_net_post(x[:,:,:,list(self.output_res_indices.values())], coords_target_hr, non_valid)
         
-        if self.predict_residual and not isinstance(self.core_model, nn.Identity):
-            coords_target_lr = helpers.scale_coords(coords_target, self.range_region_target_rad[0], self.range_region_target_rad[1])[0]
-
-            x_reg_lr = x_reg_lr.permute(0,-2,-1,1)
-            x_pre = self.output_net_pre(x_reg_lr[:,:,:,list(self.output_res_indices.values())], coords_target_lr)[0]
+        if not self.residual_in_core and not isinstance(self.core_model, nn.Identity):
+            x_pre = self.output_net_pre(x_reg_lr[:,list(self.output_res_indices.values()),:,:], coords_target_hr, non_valid)[0]
 
             for var in self.output_res_indices.keys():
                 if self.use_gnlll:
@@ -163,9 +160,14 @@ class pyramid_step_model(nn.Module):
         if norm:
             x = self.normalize(x, denorm=True)
 
-        return x, x_reg_lr, x_reg_hr, non_valid
+        return x, x_reg_lr, x_reg_hr, non_valid_var
 
     def check_model_dir(self):
+        if 'km' not in self.model_settings.keys():
+            self.model_settings['km']=False
+
+        self.km = self.model_settings['km']
+
         self.model_dir = self.model_settings['model_dir']
 
         model_settings_path = os.path.join(self.model_dir,'model_settings.json')
@@ -184,6 +186,7 @@ class pyramid_step_model(nn.Module):
             json.dump(self.model_settings, f, indent=4)
 
 
+
     def set_training_configuration(self, train_settings=None):
         self.train_settings = load_settings(train_settings, id='train')
 
@@ -194,24 +197,29 @@ class pyramid_step_model(nn.Module):
 
 
     def create_grids(self):
-        # dependend on resolution and fov
-        # "static"
-        #
+       
         self.radius_region_source_km = self.model_settings['radius_region_source_km']
-        self.range_region_source_rad = [-self.radius_region_source_km/(6371), self.radius_region_source_km/(6371)]
-
         self.radius_region_target_km = self.model_settings['radius_region_target_km']
-        self.range_region_target_rad = [-self.radius_region_target_km/(6371), self.radius_region_target_km/(6371)]
 
+        if self.model_settings['km']:
+            self.range_region_source_radx = [-self.radius_region_source_km/(6371), self.radius_region_source_km/(6371)]
+            self.range_region_target_radx = [-self.radius_region_target_km/(6371), self.radius_region_target_km/(6371)]
+
+            self.range_region_source_rady = self.range_region_source_radx
+            self.range_region_target_rady = self.range_region_target_radx
+        else:
+            self.range_region_source_radx = [-math.pi, math.pi]
+            self.range_region_target_radx = [-math.pi, math.pi]
+
+            self.range_region_source_rady = [-math.pi/2, math.pi/2]
+            self.range_region_target_rady = [-math.pi/2, math.pi/2]
+ 
         self.n_in, self.n_out = self.model_settings['n_regular']
 
-        self.grid_size_in = (2*self.radius_region_source_km)/self.n_in
-        self.grid_size_out = (2*self.radius_region_target_km)/self.n_out
-
-        self.model_settings['range_region_source_rad'] = self.range_region_source_rad
-        self.model_settings['range_region_target_rad'] = self.range_region_target_rad
-        self.model_settings['grid_size_in'] = self.grid_size_in
-        self.model_settings['grid_size_out'] = self.grid_size_out
+        self.model_settings['range_region_source_radx'] = self.range_region_source_radx
+        self.model_settings['range_region_target_radx'] = self.range_region_target_radx
+        self.model_settings['range_region_source_rady'] = self.range_region_source_rady
+        self.model_settings['range_region_target_rady'] = self.range_region_target_rady
 
     def set_normalizer(self):
         self.normalize = normalizer(self.model_settings['normalization'])
@@ -229,7 +237,8 @@ class pyramid_step_model(nn.Module):
         elif mode == 'interpolation': 
             self.input_mapper = helpers.unstructured_to_reg_interpolator(
                 self.model_settings['n_regular'][0],
-                self.model_settings['range_region_target_rad'],
+                self.model_settings['range_region_target_radx'],
+                self.model_settings['range_region_target_rady'],
                 method=self.model_settings['interpolation_method'] if 'interpolation_method' in self.model_settings else 'nearest' 
             )
 
@@ -241,23 +250,41 @@ class pyramid_step_model(nn.Module):
     def apply_parallel(self):
         pass
     
-    def get_region_generator_settings(self):
-        region_gen_dict = {
-                'rect_source': False,
-                'radius_source': self.radius_region_source_km,
-                'rect_target': False,
-                'radius_target': self.radius_region_target_km,
-                "lon_range": [
-                        -180,
-                        180
-                    ],
-                    "lat_range": [
-                        -90,
-                        90
-                    ],
-                "batch_size": 1,
-                "generate_interval": 1
-            }
+    def get_region_generator_settings(self, lon_trans=False):
+        if lon_trans:
+            region_gen_dict = {
+                    'rect_source': False,
+                    'radius_source': -1,
+                    'rect_target': False,
+                    'radius_target': -1,
+                    "lon_range": [
+                            -180,
+                            180
+                        ],
+                        "lat_range": [
+                            -0,
+                            0.0001
+                        ],
+                    "batch_size": 1,
+                    "generate_interval": 1
+                }
+        else:
+            region_gen_dict = {
+                    'rect_source': False,
+                    'radius_source': self.radius_region_source_km,
+                    'rect_target': False,
+                    'radius_target': self.radius_region_target_km,
+                    "lon_range": [
+                            -180,
+                            180
+                        ],
+                        "lat_range": [
+                            -90,
+                            90
+                        ],
+                    "batch_size": 1,
+                    "generate_interval": 1
+                }
         return region_gen_dict
 
     
@@ -280,14 +307,27 @@ class pyramid_step_model(nn.Module):
         if "use_samples" in train_settings.keys() and train_settings["use_samples"]:
             train_settings["rel_coords"]=True
         else:
-            if "random_region" not in self.train_settings.keys():
+            if "random_region" not in self.train_settings.keys() and self.model_settings['km']:
                 train_settings["random_region"] = self.get_region_generator_settings()
-
+            
+            if 'lon_trans' in self.train_settings.keys() and self.train_settings['lon_trans']:
+                train_settings["random_region"] = self.get_region_generator_settings(lon_trans=True)
 
         train_settings["gauss_loss"] = self.model_settings['gauss'] 
         train_settings["variables_source"] = self.model_settings["variables_source"]
         train_settings["variables_target"] = self.model_settings["variables_target"]
         train_settings['model_dir'] = self.model_dir
+
+        interpolation_dict = {
+            'interpolate_source': True,
+            'interpolate_target': False,
+            'interpolation_size_s': self.n_in,
+            'range_source_x': self.range_region_source_radx,
+            'range_source_y': self.range_region_source_rady,
+            'interpolation_method': self.model_settings['interpolation_method'] if 'interpolation_method' in self.model_settings else 'nearest' 
+            }
+
+        train_settings['interpolation'] = interpolation_dict
 
         self.set_input_mapper(mode=None)
 

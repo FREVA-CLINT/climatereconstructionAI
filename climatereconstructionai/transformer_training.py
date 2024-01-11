@@ -13,7 +13,7 @@ from .utils import twriter_t, early_stopping
 from .utils.io import save_ckpt
 from .utils.netcdfloader_samples import NetCDFLoader_lazy, InfiniteSampler, SampleLoader
 
-class vorticity_calculator():
+class physics_calculator():
     def __init__(self, grid_file_path, device='cpu') -> None:
         
         self.device=device
@@ -133,6 +133,21 @@ def add_vorticity(vort_cal, tensor_dict, global_edge_indices):
     v = v[:,:,:,0] if v.dim()==4 else v
     tensor_dict['vort'], coords_vort, non_valid_mask = vort_cal.get_vorticity_from_edge_indices(global_edge_indices, u, v)
     return tensor_dict, non_valid_mask, coords_vort
+
+
+class AscentFunction(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, input):
+        return input
+
+    @staticmethod
+    def backward(ctx, grad_input):
+        return -grad_input
+
+def make_ascent(loss):
+    return AscentFunction.apply(loss)
+
+
 
 class GaussLoss(nn.Module):
     def __init__(self):
@@ -358,9 +373,7 @@ def train(model, training_settings, model_settings={}):
                                     sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
                                     lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
                                     rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False,
-                                    interpolation_size_s=model_settings['n_regular'][0],
-                                    range_target=model_settings['range_region_target_rad'],
-                                    interpolation_method=model_settings['interpolation_method'] if 'interpolation_method' in model_settings else 'nearest')
+                                    interpolation_dict=training_settings['interpolation'])
         
         dataset_val = NetCDFLoader_lazy(source_files_val, 
                                     target_files_val,
@@ -380,9 +393,7 @@ def train(model, training_settings, model_settings={}):
                                     sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
                                     lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
                                     rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False,
-                                    interpolation_size_s=model_settings['n_regular'][0],
-                                    range_target=model_settings['range_region_target_rad'],
-                                    interpolation_method=model_settings['interpolation_method'] if 'interpolation_method' in model_settings else 'nearest')
+                                    interpolation_dict=training_settings['interpolation'])
 
         model_settings['normalization'] = norm_dict = dataset_train.norm_dict
 
@@ -419,10 +430,16 @@ def train(model, training_settings, model_settings={}):
     
     if 'vort' in lambdas.keys() and lambdas['vort']>0:
         calc_vort=True
- 
+    
+    dw_train = False
+
+    if 'dw_train' in training_settings.keys() and training_settings['dw_train']:
+        dw_train = True
+        lambdas = dict(zip(lambdas.keys(), [torch.nn.Parameter(torch.tensor(val, dtype=float), requires_grad=True) if val>0 else torch.nn.Parameter(torch.tensor(val, dtype=float), requires_grad=False) for val in lambdas.values()]))
+
     if calc_vort and 'grid_file' in training_settings.keys() and len(training_settings['grid_file']):
         calc_vort = True
-        vort_calc = vorticity_calculator(training_settings['grid_file'], device=device)
+        vort_calc = physics_calculator(training_settings['grid_file'], device=device)
     else:
         calc_vort = False
 
@@ -462,6 +479,9 @@ def train(model, training_settings, model_settings={}):
     
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=training_settings['lr'])
 
+    if dw_train:
+         optimizer2 = torch.optim.Adam(filter(lambda p: p.requires_grad, lambdas.values()), lr=0.003)
+
     lr_scheduler = CosineWarmupScheduler(optimizer, training_settings["T_warmup"], training_settings['max_iter'])
 
     start_iter = 0
@@ -476,7 +496,7 @@ def train(model, training_settings, model_settings={}):
     train_losses_save = []
     val_losses_save = []
     lrs = []
-
+    lrs = []
     for i in pbar:
      
         n_iter = i + 1
@@ -487,11 +507,9 @@ def train(model, training_settings, model_settings={}):
 
         model.train()
 
-        source, target, coords_source, coords_target, target_indices = [data_to_device(x, device) for x in next(iterator_train)]
+        source, target, coords_source, coords_target, source_indices, target_indices = [data_to_device(x, device) for x in next(iterator_train)]
 
         output,_, output_reg_hr, non_valid_mask = model(source, coords_target, coords_source=coords_source)
-
-        optimizer.zero_grad()
 
         if calc_vort:
             spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
@@ -502,15 +520,28 @@ def train(model, training_settings, model_settings={}):
             if 'vort' not in target.keys():
                 target = add_vorticity(vort_calc, target, uv_dim_indices)[0]
 
-        loss, train_loss_dict = dict_loss_fcn(output, target, non_valid_mask, lambdas)
-
         if calc_reg_loss:
             reg_loss = f_tv*loss_fcn_reg(output_reg_hr)
             loss += reg_loss
             train_loss_dict['reg_loss'] = reg_loss.item()
 
-     #   loss += reg_loss_fcn(output, target, coords_target)
-        loss.backward()
+        loss, train_loss_dict = dict_loss_fcn(output, target, non_valid_mask, lambdas)
+
+        optimizer.zero_grad()
+        if dw_train and i>2 and loss.item() < train_losses_save[-1] and train_losses_save[-1] < train_losses_save[-2]:
+            
+            loss.backward(retain_graph=True) 
+
+            dw_loss = make_ascent(loss)
+
+            optimizer2.zero_grad()
+            dw_loss.backward(retain_graph=True)
+            optimizer2.step()
+
+            writer.update_scalars(dict(zip(lambdas.keys(),[val.item() for val in lambdas.values()])), n_iter, 'train')
+        
+        else:
+            loss.backward() 
 
         train_losses_save.append(loss.item())
         train_loss_dict['total'] = loss.item()
@@ -526,7 +557,7 @@ def train(model, training_settings, model_settings={}):
 
             for _ in range(training_settings['n_iters_val']):
 
-                source, target, coords_source, coords_target, target_indices = [data_to_device(x, device) for x in next(iterator_val)]
+                source, target, coords_source, coords_target, source_indices, target_indices = [data_to_device(x, device) for x in next(iterator_val)]
 
                 with torch.no_grad():
                     output, output_reg_lr, output_reg_hr, non_valid_mask = model(source, coords_target, coords_source=coords_source)

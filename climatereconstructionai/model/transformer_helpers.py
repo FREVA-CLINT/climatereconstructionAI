@@ -499,7 +499,7 @@ class nu_grid_sampler(nn.Module):
         self.nh = nh
         self.softmax2d = nn.Softmax2d()
 
-    def forward(self, x, coords):
+    def forward(self, x, coords, return_sum=True):
         b, n, nc = coords.shape
         _, c, nx, ny = x.shape
 
@@ -544,18 +544,24 @@ class nu_grid_sampler(nn.Module):
 
         x = x.view(b,c,n,self.nh,self.nh)
 
-        x = x*weights_2d.unsqueeze(dim=1)
-
-        x = x.view(b, c, n, self.nh**2).sum(dim=-1)
+        
+        if return_sum:
+            x = x*weights_2d.unsqueeze(dim=1)
+            x = x.view(b, c, n, self.nh**2).sum(dim=-1)
+        else:
+            x = x.view(b, c, n, self.nh**2)
 
         return x
         
-def scale_coords(coords, mn, mx):
+def scale_coords(coords, rngx, rngy=None):
     coords_scaled = {}
     non_valid = {}
 
+    if rngy is None:
+        rngy=rngx
+
     for spatial_dim, coords_ in coords.items():
-        coords_scaled[spatial_dim] = (coords_ - mn)/(mx - mn)
+        coords_scaled[spatial_dim] = torch.stack([(coords_[:,0] - rngx[0])/(rngx[1] - rngx[0]), (coords_[:,1] - rngy[0])/(rngy[1] - rngy[0])], dim=1)
         non_valid[spatial_dim] = torch.logical_or(
             torch.logical_or(coords_scaled[spatial_dim][:,0]>1, 
                             coords_scaled[spatial_dim][:,0]<0),
@@ -761,12 +767,17 @@ class unstructured_to_reg_qdiscretizer():
 
 
 class unstructured_to_reg_interpolator():
-    def __init__(self, output_dim, coord_range, method='linear'):
+    def __init__(self, output_dim, coord_rangex, coord_rangey, method='linear'):
         super().__init__()
-
-        x = y = np.linspace(coord_range[0],
-                            coord_range[1],
-                            output_dim)
+   
+        x = np.linspace(coord_rangex[0],
+                        coord_rangex[1],
+                        output_dim)
+        
+        y = np.linspace(coord_rangey[0],
+                        coord_rangey[1],
+                        output_dim)
+       
         
         self.inter = gu.grid_interpolator(x,y, method=method)
 

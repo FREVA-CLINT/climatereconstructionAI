@@ -437,6 +437,15 @@ def get_regions(lons, lats, seeds_lon, seeds_lat, radius_region=None, n_points=N
 
     return distances_regions, indices_regions, lons_regions, lats_regions
 
+def v_spherical_to_cart(u: torch.tensor, v: torch.tensor, lon: torch.tensor, lat: torch.tensor):
+
+
+    vx = (torch.cos(lat) * torch.sin(lon)).view(1,-1)*u - (torch.sin(lat) * torch.cos(lon)).view(1,-1)*v
+    vy = (torch.sin(lat) * torch.sin(lon)).view(1,-1)*v - (torch.cos(lat) * torch.cos(lon)).view(1,-1)*u
+    vz = -(torch.cos(lat)).view(1,-1)*v
+
+    return vx,vy,vz
+
 
 def rotate_coord_system(lons: torch.tensor, lats: torch.tensor, rotation_lon: torch.tensor, rotation_lat: torch.tensor):
 
@@ -630,10 +639,19 @@ def generate_region(coords, range_lon=None, range_lat=None, n_points=None, radiu
         seeds_lon = locations[0]
         seeds_lat = locations[1]
 
-
-    distances_regions, indices_regions, lons_regions, lats_regions = get_regions(coords['lon'], coords['lat'], seeds_lon, seeds_lat, radius_region=radius, n_points=n_points, in_deg=True, rect=rect, return_rotated_coords=return_rotated_coords)
-    n_points = len(distances_regions)
-    radius = distances_regions.max()
+    if radius > -1:
+        distances_regions, indices_regions, lons_regions, lats_regions = get_regions(coords['lon'], coords['lat'], seeds_lon, seeds_lat, radius_region=radius, n_points=n_points, in_deg=True, rect=rect, return_rotated_coords=return_rotated_coords)
+        n_points = len(distances_regions)
+        radius = distances_regions.max()
+    
+    else:
+        lons_regions, lats_regions = rotate_coord_system(coords['lon'], coords['lat'], seeds_lon, seeds_lat)
+        lons_regions = lons_regions.T
+        lats_regions = lats_regions.T
+        n_points = lons_regions.shape[0]
+        indices_regions = torch.arange((n_points), dtype=int)
+        radius = -1
+        distances_regions = 0
 
     out_dict = {'distances': distances_regions,
                 'indices': indices_regions,

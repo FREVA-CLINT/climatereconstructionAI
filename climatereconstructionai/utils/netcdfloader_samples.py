@@ -157,10 +157,7 @@ class NetCDFLoader_lazy(Dataset):
                  sample_for_norm=-1,
                  lazy_load=False,
                  rotate_cs=False,
-                 interpolation_size_s=None,
-                 interpolation_size_t=None,
-                 range_target=None,
-                 interpolation_method='nearest'):
+                 interpolation_dict=None):
         
         super(NetCDFLoader_lazy, self).__init__()
         
@@ -183,11 +180,30 @@ class NetCDFLoader_lazy(Dataset):
         self.sample_for_norm = sample_for_norm
         self.lazy_load=lazy_load
         self.rotate_cs = rotate_cs
-        self.interpolation_size_s = interpolation_size_s
-        self.interpolation_size_t = interpolation_size_t
-        self.range_target = range_target
-        self.interpolation_method = interpolation_method
+  
+        if interpolation_dict is not None:
+                 
+            if interpolation_dict is not None:
 
+                self.interpolate_source = interpolation_dict['interpolate_source']
+                self.interpolate_target = interpolation_dict['interpolate_target']
+
+                if interpolation_dict['interpolate_target']:
+                    self.input_mapper_t = unstructured_to_reg_interpolator(
+                        interpolation_dict['interpolation_size_t'],
+                        interpolation_dict['range_target_x'],
+                        interpolation_dict['range_target_y'],
+                        method=interpolation_dict['interpolation_method']
+                        )
+                    
+                if interpolation_dict['interpolate_source']:
+                    self.input_mapper_s = unstructured_to_reg_interpolator(
+                        interpolation_dict['interpolation_size_s'],
+                        interpolation_dict['range_source_x'],
+                        interpolation_dict['range_source_y'],
+                        method=interpolation_dict['interpolation_method']
+                        )
+ 
         self.flatten=False
 
         if random_region is not None:
@@ -226,20 +242,6 @@ class NetCDFLoader_lazy(Dataset):
         self.norm_dict = normalization
         self.normalizer = normalizer(self.norm_dict)
 
-        if self.interpolation_size_s is not None:
-            self.input_mapper_s = unstructured_to_reg_interpolator(
-                self.interpolation_size_s,
-                range_target,
-                method=interpolation_method
-                )
-        
-        if self.interpolation_size_t is not None:
-            self.input_mapper_t = unstructured_to_reg_interpolator(
-                self.interpolation_size_t,
-                range_target,
-                method=interpolation_method
-                )
-
 
     def get_coordinates(self, ds, dims_variables_dict, seeds=[], n_drop_dict={}, p_drop=0, rotate_cs=False):
 
@@ -273,11 +275,14 @@ class NetCDFLoader_lazy(Dataset):
                                               rect=rect,
                                               return_rotated_coords=rotate_cs)
                 
+
                 coords = torch.stack([region_dict['lon'],region_dict['lat']], dim=0)
+
                 seeds = region_dict['locations']
                 global_indices = region_dict['indices'].squeeze()
                 
             else:
+                seeds = [0,0]
                 global_indices = torch.arange(coords.shape[1])
 
             indices = torch.arange(coords.shape[1])
@@ -391,7 +396,7 @@ class NetCDFLoader_lazy(Dataset):
             save_path_target = os.path.join(self.save_nc_sample_path, os.path.basename(file_path_target).replace('.nc', f'_{float(seeds[0]):.3f}_{float(seeds[1]):.3f}_target.nc'))
             ds_target.to_netcdf(save_path_target)
 
-        return ds_source, ds_target, seeds, spatial_dim_indices_target
+        return ds_source, ds_target, seeds, spatial_dim_indices_source, spatial_dim_indices_target
 
 
     def get_data(self, ds, index, dims_variables_dict, seeds):
@@ -406,13 +411,6 @@ class NetCDFLoader_lazy(Dataset):
             for var in vars:
                 data_var = torch.tensor(ds[var][index].values).squeeze()
                 data[var] = data_var.unsqueeze(dim=-1)
-
-     #       if len(seeds)>0 and self.rotate_cs and 'u' in vars:
-     #           u_rad, v_rad = data['u']/(6371000), data['v']/6371000
-     #           mag = (u_rad**2+v_rad**2).sqrt()
-     #          u_rad, v_rad = u_rad/mag,v_rad/mag
-     #           u_rad, v_rad = rotate_coord_system(u_rad, v_rad, seeds[0].deg2rad(),seeds[1].deg2rad())
-     #           data['u'], data['v'] = mag*u_rad*6371000, mag*v_rad*6371000
 
         return data, coords
 
@@ -443,7 +441,7 @@ class NetCDFLoader_lazy(Dataset):
         elif self.sampling_mode=='paired':
             target_file = self.files_target[source_index]
 
-        ds_source, ds_target, seeds, spatial_dim_indices = self.get_files(source_file, file_path_target=target_file)
+        ds_source, ds_target, seeds, spatial_dim_indices_source, spatial_dim_indices_target = self.get_files(source_file, file_path_target=target_file)
 
         data_source, rel_coords_source = self.get_data(ds_source, index, self.dims_variables_source, seeds)
         data_target, rel_coords_target = self.get_data(ds_target, index_target, self.dims_variables_target, seeds)
@@ -452,17 +450,17 @@ class NetCDFLoader_lazy(Dataset):
             data_source = self.normalizer(data_source)
             data_target = self.normalizer(data_target)
 
-        if self.interpolation_size_s is not None:
+        if self.interpolate_source:
             data_source = self.input_mapper_s(data_source, rel_coords_source, self.dims_variables_source['spatial_dims_var'])
             rel_coords_source = dict(zip(rel_coords_source.keys(),[torch.empty(0) for _ in rel_coords_source.values()]))
 
-        if self.interpolation_size_t is not None:
+        if self.interpolate_target:
             data_target = self.input_mapper_t(data_target, rel_coords_target, self.dims_variables_target['spatial_dims_var'])
             rel_coords_target = dict(zip(rel_coords_target.keys(),[torch.empty(0) for _ in rel_coords_target.values()]))
 
         if len(self.save_tensor_sample_path)>0:
             save_path = os.path.join(self.save_tensor_sample_path, os.path.basename(source_file).replace('.nc', f'_{float(seeds[0]):.3f}_{float(seeds[1]):.3f}.pt'))
-            torch.save([data_source, data_target, rel_coords_source, rel_coords_target, spatial_dim_indices], save_path)
+            torch.save([data_source, data_target, rel_coords_source, rel_coords_target, spatial_dim_indices_target], save_path)
 
             dict_file = os.path.join(self.save_tensor_sample_path,'dims_var_source.json')
             
@@ -473,7 +471,7 @@ class NetCDFLoader_lazy(Dataset):
                 with open(os.path.join(self.save_tensor_sample_path,'dims_var_target.json'), 'w') as f:
                     json.dump(self.dims_variables_target, f, indent=4)
 
-        return data_source, data_target, rel_coords_source, rel_coords_target, spatial_dim_indices
+        return data_source, data_target, rel_coords_source, rel_coords_target, spatial_dim_indices_source, spatial_dim_indices_target
 
     def __len__(self):
         return self.num_datapoints_time
@@ -484,7 +482,7 @@ class SampleLoader(Dataset):
         self.root_dir = root_dir
         self.file_list = os.listdir(root_dir)
         sample_path = os.path.join(self.root_dir, self.file_list[0])
-        _, _, coords_source, coords_target, target_indices = torch.load(sample_path, map_location='cpu')
+        _, _, coords_source, coords_target, source_indices, target_indices = torch.load(sample_path, map_location='cpu')
 
         self.n_dict_source = dict(zip(coords_source.keys(),[val.shape[-1] for val in coords_source.values()]))
         self.n_dict_target = dict(zip(coords_target.keys(),[val.shape[-1] for val in coords_target.values()]))
@@ -498,7 +496,6 @@ class SampleLoader(Dataset):
 
     def __getitem__(self, idx):
         valid_file = False
-        #self.file_list = os.listdir(self.root_dir)
 
         while not valid_file:
             idx = torch.randint(0,len(self.file_list), size=(1,))
@@ -510,7 +507,7 @@ class SampleLoader(Dataset):
                 except:
                     idx = torch.randint(0,len(self.file_list), size=(1,))
 
-        source, target, coords_source, coords_target, target_indices = data
+        source, target, coords_source, coords_target, source_indices, target_indices = data
 
         n_dict_source_sample = dict(zip(coords_source.keys(),[val.shape[-1] for val in coords_source.values()]))
         n_dict_target_sample = dict(zip(coords_target.keys(),[val.shape[-1] for val in coords_target.values()]))
