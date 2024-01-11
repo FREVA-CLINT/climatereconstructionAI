@@ -220,15 +220,14 @@ class DictLoss(nn.Module):
         self.factor_list = factor_list
 
 
-    def forward(self, output, target, non_valid_mask, lambdas):
+    def forward(self, output, target, non_valid_mask, lambdas, lambdas_m):
         loss_dict = {}
         total_loss = 0
 
         for k, loss_fcn in enumerate(self.loss_fcns):
             f = self.factor_list[k]
             for var in output.keys():
-                lambda_var = lambdas[var]
-                loss = lambda_var*f*loss_fcn(output[var], target[var], non_valid_mask[var])
+                loss = lambdas[var]*lambdas_m[var]*f*loss_fcn(output[var], target[var], non_valid_mask[var])
                 loss_dict[f'{var}_{str(loss_fcn._get_name())}'] = loss.item()
                 total_loss+=loss
 
@@ -432,10 +431,11 @@ def train(model, training_settings, model_settings={}):
         calc_vort=True
     
     dw_train = False
+    lambdas_m = dict(zip(lambdas.keys(), [1. for _ in lambdas.values()]))
 
     if 'dw_train' in training_settings.keys() and training_settings['dw_train']:
         dw_train = True
-        lambdas = dict(zip(lambdas.keys(), [torch.nn.Parameter(torch.tensor(val, dtype=float), requires_grad=True) if val>0 else torch.nn.Parameter(torch.tensor(val, dtype=float), requires_grad=False) for val in lambdas.values()]))
+        lambdas_m = dict(zip(lambdas_m.keys(), [torch.nn.Parameter(torch.tensor(val, dtype=float), requires_grad=True) if val>0 else torch.nn.Parameter(torch.tensor(val, dtype=float), requires_grad=False) for val in lambdas_m.values()]))
 
     if calc_vort and 'grid_file' in training_settings.keys() and len(training_settings['grid_file']):
         calc_vort = True
@@ -480,7 +480,7 @@ def train(model, training_settings, model_settings={}):
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=training_settings['lr'])
 
     if dw_train:
-         optimizer2 = torch.optim.Adam(filter(lambda p: p.requires_grad, lambdas.values()), lr=0.003)
+         optimizer2 = torch.optim.Adam(filter(lambda p: p.requires_grad, lambdas_m.values()), lr=training_settings['lr_w'])
 
     lr_scheduler = CosineWarmupScheduler(optimizer, training_settings["T_warmup"], training_settings['max_iter'])
 
@@ -525,7 +525,7 @@ def train(model, training_settings, model_settings={}):
             loss += reg_loss
             train_loss_dict['reg_loss'] = reg_loss.item()
 
-        loss, train_loss_dict = dict_loss_fcn(output, target, non_valid_mask, lambdas)
+        loss, train_loss_dict = dict_loss_fcn(output, target, non_valid_mask, lambdas, lambdas_m)
 
         optimizer.zero_grad()
         if dw_train and i>2 and loss.item() < train_losses_save[-1] and train_losses_save[-1] < train_losses_save[-2]:
@@ -538,7 +538,7 @@ def train(model, training_settings, model_settings={}):
             dw_loss.backward(retain_graph=True)
             optimizer2.step()
 
-            writer.update_scalars(dict(zip(lambdas.keys(),[val.item() for val in lambdas.values()])), n_iter, 'train')
+            writer.update_scalars(dict(zip(lambdas.keys(),[val.item() for val in lambdas_m.values()])), n_iter, 'train')
         
         else:
             loss.backward() 
@@ -571,7 +571,7 @@ def train(model, training_settings, model_settings={}):
                             target = add_vorticity(vort_calc, target, uv_dim_indices)[0]
                     else:
                         coords_vort = None
-                    loss, val_loss_dict = dict_loss_fcn(output, target, non_valid_mask, lambdas)
+                    loss, val_loss_dict = dict_loss_fcn(output, target, non_valid_mask, lambdas, lambdas_m)
 
                     if calc_reg_loss:
                         reg_loss = f_tv*loss_fcn_reg(output_reg_hr)
