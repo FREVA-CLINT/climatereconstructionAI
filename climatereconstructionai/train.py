@@ -52,10 +52,10 @@ def train(arg_file=None):
                                cfg.time_steps, cfg.steady_masks)
     iterator_train = iter(DataLoader(dataset_train, batch_size=cfg.batch_size,
                                      sampler=InfiniteSampler(len(dataset_train)),
-                                     num_workers=cfg.n_threads))
+                                     num_workers=cfg.n_threads, persistent_workers=True))
     iterator_val = iter(DataLoader(dataset_val, batch_size=cfg.batch_size,
                                    sampler=InfiniteSampler(len(dataset_val)),
-                                   num_workers=cfg.n_threads))
+                                   num_workers=cfg.n_threads, persistent_workers=True))
 
     image_sizes = dataset_train.img_sizes
     if cfg.conv_factor is None:
