@@ -508,7 +508,7 @@ def train(model, training_settings, model_settings={}):
 
         model.train()
 
-        source, target, coords_source, coords_target, target_indices = [data_to_device(x, device) for x in next(iterator_train)]
+        source, target, coords_source, coords_target, _, target_indices = [data_to_device(x, device) for x in next(iterator_train)]
 
         output,_, output_reg_hr, non_valid_mask = model(source, coords_target, coords_source=coords_source)
 
@@ -559,7 +559,7 @@ def train(model, training_settings, model_settings={}):
 
             for _ in range(training_settings['n_iters_val']):
 
-                source, target, coords_source, coords_target, target_indices = [data_to_device(x, device) for x in next(iterator_val)]
+                source, target, coords_source, coords_target, _, target_indices = [data_to_device(x, device) for x in next(iterator_val)]
 
                 with torch.no_grad():
                     output, output_reg_lr, output_reg_hr, non_valid_mask = model(source, coords_target, coords_source=coords_source)
