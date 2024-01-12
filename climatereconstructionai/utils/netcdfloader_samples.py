@@ -507,7 +507,7 @@ class SampleLoader(Dataset):
                 except:
                     idx = torch.randint(0,len(self.file_list), size=(1,))
 
-        source, target, coords_source, coords_target, source_indices, target_indices = data
+        source, target, coords_source, coords_target, target_indices = data
 
         n_dict_source_sample = dict(zip(coords_source.keys(),[val.shape[-1] for val in coords_source.values()]))
         n_dict_target_sample = dict(zip(coords_target.keys(),[val.shape[-1] for val in coords_target.values()]))
