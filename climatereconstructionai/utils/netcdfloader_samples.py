@@ -482,7 +482,7 @@ class SampleLoader(Dataset):
         self.root_dir = root_dir
         self.file_list = os.listdir(root_dir)
         sample_path = os.path.join(self.root_dir, self.file_list[0])
-        _, _, coords_source, coords_target, _, _ = torch.load(sample_path, map_location='cpu')
+        _, _, coords_source, coords_target, _ = torch.load(sample_path, map_location='cpu')
 
         self.n_dict_source = dict(zip(coords_source.keys(),[val.shape[-1] for val in coords_source.values()]))
         self.n_dict_target = dict(zip(coords_target.keys(),[val.shape[-1] for val in coords_target.values()]))
