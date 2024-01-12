@@ -6,9 +6,15 @@ import math
     
   
 class res_net_block(nn.Module):
-    def __init__(self, hw, in_channels, out_channels, k_size=3, batch_norm=True, stride=1, groups=1, dropout=0, with_att=False, with_res=True, bias=True, out_activation=True):
+    def __init__(self, hw, in_channels, out_channels, k_size=3, batch_norm=True, stride=1, groups=1, dropout=0, with_att=False, with_res=True, bias=True, out_activation=True, global_padding=False):
         super().__init__()
 
+      #  if global_padding:
+      #      self.pad_lon = nn.functional.pad() CircularPad2d((0,0,0,k_size // 2))
+      #      self.pad_lat = nn.ReplicationPad2d((0,0,k_size // 2,0))
+      #      padding = 0
+      #  else:
+       #     self.pad_lon = self.pad_lat = nn.Identity()
         padding = k_size // 2
 
         self.conv1 = nn.Conv2d(in_channels, out_channels, stride=stride, padding=padding, kernel_size=k_size, padding_mode='replicate',groups=groups, bias=bias)
@@ -33,6 +39,8 @@ class res_net_block(nn.Module):
             self.att = helpers.ConvSelfAttention(out_channels, hw, n_heads=4)
 
     def forward(self, x):
+      #  x = self.pad_lon(self.pad_lat(x))
+
         if self.with_res:
             x_res = self.reduction(x)
 
@@ -186,7 +194,7 @@ class out_net(nn.Module):
         else:
             self.upsample_res = self.upsample_out = nn.Identity()
         
-        self.out_layer = res_net_block(hw_in, len(output_indices), len(output_indices), k_size=5, batch_norm=False, groups=len(output_indices), dropout=0, with_res=True, with_att=False, bias=False, out_activation=False)
+        self.out_layer = res_net_block(hw_in, len(output_indices), len(output_indices), k_size=3, batch_norm=False, groups=len(output_indices), dropout=0, with_res=True, with_att=False, bias=False, out_activation=False)
 
         self.global_residual = global_residual
         
@@ -227,7 +235,6 @@ class ResUNet(nn.Module):
         x, layer_outputs = self.encoder(x)
         x = self.mid(x)
         x = self.decoder(x, layer_outputs)
-
         x = self.out_net(x, x_res)
 
         return x
