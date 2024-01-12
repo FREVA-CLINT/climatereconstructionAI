@@ -6,7 +6,7 @@ import math
     
   
 class res_net_block(nn.Module):
-    def __init__(self, hw, in_channels, out_channels, k_size=3, batch_norm=True, stride=1, groups=1, dropout=0, with_att=False, with_res=True, bias=True):
+    def __init__(self, hw, in_channels, out_channels, k_size=3, batch_norm=True, stride=1, groups=1, dropout=0, with_att=False, with_res=True, bias=True, out_activation=True):
         super().__init__()
 
         padding = k_size // 2
@@ -26,7 +26,7 @@ class res_net_block(nn.Module):
         self.dropout2 = nn.Dropout(dropout) if dropout>0 else nn.Identity()
 
         self.activation1 = nn.SiLU()
-        self.activation2 = nn.SiLU()
+        self.activation2 = nn.SiLU() if out_activation else nn.Identity()
 
         self.with_att = with_att
         if with_att:
@@ -167,36 +167,39 @@ class mid(nn.Module):
         return x
     
 
-class res_conn(nn.Module):
-    def __init__(self, input_indices, output_indices, hw_in, hw_out):
+class out_net(nn.Module):
+    def __init__(self, input_indices, output_indices, hw_in, hw_out, global_residual=True):
         super().__init__()
 
         self.input_indices = input_indices
         self.output_indices = output_indices
 
-        if hw_in > hw_out:
+        if hw_in > hw_out and global_residual:
             upcale_factor = hw_in // hw_out
             self.upsample_out = nn.Upsample(scale_factor=upcale_factor, mode='bicubic', align_corners=False)
             self.upsample_res = nn.Identity()
-          #  self.out_layer = res_net_block(hw_in, len(output_indices), len(output_indices), k_size=5, batch_norm=False, groups=len(output_indices), dropout=0, with_res=True, with_att=False)
 
-        elif hw_in < hw_out:
+        elif hw_in < hw_out and global_residual:
             upcale_factor = hw_out // hw_in
             self.upsample_res = nn.Upsample(scale_factor=upcale_factor, mode='bicubic', align_corners=False)
             self.upsample_out = nn.Identity()
-            #self.out_layer = res_net_block(hw_in, len(output_indices), len(output_indices), k_size=5, batch_norm=False, groups=len(output_indices), dropout=0, with_res=True, with_att=False)
         else:
             self.upsample_res = self.upsample_out = nn.Identity()
-        self.out_layer = nn.Identity()
+        
+        self.out_layer = res_net_block(hw_in, len(output_indices), len(output_indices), k_size=5, batch_norm=False, groups=len(output_indices), dropout=0, with_res=True, with_att=False, bias=False, out_activation=False)
+
+        self.global_residual = global_residual
         
         
     def forward(self, x, x_res):
 
         x_res = self.upsample_res(x_res[:,self.input_indices,:,:])
         x = self.upsample_out(x)
-        x[:,self.output_indices] = x[:,self.output_indices] + x_res
 
-        x = self.out_layer(x)
+        if self.global_residual:
+            x[:,self.output_indices] = self.out_layer(x[:,self.output_indices]) + x_res
+        else:
+            x[:,self.output_indices] = self.out_layer(x[:,self.output_indices])
 
         return x
 
@@ -213,13 +216,8 @@ class ResUNet(nn.Module):
         input_indices = res_indices
         output_indices = torch.arange(len(res_indices)) * (out_channels // len(res_indices))
 
-        self.residual = residual
-
-        if residual:
-            self.res_conn = res_conn(input_indices, output_indices, hw_in, hw_out)
-        else:
-            self.res_conn = nn.Identity()
-
+        self.out_net = out_net(input_indices, output_indices, hw_in, hw_out, global_residual=residual)
+  
         hw_mid = hw_in // (input_stride*2**(n_levels-1))
         self.mid = mid(hw_mid, n_res_blocks, model_dim_unet*(4**(n_levels-1)), with_att=True)
 
@@ -230,8 +228,7 @@ class ResUNet(nn.Module):
         x = self.mid(x)
         x = self.decoder(x, layer_outputs)
 
-        if self.residual:
-            x = self.res_conn(x, x_res)
+        x = self.out_net(x, x_res)
 
         return x
 
