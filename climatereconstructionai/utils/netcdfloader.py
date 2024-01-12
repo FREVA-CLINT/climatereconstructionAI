@@ -11,7 +11,7 @@ from .normalizer import img_normalization, bnd_normalization
 from .. import config as cfg
 
 
-def load_steadymask(path, mask_names, data_types, device):
+def load_steadymask(path, mask_names, data_types):
     if mask_names is None:
         return None
     else:
@@ -22,9 +22,11 @@ def load_steadymask(path, mask_names, data_types, device):
             assert len(mask_names) == cfg.n_target_data
             steady_mask = load_netcdf(path, mask_names, data_types[-cfg.n_target_data:])[0]
 
-        # XXX need to increase steady_mask by n_pred_steps
-        # stack + squeeze ensures that it works with steady masks with one timestep or no timestep
-        return torch.stack([torch.from_numpy(np.array(mask)).to(device) for mask in steady_mask]).squeeze()
+        steady_mask = torch.stack([torch.from_numpy(np.array(mask)) for mask in steady_mask])
+        # squeeze time dimension if any
+        if steady_mask.ndim == 4:
+            steady_mask = steady_mask.squeeze(axis=1)
+        return steady_mask
 
 
 class InfiniteSampler(Sampler):
@@ -151,7 +153,7 @@ class NetCDFLoader(Dataset):
 
         self.bounds = bnd_normalization(self.img_mean, self.img_std)
 
-        self.steady_mask = load_steadymask(mask_root, steady_masks, data_types, cfg.device)
+        self.steady_mask = load_steadymask(mask_root, steady_masks, data_types)
 
     def load_data(self, ind_data, img_indices, mask_indices):
 
@@ -218,9 +220,9 @@ class NetCDFLoader(Dataset):
 
             if i >= ndata - cfg.n_target_data:
                 images.append(image[cfg.out_steps])
-                out_masks.append(self.create_out_mask(mask, i))
+                out_masks.append(self.create_out_mask(mask, i - ndata + cfg.n_target_data))
             else:
-                if cfg.n_target_data == 0:
+                if cfg.n_target_data == 0 and i < cfg.n_output_data:
                     images.append(image[cfg.out_steps])
                     out_masks.append(self.create_out_mask(mask, i))
                 in_masks.append(mask[cfg.in_steps])
@@ -228,12 +230,10 @@ class NetCDFLoader(Dataset):
 
         if cfg.channel_steps:
             return torch.cat(masked, dim=0).transpose(0, 1), torch.cat(in_masks, dim=0).transpose(0, 1), \
-                   torch.cat(out_masks[:cfg.n_output_data], dim=0).transpose(0, 1), \
-                   torch.cat(images[:cfg.n_output_data], dim=0).transpose(0, 1), index
+                   torch.cat(out_masks, dim=0).transpose(0, 1), torch.cat(images, dim=0).transpose(0, 1), index
         else:
             return torch.cat(masked, dim=1), torch.cat(in_masks, dim=1), \
-                   torch.cat(out_masks[:cfg.n_output_data], dim=0).transpose(0, 1), \
-                   torch.cat(images[:cfg.n_output_data], dim=0).transpose(0, 1), index
+                   torch.cat(out_masks, dim=0).transpose(0, 1), torch.cat(images, dim=0).transpose(0, 1), index
 
     def __len__(self):
         return self.img_length
