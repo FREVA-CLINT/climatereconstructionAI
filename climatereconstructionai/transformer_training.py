@@ -481,6 +481,7 @@ def train(model, training_settings, model_settings={}):
 
     if dw_train:
          optimizer2 = torch.optim.Adam(filter(lambda p: p.requires_grad, lambdas_m.values()), lr=training_settings['lr_w'])
+         lr_scheduler2 = CosineWarmupScheduler(optimizer2, training_settings["T_warmup"], training_settings['max_iter'])
 
     lr_scheduler = CosineWarmupScheduler(optimizer, training_settings["T_warmup"], training_settings['max_iter'])
 
@@ -519,13 +520,13 @@ def train(model, training_settings, model_settings={}):
 
             if 'vort' not in target.keys():
                 target = add_vorticity(vort_calc, target, uv_dim_indices)[0]
+        
+        loss, train_loss_dict = dict_loss_fcn(output, target, non_valid_mask, lambdas, lambdas_m)
 
         if calc_reg_loss:
             reg_loss = f_tv*loss_fcn_reg(output_reg_hr)
             loss += reg_loss
             train_loss_dict['reg_loss'] = reg_loss.item()
-
-        loss, train_loss_dict = dict_loss_fcn(output, target, non_valid_mask, lambdas, lambdas_m)
 
         optimizer.zero_grad()
         if dw_train and i>2 and loss.item() < train_losses_save[-1] and train_losses_save[-1] < train_losses_save[-2]:
@@ -537,6 +538,7 @@ def train(model, training_settings, model_settings={}):
             optimizer2.zero_grad()
             dw_loss.backward()
             optimizer2.step()
+            lr_scheduler2.step()
 
             writer.update_scalars(dict(zip(lambdas.keys(),[val.item() for val in lambdas_m.values()])), n_iter, 'train')
         
