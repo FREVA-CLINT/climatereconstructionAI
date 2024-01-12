@@ -435,7 +435,7 @@ def train(model, training_settings, model_settings={}):
 
     if 'dw_train' in training_settings.keys() and training_settings['dw_train']:
         dw_train = True
-        lambdas_m = dict(zip(lambdas_m.keys(), [torch.nn.Parameter(torch.tensor(val, dtype=float), requires_grad=True) if val>0 else torch.nn.Parameter(torch.tensor(val, dtype=float), requires_grad=False) for val in lambdas_m.values()]))
+        lambdas_m = dict(zip(lambdas_m.keys(), [torch.nn.Parameter(torch.tensor(val, dtype=float), requires_grad=val>0) for val in lambdas_m.values()]))
 
     if calc_vort and 'grid_file' in training_settings.keys() and len(training_settings['grid_file']):
         calc_vort = True
@@ -535,7 +535,7 @@ def train(model, training_settings, model_settings={}):
             dw_loss = make_ascent(loss)
 
             optimizer2.zero_grad()
-            dw_loss.backward(retain_graph=True)
+            dw_loss.backward()
             optimizer2.step()
 
             writer.update_scalars(dict(zip(lambdas.keys(),[val.item() for val in lambdas_m.values()])), n_iter, 'train')
