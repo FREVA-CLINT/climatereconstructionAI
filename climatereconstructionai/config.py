@@ -321,6 +321,8 @@ def set_evaluate_args(arg_file=None, prog_func=None):
                             help="Split the climate dataset into several partitions along the time coordinate")
     arg_parser.add_argument('--maxmem', type=int, default=None,
                             help="Maximum available memory in MB (overwrite partitions parameter)")
+    arg_parser.add_argument('--time-freq', type=str, default=None,
+                            help="Time frequency for pred-steps option (only for D,H,M,S,etc.)")
     arg_parser.add_argument('--split-outputs', action='store_true',
                             help="Do not merge the outputs when using multiple models and/or partitions")
     arg_parser.add_argument('-f', '--load-from-file', type=str, action=LoadFromFile,

@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from tensorboardX import SummaryWriter
 import xarray as xr
+import pandas as pd
 
 from .netcdfchecker import reformat_dataset
 from .normalizer import renormalize
@@ -179,26 +180,25 @@ def create_outputs(data_dict, eval_path, output_names, data_stats, xr_dss, i_mod
             output_names[rootname][i_model] += [rootname + suffix + ".nc"]
 
             ds = xr_dss[i_data]["ds1"].copy()
-
             dims = xr_dss[i_data]["dims"].copy()
             coords = xr_dss[i_data]["coords"].copy()
+            coords["time"] = xr_dss[i_data]["ds"]["time"].values[index]
             if cfg.n_pred_steps > 1 and cname == "output":
-                dims = [dims[0]] + ["pred_timestep"] + dims[1:]
-                coords["pred_timestep"] = cfg.pred_timestep
+                dims = [dims[0]] + ["pred_time"] + dims[1:]
+                coords["pred_time"] = np.array(cfg.pred_timestep)
+                if cfg.time_freq:
+                    coords["pred_time"] = pd.to_timedelta(coords["pred_time"], unit=cfg.time_freq)
+                    coords['times'] = (["pred_time", "time"], np.add.outer(coords["pred_time"], coords["time"]))
                 i_pred = range(j * cfg.n_pred_steps, (j + 1) * cfg.n_pred_steps)
                 i_plot[cname] = i_pred[0]
             else:
-                i_pred = j
-                i_plot[cname] = j
+                i_pred, i_plot[cname] = j, j
 
             if cfg.normalize_data and cname != "mask":
-                data_dict[cname][:, i_pred, :, :] = renormalize(data_dict[cname][:, i_pred, :, :],
-                                                           data_stats["mean"][i_data], data_stats["std"][i_data])
+                data_dict[cname][:, i_pred] = renormalize(data_dict[cname][:, i_pred],
+                                                          data_stats["mean"][i_data], data_stats["std"][i_data])
 
-            ds[data_type] = xr.DataArray(data_dict[cname].to(torch.device('cpu')).detach().numpy()[:, i_pred, :, :],
-                                         dims=dims, coords=coords)
-            ds["time"] = xr_dss[i_data]["ds"]["time"].values[index]
-
+            ds[data_type] = xr.DataArray(data_dict[cname].detach().numpy()[:, i_pred], dims=dims, coords=coords)
             ds = reformat_dataset(xr_dss[i_data]["ds"], ds, data_type)
 
             for var in xr_dss[i_data]["ds"].keys():
