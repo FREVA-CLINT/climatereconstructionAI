@@ -16,12 +16,20 @@ from ..utils.io import load_ckpt, load_model
 from ..utils import grid_utils as gu
 from ..utils.normalizer import normalizer
 
- 
+def sign_pow(x, pow):
+    if pow % 2 == 0 or pow < 1:
+        sgn = torch.sign(x)
+        x = sgn * x ** pow
+    else:
+        x = x ** pow
+    return x
+
 class output_net(nn.Module):
-    def __init__(self, model_settings, s, nh, n, use_gnlll=False):
+    def __init__(self, model_settings, s, nh, n, use_gnlll=False, use_poly=False):
         super().__init__()
 
         self.use_gnlll = use_gnlll
+        self.use_poly = use_poly
 
         self.grid_to_target_sampler = helpers.nu_grid_sampler(n_res=n,
                                       s=s,
@@ -31,7 +39,7 @@ class output_net(nn.Module):
         self.output_dims = model_settings['output_dims']
         self.spatial_dim_var_dict = model_settings['spatial_dims_var_target']
        
-        if use_gnlll:
+        if use_gnlll or use_poly:
             self.output_dims = [out_dim*2 for out_dim in self.output_dims]
 
         self.activation_mu = nn.Identity()
@@ -59,6 +67,11 @@ class output_net(nn.Module):
             if self.use_gnlll:
                 data = torch.split(data, len(vars), dim=1)
                 data = torch.stack((self.activation_mu(data[0]), nn.functional.softplus(data[1])), dim=2)
+
+            elif self.use_poly:
+                data = torch.split(data, len(vars), dim=1)
+                data = sign_pow(data[0], 1) + 0.5 * sign_pow(data[1], 2)
+
             else:
                 data = self.activation_mu(data).unsqueeze(dim=2)
             
@@ -97,6 +110,7 @@ class pyramid_step_model(nn.Module):
 
         self.residual_in_core = self.model_settings['residual_in_core']
         self.use_gnlll = self.model_settings['gauss']
+        self.use_poly = self.model_settings['poly']
 
         self.core_model = nn.Identity()
         
@@ -112,7 +126,8 @@ class pyramid_step_model(nn.Module):
                                           model_settings_pre["interpolation_std"],
                                           model_settings_pre["interpolation_nh"],
                                           model_settings_pre["interpolation_sample_pts"],
-                                          use_gnlll=self.use_gnlll)
+                                          use_gnlll=self.use_gnlll,
+                                          use_poly=self.use_poly)
         
         self.check_model_dir()
 

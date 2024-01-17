@@ -260,7 +260,7 @@ class core_ResUNet(psm.pyramid_step_model):
 
         self.time_dim= False
 
-        if model_settings['gauss']:
+        if model_settings['gauss'] or model_settings['poly']:
             output_dim *=2
 
         if grouped:
