@@ -504,12 +504,13 @@ class SampleLoader(Dataset):
                 try:
                     data = torch.load(path, map_location='cpu')
                     valid_file=True
+                    if len(data)<6:
+                        idx = torch.randint(0,len(self.file_list), size=(1,))
+                        valid_file=False
                 except:
                     idx = torch.randint(0,len(self.file_list), size=(1,))
 
-                if len(data)<6:
-                    idx = torch.randint(0,len(self.file_list), size=(1,))
-                    valid_file=False
+       
 
         source, target, coords_source, coords_target, source_indices, target_indices = data
 
