@@ -74,21 +74,21 @@ class normalizer(torch.nn.Module):
 
 def norm_max(data, moments, denorm=False):
     if denorm:
-        data = data*moments[1]
+        data = data * moments[1]
     else:
-        data = (data)/(moments[1])
+        data = (data) / (moments[1])
     return data 
 
 def norm_min_max(data, moments, denorm=False):
     if denorm:
-        data = (data+moments[0])*(moments[1] - moments[0])
+        data = data*(moments[1] - moments[0]) + moments[0]
     else:
-        data = (data-moments[0])/(moments[1] - moments[0])
+        data = (data - moments[0])/(moments[1] - moments[0])
     return data
 
 def norm_mean_std(data, moments, denorm=False):
     if denorm:
-        data = (data+moments[0])*(moments[1])
+        data = data * moments[1] + moments[0]
     else:
-        data = (data-moments[0])/(moments[1])
+        data = (data - moments[0]) / moments[1]
     return data
