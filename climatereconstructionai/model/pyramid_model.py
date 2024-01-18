@@ -3,7 +3,6 @@ import os
 import copy
 import torch
 import torch.nn as nn
-from torch import multiprocessing
 import xarray as xr
 import math
 from .. import transformer_training as trainer
@@ -259,13 +258,8 @@ class pyramid_model(nn.Module):
 
         return output_batch, non_valid_mask, batch_idx
 
-    def apply(self, x, ts=-1, batch_size=-1, num_workers=1, device='cpu'):
-
-        if not self.mp_set:
-            multiprocessing.set_start_method('spawn')
-            self.mp_set = True
+    def apply_in_patches(self, x, ts=-1, batch_size=-1, num_workers=1, device='cpu'):
         
-
         c_of_p_batched_source, coords_source_batches = self.get_batches_coords(self.relations_source, batch_size, device=device)
         c_of_p_batched_target, coords_target_batches = self.get_batches_coords(self.relations_target, batch_size, device=device)
 
@@ -285,15 +279,11 @@ class pyramid_model(nn.Module):
             coords_source_batch = coords_source_batches[batch_idx]
             coords_target_batch = coords_target_batches[batch_idx]
             data_source_batch = data_source_batched[batch_idx]
-           
+        
             batches.append((data_source_batch, coords_source_batch, coords_target_batch, batch_idx))
 
-        pool = multiprocessing.Pool(processes=num_workers)
-        outputs = pool.map(self.process_batch, batches)
-        pool.close()
-        pool.join()
-
-
+        outputs = [self.process_batch(batch) for batch in batches]
+    
         data_output_std = {}
         if outputs[0][0][list(self.relations_target['spatial_dims_var'].values())[0][0]].shape[2]>1:
             get_std = True
@@ -311,7 +301,7 @@ class pyramid_model(nn.Module):
         for output, non_valid_mask, batch_idx in outputs:
             
             for variable, spatial_dim in  self.relations_target['var_spatial_dims'].items():
-              
+            
                 indices = c_of_p_batched_target[spatial_dim][:,batch_idx]
 
                 data = output[variable][:,0].transpose(-1,-2)
@@ -321,7 +311,7 @@ class pyramid_model(nn.Module):
                 b,n,c = data.shape
 
                 data = data.view(b*n,c)
-   
+
                 data_output[variable][indices.view(2,b*n)[0],indices.view(2,b*n)[1]] = data[:,0]
 
                 if get_std:
@@ -329,7 +319,34 @@ class pyramid_model(nn.Module):
         
         return data_output, data_output_std
 
-        # work through global data and then average - parameters?
+
+    def apply_global(self, x, ts=-1, device='cpu'):
+            
+            with open(self.local_model.model_settings["domain"],'r') as f:
+                domain = json.load(f)
+
+            data_source = {}
+            coords_source = {}
+            for spatial_dim, vars in domain["spatial_dims_var_source"].items():
+                coord_dict = gu.get_coord_dict_from_var(x, spatial_dim)
+
+                coords_source[spatial_dim] = gu.get_coords_as_tensor(x, lon=coord_dict['lon'], lat=coord_dict['lat']).unsqueeze(dim=0)
+                for variable in vars:
+                    data_source[variable] = torch.tensor(x[variable].values[[ts]]).squeeze().to(device).unsqueeze(dim=0).unsqueeze(dim=-1)
+
+            coords_target = {}
+            for spatial_dim, vars in domain["spatial_dims_var_target"].items():
+                coord_dict = gu.get_coord_dict_from_var(x, spatial_dim)
+                coords_target[spatial_dim] = gu.get_coords_as_tensor(x, lon=coord_dict['lon'], lat=coord_dict['lat']).unsqueeze(dim=0)
+
+            self.local_model.set_input_mapper(mode="interpolation")
+
+            with torch.no_grad():
+                output = self.local_model(data_source, coords_target, coords_source=coords_source, norm=True)[0]
+                
+            return output, {}
+
+            
     def train_(self, train_settings, pretrain=False):
         self.train_settings = load_settings(train_settings, id='train')
 
