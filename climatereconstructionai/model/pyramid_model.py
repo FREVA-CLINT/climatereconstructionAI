@@ -320,7 +320,7 @@ class pyramid_model(nn.Module):
         return data_output, data_output_std
 
 
-    def apply_global(self, x, ts=-1, device='cpu', coords_target=None):
+    def apply_global(self, x, ts=-1, device='cpu', ds_target=None):
             
             with open(self.local_model.model_settings["domain"],'r') as f:
                 domain = json.load(f)
@@ -334,12 +334,14 @@ class pyramid_model(nn.Module):
                 for variable in vars:
                     data_source[variable] = torch.tensor(x[variable].values[[ts]]).squeeze().to(device).unsqueeze(dim=0).unsqueeze(dim=-1)
 
-            if coords_target is None:
-                coords_target = {}
-                for spatial_dim, vars in domain["spatial_dims_var_target"].items():
-                    coord_dict = gu.get_coord_dict_from_var(x, spatial_dim)
-                    coords_target[spatial_dim] = gu.get_coords_as_tensor(x, lon=coord_dict['lon'], lat=coord_dict['lat']).unsqueeze(dim=0)
+            if ds_target is None:
+                ds_target = x
 
+            coords_target = {}
+            for spatial_dim, vars in domain["spatial_dims_var_target"].items():
+                coord_dict = gu.get_coord_dict_from_var(ds_target, spatial_dim)
+                coords_target[spatial_dim] = gu.get_coords_as_tensor(ds_target, lon=coord_dict['lon'], lat=coord_dict['lat']).unsqueeze(dim=0)
+    
             self.local_model.set_input_mapper(mode="interpolation")
 
             with torch.no_grad():
