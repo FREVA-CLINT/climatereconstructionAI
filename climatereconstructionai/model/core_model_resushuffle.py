@@ -63,15 +63,15 @@ class res_net_block(nn.Module):
         
 
 class res_blocks(nn.Module): 
-    def __init__(self, hw, n_blocks, in_channels, out_channels, k_size=3, with_reduction=True, batch_norm=True, groups=1, dropout=0, with_att=False, with_res=True, out_activation=True):
+    def __init__(self, hw, n_blocks, in_channels, out_channels, k_size=3, with_reduction=True, batch_norm=True, groups=1, dropout=0, with_att=False, with_res=True, out_activation=True, bias=True):
         super().__init__()
 
         self.res_net_blocks = nn.ModuleList()
 
-        self.res_net_blocks.append(res_net_block(hw, in_channels, out_channels, k_size=k_size, batch_norm=batch_norm, groups=groups, dropout=dropout, with_att=with_att, with_res=with_res, out_activation=out_activation))
+        self.res_net_blocks.append(res_net_block(hw, in_channels, out_channels, k_size=k_size, batch_norm=batch_norm, groups=groups, dropout=dropout, with_att=with_att, with_res=with_res, out_activation=out_activation, bias=bias))
         
         for _ in range(n_blocks-1):
-            self.res_net_blocks.append(res_net_block(hw, out_channels, out_channels, k_size=k_size, batch_norm=batch_norm, groups=groups, dropout=dropout, with_att=False, with_res=with_res, out_activation=out_activation))
+            self.res_net_blocks.append(res_net_block(hw, out_channels, out_channels, k_size=k_size, batch_norm=batch_norm, groups=groups, dropout=dropout, with_att=False, with_res=with_res, out_activation=out_activation, bias=bias))
 
         self.max_pool = nn.MaxPool2d(kernel_size=2) if with_reduction else nn.Identity()
 
@@ -82,11 +82,11 @@ class res_blocks(nn.Module):
         return self.max_pool(x), x
 
 class encoder(nn.Module): 
-    def __init__(self, hw_in, n_levels, n_blocks, u_net_channels, in_channels, k_size=3, k_size_in=7, input_stride=1, batch_norm=True, n_groups=1, dropout=0):
+    def __init__(self, hw_in, n_levels, n_blocks, u_net_channels, in_channels, k_size=3, k_size_in=7, input_stride=1, batch_norm=True, n_groups=1, dropout=0, bias=True):
         super().__init__()
 
         u_net_channels_g = u_net_channels*n_groups
-        self.in_layer = res_net_block(hw_in, in_channels, u_net_channels_g, stride=input_stride, k_size=k_size_in, batch_norm=batch_norm, groups=n_groups, dropout=dropout, with_res=False)
+        self.in_layer = res_net_block(hw_in, in_channels, u_net_channels_g, stride=input_stride, k_size=k_size_in, batch_norm=batch_norm, groups=n_groups, dropout=dropout, with_res=False, bias=bias)
         
         self.layers = nn.ModuleList()
         for n in range(n_levels):
@@ -99,7 +99,7 @@ class encoder(nn.Module):
 
             reduction = False if n == n_levels-1 else True
             hw = hw_in/(input_stride*2**(n))
-            self.layers.append(res_blocks(hw, n_blocks, in_channels_block, out_channels_block, k_size=k_size, batch_norm=batch_norm, groups=1, with_reduction=reduction, dropout=dropout))
+            self.layers.append(res_blocks(hw, n_blocks, in_channels_block, out_channels_block, k_size=k_size, batch_norm=batch_norm, groups=1, with_reduction=reduction, dropout=dropout, bias=bias))
         
     def forward(self, x):
         outputs = []
@@ -110,7 +110,7 @@ class encoder(nn.Module):
         return x, outputs
 
 class decoder_block_shuffle(nn.Module):
-    def __init__(self, hw, n_blocks, in_channels, out_channels, k_size=3, with_skip=True, batch_norm=False, dropout=0):
+    def __init__(self, hw, n_blocks, in_channels, out_channels, k_size=3, with_skip=True, batch_norm=False, dropout=0, bias=True):
         super().__init__()
   
         self.up = nn.PixelShuffle(2)
@@ -119,7 +119,7 @@ class decoder_block_shuffle(nn.Module):
 
         #self.res_block = res_net_block(out_channels*2, out_channels,  k_size=k_size, batch_norm=batch_norm, dropout=dropout)
 
-        self.res_blocks = res_blocks(hw, n_blocks, in_channels, out_channels, k_size=k_size, batch_norm=False, groups=1, with_reduction=False, dropout=dropout, with_res=True)
+        self.res_blocks = res_blocks(hw, n_blocks, in_channels, out_channels, k_size=k_size, batch_norm=False, groups=1, with_reduction=False, dropout=dropout, with_res=True, bias=bias)
 
     def forward(self, x, skip_channels=None):
 
@@ -133,7 +133,7 @@ class decoder_block_shuffle(nn.Module):
         return x
 
 class decoder(nn.Module):
-    def __init__(self, hw_in, n_levels, n_blocks, u_net_channels, out_channels, upcale_factor=1, k_size=3, batch_norm=False, dropout=0, n_groups=1):
+    def __init__(self, hw_in, n_levels, n_blocks, u_net_channels, out_channels, upcale_factor=1, k_size=3, batch_norm=False, dropout=0, n_groups=1, bias=True):
         super().__init__()
 
         self.decoder_blocks = nn.ModuleList()
@@ -144,7 +144,7 @@ class decoder(nn.Module):
 
             if n==1:
                 out_channels_block = u_net_channels*n_groups*upcale_factor**2
-            self.decoder_blocks.append(decoder_block_shuffle(hw, n_blocks, in_channels_block, out_channels_block, k_size=k_size, with_skip=True, batch_norm=batch_norm, dropout=dropout))      
+            self.decoder_blocks.append(decoder_block_shuffle(hw, n_blocks, in_channels_block, out_channels_block, k_size=k_size, with_skip=True, batch_norm=batch_norm, dropout=dropout, bias=bias))      
         
         out_channels_block = out_channels_block // upcale_factor**2
 
@@ -163,10 +163,10 @@ class decoder(nn.Module):
         return x
 
 class mid(nn.Module):
-    def __init__(self, hw, n_blocks, channels, k_size=3,  dropout=0, with_att=False):
+    def __init__(self, hw, n_blocks, channels, k_size=3,  dropout=0, with_att=False, bias=True):
         super().__init__()
 
-        self.res_blocks = res_blocks(hw, n_blocks, channels, channels, k_size=k_size, batch_norm=False, groups=1, with_reduction=False, dropout=dropout, with_att=with_att)
+        self.res_blocks = res_blocks(hw, n_blocks, channels, channels, k_size=k_size, batch_norm=False, groups=1, with_reduction=False, dropout=dropout, with_att=with_att, bias=bias)
 
     def forward(self, x):
 
@@ -213,13 +213,13 @@ class out_net(nn.Module):
 
 
 class ResUNet(nn.Module): 
-    def __init__(self, hw_in, hw_out, n_levels, n_res_blocks, model_dim_unet, in_channels, out_channels, residual, res_indices, input_stride, batch_norm=True, k_size=3, in_groups=1, out_groups=1, dropout=0):
+    def __init__(self, hw_in, hw_out, n_levels, n_res_blocks, model_dim_unet, in_channels, out_channels, residual, res_indices, input_stride, batch_norm=True, k_size=3, in_groups=1, out_groups=1, dropout=0, bias=True):
         super().__init__()
 
         upcale_factor = int(torch.tensor([(hw_out*input_stride) // hw_in, 1]).max())
 
-        self.encoder = encoder(hw_in, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, 7, input_stride, batch_norm=batch_norm, n_groups=in_groups, dropout=dropout)
-        self.decoder = decoder(hw_in, n_levels, n_res_blocks, model_dim_unet, out_channels, upcale_factor=upcale_factor, k_size=k_size, batch_norm=False, dropout=dropout, n_groups=out_groups)
+        self.encoder = encoder(hw_in, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, 7, input_stride, batch_norm=batch_norm, n_groups=in_groups, dropout=dropout, bias=bias)
+        self.decoder = decoder(hw_in, n_levels, n_res_blocks, model_dim_unet, out_channels, upcale_factor=upcale_factor, k_size=k_size, batch_norm=False, dropout=dropout, n_groups=out_groups, bias=bias)
 
         input_indices = res_indices
         output_indices = torch.arange(len(res_indices)) * (out_channels // len(res_indices))
@@ -227,7 +227,7 @@ class ResUNet(nn.Module):
         self.out_net = out_net(input_indices, output_indices, hw_in, hw_out, global_residual=residual)
   
         hw_mid = hw_in // (input_stride*2**(n_levels-1))
-        self.mid = mid(hw_mid, n_res_blocks, model_dim_unet*(4**(n_levels-1)), with_att=True)
+        self.mid = mid(hw_mid, n_res_blocks, model_dim_unet*(4**(n_levels-1)), with_att=True, bias=bias)
 
     def forward(self, x):
 
@@ -273,6 +273,7 @@ class core_ResUNet(psm.pyramid_step_model):
         hw_out = model_settings['n_regular'][1]
 
         input_stride = 1 if 'input_stride' not in model_settings.keys() else model_settings['input_stride']
+        bias = True if 'bias' not in model_settings.keys() else model_settings['bias']
 
         res_indices = []
         for var_target in self.model_settings['variables_target']:
@@ -280,7 +281,7 @@ class core_ResUNet(psm.pyramid_step_model):
             if len(var_in_source)==1:
                 res_indices.append(var_in_source[0])
 
-        self.core_model = ResUNet(hw_in, hw_out, depth, n_blocks, model_dim_core, input_dim, output_dim, model_settings['residual_in_core'], res_indices, input_stride, batch_norm=batch_norm, in_groups=in_groups, out_groups=out_groups, dropout=dropout)
+        self.core_model = ResUNet(hw_in, hw_out, depth, n_blocks, model_dim_core, input_dim, output_dim, model_settings['residual_in_core'], res_indices, input_stride, batch_norm=batch_norm, in_groups=in_groups, out_groups=out_groups, dropout=dropout, bias=bias)
 
         if "pretrained_path" in self.model_settings.keys():
             self.check_pretrained(log_dir_check=self.model_settings['pretrained_path'])

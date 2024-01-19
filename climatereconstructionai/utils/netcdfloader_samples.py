@@ -504,15 +504,18 @@ class SampleLoader(Dataset):
                 try:
                     data = torch.load(path, map_location='cpu')
                     valid_file=True
-                    if len(data)<6:
-                        idx = torch.randint(0,len(self.file_list), size=(1,))
-                        valid_file=False
+                   # if len(data)<6:
+                   #     idx = torch.randint(0,len(self.file_list), size=(1,))
+                   #     valid_file=False
                 except:
                     idx = torch.randint(0,len(self.file_list), size=(1,))
 
-       
-
-        source, target, coords_source, coords_target, source_indices, target_indices = data
+        source = data[0]
+        target = data[1]
+        coords_source = data[2]
+        coords_target = data[3]
+        target_indices = data[-1]
+        data.insert(4, torch.zeros((10,)))
 
         n_dict_source_sample = dict(zip(coords_source.keys(),[val.shape[-1] for val in coords_source.values()]))
         n_dict_target_sample = dict(zip(coords_target.keys(),[val.shape[-1] for val in coords_target.values()]))

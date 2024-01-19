@@ -70,7 +70,7 @@ class output_net(nn.Module):
 
             elif self.use_poly:
                 data = torch.split(data, len(vars), dim=1)
-                data = sign_pow(data[0], 1) + 0.5 * sign_pow(data[1], 2)
+                data = (sign_pow(data[0], 1) + 0.5 * sign_pow(data[1], 2)).unsqueeze(dim=2)
 
             else:
                 data = self.activation_mu(data).unsqueeze(dim=2)

@@ -147,8 +147,6 @@ class AscentFunction(torch.autograd.Function):
 def make_ascent(loss):
     return AscentFunction.apply(loss)
 
-
-
 class GaussLoss(nn.Module):
     def __init__(self):
         super().__init__()
@@ -233,6 +231,33 @@ class DictLoss(nn.Module):
 
         return total_loss, loss_dict
 
+class Trivial_loss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.loss = torch.nn.MSELoss()
+        self.registered = False
+    
+    def register_samples(self, source, coords_target, target):
+        self.source_0 = torch.zeros_like(source, device=source.device)
+        self.target_0 = {}
+        for var, values in target.items():
+            if var == 'u' or var == 'v': 
+                self.target_0[var] = torch.zeros_like(values, device=source.device)
+            elif var == 'zos':
+                self.target_0[var] = torch.ones_like(values, device=source.device)*0.5
+        self.coords_target = coords_target
+        self.registered = True
+
+    def forward(self, model):
+        output = model(self.source_0, self.coords_target)[0]
+
+        total_loss = 0 
+        for var in output.keys():
+            loss = self.loss(output[var].squeeze(), self.target_0[var].squeeze())
+            total_loss+=loss
+
+        return total_loss
+    
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
 
     def __init__(self, optimizer, warmup, max_iters):
@@ -460,6 +485,13 @@ def train(model, training_settings, model_settings={}):
         factors.append(training_settings["lambda_l1_rel"])
         loss_fcns.append(L1Loss_rel())
 
+
+    calc_trivial_loss=False
+    if "lambda_trivial_loss" in training_settings.keys() and training_settings["lambda_trivial_loss"]>0:
+        f_tl = training_settings["lambda_trivial_loss"]
+        loss_fcn_trivial = Trivial_loss()
+        calc_trivial_loss=True
+
     calc_reg_loss=False
     if "lambda_tv_loss_rel" in training_settings.keys() and training_settings["lambda_tv_loss_rel"]>0:
         f_tv = training_settings["lambda_tv_loss_rel"]
@@ -510,6 +542,9 @@ def train(model, training_settings, model_settings={}):
 
         source, target, coords_source, coords_target, _, target_indices = [data_to_device(x, device) for x in next(iterator_train)]
 
+        if calc_trivial_loss and not loss_fcn_trivial.registered:
+            loss_fcn_trivial.register_samples(source, coords_target, target)
+
         output,_, output_reg_hr, non_valid_mask = model(source, coords_target, coords_source=coords_source)
 
         if calc_vort:
@@ -522,6 +557,11 @@ def train(model, training_settings, model_settings={}):
                 target = add_vorticity(vort_calc, target, uv_dim_indices)[0]
         
         loss, train_loss_dict = dict_loss_fcn(output, target, non_valid_mask, lambdas, lambdas_m)
+
+        if calc_trivial_loss:
+            trivial_loss = f_tl*loss_fcn_trivial(model)
+            loss += trivial_loss
+            train_loss_dict['trivial_loss'] = trivial_loss.item()
 
         if calc_reg_loss:
             reg_loss = f_tv*loss_fcn_reg(output_reg_hr)
@@ -585,8 +625,8 @@ def train(model, training_settings, model_settings={}):
                 val_losses.append(list(val_loss_dict.values()))
             
             val_loss = torch.tensor(val_losses).mean(dim=0)
-            val_loss = dict(zip(train_loss_dict.keys(), val_loss))
-
+            val_loss = dict(zip(val_loss_dict.keys(), val_loss))
+            
             val_losses_save.append(val_loss_dict['total'])
             debug_dict = {}
             if training_settings['save_debug']:
