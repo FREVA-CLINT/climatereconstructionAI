@@ -9,130 +9,13 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import netCDF4 as netcdf
 
-from .utils import twriter_t, early_stopping
+from .utils import twriter_t, early_stopping, optimization
 from .utils.io import save_ckpt
 from .utils.netcdfloader_samples import NetCDFLoader_lazy, InfiniteSampler, SampleLoader
 
-class physics_calculator():
-    def __init__(self, grid_file_path, device='cpu') -> None:
-        
-        self.device=device
-        dset = netcdf.Dataset(grid_file_path)
-
-        self.zonal_normal_primal_edge = torch.from_numpy(dset['zonal_normal_primal_edge'][:].data).to(device)
-        self.meridional_normal_primal_edge = torch.from_numpy(dset['meridional_normal_primal_edge'][:].data).to(device)
-        self.edges_of_vertex = torch.from_numpy(dset['edges_of_vertex'][:].data.T-1).clamp(min=0).long().to(device)
-        self.dual_edge_length = torch.from_numpy(dset['dual_edge_length'][:].data).to(device)
-        self.edge_vertices = torch.from_numpy(dset['edge_vertices'][:].data).long().to(device)-1
-
-        self.dual_area = torch.tensor(dset['dual_area'][:].data, device=device)
-
-        edge_dual_normal_cartesian_x = dset['edge_dual_normal_cartesian_x'][:].data
-        edge_dual_normal_cartesian_y = dset['edge_dual_normal_cartesian_y'][:].data
-        edge_dual_normal_cartesian_z = dset['edge_dual_normal_cartesian_z'][:].data
-
-        edge_middle_cartesian_x = dset['edge_middle_cartesian_x'][:].data
-        edge_middle_cartesian_y = dset['edge_middle_cartesian_y'][:].data
-        edge_middle_cartesian_z = dset['edge_middle_cartesian_z'][:].data
-
-        cartesian_x_vertices = dset['cartesian_x_vertices'][:].data
-        cartesian_y_vertices = dset['cartesian_y_vertices'][:].data
-        cartesian_z_vertices = dset['cartesian_z_vertices'][:].data
-
-        cartesian_vertices = torch.tensor([cartesian_x_vertices,cartesian_y_vertices,
-                                            cartesian_z_vertices],device=device).T
-
-        edge_dual_normal_cartesian = torch.tensor([edge_dual_normal_cartesian_x,edge_dual_normal_cartesian_y,
-                                            edge_dual_normal_cartesian_z],device=device).T
-
-        edge_middle_cartesian = torch.tensor([edge_middle_cartesian_x,edge_middle_cartesian_y,
-                                        edge_middle_cartesian_z],device=device).T
-
-        
-        self.nout = edge_middle_cartesian[self.edges_of_vertex]-cartesian_vertices.unsqueeze(dim=1)
-        self.signorient = torch.sign((self.nout*edge_dual_normal_cartesian[self.edges_of_vertex]).sum(axis=-1))
-
-        self.nout = self.nout.to(device)
-        self.signorient = self.signorient.to(device)
-        self.coords_v = torch.stack([torch.tensor(dset['vlon'][:].data, device=device), torch.tensor(dset['vlat'][:].data, device=device)])
-        dset.close()
-
-    def get_vorticity(self, normalVelocity):
-        vort = ((normalVelocity*self.dual_edge_length)[self.edges_of_vertex]*self.signorient).sum(axis=-1)/self.dual_area
-        return vort
-    
-
-    def get_vorticity_from_uv(self, u, v):
-        normalVectorx = self.zonal_normal_primal_edge
-        normalVectory = self.meridional_normal_primal_edge
-
-        normalVelocity = u * normalVectorx + v * normalVectory
-
-        return self.get_vorticity(normalVelocity)
-    
-
-    def get_vorticity_from_ds(self, ds, ts):
-        u = torch.from_numpy(ds['u'][:].data[ts,0].astype(np.float32))
-        v = torch.from_numpy(ds['v'][:].data[ts,0].astype(np.float32))
-
-        return self.get_vorticity_from_uv(u,v)
-    
-
-    def get_vorticity_from_edge_indices(self, global_edge_indices, u, v):
-        b,n = global_edge_indices.shape
-        n_edges_global = self.zonal_normal_primal_edge.shape[-1]
-        n_vertices_global = self.edges_of_vertex.shape[0]
-
-        global_edge_indices_b = global_edge_indices + (torch.arange(b, device=self.device)*n_edges_global).view(b,1)
-        global_edge_indices_b_red = global_edge_indices_b.unique(return_counts=True)[1].max()>1
-
-        v_indices = self.edge_vertices[:,global_edge_indices].transpose(0,1).reshape(b,-1)
-        v_indices_b = v_indices + (torch.arange(b, device=self.device)*n_vertices_global).view(b,1)
-
-        u_global = torch.zeros((b*n_edges_global),device=self.device)
-        v_global = torch.zeros((b*n_edges_global),device=self.device)
-        u_global[global_edge_indices_b.view(-1)] = u.view(-1)
-        v_global[global_edge_indices_b.view(-1)] = v.view(-1)
-        u_global = u_global.view(b,n_edges_global)
-        v_global = v_global.view(b,n_edges_global)
-
-        unique, inverse, counts = torch.unique(v_indices_b, return_counts=True, return_inverse=True)
-        non_valid = unique[(counts!=6)]
-        mask = torch.isin(v_indices_b, non_valid)
-       # valid_b = torch.bucketize(valid, (torch.arange(b)*n_vertices_global))
-       # n_valid = valid_b.unique(return_counts=True)[1]
-
-        v_indices_fov = v_indices_b
-        self.v_indices_fov = v_indices_fov
-
-        normalVelocity = u_global*self.zonal_normal_primal_edge + v_global*self.meridional_normal_primal_edge
-
-        edges_of_vertex = self.edges_of_vertex[v_indices]
-        normalVelocity_con = torch.gather(normalVelocity, dim=1, index=edges_of_vertex.view(b,-1))
-        normalVelocity_con = normalVelocity_con.view(b,-1,6)
-        #normalVelocity_con = normalVelocity[torch.from_numpy(self.edges_of_vertex[v_indices_fov])]
-
-        edge_length_con = self.dual_edge_length[edges_of_vertex]
-
-        signorient_con = self.signorient[v_indices]
-
-        dual_area_con = self.dual_area[v_indices]
-
-        vort = ((normalVelocity_con*edge_length_con)*signorient_con).sum(axis=-1)/dual_area_con
-
-        vort = vort.view(b,1,1,-1)
-
-        coords_v = self.coords_v[:,v_indices].transpose(1,0)
-        return vort, coords_v, mask
-
-def add_vorticity(vort_cal, tensor_dict, global_edge_indices):
-    u = tensor_dict['u']
-    v = tensor_dict['v']
-
-    u = u[:,0,0] if u.dim()==4 else u
-    v = v[:,0,0] if v.dim()==4 else v
-    tensor_dict['vort'], coords_vort, non_valid_mask = vort_cal.get_vorticity_from_edge_indices(global_edge_indices, u, v)
-    return tensor_dict, non_valid_mask, coords_vort
+def arclen(p1,p2):
+  length = 2*torch.arcsin(torch.linalg.norm(p2-p1,axis=-1)/2)
+  return length
 
 
 class AscentFunction(torch.autograd.Function):
@@ -147,117 +30,6 @@ class AscentFunction(torch.autograd.Function):
 def make_ascent(loss):
     return AscentFunction.apply(loss)
 
-class GaussLoss(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.Gauss = torch.nn.GaussianNLLLoss()
-
-    def forward(self, output, target, non_valid_mask):
-        output_valid = output[:,0].transpose(-2,-1)[~non_valid_mask]
-        target_valid = target[~non_valid_mask].squeeze()
-        loss =  self.Gauss(output_valid[:,0],target_valid,output_valid[:,1])
-        return loss
-
-class L1Loss(nn.Module):
-    def __init__(self, loss='l1'):
-        super().__init__()
-        if loss=='l1':
-            self.loss = torch.nn.L1Loss()
-        else:
-            self.loss = torch.nn.MSELoss()
-
-    def forward(self, output, target, non_valid_mask):
-        output_valid = output[:,0,0][~non_valid_mask]
-        target_valid = target.squeeze()[~non_valid_mask].squeeze()
-        loss = self.loss(output_valid,target_valid)
-        return loss
-
-class L1Loss_rel(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.loss = torch.nn.MSELoss()
-
-    def forward(self, output, target, non_valid_mask):
-        output_valid = output[:,0,0][~non_valid_mask]
-        target_valid = target[~non_valid_mask].squeeze()
-        abs_loss = ((output_valid - target_valid)/(target_valid+1e-10)).abs()
-        loss = abs_loss.clamp(max=1)
-        loss = loss.mean()
-        return loss
-    
-class TVLoss(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, output_hr):
-        
-        loss = (output_hr[:,1:] - output_hr[:,:-1]).abs().mean() + (output_hr[:,:,1:] - output_hr[:,:,:-1]).abs().mean()
-
-        return loss
-
-class TVLoss_rel(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, output_hr):
-        
-        rel_diff1 = ((output_hr[:,1:] - output_hr[:,:-1])/(output_hr[:,1:]+1e-10)).abs()
-        rel_diff1 = rel_diff1.clamp(max=1)
-
-        rel_diff2 = ((output_hr[:,:,1:] - output_hr[:,:,:-1])/(output_hr[:,:,1:]+1e-10)).abs()
-        rel_diff2 = rel_diff2.clamp(max=1)
-
-        loss = (rel_diff1.mean() + rel_diff2.mean())
-
-        return loss
-
-class DictLoss(nn.Module):
-    def __init__(self, loss_fcn_list, factor_list):
-        super().__init__()
-        self.loss_fcns = loss_fcn_list
-        self.factor_list = factor_list
-
-
-    def forward(self, output, target, non_valid_mask, lambdas, lambdas_m):
-        loss_dict = {}
-        total_loss = 0
-
-        for k, loss_fcn in enumerate(self.loss_fcns):
-            f = self.factor_list[k]
-            for var in output.keys():
-                loss = lambdas[var]*lambdas_m[var]*f*loss_fcn(output[var], target[var], non_valid_mask[var])
-                loss_dict[f'{var}_{str(loss_fcn._get_name())}'] = loss.item()
-                total_loss+=loss
-
-        return total_loss, loss_dict
-
-class Trivial_loss(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.loss = torch.nn.MSELoss()
-        self.registered = False
-    
-    def register_samples(self, source, coords_target, target):
-        self.source_0 = torch.zeros_like(source, device=source.device)
-        self.target_0 = {}
-        for var, values in target.items():
-            if var == 'u' or var == 'v': 
-                self.target_0[var] = torch.zeros_like(values, device=source.device)
-            elif var == 'zos':
-                self.target_0[var] = torch.ones_like(values, device=source.device)*0.5
-        self.coords_target = coords_target
-        self.registered = True
-
-    def forward(self, model):
-        output = model(self.source_0, self.coords_target)[0]
-
-        total_loss = 0 
-        for var in output.keys():
-            loss = self.loss(output[var].squeeze(), self.target_0[var].squeeze())
-            total_loss+=loss
-
-        return total_loss
-    
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
 
     def __init__(self, optimizer, warmup, max_iters):
@@ -444,90 +216,35 @@ def train(model, training_settings, model_settings={}):
                                     pin_memory_device=device))
     
     model = model.to(device)
-    
-    calc_vort=False
-    if 'lambdas' in training_settings.keys():
-        lambdas = training_settings['lambdas']
-    else:
-        vars = model.model_settings['variables_target']
-        lambdas = dict(zip(vars, [1]*len(vars)))
-    
-    if 'vort' in lambdas.keys() and lambdas['vort']>0:
-        calc_vort=True
+
+    early_stop = early_stopping.early_stopping(training_settings['early_stopping_delta'], training_settings['early_stopping_patience'])
+
+    loss_calculator = optimization.loss_calculator(training_settings, model.model_settings['spatial_dims_var_target'])    
+
+    lambdas_var = training_settings['lambdas_var']
+    lambdas = training_settings['lambdas']
     
     dw_train = False
-    lambdas_m = dict(zip(lambdas.keys(), [1. for _ in lambdas.values()]))
 
     if 'dw_train' in training_settings.keys() and training_settings['dw_train']:
         dw_train = True
-        lambdas_m = dict(zip(lambdas_m.keys(), [torch.nn.Parameter(torch.tensor(val, dtype=float), requires_grad=val>0) for val in lambdas_m.values()]))
+        lambdas = dict(zip(lambdas.keys(), [torch.nn.Parameter(torch.tensor(val, dtype=float), requires_grad=val>0) for val in lambdas.values()]))
 
-    if calc_vort and 'grid_file' in training_settings.keys() and len(training_settings['grid_file']):
-        calc_vort = True
-        vort_calc = physics_calculator(training_settings['grid_file'], device=device)
-    else:
-        calc_vort = False
+        optimizer2 = torch.optim.Adam(filter(lambda p: p.requires_grad, lambdas.values()), lr=training_settings['lr_w'])
+        lr_scheduler2 = CosineWarmupScheduler(optimizer2, training_settings["T_warmup"], training_settings['max_iter'])
 
-
-    loss_fcns = []
-    factors = []
-    if training_settings["gauss_loss"]:
-        loss_fcns.append(GaussLoss())
-        factors.append(1)
-    else:
-        if "loss" in training_settings.keys() and training_settings['loss']=="l2":
-            loss_fcns.append(L1Loss(loss='l2'))
-        else:
-            loss_fcns.append(L1Loss(loss='l1'))    
-        factors.append(1)
-
-    if "lambda_l1_rel" in training_settings.keys() and training_settings["lambda_l1_rel"]>0:
-        factors.append(training_settings["lambda_l1_rel"])
-        loss_fcns.append(L1Loss_rel())
-
-
-    calc_trivial_loss=False
-    if "lambda_trivial_loss" in training_settings.keys() and training_settings["lambda_trivial_loss"]>0:
-        f_tl = training_settings["lambda_trivial_loss"]
-        loss_fcn_trivial = Trivial_loss()
-        calc_trivial_loss=True
-
-    calc_reg_loss=False
-    if "lambda_tv_loss_rel" in training_settings.keys() and training_settings["lambda_tv_loss_rel"]>0:
-        f_tv = training_settings["lambda_tv_loss_rel"]
-        loss_fcn_reg = TVLoss_rel()
-        calc_reg_loss=True
-
-    elif "lambda_tv_loss" in training_settings.keys() and training_settings["lambda_tv_loss"]>0:
-        f_tv = training_settings["lambda_tv_loss"]
-        loss_fcn_reg = TVLoss()
-        calc_reg_loss=True
-
-    dict_loss_fcn = DictLoss(loss_fcns, factors)
-
-  #  reg_loss_fcn = RegLoss(model_settings)
-   
-    early_stop = early_stopping.early_stopping(training_settings['early_stopping_delta'], training_settings['early_stopping_patience'])
     
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=training_settings['lr'])
-
-    if dw_train:
-         optimizer2 = torch.optim.Adam(filter(lambda p: p.requires_grad, lambdas_m.values()), lr=training_settings['lr_w'])
-         lr_scheduler2 = CosineWarmupScheduler(optimizer2, training_settings["T_warmup"], training_settings['max_iter'])
-
     lr_scheduler = CosineWarmupScheduler(optimizer, training_settings["T_warmup"], training_settings['max_iter'])
-
-    start_iter = 0
-    
-    spatial_dim_var_target = model.model_settings['spatial_dims_var_target']
+  
     
     if training_settings['multi_gpus']:
         model = torch.nn.DataParallel(model)
 
-    pbar = tqdm(range(start_iter, training_settings['max_iter']))
+    pbar = tqdm(range(0, training_settings['max_iter']))
 
-    train_losses_save = []
-    val_losses_save = []
+    train_losses_hist = []
+    val_losses_hist = []
     lrs = []
     lrs = []
     for i in pbar:
@@ -542,54 +259,32 @@ def train(model, training_settings, model_settings={}):
 
         source, target, coords_source, coords_target, _, target_indices = [data_to_device(x, device) for x in next(iterator_train)]
 
-        if calc_trivial_loss and not loss_fcn_trivial.registered:
-            loss_fcn_trivial.register_samples(source, coords_target, target)
-
         output,_, output_reg_hr, non_valid_mask = model(source, coords_target, coords_source=coords_source)
 
-        if calc_vort:
-            spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
-            uv_dim_indices = target_indices[spatial_dim_uv]
-            output, non_valid_mask_vort, _ = add_vorticity(vort_calc, output, uv_dim_indices)
-            non_valid_mask['vort'] = non_valid_mask_vort
+        train_total_loss, train_loss_dict = loss_calculator(lambdas, target, model, source, coords_target, target_indices, coords_source=coords_source)
 
-            if 'vort' not in target.keys():
-                target = add_vorticity(vort_calc, target, uv_dim_indices)[0]
-        
-        loss, train_loss_dict = dict_loss_fcn(output, target, non_valid_mask, lambdas, lambdas_m)
-
-        if calc_trivial_loss:
-            trivial_loss = f_tl*loss_fcn_trivial(model)
-            loss += trivial_loss
-            train_loss_dict['trivial_loss'] = trivial_loss.item()
-
-        if calc_reg_loss:
-            reg_loss = f_tv*loss_fcn_reg(output_reg_hr)
-            loss += reg_loss
-            train_loss_dict['reg_loss'] = reg_loss.item()
+        train_losses_hist.append(train_loss_dict['total_loss'])
 
         optimizer.zero_grad()
-        if dw_train and i>2 and loss.item() < train_losses_save[-1] and train_losses_save[-1] < train_losses_save[-2]:
+        if dw_train and i>2 and train_losses_hist[-1] < train_losses_hist[-2] and train_losses_hist[-2] < train_losses_hist[-3]:
             
-            loss.backward(retain_graph=True) 
+            train_total_loss.backward(retain_graph=True) 
 
-            dw_loss = make_ascent(loss)
+            dw_loss = make_ascent(train_total_loss)
 
             optimizer2.zero_grad()
             dw_loss.backward()
             optimizer2.step()
             lr_scheduler2.step()
 
-            writer.update_scalars(dict(zip(lambdas.keys(),[val.item() for val in lambdas_m.values()])), n_iter, 'train')
+            writer.update_scalars(dict(zip(lambdas.keys(),[val.item() for val in lambdas.values()])), n_iter, 'train')
         
         else:
-            loss.backward() 
-
-        train_losses_save.append(loss.item())
-        train_loss_dict['total'] = loss.item()
+            train_total_loss.backward() 
 
         optimizer.step()
         lr_scheduler.step()
+
 
         if n_iter % training_settings['log_interval'] == 0:
             writer.update_scalars(train_loss_dict, n_iter, 'train')
@@ -602,50 +297,36 @@ def train(model, training_settings, model_settings={}):
                 source, target, coords_source, coords_target, _, target_indices = [data_to_device(x, device) for x in next(iterator_val)]
 
                 with torch.no_grad():
-                    output, output_reg_lr, output_reg_hr, non_valid_mask = model(source, coords_target, coords_source=coords_source)
+                    source, target, coords_source, coords_target, _, target_indices = [data_to_device(x, device) for x in next(iterator_train)]
 
-                    if calc_vort:
-                        uv_dim_indices = target_indices[spatial_dim_uv]
-                        output, non_valid_mask_vort, coords_vort = add_vorticity(vort_calc, output, uv_dim_indices)
-                        non_valid_mask['vort'] = non_valid_mask_vort
+                output,_, output_reg_hr, non_valid_mask = model(source, coords_target, coords_source=coords_source)
 
-                        if 'vort' not in target.keys():
-                            target = add_vorticity(vort_calc, target, uv_dim_indices)[0]
-                    else:
-                        coords_vort = None
-                    loss, val_loss_dict = dict_loss_fcn(output, target, non_valid_mask, lambdas, lambdas_m)
-
-                    if calc_reg_loss:
-                        reg_loss = f_tv*loss_fcn_reg(output_reg_hr)
-                        loss += reg_loss
-                        val_loss_dict['reg_loss'] = reg_loss.item()
-
-                    val_loss_dict['total'] = loss.item()
+                _, val_loss_dict = loss_calculator(lambdas, target, model, source, coords_target, target_indices, coords_source=coords_source)
 
                 val_losses.append(list(val_loss_dict.values()))
             
             val_loss = torch.tensor(val_losses).mean(dim=0)
             val_loss = dict(zip(val_loss_dict.keys(), val_loss))
             
-            val_losses_save.append(val_loss_dict['total'])
+            val_losses_hist.append(val_loss['total_loss'])
             debug_dict = {}
             if training_settings['save_debug']:
                 torch.save(debug_dict, os.path.join(log_dir,'debug_dict.pt'))
                 torch.save(coords_source,os.path.join(log_dir,'coords_source.pt'))
                 torch.save(coords_target,os.path.join(log_dir,'coords_target.pt'))
-                torch.save(coords_vort,os.path.join(log_dir,'coords_vort.pt'))
+      #          torch.save(coords_vort,os.path.join(log_dir,'coords_vort.pt'))
                 torch.save(output, os.path.join(log_dir,'output.pt'))
                 torch.save(output_reg_hr, os.path.join(log_dir,'output_reg_hr.pt'))
-                torch.save(output_reg_lr, os.path.join(log_dir,'output_reg_lr.pt'))
+    #            torch.save(output_reg_lr, os.path.join(log_dir,'output_reg_lr.pt'))
                 torch.save(target, os.path.join(log_dir,'target.pt'))
                 torch.save(source, os.path.join(log_dir,'source.pt'))
                 if "vort" in non_valid_mask.keys():
                     torch.save(non_valid_mask["vort"], os.path.join(log_dir,'non_valid_mask_vort.pt'))
-                np.savetxt(os.path.join(log_dir,'losses_val.txt'),np.array(val_losses_save))
-                np.savetxt(os.path.join(log_dir,'losses_train.txt'),np.array(train_losses_save))
+                np.savetxt(os.path.join(log_dir,'losses_val.txt'),np.array(val_losses_hist))
+                np.savetxt(os.path.join(log_dir,'losses_train.txt'),np.array(train_losses_hist))
                 np.savetxt(os.path.join(log_dir,'lrs.txt'),np.array(lrs))
        
-            early_stop.update(val_loss['total'], n_iter, model_save=model)
+            early_stop.update(val_loss['total_loss'], n_iter, model_save=model)
 
             writer.update_scalars(val_loss, n_iter, 'val')
 
