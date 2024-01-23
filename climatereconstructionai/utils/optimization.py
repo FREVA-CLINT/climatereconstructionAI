@@ -259,7 +259,7 @@ class VortLoss(nn.Module):
         output_vort, non_valid_mask_vort, _ = get_vorticity(self.phys_calc, output, uv_dim_indices)
         target_vort = get_vorticity(self.phys_calc, target, uv_dim_indices)[0]
 
-        vort_loss = L1Loss(output_vort, target_vort, non_valid_mask_vort)  
+        vort_loss = self.loss_fcn(output_vort, target_vort, non_valid_mask_vort)  
 
         return vort_loss
 
