@@ -257,9 +257,9 @@ def train(model, training_settings, model_settings={}):
 
         model.train()
 
-        source, target, coords_source, coords_target, _, target_indices = [data_to_device(x, device) for x in next(iterator_train)]
-
-        output,_, output_reg_hr, non_valid_mask = model(source, coords_target, coords_source=coords_source)
+        data = [data_to_device(x, device) for x in next(iterator_train)]
+        source, target, coords_source, coords_target = data[:4] # for backward compability
+        target_indices = data[-1]
 
         train_total_loss, train_loss_dict = loss_calculator(lambdas, target, model, source, coords_target, target_indices, coords_source=coords_source)
 
@@ -294,14 +294,11 @@ def train(model, training_settings, model_settings={}):
 
             for _ in range(training_settings['n_iters_val']):
 
-                source, target, coords_source, coords_target, _, target_indices = [data_to_device(x, device) for x in next(iterator_val)]
+                data = [data_to_device(x, device) for x in next(iterator_val)]
+                source, target, coords_source, coords_target = data[:4] # for backward compability
+                target_indices = data[-1]               
 
-                with torch.no_grad():
-                    source, target, coords_source, coords_target, _, target_indices = [data_to_device(x, device) for x in next(iterator_train)]
-
-                output,_, output_reg_hr, non_valid_mask = model(source, coords_target, coords_source=coords_source)
-
-                _, val_loss_dict = loss_calculator(lambdas, target, model, source, coords_target, target_indices, coords_source=coords_source)
+                _, val_loss_dict, output, output_reg_hr, non_valid_mask = loss_calculator(lambdas, target, model, source, coords_target, target_indices, coords_source=coords_source, val=True)
 
                 val_losses.append(list(val_loss_dict.values()))
             
@@ -314,10 +311,8 @@ def train(model, training_settings, model_settings={}):
                 torch.save(debug_dict, os.path.join(log_dir,'debug_dict.pt'))
                 torch.save(coords_source,os.path.join(log_dir,'coords_source.pt'))
                 torch.save(coords_target,os.path.join(log_dir,'coords_target.pt'))
-      #          torch.save(coords_vort,os.path.join(log_dir,'coords_vort.pt'))
                 torch.save(output, os.path.join(log_dir,'output.pt'))
                 torch.save(output_reg_hr, os.path.join(log_dir,'output_reg_hr.pt'))
-    #            torch.save(output_reg_lr, os.path.join(log_dir,'output_reg_lr.pt'))
                 torch.save(target, os.path.join(log_dir,'target.pt'))
                 torch.save(source, os.path.join(log_dir,'source.pt'))
                 if "vort" in non_valid_mask.keys():

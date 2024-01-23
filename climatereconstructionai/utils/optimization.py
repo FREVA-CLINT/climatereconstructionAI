@@ -351,9 +351,13 @@ class loss_calculator(nn.Module):
                 self.loss_fcn_dict['div'] = DivLoss(phys_calc)
 
 
-    def forward(self, lambdas, target, model, source, coords_target, target_indices, coords_source=None):
+    def forward(self, lambdas, target, model, source, coords_target, target_indices, coords_source=None, val=False):
         
-        output, _, output_reg_hr, non_valid_mask = model(source, coords_target, coords_source=coords_source)
+        if val:
+            with torch.no_grad():
+                output, _, output_reg_hr, non_valid_mask = model(source, coords_target, coords_source=coords_source)
+        else:
+            output, _, output_reg_hr, non_valid_mask = model(source, coords_target, coords_source=coords_source)
 
         if 'trivial' in self.loss_fcn_dict.keys() and not self.loss_fcn_dict['trivial'].registered:
             self.loss_fcn_dict['trivial'].register_samples(source, coords_target, target)
@@ -385,4 +389,7 @@ class loss_calculator(nn.Module):
 
         loss_dict['total_loss'] = total_loss.item()
         
-        return total_loss, loss_dict
+        if val:
+            return total_loss, loss_dict, output, output_reg_hr, non_valid_mask
+        else:
+            return total_loss, loss_dict
