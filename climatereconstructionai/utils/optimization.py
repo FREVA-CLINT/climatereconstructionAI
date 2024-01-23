@@ -302,12 +302,12 @@ class loss_calculator(nn.Module):
 
         self.spatial_dim_var_target = spatial_dim_var_target
         self.lambdas_var = training_settings['lambdas_var']
+        self.lambdas_static = training_settings['lambdas']
 
-        lambdas = training_settings['lambdas']
         self.loss_fcn_dict = {} 
 
         phys_calc = None
-        for loss_type, value in lambdas.items():
+        for loss_type, value in self.lambdas_static.items():
         
             if loss_type == 'tv' and value > 0:
                 self.loss_fcn_dict['tv'] = TVLoss()
@@ -341,7 +341,7 @@ class loss_calculator(nn.Module):
                 self.loss_fcn_dict['div'] = DivLoss(phys_calc)
 
 
-    def forward(self, lambdas, target, model, source, coords_target, target_indices, coords_source=None, val=False):
+    def forward(self, lambdas_optim, target, model, source, coords_target, target_indices, coords_source=None, val=False):
         
         if val:
             with torch.no_grad():
@@ -374,7 +374,7 @@ class loss_calculator(nn.Module):
             elif loss_type == 'div':
                 loss =  loss_fcn(output, target_indices, self.spatial_dim_var_target)
             
-            total_loss += lambdas[loss_type] * loss
+            total_loss += self.lambdas_static[loss_type]*lambdas_optim[loss_type] * loss
             loss_dict[loss_type] = loss.item()
 
         loss_dict['total_loss'] = total_loss.item()
