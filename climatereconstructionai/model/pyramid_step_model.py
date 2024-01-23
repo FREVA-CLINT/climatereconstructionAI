@@ -119,7 +119,7 @@ class pyramid_step_model(nn.Module):
         model_settings_pre = self.model_settings
 
         self.output_net_pre = output_net(model_settings_pre,
-                                         0.5, 10, model_settings_pre["interpolation_sample_pts"], 
+                                         0.2, 5, model_settings_pre["interpolation_sample_pts"], 
                                          use_gnlll=False)
         
         self.output_net_post = output_net(self.model_settings,
@@ -166,9 +166,9 @@ class pyramid_step_model(nn.Module):
 
             for var in self.output_res_indices.keys():
                 if self.use_gnlll:
-                    mu, std = torch.split(x[var], 1, dim=-1)
-                    mu = mu + x_pre[var][:,:,:,[0]] 
-                    x[var] = torch.concat((mu,std), dim=-1)
+                    mu, std = torch.split(x[var], 1, dim=2)
+                    mu = mu + x_pre[var]
+                    x[var] = torch.concat((mu,std), dim=2)
                 else:
                     x[var] = x[var] + x_pre[var]
         

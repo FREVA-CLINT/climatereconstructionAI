@@ -176,11 +176,11 @@ class mid(nn.Module):
     
 
 class out_net(nn.Module):
-    def __init__(self, input_indices, output_indices, hw_in, hw_out, global_residual=True):
+    def __init__(self, res_indices, channels, hw_in, hw_out, global_residual=True):
         super().__init__()
 
-        self.input_indices = input_indices
-        self.output_indices = output_indices
+        self.res_indices_rhs = res_indices
+        self.res_indices_lhs = torch.arange(len(res_indices))
 
         if hw_in > hw_out and global_residual:
             upcale_factor = hw_in // hw_out
@@ -194,20 +194,20 @@ class out_net(nn.Module):
         else:
             self.upsample_res = self.upsample_out = nn.Identity()
         
-        self.out_layer = res_net_block(hw_in, len(output_indices), len(output_indices), k_size=3, batch_norm=False, groups=len(output_indices), dropout=0, with_res=True, with_att=False, bias=False, out_activation=False)
+        self.out_layer = res_net_block(hw_in, channels, channels, k_size=3, batch_norm=False, groups=channels, dropout=0, with_res=True, with_att=False, bias=False, out_activation=False)
 
         self.global_residual = global_residual
         
         
     def forward(self, x, x_res):
 
-        x_res = self.upsample_res(x_res[:,self.input_indices,:,:])
+        x_res = self.upsample_res(x_res[:,self.res_indices_rhs,:,:])
         x = self.upsample_out(x)
 
+        x = self.out_layer(x)
+
         if self.global_residual:
-            x[:,self.output_indices] = self.out_layer(x[:,self.output_indices]) + x_res
-        else:
-            x[:,self.output_indices] = self.out_layer(x[:,self.output_indices])
+            x[:,self.res_indices_lhs] = x[:,self.res_indices_lhs] + x_res
 
         return x
 
@@ -221,10 +221,7 @@ class ResUNet(nn.Module):
         self.encoder = encoder(hw_in, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, 7, input_stride, batch_norm=batch_norm, n_groups=in_groups, dropout=dropout, bias=bias)
         self.decoder = decoder(hw_in, n_levels, n_res_blocks, model_dim_unet, out_channels, upcale_factor=upcale_factor, k_size=k_size, batch_norm=False, dropout=dropout, n_groups=out_groups, bias=bias)
 
-        input_indices = res_indices
-        output_indices = torch.arange(len(res_indices)) * (out_channels // len(res_indices))
-
-        self.out_net = out_net(input_indices, output_indices, hw_in, hw_out, global_residual=residual)
+        self.out_net = out_net(res_indices, out_channels, hw_in, hw_out, global_residual=residual)
   
         hw_mid = hw_in // (input_stride*2**(n_levels-1))
         self.mid = mid(hw_mid, n_res_blocks, model_dim_unet*(4**(n_levels-1)), with_att=True, bias=bias)

@@ -304,7 +304,7 @@ class Trivial_loss(nn.Module):
 
         total_loss = 0 
         for var in output.keys():
-            loss = self.loss(output[var].squeeze(), self.target_0[var].squeeze())
+            loss = self.loss(output[var][:,0,0], self.target_0[var][:,:,0])
             total_loss+=loss
 
         return total_loss
@@ -339,6 +339,9 @@ class loss_calculator(nn.Module):
 
             elif loss_type == 'trivial' and value > 0:
                 self.loss_fcn_dict['trivial'] = Trivial_loss()
+            
+            elif loss_type == 'gauss' and value > 0:
+                self.loss_fcn_dict['gauss'] =DictLoss(GaussLoss())
 
             elif loss_type == 'vort' and value > 0:
                 if phys_calc is None:
@@ -372,7 +375,7 @@ class loss_calculator(nn.Module):
             elif loss_type == 'tv' or loss_type == 'tv_rel':
                 loss =  loss_fcn(output_reg_hr)
 
-            elif loss_type == 'l2' or loss_type == 'l1':
+            elif loss_type == 'l2' or loss_type == 'l1' or loss_type == 'gauss':
                 loss =  loss_fcn(output, target, non_valid_mask)
 
             elif loss_type == 'rel':
