@@ -19,9 +19,16 @@ class physics_calculator():
         self.meridional_normal_primal_edge = torch.from_numpy(dset['meridional_normal_primal_edge'][:].data).to(device)
         self.edges_of_vertex = torch.from_numpy(dset['edges_of_vertex'][:].data.T-1).clamp(min=0).long().to(device)
         self.dual_edge_length = torch.from_numpy(dset['dual_edge_length'][:].data).to(device)
+        self.edge_length = torch.from_numpy(dset['edge_length'][:].data).to(device)
         self.edge_vertices = torch.from_numpy(dset['edge_vertices'][:].data).long().to(device)-1
 
+        self.cell_area = torch.from_numpy(dset['cell_area'][:].data).to(device)
+        self.edge_of_cell = torch.from_numpy(dset['edge_of_cell'][:].data.T-1).to(device)
+        self.adjacent_cell_of_edge = torch.from_numpy(dset['adjacent_cell_of_edge'][:].data.T-1).long().to(device)
+
         self.dual_area = torch.tensor(dset['dual_area'][:].data, device=device)
+
+        self.orientation_of_normal = torch.from_numpy(dset['orientation_of_normal'][:].data).to(device)
 
         edge_dual_normal_cartesian_x = dset['edge_dual_normal_cartesian_x'][:].data
         edge_dual_normal_cartesian_y = dset['edge_dual_normal_cartesian_y'][:].data
@@ -74,63 +81,49 @@ class physics_calculator():
         return self.get_vorticity_from_uv(u,v)
     
 
-    def get_vorticity_from_edge_indices(self, global_edge_indices, u, v):
+    def get_normal_velocity_from_indices(self, global_edge_indices, u, v):
         b,n = global_edge_indices.shape
         n_edges_global = self.zonal_normal_primal_edge.shape[-1]
-        n_vertices_global = self.edges_of_vertex.shape[0]
 
         global_edge_indices_b = global_edge_indices + (torch.arange(b, device=self.device)*n_edges_global).view(b,1)
-        global_edge_indices_b_red = global_edge_indices_b.unique(return_counts=True)[1].max()>1
-
-        v_indices = self.edge_vertices[:,global_edge_indices].transpose(0,1).reshape(b,-1)
-        v_indices_b = v_indices + (torch.arange(b, device=self.device)*n_vertices_global).view(b,1)
 
         u_global = torch.zeros((b*n_edges_global),device=self.device)
         v_global = torch.zeros((b*n_edges_global),device=self.device)
+        valid_mask = torch.zeros((b*n_edges_global),device=self.device, dtype=bool)
+
         u_global[global_edge_indices_b.view(-1)] = u.view(-1)
         v_global[global_edge_indices_b.view(-1)] = v.view(-1)
+        valid_mask[global_edge_indices_b.view(-1)] = True
+
         u_global = u_global.view(b,n_edges_global)
         v_global = v_global.view(b,n_edges_global)
-
-        unique, inverse, counts = torch.unique(v_indices_b, return_counts=True, return_inverse=True)
-        non_valid = unique[(counts!=6)]
-        mask = torch.isin(v_indices_b, non_valid)
-       # valid_b = torch.bucketize(valid, (torch.arange(b)*n_vertices_global))
-       # n_valid = valid_b.unique(return_counts=True)[1]
-
-        v_indices_fov = v_indices_b
-        self.v_indices_fov = v_indices_fov
+        valid_mask = valid_mask.view(b,n_edges_global)
 
         normalVelocity = u_global*self.zonal_normal_primal_edge + v_global*self.meridional_normal_primal_edge
 
-        edges_of_vertex = self.edges_of_vertex[v_indices]
-        normalVelocity_con = torch.gather(normalVelocity, dim=1, index=edges_of_vertex.view(b,-1))
-        normalVelocity_con = normalVelocity_con.view(b,-1,6)
-        #normalVelocity_con = normalVelocity[torch.from_numpy(self.edges_of_vertex[v_indices_fov])]
+        return normalVelocity, valid_mask
 
-        edge_length_con = self.dual_edge_length[edges_of_vertex]
 
-        signorient_con = self.signorient[v_indices]
+    def get_vorticity_from_edge_indices(self, global_edge_indices, u, v):
+        b,n = global_edge_indices.shape
+        normalVelocity, mask = self.get_normal_velocity_from_indices(global_edge_indices, u, v)
+        vort_mask = ((mask)[:,self.edges_of_vertex]).sum(axis=-1) == 6
+        vort = ((normalVelocity*self.dual_edge_length)[:,self.edges_of_vertex]*self.signorient).sum(axis=-1)/self.dual_area.unsqueeze(dim=0)
+        vort[~vort_mask] = 0
 
-        dual_area_con = self.dual_area[v_indices]
+        return vort.view(b,1,1,-1), ~vort_mask
 
-        vort = ((normalVelocity_con*edge_length_con)*signorient_con).sum(axis=-1)/dual_area_con
 
-        vort = vort.view(b,1,1,-1)
+    def get_divergence_from_edge_indices(self, global_edge_indices, u, v, zos=None):
 
-        coords_v = self.coords_v[:,v_indices].transpose(1,0)
-        return vort, coords_v, mask
-
-    def get_global_divergence(self, u, v, zos=None):
-        # global only
-
-        normal_velocity = u*self.zonal_normal_primal_edge.unsqueeze(dim=0) + v*self.meridional_normal_primal_edge.unsqueeze(dim=0) 
+        normalVelocity, mask = self.get_normal_velocity_from_indices(global_edge_indices, u, v)
         
         if zos is not None:
+            # to be implemented
             dek = arclen((self.cartesian_cell_circumcenter/torch.linalg.norm(self.cartesian_cell_circumcenter,dim=-1).unsqueeze(dim=-1)).unsqueeze(dim=1),
                     (self.edge_middle_cartesian[self.edge_of_cell]/torch.linalg.norm(self.edge_middle_cartesian[self.edge_of_cell],dim=-1).unsqueeze(dim=-1)))*self.rad
             
-            Pu = (((normal_velocity*self.edge_length)[self.edge_of_cell]*dek).unsqueeze(dim=-1)*self.edge_primal_normal_cartesian[self.edge_of_cell]).sum(dim=1)/self.cell_area.unsqueeze(dim=-1)
+            Pu = (((normalVelocity*self.edge_length)[self.edge_of_cell]*dek).unsqueeze(dim=-1)*self.edge_primal_normal_cartesian[self.edge_of_cell]).sum(dim=1)/self.cell_area.unsqueeze(dim=-1)
             dek = torch.stack([arclen(self.cartesian_cell_circumcenter[self.adjacent_cell_of_edge[:,0]],self.edge_middle_cartesian),
                         arclen(self.cartesian_cell_circumcenter[self.adjacent_cell_of_edge[:,1]],self.edge_middle_cartesian)]).T*self.rad
             
@@ -139,9 +132,12 @@ class physics_calculator():
             div = ((PThPu*self.edge_length)[self.edge_of_cell]*self.orientation_of_normal.T).sum(dim=-1)/self.cell_area 
 
         else:
-            div = ((normal_velocity*self.edge_length.unsqueeze(dim=0))[:,self.edge_of_cell]*self.orientation_of_normal.T.unsqueeze(dim=0)).sum(dim=-1)/self.cell_area.unsqueeze(dim=0)
+            div_mask = mask[:,self.edge_of_cell].sum(dim=-1) == 3
+            div = ((normalVelocity*self.edge_length.unsqueeze(dim=0))[:,self.edge_of_cell]*self.orientation_of_normal.T.unsqueeze(dim=0)).sum(dim=-1)/self.cell_area.unsqueeze(dim=0)
+            div[~div_mask] = 0
             
-        return div
+        return div, ~div_mask
+    
 
 def get_vorticity(phys_calc, tensor_dict, global_edge_indices):
     u = tensor_dict['u']
@@ -159,9 +155,9 @@ def get_div_loss(phys_calc, tensor_dict):
 
     u = u[:,0,0] if u.dim()==4 else u
     v = v[:,0,0] if v.dim()==4 else v
-    div = phys_calc.get_global_divergence(u, v)
+    div, non_valid_mask = phys_calc.get_divergence_from_edge_indices(u, v)
 
-    loss = div.abs()    
+    loss = (div[~non_valid_mask]**2).mean()   
     return loss
 
 
