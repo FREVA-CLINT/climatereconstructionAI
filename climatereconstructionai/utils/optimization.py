@@ -149,18 +149,6 @@ def get_vorticity(phys_calc, tensor_dict, global_edge_indices):
     return vort, non_valid_mask, coords_vort
 
 
-def get_div_loss(phys_calc, tensor_dict):
-    u = tensor_dict['u']
-    v = tensor_dict['v']
-
-    u = u[:,0,0] if u.dim()==4 else u
-    v = v[:,0,0] if v.dim()==4 else v
-    div, non_valid_mask = phys_calc.get_divergence_from_edge_indices(u, v)
-
-    loss = (div[~non_valid_mask]**2).mean()   
-    return loss
-
-
 class GaussLoss(nn.Module):
     def __init__(self):
         super().__init__()
@@ -241,7 +229,6 @@ class DictLoss(nn.Module):
 
         return total_loss
 
-
 class VortLoss(nn.Module):
     def __init__(self, phys_calc):
         super().__init__()
@@ -265,16 +252,20 @@ class DivLoss(nn.Module):
         self.phys_calc = phys_calc
         self.loss_fcn = L1Loss()
 
-    def forward(self, output):
+    def forward(self, output, target_indices, spatial_dim_var_target):
        
         u = output['u']
         v = output['v']
 
         u = u[:,0,0] if u.dim()==4 else u
         v = v[:,0,0] if v.dim()==4 else v
-        div = self.phys_calc.get_global_divergence(u, v)
 
-        loss = div.abs()    
+        spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
+        uv_dim_indices = target_indices[spatial_dim_uv]
+        
+        div, non_valid_mask = self.phys_calc.get_divergence_from_edge_indices(uv_dim_indices, u, v)
+
+        loss = (div[~non_valid_mask]**2).mean()     
 
         return loss
 
