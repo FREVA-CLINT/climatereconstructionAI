@@ -277,7 +277,9 @@ def train(model, training_settings, model_settings={}):
             optimizer2.step()
             lr_scheduler2.step()
 
-            writer.update_scalars(dict(zip(lambdas.keys(),[val.item() for val in lambdas.values()])), n_iter, 'train')
+            lambda_keys = [f'lambda_{key}' for key in lambdas.keys()]
+            lambda_vals = [val.item() for val in lambdas.values()]
+            writer.update_scalars(dict(zip(lambda_keys, lambda_vals)), n_iter, 'train')
         
         else:
             train_total_loss.backward() 
