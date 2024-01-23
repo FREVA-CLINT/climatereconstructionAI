@@ -345,12 +345,12 @@ class loss_calculator(nn.Module):
 
             elif loss_type == 'vort' and value > 0:
                 if phys_calc is None:
-                    phys_calc = physics_calculator(training_settings['grid_file'])
+                    phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
                 self.loss_fcn_dict['vort'] = VortLoss(phys_calc)
 
             elif loss_type == 'div' and value > 0:
                 if phys_calc is None:
-                    phys_calc = physics_calculator(training_settings['grid_file'])
+                    phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
                 self.loss_fcn_dict['div'] = DivLoss(phys_calc)
 
 
