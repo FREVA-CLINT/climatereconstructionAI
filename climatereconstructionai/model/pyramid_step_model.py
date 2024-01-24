@@ -119,7 +119,9 @@ class pyramid_step_model(nn.Module):
         model_settings_pre = self.model_settings
 
         self.output_net_pre = output_net(model_settings_pre,
-                                         0.2, 5, model_settings_pre["interpolation_sample_pts"], 
+                                         model_settings_pre["interpolation_std_s"],
+                                          model_settings_pre["interpolation_nh_s"],
+                                          model_settings_pre["interpolation_sample_pts"],
                                          use_gnlll=False)
         
         self.output_net_post = output_net(self.model_settings,
