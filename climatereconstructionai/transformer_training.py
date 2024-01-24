@@ -142,8 +142,8 @@ def train(model, training_settings, model_settings={}):
         with open(os.path.join(sample_dir_train, 'dims_var_source.json'), 'r') as f:
             dims_variables_source = json.load(f)
 
-        dataset_train = SampleLoader(sample_dir_train, dims_variables_source, dims_variables_target)
-        dataset_val = SampleLoader(sample_dir_val, dims_variables_source, dims_variables_target)
+        dataset_train = SampleLoader(sample_dir_train, dims_variables_source, dims_variables_target, training_settings['variables_source'], training_settings['variables_target'])
+        dataset_val = SampleLoader(sample_dir_val, dims_variables_source, dims_variables_target, training_settings['variables_source'], training_settings['variables_target'])
        
         with open(os.path.join(sample_dir_train,'norm_dict.json'), 'r') as f:
             norm_dict = json.load(f)

@@ -478,7 +478,7 @@ class NetCDFLoader_lazy(Dataset):
 
 
 class SampleLoader(Dataset):
-    def __init__(self, root_dir, dims_variables_source, dims_variables_target):
+    def __init__(self, root_dir, dims_variables_source, dims_variables_target, variables_source, variables_target):
         self.root_dir = root_dir
         self.file_list = os.listdir(root_dir)
         sample_path = os.path.join(self.root_dir, self.file_list[0])
@@ -487,6 +487,9 @@ class SampleLoader(Dataset):
         self.n_dict_source = dict(zip(coords_source.keys(),[val.shape[-1] for val in coords_source.values()]))
         self.n_dict_target = dict(zip(coords_target.keys(),[val.shape[-1] for val in coords_target.values()]))
         
+        sample_variables_source = list(dims_variables_source['var_spatial_dims'].keys())
+        self.indices_source = [k for k,var in enumerate(sample_variables_source) if var in variables_source]
+
         self.dims_variables_source = dims_variables_source
         self.dims_variables_target = dims_variables_target
    
@@ -538,6 +541,6 @@ class SampleLoader(Dataset):
             target_indices[spatial_dim] = target_indices[spatial_dim][indices]
             coords_target[spatial_dim] = coords_target[spatial_dim][:,indices]
 
-        data = [source, target, torch.zeros((10,)), coords_target, target_indices]
+        data = [source[self.indices_source], target, torch.zeros((10,)), coords_target, target_indices]
         
         return data
