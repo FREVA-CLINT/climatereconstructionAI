@@ -91,8 +91,8 @@ class physics_calculator():
         v_global = torch.zeros((b*n_edges_global),device=self.device)
         valid_mask = torch.zeros((b*n_edges_global),device=self.device, dtype=bool)
 
-        u_global[global_edge_indices_b.view(-1)] = u.view(-1)
-        v_global[global_edge_indices_b.view(-1)] = v.view(-1)
+        u_global[global_edge_indices_b.view(-1)] = u.contiguous().view(-1)
+        v_global[global_edge_indices_b.view(-1)] = v.contiguous().view(-1)
         valid_mask[global_edge_indices_b.view(-1)] = True
 
         u_global = u_global.view(b,n_edges_global)
