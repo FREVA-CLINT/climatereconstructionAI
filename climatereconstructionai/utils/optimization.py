@@ -202,23 +202,12 @@ class TVLoss_log(nn.Module):
         super().__init__()
 
     def forward(self, output_hr):
-        output_hr = output_hr.abs().log10()
+        output_hr = (output_hr.abs()+1e-10).log10()
 
         loss = (output_hr[:,:,1:] - output_hr[:,:,:-1]).abs().mean() + (output_hr[:,:,:,1:] - output_hr[:,:,:,:-1]).abs().mean()
 
         return loss
 
-
-class LogLoss(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, output_hr):
-        output_hr = output_hr.abs().log10()
-
-        loss = (output_hr[:,:,1:] - output_hr[:,:,:-1]).abs().mean() + (output_hr[:,:,:,1:] - output_hr[:,:,:,:-1]).abs().mean()
-
-        return loss
 
 class LogLoss(nn.Module):
     def __init__(self, ):
@@ -233,8 +222,8 @@ class LogLoss(nn.Module):
         target_sgn = target_valid.sign()
 
         loss_sgn = self.loss(output_sgn,target_sgn)
-        output_mag = output_valid.abs().log10()
-        target_mag = target_valid.abs().log10()
+        output_mag = (output_valid.abs()+1e-10).log10()
+        target_mag = (target_valid.abs()+1e-10).log10()
 
         loss_mag = self.loss(output_mag,target_mag)
         return loss_sgn + loss_mag
