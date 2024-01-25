@@ -264,7 +264,7 @@ class ResUNet(nn.Module):
         self.encoder = encoder(hw_in, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, 7, input_stride, batch_norm=batch_norm, n_groups=in_groups, dropout=dropout, bias=bias, global_padding=global_padding)
         self.decoder = decoder(hw_in, n_levels, n_res_blocks, model_dim_unet, out_channels, global_upscale_factor=global_upscale_factor, k_size=k_size, dropout=dropout, n_groups=out_groups, bias=bias, global_padding=global_padding)
 
-        self.out_net = out_net(res_indices, hw_in, hw_out, global_residual=residual, global_padding=global_padding)
+        self.out_net = out_net(res_indices, hw_in, hw_in//input_stride, global_residual=residual, global_padding=global_padding)
   
         hw_mid = hw_in // (input_stride*2**(n_levels-1))
         self.mid = mid(hw_mid, n_res_blocks, model_dim_unet*(2**(n_levels-1)), with_att=True, bias=bias, global_padding=global_padding)
