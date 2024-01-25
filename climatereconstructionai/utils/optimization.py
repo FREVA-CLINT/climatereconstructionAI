@@ -193,9 +193,51 @@ class TVLoss(nn.Module):
 
     def forward(self, output_hr):
         
-        loss = (output_hr[:,1:] - output_hr[:,:-1]).abs().mean() + (output_hr[:,:,1:] - output_hr[:,:,:-1]).abs().mean()
+        loss = (output_hr[:,:,1:] - output_hr[:,:,:-1]).abs().mean() + (output_hr[:,:,:,1:] - output_hr[:,:,:,:-1]).abs().mean()
 
         return loss
+    
+class TVLoss_log(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, output_hr):
+        output_hr = output_hr.abs().log10()
+
+        loss = (output_hr[:,:,1:] - output_hr[:,:,:-1]).abs().mean() + (output_hr[:,:,:,1:] - output_hr[:,:,:,:-1]).abs().mean()
+
+        return loss
+
+
+class LogLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, output_hr):
+        output_hr = output_hr.abs().log10()
+
+        loss = (output_hr[:,:,1:] - output_hr[:,:,:-1]).abs().mean() + (output_hr[:,:,:,1:] - output_hr[:,:,:,:-1]).abs().mean()
+
+        return loss
+
+class LogLoss(nn.Module):
+    def __init__(self, ):
+        super().__init__()
+        self.loss = torch.nn.MSELoss()
+
+    def forward(self, output, target, non_valid_mask):
+        output_valid = output[:,0,0][~non_valid_mask]
+        target_valid = target.squeeze()[~non_valid_mask].squeeze()
+
+        output_sgn = output_valid.sign()
+        target_sgn = target_valid.sign()
+
+        loss_sgn = self.loss(output_sgn,target_sgn)
+        output_mag = output_valid.abs().log10()
+        target_mag = target_valid.abs().log10()
+
+        loss_mag = self.loss(output_mag,target_mag)
+        return loss_sgn + loss_mag
 
 class TVLoss_rel(nn.Module):
     def __init__(self):
@@ -203,10 +245,10 @@ class TVLoss_rel(nn.Module):
 
     def forward(self, output_hr):
         
-        rel_diff1 = ((output_hr[:,1:] - output_hr[:,:-1])/(output_hr[:,1:]+1e-10)).abs()
+        rel_diff1 = ((output_hr[:,:,1:] - output_hr[:,:,:-1])/(output_hr[:,:,1:]+1e-10)).abs()
         rel_diff1 = rel_diff1.clamp(max=1)
 
-        rel_diff2 = ((output_hr[:,:,1:] - output_hr[:,:,:-1])/(output_hr[:,:,1:]+1e-10)).abs()
+        rel_diff2 = ((output_hr[:,:,:,1:] - output_hr[:,:,:,:-1])/(output_hr[:,:,:,1:]+1e-10)).abs()
         rel_diff2 = rel_diff2.clamp(max=1)
 
         loss = (rel_diff1.mean() + rel_diff2.mean())
@@ -312,6 +354,9 @@ class loss_calculator(nn.Module):
             if loss_type == 'tv' and value > 0:
                 self.loss_fcn_dict['tv'] = TVLoss()
 
+            elif loss_type == 'tv_log' and value > 0:
+                self.loss_fcn_dict['tv_log'] = TVLoss_log()
+
             elif loss_type == 'tv_rel' and value > 0:
                 self.loss_fcn_dict['tv_rel'] = TVLoss_rel()
 
@@ -320,6 +365,9 @@ class loss_calculator(nn.Module):
 
             elif loss_type == 'l1' and value > 0:
                 self.loss_fcn_dict['l1'] = DictLoss(L1Loss(loss='l1'))
+            
+            elif loss_type == 'log' and value > 0:
+                self.loss_fcn_dict['log'] = DictLoss(LogLoss())
 
             elif loss_type == 'rel' and value > 0:
                 self.loss_fcn_dict['rel'] = DictLoss(L1Loss_rel())
@@ -359,10 +407,10 @@ class loss_calculator(nn.Module):
             if loss_type == 'trivial':
                 loss =  loss_fcn(model)
 
-            elif loss_type == 'tv' or loss_type == 'tv_rel':
+            elif loss_type == 'tv' or loss_type == 'tv_rel' or loss_type == 'tv_log':
                 loss =  loss_fcn(output_reg_hr)
 
-            elif loss_type == 'l2' or loss_type == 'l1' or loss_type == 'gauss':
+            elif loss_type == 'l2' or loss_type == 'l1' or loss_type == 'gauss' or loss_type == 'log':
                 loss =  loss_fcn(output, target, non_valid_mask)
 
             elif loss_type == 'rel':
