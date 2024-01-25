@@ -8,7 +8,43 @@ def global_pad(x, padding):
     x = nn.functional.pad(x, (padding,padding,0,0),mode='circular')
     x = nn.functional.pad(x, (0,0,padding,padding),mode='replicate')
     return x
-  
+
+
+def ICNR(tensor, initializer, upscale_factor=2, *args, **kwargs):
+    upscale_factor_squared = upscale_factor * upscale_factor
+    
+    sub_kernel = torch.empty(tensor.shape[0] // upscale_factor_squared,
+                             *tensor.shape[1:])
+    sub_kernel = initializer(sub_kernel, *args, **kwargs)
+    return sub_kernel.repeat_interleave(upscale_factor_squared, dim=0)
+
+
+class shuffle_upscaling(nn.Module):
+    def __init__(self, in_channels, upscale_factor, k_size=3, bias=False, global_padding=False):
+        super().__init__()
+
+        out_channels = in_channels * upscale_factor**2
+        self.global_padding = global_padding
+        self.padding = k_size // 2
+
+        if not global_padding:
+            self.conv = nn.Conv2d(in_channels, out_channels, stride=1, padding=k_size//2, kernel_size=k_size, padding_mode='replicate', bias=bias)
+        else:
+            self.conv = nn.Conv2d(in_channels, out_channels, stride=1, kernel_size=k_size, bias=bias)
+        
+        weight = ICNR(self.conv.weight, initializer=nn.init.kaiming_normal_,upscale_factor=upscale_factor)
+        self.conv.weight.data.copy_(weight)
+                        
+        self.pixel_shuffle = nn.PixelShuffle(upscale_factor)
+
+    def forward(self, x):
+        if self.global_padding:
+            x = global_pad(x, self.padding)
+        x = self.conv(x)
+        x = self.pixel_shuffle(x)
+
+        return x
+
 class res_net_block(nn.Module):
     def __init__(self, hw, in_channels, out_channels, k_size=3, batch_norm=True, stride=1, groups=1, dropout=0, with_att=False, with_res=True, bias=True, out_activation=True, global_padding=False):
         super().__init__()
@@ -39,7 +75,7 @@ class res_net_block(nn.Module):
 
         self.with_att = with_att
         if with_att:
-            self.att = helpers.ConvSelfAttention(out_channels, hw, n_heads=4)
+            self.att = helpers.ConvSelfAttention(out_channels, hw, n_heads=1)
 
     def forward(self, x):
 
@@ -104,7 +140,7 @@ class encoder(nn.Module):
                 out_channels_block = u_net_channels 
             else:
                 in_channels_block = out_channels_block
-                out_channels_block = u_net_channels*(4**(n))
+                out_channels_block = u_net_channels*(2**(n))
 
             reduction = False if n == n_levels-1 else True
             hw = hw_in/(input_stride*2**(n))
@@ -113,28 +149,27 @@ class encoder(nn.Module):
     def forward(self, x):
         outputs = []
         x = self.in_layer(x)
+        x_in = x
         for layer in self.layers:
             x, x_skip = layer(x)
             outputs.append(x_skip)
-        return x, outputs
+        return x, outputs, x_in
 
 class decoder_block_shuffle(nn.Module):
-    def __init__(self, hw, n_blocks, in_channels, out_channels, k_size=3, with_skip=True, batch_norm=False, dropout=0, bias=True, global_padding=False):
+    def __init__(self, hw, n_blocks, in_channels, out_channels, k_size=3, dropout=0, upscale_factor=2, bias=True, global_padding=False, out_activation=True, groups=1, with_res=True, with_skip=True):
         super().__init__()
-  
-        self.up = nn.PixelShuffle(2)
 
-        self.with_skip=with_skip
+        self.up = shuffle_upscaling(in_channels, upscale_factor, k_size=k_size, bias=False, global_padding=global_padding) if upscale_factor > 1 else nn.Identity()
+        
+        in_channels = in_channels + in_channels//2 if with_skip else in_channels
 
-        #self.res_block = res_net_block(out_channels*2, out_channels,  k_size=k_size, batch_norm=batch_norm, dropout=dropout)
-
-        self.res_blocks = res_blocks(hw, n_blocks, in_channels, out_channels, k_size=k_size, batch_norm=False, groups=1, with_reduction=False, dropout=dropout, with_res=True, bias=bias, global_padding=global_padding)
+        self.res_blocks = res_blocks(hw, n_blocks, in_channels, out_channels, k_size=k_size, batch_norm=False, groups=groups, with_reduction=False, dropout=dropout, with_res=with_res, bias=bias, global_padding=global_padding, out_activation=out_activation)
 
     def forward(self, x, skip_channels=None):
 
         x = self.up(x)
 
-        if self.with_skip:
+        if not skip_channels is None:
             x = torch.concat((x, skip_channels), dim=1)
       
         x = self.res_blocks(x)[0]
@@ -142,23 +177,20 @@ class decoder_block_shuffle(nn.Module):
         return x
 
 class decoder(nn.Module):
-    def __init__(self, hw_in, n_levels, n_blocks, u_net_channels, out_channels, upcale_factor=1, k_size=3, batch_norm=False, dropout=0, n_groups=1, bias=True, global_padding=False):
+    def __init__(self, hw_in, n_levels, n_blocks, u_net_channels, out_channels, global_upscale_factor=1, k_size=3, dropout=0, n_groups=1, bias=True, global_padding=False):
         super().__init__()
 
         self.decoder_blocks = nn.ModuleList()
         for n in range(n_levels-1, 0,-1):
-            out_channels_block = u_net_channels*(4**(n-1))
+            out_channels_block = u_net_channels*(2**(n-1))
             in_channels_block = out_channels_block*2
             hw = hw_in/(2**(n-1))
-
+            
             if n==1:
-                out_channels_block = u_net_channels*n_groups*upcale_factor**2
-            self.decoder_blocks.append(decoder_block_shuffle(hw, n_blocks, in_channels_block, out_channels_block, k_size=k_size, with_skip=True, batch_norm=batch_norm, dropout=dropout, bias=bias, global_padding=global_padding))      
+                out_channels_block = n_groups * (out_channels_block // n_groups + out_channels_block % n_groups)
+            self.decoder_blocks.append(decoder_block_shuffle(hw, n_blocks, in_channels_block, out_channels_block, k_size=k_size, dropout=dropout, bias=bias, global_padding=global_padding))      
         
-        out_channels_block = out_channels_block // upcale_factor**2
-
-        self.upscale = nn.PixelShuffle(upcale_factor) if upcale_factor >1 else nn.Identity()
-        self.out_layer = res_net_block(hw_in, out_channels_block, out_channels, k_size=k_size, batch_norm=batch_norm, groups=n_groups, dropout=dropout, with_res=False, with_att=False, bias=False, global_padding=global_padding)
+        self.out_block = decoder_block_shuffle(hw, n_blocks, out_channels_block, out_channels, k_size=k_size, dropout=dropout, groups=n_groups, upscale_factor=global_upscale_factor, with_res=False, bias=False, global_padding=global_padding, out_activation=False, with_skip=False)
 
     def forward(self, x, skip_channels):
 
@@ -166,8 +198,7 @@ class decoder(nn.Module):
             x_skip = skip_channels[-(k+2)]  
             x = layer(x, x_skip)
 
-        x = self.upscale(x)
-        x = self.out_layer(x)
+        x = self.out_block(x)
 
         return x
 
@@ -185,16 +216,20 @@ class mid(nn.Module):
     
 
 class out_net(nn.Module):
-    def __init__(self, res_indices, channels, hw_in, hw_out, global_residual=True, global_padding=False):
+    def __init__(self, res_indices, hw_in, hw_out, global_residual=True, global_padding=False):
         super().__init__()
 
         self.res_indices_rhs = res_indices
         self.res_indices_lhs = torch.arange(len(res_indices))
+        self.global_padding = global_padding
+
 
         if hw_in > hw_out and global_residual:
             upcale_factor = hw_in // hw_out
-            self.upsample_out = nn.Upsample(scale_factor=upcale_factor, mode='bicubic', align_corners=False)
-            self.upsample_res = nn.Identity()
+            self.upsample_out = nn.Identity()#nn.Upsample(scale_factor=upcale_factor, mode='bicubic', align_corners=False)
+            self.upsample_res = nn.AvgPool2d(kernel_size=upcale_factor+1, stride=upcale_factor)
+
+            self.padding = upcale_factor // 2
 
         elif hw_in < hw_out and global_residual:
             upcale_factor = hw_out // hw_in
@@ -202,20 +237,19 @@ class out_net(nn.Module):
             self.upsample_out = nn.Identity()
         else:
             self.upsample_res = self.upsample_out = nn.Identity()
-        
-        self.out_layer = res_net_block(hw_in, channels, channels, k_size=3, batch_norm=False, groups=channels, dropout=0, with_res=True, with_att=False, bias=False, out_activation=False, global_padding=global_padding)
 
         self.global_residual = global_residual
         
         
     def forward(self, x, x_res):
-
-        x_res = self.upsample_res(x_res[:,self.res_indices_rhs,:,:])
+                
         x = self.upsample_out(x)
-
-        x = self.out_layer(x)
-
+        
         if self.global_residual:
+            if self.global_padding:
+                x_res = global_pad(x_res, self.padding)
+            x_res = self.upsample_res(x_res[:,self.res_indices_rhs,:,:])
+
             x[:,self.res_indices_lhs] = x[:,self.res_indices_lhs] + x_res
 
         return x
@@ -225,20 +259,20 @@ class ResUNet(nn.Module):
     def __init__(self, hw_in, hw_out, n_levels, n_res_blocks, model_dim_unet, in_channels, out_channels, residual, res_indices, input_stride, batch_norm=True, k_size=3, in_groups=1, out_groups=1, dropout=0, bias=True, global_padding=False):
         super().__init__()
 
-        upcale_factor = int(torch.tensor([(hw_out*input_stride) // hw_in, 1]).max())
+        global_upscale_factor = int(torch.tensor([(hw_out*input_stride) // hw_in, 1]).max())
 
         self.encoder = encoder(hw_in, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, 7, input_stride, batch_norm=batch_norm, n_groups=in_groups, dropout=dropout, bias=bias, global_padding=global_padding)
-        self.decoder = decoder(hw_in, n_levels, n_res_blocks, model_dim_unet, out_channels, upcale_factor=upcale_factor, k_size=k_size, batch_norm=False, dropout=dropout, n_groups=out_groups, bias=bias, global_padding=global_padding)
+        self.decoder = decoder(hw_in, n_levels, n_res_blocks, model_dim_unet, out_channels, global_upscale_factor=global_upscale_factor, k_size=k_size, dropout=dropout, n_groups=out_groups, bias=bias, global_padding=global_padding)
 
-        self.out_net = out_net(res_indices, out_channels, hw_in, hw_out, global_residual=residual, global_padding=global_padding)
+        self.out_net = out_net(res_indices, hw_in, hw_out, global_residual=residual, global_padding=global_padding)
   
         hw_mid = hw_in // (input_stride*2**(n_levels-1))
-        self.mid = mid(hw_mid, n_res_blocks, model_dim_unet*(4**(n_levels-1)), with_att=True, bias=bias, global_padding=global_padding)
+        self.mid = mid(hw_mid, n_res_blocks, model_dim_unet*(2**(n_levels-1)), with_att=True, bias=bias, global_padding=global_padding)
 
     def forward(self, x):
 
         x_res = x
-        x, layer_outputs = self.encoder(x)
+        x, layer_outputs, _ = self.encoder(x)
         x = self.mid(x)
         x = self.decoder(x, layer_outputs)
         x = self.out_net(x, x_res)
@@ -263,6 +297,10 @@ class core_ResUNet(psm.pyramid_step_model):
 
         dropout = 0 if 'dropout' not in model_settings.keys() else model_settings['dropout']
         grouped = False if 'grouped' not in model_settings.keys() else model_settings['grouped']
+        residual_conv = False if 'residual_conv' not in model_settings.keys() else model_settings['residual_conv']
+
+        if model_settings['residual_in_core']:
+            residual_conv = False
 
         self.time_dim= False
 
