@@ -16,13 +16,6 @@ from ..utils.io import load_ckpt, load_model
 from ..utils import grid_utils as gu
 from ..utils.normalizer import normalizer
 
-def sign_pow(x, pow):
-    if pow % 2 == 0 or pow < 1:
-        sgn = torch.sign(x)
-        x = sgn * x ** pow
-    else:
-        x = x ** pow
-    return x
 
 class output_net(nn.Module):
     def __init__(self, model_settings, s, nh, n, use_gnlll=False, use_poly=False):
@@ -41,6 +34,9 @@ class output_net(nn.Module):
        
         if use_gnlll or use_poly:
             self.output_dims = [out_dim*2 for out_dim in self.output_dims]
+
+        if use_poly:
+            self.k = torch.nn.Parameter(torch.tensor([1.]), requires_grad=True)
 
         self.activation_mu = nn.Identity()
 
@@ -70,7 +66,7 @@ class output_net(nn.Module):
 
             elif self.use_poly:
                 data = torch.split(data, len(vars), dim=1)
-                data = (sign_pow(data[0], 1) + 0.5 * sign_pow(data[1], 2)).unsqueeze(dim=2)
+                data = (self.k*data[0] + (1-self.k)*data[1]**3).unsqueeze(dim=2)
 
             else:
                 data = self.activation_mu(data).unsqueeze(dim=2)
