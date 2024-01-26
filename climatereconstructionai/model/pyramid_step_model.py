@@ -81,9 +81,10 @@ class output_net(nn.Module):
         return data_out, non_valid_mask_var
 
 class pyramid_step_model(nn.Module):
-    def __init__(self, model_settings, model_dir=None):
+    def __init__(self, model_settings, model_dir=None, eval=False):
         super().__init__()
-        
+        self.eval_mode = eval
+
         self.model_settings = load_settings(model_settings, 'model')
         if 'domain' in self.model_settings.keys():
             self.model_settings.update(load_settings(self.model_settings['domain'], 'model'))
@@ -128,6 +129,10 @@ class pyramid_step_model(nn.Module):
                                           use_gnlll=self.use_gnlll,
                                           use_poly=self.use_poly)
         
+        if self.eval_mode:
+            self.eval()
+            self.set_normalizer()
+
         self.check_model_dir()
 
         if 'input_type' not in self.model_settings.keys():
@@ -175,6 +180,32 @@ class pyramid_step_model(nn.Module):
             x = self.normalize(x, denorm=True)
 
         return x, x_reg_lr, x_reg_hr, non_valid_var
+    
+    def apply_global(self, ds, ts=-1, device='cpu', ds_target=None):
+            
+            data_source = {}
+            coords_source = {}
+            for spatial_dim, vars in self.model_settings["spatial_dims_var_source"].items():
+                coord_dict = gu.get_coord_dict_from_var(ds, spatial_dim)
+
+                coords_source[spatial_dim] = gu.get_coords_as_tensor(ds, lon=coord_dict['lon'], lat=coord_dict['lat']).unsqueeze(dim=0)
+                for variable in vars:
+                    data_source[variable] = torch.tensor(ds[variable].values[[ts]]).squeeze().to(device).unsqueeze(dim=0).unsqueeze(dim=-1)
+
+            if ds_target is None:
+                ds_target = ds
+
+            coords_target = {}
+            for spatial_dim, vars in self.model_settings["spatial_dims_var_target"].items():
+                coord_dict = gu.get_coord_dict_from_var(ds_target, spatial_dim)
+                coords_target[spatial_dim] = gu.get_coords_as_tensor(ds_target, lon=coord_dict['lon'], lat=coord_dict['lat']).unsqueeze(dim=0)
+    
+            self.set_input_mapper(mode="interpolation")
+
+            with torch.no_grad():
+                output = self(data_source, coords_target, coords_source=coords_source, norm=True)[0]
+                
+            return output, {}
 
     def check_model_dir(self):
         if 'km' not in self.model_settings.keys():
@@ -196,8 +227,9 @@ class pyramid_step_model(nn.Module):
         if not os.path.isdir(self.model_dir):
             os.makedirs(self.model_dir)
 
-        with open(model_settings_path, 'w') as f:
-            json.dump(self.model_settings, f, indent=4)
+        if not self.eval_mode:
+            with open(model_settings_path, 'w') as f:
+                json.dump(self.model_settings, f, indent=4)
 
 
 

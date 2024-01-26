@@ -281,8 +281,8 @@ class ResUNet(nn.Module):
 
 
 class core_ResUNet(psm.pyramid_step_model): 
-    def __init__(self, model_settings, model_dir=None):
-        super().__init__(model_settings, model_dir=model_dir)
+    def __init__(self, model_settings, model_dir=None, eval=False):
+        super().__init__(model_settings, model_dir=model_dir, eval=eval)
         
         model_settings = self.model_settings
 
@@ -331,3 +331,5 @@ class core_ResUNet(psm.pyramid_step_model):
 
         if "pretrained_path" in self.model_settings.keys():
             self.check_pretrained(log_dir_check=self.model_settings['pretrained_path'])
+        elif self.eval_mode:
+            self.check_pretrained(log_dir_check=self.log_dir)
