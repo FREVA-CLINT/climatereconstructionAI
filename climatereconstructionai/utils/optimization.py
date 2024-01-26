@@ -135,8 +135,10 @@ class physics_calculator():
             div_mask = mask[:,self.edge_of_cell].sum(dim=-1) == 3
             div = ((normalVelocity*self.edge_length.unsqueeze(dim=0))[:,self.edge_of_cell]*self.orientation_of_normal.T.unsqueeze(dim=0)).sum(dim=-1)/self.cell_area.unsqueeze(dim=0)
             div[~div_mask] = 0
-            
-        return div, ~div_mask
+
+        div_sum = (self.cell_area.unsqueeze(dim=0)*div/self.rad).sum(dim=1)
+       
+        return div, ~div_mask, div_sum
     
 
 def get_vorticity(phys_calc, tensor_dict, global_edge_indices):
@@ -154,7 +156,7 @@ class GaussLoss(nn.Module):
         super().__init__()
         self.Gauss = torch.nn.GaussianNLLLoss()
 
-    def forward(self, output, target, non_valid_mask):
+    def forward(self, output, target, non_valid_mask, k=None):
         output_valid = output[:,0].transpose(-2,-1)[~non_valid_mask]
         target_valid = target[~non_valid_mask].squeeze()
         loss =  self.Gauss(output_valid[:,0],target_valid,output_valid[:,1])
@@ -168,7 +170,7 @@ class L1Loss(nn.Module):
         else:
             self.loss = torch.nn.MSELoss()
 
-    def forward(self, output, target, non_valid_mask):
+    def forward(self, output, target, non_valid_mask, k=None):
         output_valid = output[:,0,0][~non_valid_mask]
         target_valid = target.squeeze()[~non_valid_mask].squeeze()
         loss = self.loss(output_valid,target_valid)
@@ -179,10 +181,23 @@ class L1Loss_rel(nn.Module):
         super().__init__()
         self.loss = torch.nn.MSELoss()
 
-    def forward(self, output, target, non_valid_mask):
+    def forward(self, output, target, non_valid_mask, k=None):
         output_valid = output[:,0,0][~non_valid_mask]
         target_valid = target[~non_valid_mask].squeeze()
         abs_loss = ((output_valid - target_valid)/(target_valid+1e-10)).abs()
+        loss = abs_loss.clamp(max=1)
+        loss = loss.mean()
+        return loss
+    
+class L1Loss_relv(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.loss = torch.nn.MSELoss()
+
+    def forward(self, output, target, non_valid_mask, k):
+        output_valid = output[:,0,0][~non_valid_mask]
+        target_valid = target[~non_valid_mask].squeeze()
+        abs_loss = ((output_valid - target_valid)/(target_valid.abs()**k+1e-10)).abs()
         loss = abs_loss.clamp(max=1)
         loss = loss.mean()
         return loss
@@ -249,12 +264,12 @@ class DictLoss(nn.Module):
         super().__init__()
         self.loss_fcn = loss_fcn
 
-    def forward(self, output, target, non_valid_mask):
+    def forward(self, output, target, non_valid_mask, k=None):
         loss_dict = {}
         total_loss = 0
 
         for var in output.keys():
-            loss = self.loss_fcn(output[var], target[var], non_valid_mask[var])
+            loss = self.loss_fcn(output[var], target[var], non_valid_mask[var], k)
             total_loss+=loss
             loss_dict[f'{var}_{str(self.loss_fcn._get_name())}'] = loss.item()
 
@@ -275,7 +290,7 @@ class VortLoss(nn.Module):
 
         vort_loss = self.loss_fcn(output_vort, target_vort, non_valid_mask_vort)  
 
-        return vort_loss
+        return vort_loss    
 
 class DivLoss(nn.Module):
     def __init__(self, phys_calc):
@@ -294,9 +309,9 @@ class DivLoss(nn.Module):
         spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
         uv_dim_indices = target_indices[spatial_dim_uv]
 
-        div, non_valid_mask = self.phys_calc.get_divergence_from_edge_indices(uv_dim_indices, u, v)
+        _, _, div_sum = self.phys_calc.get_divergence_from_edge_indices(uv_dim_indices, u, v)
 
-        loss = (div[~non_valid_mask]**2).mean()     
+        loss = div_sum.mean()
 
         return loss
 
@@ -355,6 +370,9 @@ class loss_calculator(nn.Module):
             elif loss_type == 'l1' and value > 0:
                 self.loss_fcn_dict['l1'] = DictLoss(L1Loss(loss='l1'))
             
+            elif loss_type == 'l1_relv' and value > 0:
+                self.loss_fcn_dict['l1_relv'] = DictLoss(L1Loss_relv())
+            
             elif loss_type == 'log' and value > 0:
                 self.loss_fcn_dict['log'] = DictLoss(LogLoss())
 
@@ -378,7 +396,7 @@ class loss_calculator(nn.Module):
                 self.loss_fcn_dict['div'] = DivLoss(phys_calc)
 
 
-    def forward(self, lambdas_optim, target, model, source, coords_target, target_indices, coords_source=None, val=False):
+    def forward(self, lambdas_optim, target, model, source, coords_target, target_indices, coords_source=None, val=False, k=None):
         
         if val:
             with torch.no_grad():
@@ -401,6 +419,9 @@ class loss_calculator(nn.Module):
 
             elif loss_type == 'l2' or loss_type == 'l1' or loss_type == 'gauss' or loss_type == 'log':
                 loss =  loss_fcn(output, target, non_valid_mask)
+            
+            elif loss_type == 'l1_relv':
+                loss =  loss_fcn(output, target, non_valid_mask, k=k)
 
             elif loss_type == 'rel':
                 loss =  loss_fcn(output, target, non_valid_mask)

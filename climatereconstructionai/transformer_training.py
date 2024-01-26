@@ -232,9 +232,16 @@ def train(model, training_settings, model_settings={}):
     lambdas_optim_vals = [torch.nn.Parameter(torch.tensor(1, dtype=float), requires_grad=dw_train) for _ in lambdas_optim_keys]
     lambdas_optim = dict(zip(lambdas_optim_keys, lambdas_optim_vals))
 
+    if 'l1_relv' in lambdas_optim.keys():
+        inital_k = 0. if 'initial_k' not in training_settings.keys() else training_settings['initial_k']
+        lambdas_optim['k_l1_relv'] = torch.nn.Parameter(torch.tensor(inital_k, dtype=float), requires_grad=dw_train)
+    else:
+        lambdas_optim['k_l1_relv'] = None
+
     if dw_train:
         optimizer2 = torch.optim.Adam(filter(lambda p: p.requires_grad, lambdas_optim.values()), lr=training_settings['lr_w'])
         lr_scheduler2 = CosineWarmupScheduler(optimizer2, training_settings["T_warmup"], training_settings['max_iter'])
+        dw_patience = 4 if 'dw_patience' not in training_settings.keys() else training_settings['dw_patience'] 
 
     
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=training_settings['lr'])
@@ -264,12 +271,12 @@ def train(model, training_settings, model_settings={}):
         source, target, coords_source, coords_target = data[:4] # for backward compability
         target_indices = data[-1]
 
-        train_total_loss, train_loss_dict = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source)
+        train_total_loss, train_loss_dict = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, k=lambdas_optim['k_l1_relv'])
 
         train_losses_hist.append(train_loss_dict['total_loss'])
 
         optimizer.zero_grad()
-        if dw_train and i>2 and train_losses_hist[-1] < train_losses_hist[-2] and train_losses_hist[-2] < train_losses_hist[-3]:
+        if dw_train and len(train_losses_hist)>=dw_patience and (torch.tensor(train_losses_hist)).diff()[-dw_patience:].sum()<0:
             
             train_total_loss.backward(retain_graph=True) 
 
@@ -281,7 +288,7 @@ def train(model, training_settings, model_settings={}):
             lr_scheduler2.step()
 
             lambda_keys = [f'lambda_{key}' for key in lambdas_optim.keys()]
-            lambda_vals = [lambdas_stat[key] * val_optim.item() for key, val_optim in lambdas_optim.items()]
+            lambda_vals = [lambdas_stat[key] * val_optim.item() if key!='k_l1_relv' else val_optim.item() for key, val_optim in lambdas_optim.items() ]
             writer.update_scalars(dict(zip(lambda_keys, lambda_vals)), n_iter, 'train')
         
         else:
@@ -303,7 +310,7 @@ def train(model, training_settings, model_settings={}):
                 source, target, coords_source, coords_target = data[:4] # for backward compability
                 target_indices = data[-1]               
 
-                _, val_loss_dict, output, output_reg_hr, non_valid_mask = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, val=True)
+                _, val_loss_dict, output, output_reg_hr, non_valid_mask = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, val=True, k=lambdas_optim['k_l1_relv'])
 
                 val_losses.append(list(val_loss_dict.values()))
             
