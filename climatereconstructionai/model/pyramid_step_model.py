@@ -36,7 +36,7 @@ class output_net(nn.Module):
             self.output_dims = [out_dim*2 for out_dim in self.output_dims]
 
         if use_poly:
-            inital_k = 1. if 'initial_k' not in model_settings.keys() else model_settings['initial_k']
+            inital_k = 1. if 'poly_k' not in model_settings.keys() else model_settings['poly_k']
             self.k = torch.nn.Parameter(torch.tensor([float(inital_k)]), requires_grad=True)
 
         self.activation_mu = nn.Identity()
