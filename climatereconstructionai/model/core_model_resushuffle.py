@@ -216,47 +216,54 @@ class mid(nn.Module):
     
 
 class out_net(nn.Module):
-    def __init__(self, res_indices, hw_in, hw_out, global_residual=True, global_padding=False):
+    def __init__(self, res_indices, hw_in, hw_out, res_mode=True, global_padding=False):
         super().__init__()
 
         self.res_indices_rhs = res_indices
         self.res_indices_lhs = torch.arange(len(res_indices))
-        self.global_padding = global_padding
 
+        self.global_residual = True
+        scale_factor = hw_out / hw_in
+        self.res_mode = res_mode
+        self.scale_factor = scale_factor
 
-        if hw_in > hw_out and global_residual:
-            upcale_factor = hw_in // hw_out
-            self.upsample_out = nn.Identity()#nn.Upsample(scale_factor=upcale_factor, mode='bicubic', align_corners=False)
-            self.upsample_res = nn.AvgPool2d(kernel_size=upcale_factor+1, stride=upcale_factor)
+        if res_mode == 'core_inter':
+            pass
 
-            self.padding = upcale_factor // 2
+        elif res_mode=='core_train':
+            total_stride = int(1/scale_factor)
+            stride1 = total_stride // 2 if total_stride > 2 else 2
+            stride2 = stride1 if total_stride > 2 else 1
+            self.res_interpolate = nn.Sequential(res_net_block(hw_out, len(res_indices), len(res_indices), k_size=5, batch_norm=False, stride=stride1, groups=len(res_indices), dropout=0, with_att=False, with_res=False, bias=False, out_activation=False, global_padding=global_padding),
+                                                 res_net_block(hw_out, len(res_indices), len(res_indices), k_size=5, batch_norm=False, stride=stride2, groups=len(res_indices), dropout=0, with_att=False, with_res=False, bias=False, out_activation=False, global_padding=global_padding))
 
-        elif hw_in < hw_out and global_residual:
-            upcale_factor = hw_out // hw_in
-            self.upsample_res = nn.Upsample(scale_factor=upcale_factor, mode='bicubic', align_corners=False)
-            self.upsample_out = nn.Identity()
+        elif res_mode=='core_train_res':
+            total_stride = int(1/scale_factor)
+            stride1 = total_stride // 2 if total_stride > 2 else 2
+            stride2 = stride1 if total_stride > 2 else 1
+            self.res_interpolate = nn.Sequential(res_net_block(hw_out, len(res_indices), len(res_indices), k_size=5, batch_norm=False, stride=stride1, groups=len(res_indices), dropout=0, with_att=False, with_res=True, bias=False, out_activation=False, global_padding=global_padding),
+                                                 res_net_block(hw_out, len(res_indices), len(res_indices), k_size=5, batch_norm=False, stride=stride2, groups=len(res_indices), dropout=0, with_att=False, with_res=True, bias=False, out_activation=False, global_padding=global_padding))
+
         else:
-            self.upsample_res = self.upsample_out = nn.Identity()
+            self.res_interpolate = nn.Identity()
 
-        self.global_residual = global_residual
+            self.global_residual = False
         
         
     def forward(self, x, x_res):
-                
-        x = self.upsample_out(x)
+        
+        if self.res_mode == 'core_inter':
+            x_res = nn.functional.interpolate(x_res[:,self.res_indices_rhs,:,:],scale_factor=self.scale_factor, mode = 'bicubic', align_corners=True)
+        else:
+            x_res = self.res_interpolate(x_res[:,self.res_indices_rhs,:,:])
         
         if self.global_residual:
-            if self.global_padding:
-                x_res = global_pad(x_res, self.padding)
-            x_res = self.upsample_res(x_res[:,self.res_indices_rhs,:,:])
-
             x[:,self.res_indices_lhs] = x[:,self.res_indices_lhs] + x_res
-
         return x
 
 
 class ResUNet(nn.Module): 
-    def __init__(self, hw_in, hw_out, n_levels, n_res_blocks, model_dim_unet, in_channels, out_channels, residual, res_indices, input_stride, batch_norm=True, k_size=3, in_groups=1, out_groups=1, dropout=0, bias=True, global_padding=False):
+    def __init__(self, hw_in, hw_out, n_levels, n_res_blocks, model_dim_unet, in_channels, out_channels, res_mode, res_indices, input_stride, batch_norm=True, k_size=3, in_groups=1, out_groups=1, dropout=0, bias=True, global_padding=False):
         super().__init__()
 
         global_upscale_factor = int(torch.tensor([(hw_out*input_stride) // hw_in, 1]).max())
@@ -264,7 +271,7 @@ class ResUNet(nn.Module):
         self.encoder = encoder(hw_in, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, 7, input_stride, batch_norm=batch_norm, n_groups=in_groups, dropout=dropout, bias=bias, global_padding=global_padding)
         self.decoder = decoder(hw_in, n_levels, n_res_blocks, model_dim_unet, out_channels, global_upscale_factor=global_upscale_factor, k_size=k_size, dropout=dropout, n_groups=out_groups, bias=bias, global_padding=global_padding)
 
-        self.out_net = out_net(res_indices, hw_in, hw_in//input_stride, global_residual=residual, global_padding=global_padding)
+        self.out_net = out_net(res_indices, hw_in, hw_in//input_stride, res_mode=res_mode, global_padding=global_padding)
   
         hw_mid = hw_in // (input_stride*2**(n_levels-1))
         self.mid = mid(hw_mid, n_res_blocks, model_dim_unet*(2**(n_levels-1)), with_att=True, bias=bias, global_padding=global_padding)
@@ -297,10 +304,6 @@ class core_ResUNet(psm.pyramid_step_model):
 
         dropout = 0 if 'dropout' not in model_settings.keys() else model_settings['dropout']
         grouped = False if 'grouped' not in model_settings.keys() else model_settings['grouped']
-        residual_conv = False if 'residual_conv' not in model_settings.keys() else model_settings['residual_conv']
-
-        if model_settings['residual_in_core']:
-            residual_conv = False
 
         self.time_dim= False
 
@@ -327,7 +330,7 @@ class core_ResUNet(psm.pyramid_step_model):
 
         global_padding = True if model_settings['km']==False else False
 
-        self.core_model = ResUNet(hw_in, hw_out, depth, n_blocks, model_dim_core, input_dim, output_dim, model_settings['residual_in_core'], res_indices, input_stride, batch_norm=batch_norm, in_groups=in_groups, out_groups=out_groups, dropout=dropout, bias=bias, global_padding=global_padding)
+        self.core_model = ResUNet(hw_in, hw_out, depth, n_blocks, model_dim_core, input_dim, output_dim, model_settings['res_mode'], res_indices, input_stride, batch_norm=batch_norm, in_groups=in_groups, out_groups=out_groups, dropout=dropout, bias=bias, global_padding=global_padding)
 
         if "pretrained_path" in self.model_settings.keys():
             self.check_pretrained(log_dir_check=self.model_settings['pretrained_path'])

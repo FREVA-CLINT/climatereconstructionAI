@@ -106,7 +106,7 @@ class pyramid_step_model(nn.Module):
             if len(var_in_source)==1:
                 self.output_res_indices[var_target] = var_in_source[0]
 
-        self.residual_in_core = self.model_settings['residual_in_core']
+        self.res_mode = self.model_settings['res_mode']
         self.use_gnlll = self.model_settings['gauss']
         self.use_poly = self.model_settings['poly']
 
@@ -165,7 +165,7 @@ class pyramid_step_model(nn.Module):
             x, non_valid_var = self.output_net_post(x[:,list(self.output_res_indices.values()),:,:], coords_target_hr, non_valid)
 
         
-        if not self.residual_in_core and not isinstance(self.core_model, nn.Identity):
+        if self.res_mode=='sample' and not isinstance(self.core_model, nn.Identity):
             x_pre = self.output_net_pre(x_reg_lr[:,list(self.output_res_indices.values()),:,:], coords_target_hr, non_valid)[0]
 
             for var in self.output_res_indices.keys():
