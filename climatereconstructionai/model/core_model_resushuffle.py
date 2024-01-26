@@ -240,7 +240,7 @@ class out_net(nn.Module):
         elif res_mode=='core_train_res':
             total_stride = int(1/scale_factor)
             stride1 = total_stride // 2 if total_stride > 2 else 2
-            stride2 = stride1 if total_stride > 2 else 1
+            stride2 = stride1 // 2 if stride1 > 2 else 1
             self.res_interpolate = nn.Sequential(res_net_block(hw_out, len(res_indices), len(res_indices), k_size=5, batch_norm=False, stride=stride1, groups=len(res_indices), dropout=0, with_att=False, with_res=True, bias=False, out_activation=False, global_padding=global_padding),
                                                  res_net_block(hw_out, len(res_indices), len(res_indices), k_size=5, batch_norm=False, stride=stride2, groups=len(res_indices), dropout=0, with_att=False, with_res=True, bias=False, out_activation=False, global_padding=global_padding))
 
