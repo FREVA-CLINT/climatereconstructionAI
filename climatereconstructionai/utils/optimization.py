@@ -281,7 +281,7 @@ class VortLoss(nn.Module):
         self.phys_calc = phys_calc
         self.loss_fcn = L1Loss()
 
-    def forward(self, output, target, target_indices, spatial_dim_var_target):
+    def forward(self, output, target, target_indices, spatial_dim_var_target, val=False):
 
         spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
         uv_dim_indices = target_indices[spatial_dim_uv]
@@ -290,7 +290,10 @@ class VortLoss(nn.Module):
 
         vort_loss = self.loss_fcn(output_vort, target_vort, non_valid_mask_vort)  
 
-        return vort_loss    
+        if val:
+            return vort_loss, output_vort, target_vort, non_valid_mask_vort
+        else:
+            return vort_loss    
 
 class DivLoss(nn.Module):
     def __init__(self, phys_calc):
@@ -427,7 +430,10 @@ class loss_calculator(nn.Module):
                 loss =  loss_fcn(output, target, non_valid_mask)
 
             elif loss_type == 'vort':
-                loss =  loss_fcn(output, target, target_indices, self.spatial_dim_var_target)
+                loss =  loss_fcn(output, target, target_indices, self.spatial_dim_var_target, val=val)
+                if val:
+                    loss = val[0]
+                    output['vort'], target['vort'], _ = val[1:]
             
             elif loss_type == 'div':
                 loss =  loss_fcn(output, target_indices, self.spatial_dim_var_target)
@@ -438,6 +444,6 @@ class loss_calculator(nn.Module):
         loss_dict['total_loss'] = total_loss.item()
         
         if val:
-            return total_loss, loss_dict, output, output_reg_hr, non_valid_mask
+            return total_loss, loss_dict, output, target, output_reg_hr, non_valid_mask
         else:
             return total_loss, loss_dict

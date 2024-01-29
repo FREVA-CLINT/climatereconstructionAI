@@ -310,7 +310,7 @@ def train(model, training_settings, model_settings={}):
                 source, target, coords_source, coords_target = data[:4] # for backward compability
                 target_indices = data[-1]               
 
-                _, val_loss_dict, output, output_reg_hr, non_valid_mask = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, val=True, k=lambdas_optim['k_l1_relv'])
+                _, val_loss_dict, output, target, output_reg_hr, non_valid_mask = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, val=True, k=lambdas_optim['k_l1_relv'])
 
                 val_losses.append(list(val_loss_dict.values()))
             
