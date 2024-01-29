@@ -190,7 +190,7 @@ class decoder(nn.Module):
                 out_channels_block = n_groups * (out_channels_block // n_groups + out_channels_block % n_groups)
             self.decoder_blocks.append(decoder_block_shuffle(hw, n_blocks, in_channels_block, out_channels_block, k_size=k_size, dropout=dropout, bias=bias, global_padding=global_padding))      
         
-        n_out_blocks = global_upscale_factor // 2
+        n_out_blocks = int(torch.log2(torch.tensor(global_upscale_factor)))
         self.out_blocks = nn.ModuleList()
 
         for n in range(n_out_blocks):
