@@ -190,7 +190,21 @@ class decoder(nn.Module):
                 out_channels_block = n_groups * (out_channels_block // n_groups + out_channels_block % n_groups)
             self.decoder_blocks.append(decoder_block_shuffle(hw, n_blocks, in_channels_block, out_channels_block, k_size=k_size, dropout=dropout, bias=bias, global_padding=global_padding))      
         
-        self.out_block = decoder_block_shuffle(hw, n_blocks, out_channels_block, out_channels, k_size=k_size, dropout=dropout, groups=n_groups, upscale_factor=global_upscale_factor, with_res=False, bias=False, global_padding=global_padding, out_activation=False, with_skip=False)
+        n_out_blocks = global_upscale_factor // 2
+        self.out_blocks = nn.ModuleList()
+
+        for n in range(n_out_blocks):
+            
+            if n == n_out_blocks-1:
+                out_activation=False
+                in_channels = out_channels_block
+                out_channels_ = out_channels
+            else:
+                out_activation=True
+                in_channels = out_channels_ = out_channels_block
+
+            self.out_blocks.append(decoder_block_shuffle(hw, n_blocks, in_channels, out_channels_, k_size=k_size, dropout=dropout, groups=n_groups, upscale_factor=global_upscale_factor, with_res=True, bias=False, global_padding=global_padding, out_activation=out_activation, with_skip=False))
+
 
     def forward(self, x, skip_channels):
 
@@ -198,7 +212,8 @@ class decoder(nn.Module):
             x_skip = skip_channels[-(k+2)]  
             x = layer(x, x_skip)
 
-        x = self.out_block(x)
+        for out_block in self.out_blocks:
+            x = out_block(x)
 
         return x
 
@@ -271,7 +286,7 @@ class ResUNet(nn.Module):
         self.encoder = encoder(hw_in, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, 7, input_stride, batch_norm=batch_norm, n_groups=in_groups, dropout=dropout, bias=bias, global_padding=global_padding)
         self.decoder = decoder(hw_in, n_levels, n_res_blocks, model_dim_unet, out_channels, global_upscale_factor=global_upscale_factor, k_size=k_size, dropout=dropout, n_groups=out_groups, bias=bias, global_padding=global_padding)
 
-        self.out_net = out_net(res_indices, hw_in, hw_in//input_stride, res_mode=res_mode, global_padding=global_padding)
+        self.out_net = out_net(res_indices, hw_in, hw_out, res_mode=res_mode, global_padding=global_padding)
   
         hw_mid = hw_in // (input_stride*2**(n_levels-1))
         self.mid = mid(hw_mid, n_res_blocks, model_dim_unet*(2**(n_levels-1)), with_att=True, bias=bias, global_padding=global_padding)
@@ -294,7 +309,7 @@ class core_ResUNet(psm.pyramid_step_model):
         model_settings = self.model_settings
 
         input_dim = len(model_settings["variables_source"])
-        output_dim = len(model_settings["variables_target"]) - int(model_settings["calc_vort"]) * int('vort' in model_settings["variables_target"].keys())
+        output_dim = len(model_settings["variables_target"]) - int(model_settings["calc_vort"]) * int('vort' in model_settings["variables_target"])
         dropout = model_settings['dropout']
 
         n_blocks = model_settings['n_blocks_core']
