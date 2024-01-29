@@ -277,7 +277,7 @@ class VortLoss(nn.Module):
     def __init__(self, phys_calc):
         super().__init__()
         self.phys_calc = phys_calc
-        self.loss_fcn = torch.nn.MSELoss()
+        self.loss_fcn = L1Loss(loss='l2')
 
     def forward(self, output, target, target_indices, spatial_dim_var_target, val=False):
 
