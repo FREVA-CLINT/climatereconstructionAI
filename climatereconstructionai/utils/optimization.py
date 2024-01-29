@@ -149,6 +149,16 @@ def get_vorticity(phys_calc, tensor_dict, global_edge_indices):
     return vort, non_valid_mask
 
 
+def get_normalv(phys_calc, tensor_dict, global_edge_indices):
+    u = tensor_dict['u']
+    v = tensor_dict['v']
+
+    u = u[:,0,0] if u.dim()==4 else u
+    v = v[:,0,0] if v.dim()==4 else v
+    normalv, valid_mask = phys_calc.get_normal_velocity_from_indices(global_edge_indices, u, v)
+    return normalv, ~valid_mask
+
+
 class GaussLoss(nn.Module):
     def __init__(self):
         super().__init__()
@@ -272,6 +282,27 @@ class DictLoss(nn.Module):
             loss_dict[f'{var}_{str(self.loss_fcn._get_name())}'] = loss.item()
 
         return total_loss
+
+class NormalVLoss(nn.Module):
+    def __init__(self, phys_calc):
+        super().__init__()
+        self.phys_calc = phys_calc
+        self.loss_fcn = L1Loss(loss='l2')
+
+    def forward(self, output, target, target_indices, spatial_dim_var_target, val=False):
+
+        spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
+        uv_dim_indices = target_indices[spatial_dim_uv]
+
+        output_normal_v, non_valid_mask = get_normalv(self.phys_calc, output, uv_dim_indices)
+        target_normal_v = get_normalv(self.phys_calc, target, uv_dim_indices)[0]
+
+        loss = self.loss_fcn(output_normal_v, target_normal_v, non_valid_mask)  
+
+        if val:
+            return loss, output_normal_v, target_normal_v, non_valid_mask
+        else:
+            return loss    
 
 class VortLoss(nn.Module):
     def __init__(self, phys_calc):
@@ -400,6 +431,11 @@ class loss_calculator(nn.Module):
                     phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
                 self.loss_fcn_dict['div'] = DivLoss(phys_calc)
 
+            elif loss_type == 'normalv' and value > 0:
+                if phys_calc is None:
+                    phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
+                self.loss_fcn_dict['normalv'] = NormalVLoss(phys_calc)
+
 
     def forward(self, lambdas_optim, target, model, source, coords_target, target_indices, coords_source=None, val=False, k=None):
         
@@ -435,6 +471,12 @@ class loss_calculator(nn.Module):
                 loss =  loss_fcn(output, target, target_indices, self.spatial_dim_var_target, val=val)
                 if val:
                     output['vort'], target['vort'], _ = loss[1:]
+                    loss = loss[0]
+
+            elif loss_type == 'normalv':
+                loss =  loss_fcn(output, target, target_indices, self.spatial_dim_var_target, val=val)
+                if val:
+                    output['normalv'], target['normalv'], _ = loss[1:]
                     loss = loss[0]
             
             elif loss_type == 'div':
