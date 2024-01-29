@@ -109,7 +109,6 @@ class physics_calculator():
         normalVelocity, mask = self.get_normal_velocity_from_indices(global_edge_indices, u, v)
         vort_mask = ((mask)[:,self.edges_of_vertex]).sum(axis=-1) == 6
         vort = ((normalVelocity*self.dual_edge_length)[:,self.edges_of_vertex]*self.signorient).sum(axis=-1)/self.dual_area.unsqueeze(dim=0)
-        vort[~vort_mask] = 0
 
         return vort.view(b,1,1,-1), ~vort_mask
 
@@ -134,7 +133,6 @@ class physics_calculator():
         else:
             div_mask = mask[:,self.edge_of_cell].sum(dim=-1) == 3
             div = ((normalVelocity*self.edge_length.unsqueeze(dim=0))[:,self.edge_of_cell]*self.orientation_of_normal.T.unsqueeze(dim=0)).sum(dim=-1)/self.cell_area.unsqueeze(dim=0)
-            div[~div_mask] = 0
 
         div_sum = (self.cell_area.unsqueeze(dim=0)*div/self.rad).sum(dim=1)
        
