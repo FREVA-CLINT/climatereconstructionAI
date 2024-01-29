@@ -432,8 +432,8 @@ class loss_calculator(nn.Module):
             elif loss_type == 'vort':
                 loss =  loss_fcn(output, target, target_indices, self.spatial_dim_var_target, val=val)
                 if val:
-                    loss = val[0]
-                    output['vort'], target['vort'], _ = val[1:]
+                    loss = loss[0]
+                    output['vort'], target['vort'], _ = loss[1:]
             
             elif loss_type == 'div':
                 loss =  loss_fcn(output, target_indices, self.spatial_dim_var_target)
