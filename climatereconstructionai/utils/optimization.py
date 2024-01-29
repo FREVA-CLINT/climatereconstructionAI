@@ -279,14 +279,18 @@ class VortLoss(nn.Module):
     def __init__(self, phys_calc):
         super().__init__()
         self.phys_calc = phys_calc
-        self.loss_fcn = L1Loss()
+        self.loss_fcn = torch.nn.MSELoss()
 
     def forward(self, output, target, target_indices, spatial_dim_var_target, val=False):
 
         spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
         uv_dim_indices = target_indices[spatial_dim_uv]
         output_vort, non_valid_mask_vort = get_vorticity(self.phys_calc, output, uv_dim_indices)
-        target_vort = get_vorticity(self.phys_calc, target, uv_dim_indices)[0]
+
+        if 'vort' not in target.keys():
+            target_vort = get_vorticity(self.phys_calc, target, uv_dim_indices)[0]
+        else:
+            target_vort = target['vort']
 
         vort_loss = self.loss_fcn(output_vort, target_vort, non_valid_mask_vort)  
 

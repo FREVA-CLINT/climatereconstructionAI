@@ -294,7 +294,7 @@ class core_ResUNet(psm.pyramid_step_model):
         model_settings = self.model_settings
 
         input_dim = len(model_settings["variables_source"])
-        output_dim = len(model_settings["variables_target"])
+        output_dim = len(model_settings["variables_target"]) - int(model_settings["calc_vort"]) * int('vort' in model_settings["variables_target"].keys())
         dropout = model_settings['dropout']
 
         n_blocks = model_settings['n_blocks_core']

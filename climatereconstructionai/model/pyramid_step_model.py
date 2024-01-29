@@ -94,11 +94,14 @@ class pyramid_step_model(nn.Module):
 
         self.fusion_modules = None
 
+        if 'calc_vort' not in self.model_settings.keys():
+            self.model_settings['calc_vort'] = True
+
         self.model_settings['n_input_groups'] = len(self.model_settings['spatial_dims_var_source'])
         self.model_settings['input_dims'] = [len(values) for key, values in self.model_settings['spatial_dims_var_source'].items()]
 
         self.model_settings['n_output_groups'] = len(self.model_settings['spatial_dims_var_target'])
-        self.model_settings['output_dims'] = [len(values) for key, values in self.model_settings['spatial_dims_var_target'].items()]
+        self.model_settings['output_dims'] = [len(values) - int(self.model_settings['calc_vort'])*int('vort' in values) for key, values in self.model_settings['spatial_dims_var_target'].items()]   
 
         self.output_res_indices = {}
         for var_target in self.model_settings['variables_target']:

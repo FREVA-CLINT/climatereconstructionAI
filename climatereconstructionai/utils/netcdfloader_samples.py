@@ -218,7 +218,7 @@ class NetCDFLoader_lazy(Dataset):
         ds_target = xr.open_dataset(files_target[0])
 
         self.dims_variables_source = get_dims_coordinates(ds_source, self.variables_source)    
-        self.dims_variables_target = get_dims_coordinates(ds_target, self.variables_target)         
+        self.dims_variables_target = get_dims_coordinates(ds_target, self.variables_target)  
 
         self.num_datapoints_time = ds_source[self.variables_source[0]].shape[0]
 
@@ -293,6 +293,9 @@ class NetCDFLoader_lazy(Dataset):
             elif p_drop > 0:
                 n_drop = int((1-p_drop)*len(indices))
                 n_drop_dict[spatial_dim] = n_drop
+            
+            else:
+                n_drop = len(indices)
 
             if n_drop > len(indices):
                 pad_indices = torch.randint(len(indices), size=(n_drop - len(indices),1)).view(-1)
