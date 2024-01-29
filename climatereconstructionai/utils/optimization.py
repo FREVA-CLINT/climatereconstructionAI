@@ -156,7 +156,7 @@ def get_normalv(phys_calc, tensor_dict, global_edge_indices):
     u = u[:,0,0] if u.dim()==4 else u
     v = v[:,0,0] if v.dim()==4 else v
     normalv, valid_mask = phys_calc.get_normal_velocity_from_indices(global_edge_indices, u, v)
-    return normalv, ~valid_mask
+    return normalv.unsqueeze(dim=1).unsqueeze(dim=2), ~valid_mask
 
 
 class GaussLoss(nn.Module):
