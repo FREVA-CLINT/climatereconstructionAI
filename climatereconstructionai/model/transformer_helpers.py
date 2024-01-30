@@ -482,19 +482,23 @@ class lin_interpolator(nn.Module):
     
 
 def normal(x, mu, s):
-    return torch.exp(-0.5*((x-mu)/s)**2)/(s*torch.tensor(math.sqrt(2*math.pi)))
+    return torch.exp(-0.5*((x-mu)/s)**2)/((s**2).sqrt()*(math.sqrt(2*math.pi)))
 
 class nu_grid_sampler(nn.Module):
 
-    def __init__(self, n_res=90, s=0.5, nh=5):
+    def __init__(self, n_res=90, s=0.5, nh=5, train_s=False):
         super().__init__()
 
         nh_m = ((nh-1)/2) + 0.5
+        
+        if train_s:
+            self.s = nn.Parameter(torch.tensor(s), requires_grad=True)
+        else:
+            self.s = nn.Parameter(torch.tensor(s), requires_grad=False)
 
         self.pixel_offset_normal = nn.Parameter(torch.linspace(nh_m, -nh_m, n_res),requires_grad=False)
         self.pixel_offset_indices = nn.Parameter(torch.linspace(-(nh-1)//2, (nh-1)//2, nh),requires_grad=False)
 
-        self.s = s
         self.n_res = n_res
         self.nh = nh
         self.softmax2d = nn.Softmax2d()

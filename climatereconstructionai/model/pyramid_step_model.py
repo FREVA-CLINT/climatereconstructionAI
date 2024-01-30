@@ -24,14 +24,26 @@ class output_net(nn.Module):
         self.use_gnlll = use_gnlll
         self.use_poly = use_poly
 
+        if 'train_s' not in model_settings.keys():
+            train_s=False
+        else:
+            train_s = model_settings['train_s']
+
         self.grid_to_target_sampler = helpers.nu_grid_sampler(n_res=n,
                                       s=s,
-                                      nh=nh)
+                                      nh=nh,
+                                      train_s=train_s)
+        
+     #   self.grid_to_target_sampler = helpers.trans_nu_grid_sampler(n_res=n,
+     #                                 s=s,
+     #                                 nh=nh,
+     #                                 model_dim=model_settings['output_dim_core'],
+     #                                 output_dim=int(np.array(model_settings['output_dims']).sum()))
         
         self.n_output_groups = model_settings['n_output_groups']
         self.output_dims = model_settings['output_dims']
         self.spatial_dim_var_dict = model_settings['spatial_dims_var_target']
-       
+
         if use_gnlll or use_poly:
             self.output_dims = [out_dim*2 for out_dim in self.output_dims]
 
@@ -119,11 +131,11 @@ class pyramid_step_model(nn.Module):
         
         model_settings_pre = self.model_settings
 
-        self.output_net_pre = output_net(model_settings_pre,
-                                         model_settings_pre["interpolation_std_s"],
-                                          model_settings_pre["interpolation_nh_s"],
-                                          model_settings_pre["interpolation_sample_pts"],
-                                         use_gnlll=False)
+    #    self.output_net_pre = output_net(model_settings_pre,
+    #                                     model_settings_pre["interpolation_std_s"],
+    #                                      model_settings_pre["interpolation_nh_s"],
+    #                                      model_settings_pre["interpolation_sample_pts"],
+    #                                     use_gnlll=False)
         
         self.output_net_post = output_net(self.model_settings,
                                           model_settings_pre["interpolation_std"],
