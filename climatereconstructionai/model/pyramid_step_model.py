@@ -29,10 +29,14 @@ class output_net(nn.Module):
         else:
             train_s = model_settings['train_s']
 
-        self.grid_to_target_sampler = helpers.nu_grid_sampler(n_res=n,
-                                      s=s,
-                                      nh=nh,
-                                      train_s=train_s)
+        if nh < 3 or s<0.01:
+            self.grid_to_target_sampler = helpers.nu_grid_sampler_simple()
+            
+        else:
+            self.grid_to_target_sampler = helpers.nu_grid_sampler(n_res=n,
+                                        s=s,
+                                        nh=nh,
+                                        train_s=train_s)
         
      #   self.grid_to_target_sampler = helpers.trans_nu_grid_sampler(n_res=n,
      #                                 s=s,
@@ -63,6 +67,8 @@ class output_net(nn.Module):
         
         data_out = {}
         non_valid_mask_var = {}
+
+        x = x + self.b
 
         x = torch.split(x, self.output_dims, dim=1)
 

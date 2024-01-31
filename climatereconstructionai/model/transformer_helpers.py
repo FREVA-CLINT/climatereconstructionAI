@@ -484,6 +484,29 @@ class lin_interpolator(nn.Module):
 def normal(x, mu, s):
     return torch.exp(-0.5*((x-mu)/s)**2)/((s**2).sqrt()*(math.sqrt(2*math.pi)))
 
+class nu_grid_sampler_simple(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        self.softmax2d = nn.Softmax2d()
+
+    def forward(self, x, coords):
+        b, n, nc = coords.shape
+        _, c, nx, ny = x.shape
+
+        positionsx = (coords[:,:,1])*(x.shape[-2]-1)
+        positionsy = (coords[:,:,0])*(x.shape[-1]-1)    
+
+        positionsx = torch.clamp(positionsx, min=0, max=x.shape[-2])
+        positionsy = torch.clamp(positionsy, min=0, max=x.shape[-2])
+
+        x = x[:,:,positionsx.long(), positionsy.long()]
+
+        diag_m = torch.arange(b, device=x.device).long()
+        x = x[diag_m,:,diag_m]
+
+        return x
+
 class nu_grid_sampler(nn.Module):
 
     def __init__(self, n_res=90, s=0.5, nh=5, train_s=False):
