@@ -218,13 +218,16 @@ class decoder(nn.Module):
                     in_channels_block = out_channels_block
                     out_channels_block = n_groups * (out_channels_block // n_groups + out_channels_block % n_groups)
 
-                if n == n_layers-1:
+                elif n == n_layers-1:
                     in_channels_block = out_channels_block
                     out_channels_block = out_channels
                     out_activation = False
                     groups=n_groups
                     if global_upscale_factor==1:
                         upscale_factor=1
+                
+                else:
+                    in_channels_block = out_channels_block
 
             hw = hw_in/(2**(n-1))
             self.decoder_blocks.append(decoder_block_shuffle(hw, n_blocks, in_channels_block, out_channels_block, k_size=k_size, dropout=dropout, bias=bias, global_padding=global_padding, upscale_factor=upscale_factor, groups=groups, with_skip=with_skip, out_activation=out_activation))      
