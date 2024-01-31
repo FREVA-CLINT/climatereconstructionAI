@@ -68,8 +68,6 @@ class output_net(nn.Module):
         data_out = {}
         non_valid_mask_var = {}
 
-        x = x + self.b
-
         x = torch.split(x, self.output_dims, dim=1)
 
         idx = 0
