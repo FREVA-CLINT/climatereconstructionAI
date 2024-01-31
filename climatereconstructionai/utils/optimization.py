@@ -347,7 +347,7 @@ class DivLoss(nn.Module):
 
         _, _, div_sum = self.phys_calc.get_divergence_from_edge_indices(uv_dim_indices, u, v)
 
-        loss = div_sum.mean()
+        loss = div_sum.abs().mean()
 
         return loss
 
