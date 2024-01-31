@@ -70,10 +70,9 @@ class output_net(nn.Module):
 
         x = torch.split(x, self.output_dims, dim=1)
 
-        idx = 0
-        for spatial_dim, vars in self.spatial_dim_var_dict.items():
-  
-            data = x[idx]
+        for spatial_dim_idx, data in enumerate(x):
+            spatial_dim = list(self.spatial_dim_var_dict.keys())[spatial_dim_idx]
+            vars = self.spatial_dim_var_dict[spatial_dim]
 
             data = self.grid_to_target_sampler(data, coords_target[spatial_dim].permute(0,2,1))
 
@@ -92,7 +91,6 @@ class output_net(nn.Module):
 
             if non_valid_mask is not None:
                 non_valid_mask_var.update(dict(zip(vars, [non_valid_mask[spatial_dim]]*len(vars))))
-            idx += 1
 
         return data_out, non_valid_mask_var
 
@@ -117,7 +115,9 @@ class pyramid_step_model(nn.Module):
         self.model_settings['input_dims'] = [len(values) for key, values in self.model_settings['spatial_dims_var_source'].items()]
 
         self.model_settings['n_output_groups'] = len(self.model_settings['spatial_dims_var_target'])
+
         self.model_settings['output_dims'] = [len(values) - int(self.model_settings['calc_vort'])*int('vort' in values) for key, values in self.model_settings['spatial_dims_var_target'].items()]   
+        self.model_settings['output_dims'] = [dims for dims in self.model_settings['output_dims'] if dims>0]
 
         self.output_res_indices = {}
         for var_target in self.model_settings['variables_target']:

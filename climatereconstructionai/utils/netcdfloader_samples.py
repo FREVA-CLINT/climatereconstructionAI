@@ -44,6 +44,9 @@ def get_moments(data, type, level=0.9):
         q = np.quantile(np.abs(data), level).astype(float)
         moments = (q,q)
 
+    elif type == 'None':
+        moments = (1., 1.)
+
     elif type == 'min_max':
         moments = (data.min().astype(float), data.max().astype(float))
     else:
@@ -412,7 +415,7 @@ class NetCDFLoader_lazy(Dataset):
             coords[spatial_dim] = get_coords_as_tensor(ds, lon=coord_dict['lon'], lat=coord_dict['lat']).float()
 
             for var in vars:
-                data_var = torch.tensor(ds[var][index].values).squeeze()
+                data_var = torch.tensor(ds[var][index].values).squeeze().float()
                 data[var] = data_var.unsqueeze(dim=-1)
 
         return data, coords

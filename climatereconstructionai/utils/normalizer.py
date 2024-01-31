@@ -54,6 +54,7 @@ class normalizer(torch.nn.Module):
             'quantile_abs':norm_max,
             'min_max':norm_max,
             'normal':norm_mean_std,
+            "None":identity
         }
        
         if 'uv' in norm_dict.keys():
@@ -71,6 +72,9 @@ class normalizer(torch.nn.Module):
             norm_fcn = self.norm_fcn_dict[self.norm_dict[var_lookup]['type']]
             data[var] = norm_fcn(data_var, moments, denorm)
         return data
+
+def identity(data, moments, denorm=False):
+    return data 
 
 def norm_max(data, moments, denorm=False):
     if denorm:
