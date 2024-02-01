@@ -127,6 +127,8 @@ def infill(model, dataset, eval_path, output_names, steady_mask, data_stats, xr_
             data_dict[key] = data_dict[key][:, cfg.gt_channels, :, :]
 
         if steady_mask is not None:
+            for key in ('gt', 'image'):
+                data_dict[key][:, steady_mask.type(torch.bool)] = np.nan
             data_dict['output'][:, np.repeat(steady_mask, cfg.n_pred_steps, axis=0).type(torch.bool)] = np.nan
 
         data_dict["image"] /= data_dict["mask"]
