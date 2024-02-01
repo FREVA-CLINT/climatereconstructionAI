@@ -319,12 +319,12 @@ class VortLoss(nn.Module):
         if 'vort' not in target.keys():
             target_vort = get_vorticity(self.phys_calc, target, uv_dim_indices)[0]
         else:
-            target_vort = target['vort'].float()
+            target_vort = target['vort'].double()
 
-        vort_loss = self.loss_fcn(output_vort.float(), target_vort, non_valid_mask_vort)  
+        vort_loss = self.loss_fcn(output_vort, target_vort, non_valid_mask_vort)  
 
         if val:
-            return vort_loss, output_vort.float(), target_vort, non_valid_mask_vort
+            return vort_loss, output_vort, target_vort, non_valid_mask_vort
         else:
             return vort_loss    
 
