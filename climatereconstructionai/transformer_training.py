@@ -296,6 +296,7 @@ def train(model, training_settings, model_settings={}):
         else:
             train_total_loss.backward() 
 
+        nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
         lr_scheduler.step()
 
