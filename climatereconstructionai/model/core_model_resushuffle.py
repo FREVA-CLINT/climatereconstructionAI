@@ -130,6 +130,7 @@ class encoder(nn.Module):
     def __init__(self, hw_in, n_levels, n_blocks, u_net_channels, in_channels, k_size=3, k_size_in=7, input_stride=1, batch_norm=True, n_groups=1, dropout=0, bias=True, global_padding=False):
         super().__init__()
 
+        hw_in = torch.tensor(hw_in)
         u_net_channels_g = u_net_channels * n_groups
         self.in_layer = res_net_block(hw_in, in_channels, u_net_channels_g, stride=input_stride, k_size=k_size_in, batch_norm=batch_norm, groups=n_groups, dropout=dropout, with_res=False, bias=bias, global_padding=global_padding)
         
@@ -263,7 +264,7 @@ class out_net(nn.Module):
         self.res_indices_lhs = torch.arange(len(res_indices))
 
         self.global_residual = True
-        scale_factor = hw_out / hw_in
+        scale_factor = hw_out[0] / hw_in[1]
         self.res_mode = res_mode
         self.scale_factor = scale_factor
 
@@ -306,14 +307,14 @@ class ResUNet(nn.Module):
     def __init__(self, hw_in, hw_out, n_levels, n_res_blocks, model_dim_unet, in_channels, out_channels, res_mode, res_indices, input_stride, batch_norm=True, k_size=3, in_groups=1, out_groups=1, dropout=0, bias=True, global_padding=False):
         super().__init__()
 
-        global_upscale_factor = int(torch.tensor([(hw_out*input_stride) // hw_in, 1]).max())
+        global_upscale_factor = int(torch.tensor([(hw_out[0]*input_stride) // hw_in[0], 1]).max())
 
         self.encoder = encoder(hw_in, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, 7, input_stride, batch_norm=batch_norm, n_groups=in_groups, dropout=dropout, bias=bias, global_padding=global_padding)
         self.decoder = decoder(self.encoder.layer_configs, n_res_blocks, out_channels, global_upscale_factor=global_upscale_factor, k_size=k_size, dropout=dropout, n_groups=out_groups, bias=bias, global_padding=global_padding)
 
         self.out_net = out_net(res_indices, hw_in, hw_out, res_mode=res_mode, global_padding=global_padding)
   
-        hw_mid = hw_in // (input_stride*2**(n_levels-1))
+        hw_mid = torch.tensor(hw_in)// (input_stride*2**(n_levels-1))
         self.mid = mid(hw_mid, n_res_blocks, model_dim_unet*(2**(n_levels-1)), with_att=True, bias=bias, global_padding=global_padding)
 
     def forward(self, x):

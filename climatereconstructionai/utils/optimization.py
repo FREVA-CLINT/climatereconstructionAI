@@ -441,7 +441,7 @@ class loss_calculator(nn.Module):
         
         if val:
             with torch.no_grad():
-                output, _, output_reg_hr, non_valid_mask = model(source, coords_target, coords_source=coords_source)
+                output, output_reg_lr, output_reg_hr, non_valid_mask = model(source, coords_target, coords_source=coords_source)
         else:
             output, _, output_reg_hr, non_valid_mask = model(source, coords_target, coords_source=coords_source)
 
@@ -488,6 +488,6 @@ class loss_calculator(nn.Module):
         loss_dict['total_loss'] = total_loss.item()
         
         if val:
-            return total_loss, loss_dict, output, target, output_reg_hr, non_valid_mask
+            return total_loss, loss_dict, output, target, output_reg_hr, output_reg_lr, non_valid_mask
         else:
             return total_loss, loss_dict

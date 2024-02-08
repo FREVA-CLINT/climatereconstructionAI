@@ -17,7 +17,7 @@ class ConvSelfAttention(nn.Module):
 
         self.n_heads = n_heads
 
-        self.norm = nn.LayerNorm([in_channel, hw, hw])
+        self.norm = nn.LayerNorm([in_channel, hw[1], hw[0]])
         self.qkv = nn.Conv2d(in_channel, in_channel * 3, 1, bias=False)
         self.out = nn.Conv2d(in_channel, in_channel, 1)
 
@@ -498,7 +498,7 @@ class nu_grid_sampler_simple(nn.Module):
         positionsy = (coords[:,:,0])*(x.shape[-1]-1)    
 
         positionsx = torch.clamp(positionsx, min=0, max=x.shape[-2])
-        positionsy = torch.clamp(positionsy, min=0, max=x.shape[-2])
+        positionsy = torch.clamp(positionsy, min=0, max=x.shape[-1])
 
         x = x[:,:,positionsx.long(), positionsy.long()]
 
@@ -799,11 +799,11 @@ class unstructured_to_reg_interpolator():
    
         x = np.linspace(coord_rangex[0],
                         coord_rangex[1],
-                        output_dim)
+                        output_dim[0])
         
         y = np.linspace(coord_rangey[0],
                         coord_rangey[1],
-                        output_dim)
+                        output_dim[1])
        
         
         self.inter = gu.grid_interpolator(x,y, method=method)

@@ -314,9 +314,9 @@ def train(model, training_settings, model_settings={}):
                 target_indices = data[-1]               
 
                 if 'k_l1_relv' in lambdas_optim.keys():
-                    _, val_loss_dict, output, target, output_reg_hr, non_valid_mask = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, val=True, k=lambdas_optim['k_l1_relv'])
+                    _, val_loss_dict, output, target, output_reg_hr, output_reg_lr, non_valid_mask = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, val=True, k=lambdas_optim['k_l1_relv'])
                 else:
-                    _, val_loss_dict, output, target, output_reg_hr, non_valid_mask = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, val=True, k=None)
+                    _, val_loss_dict, output, target, output_reg_hr, output_reg_lr, non_valid_mask = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, val=True, k=None)
 
                 val_losses.append(list(val_loss_dict.values()))
             
@@ -331,6 +331,7 @@ def train(model, training_settings, model_settings={}):
                 torch.save(coords_target,os.path.join(log_dir,'coords_target.pt'))
                 torch.save(output, os.path.join(log_dir,'output.pt'))
                 torch.save(output_reg_hr, os.path.join(log_dir,'output_reg_hr.pt'))
+                torch.save(output_reg_lr, os.path.join(log_dir,'output_reg_lr.pt'))
                 torch.save(target, os.path.join(log_dir,'target.pt'))
                 torch.save(source, os.path.join(log_dir,'source.pt'))
                 if "vort" in non_valid_mask.keys():
