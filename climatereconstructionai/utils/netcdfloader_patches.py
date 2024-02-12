@@ -149,6 +149,7 @@ class NetCDFLoader_lazy(Dataset):
                  grid_spacing_equator_km,
                  pix_size_patch,
                  patches_overlap_source,
+                 patches_overlap_target,
                  p_dropout_source=0,
                  p_dropout_target=0,
                  n_pts_min = True,
@@ -183,7 +184,7 @@ class NetCDFLoader_lazy(Dataset):
         self.sample_condition_dict = sample_condition_dict
 
         self.patches_source = get_patches(grid_spacing_equator_km, pix_size_patch, patches_overlap_source)
-        self.patches_target = get_patches(grid_spacing_equator_km, pix_size_patch, 0)
+        self.patches_target = get_patches(grid_spacing_equator_km, pix_size_patch, patches_overlap_target)
         
         if interpolation_dict is not None:
                  
@@ -302,7 +303,6 @@ class NetCDFLoader_lazy(Dataset):
             rel_coords_lon = (coords[0,:] - patch_borders_lon[0])/(patch_borders_lon[1]-patch_borders_lon[0])
             rel_coords_lat = (coords[1,:] - patch_borders_lat[0])/(patch_borders_lat[1]-patch_borders_lat[0])
             rel_coords_dict[spatial_dim] = torch.stack((rel_coords_lon,rel_coords_lat),dim=0)
-            
 
         return spatial_dim_indices, rel_coords_dict, patch_id
 

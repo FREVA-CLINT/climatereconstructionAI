@@ -718,10 +718,10 @@ def get_ids_in_patches(patches, coords, return_torch=True):
 
             in_patch_lon = np.logical_and(coords[0] >= border_patch_lon[0], coords[0] <= border_patch_lon[1])
 
-            if border_patch_lon[0] < math.pi:
+            if np.round(border_patch_lon[0],6) < np.round(math.pi,6):
                 in_patch_lon = np.logical_or(in_patch_lon, (coords[0] >= (2*math.pi + border_patch_lon[0])))
 
-            elif border_patch_lon[1] > math.pi:
+            elif np.round(border_patch_lon[1],6) > np.round(math.pi,6):
                 in_patch_lon = np.logical_or(in_patch_lon, (coords[0] <= (border_patch_lon[1] - 2*math.pi)))
 
             in_patch_lat = np.logical_and(coords[1] >= border_patch_lat[0], coords[1] <= border_patch_lat[1])

@@ -290,7 +290,8 @@ class pyramid_step_model(nn.Module):
             self.patches_target = gu.get_patches(
                 self.model_settings["grid_spacing_equator_km"],
                 self.model_settings["pix_size_patch"],
-                0)
+                self.model_settings["patches_overlap_target"])
+            
             range_target_lon = self.patches_target["borders_lon"][0]
             range_source_lon = self.patches_source["borders_lon"][0]
             range_source_lon_rel = (range_source_lon - range_target_lon[0])/(range_target_lon[1] - range_target_lon[0])
