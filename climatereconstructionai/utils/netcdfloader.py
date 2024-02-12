@@ -207,6 +207,7 @@ class NetCDFLoader(Dataset):
             mask_indices[mask_indices > self.mask_length[mask_ds_index] - 1] = self.mask_length[mask_ds_index] - 1
         else:
             mask_indices = img_indices
+            mask_ds_index = ds_index
         # load data from ranges
         images, masks = self.load_data(ind_data, img_indices, ds_index, mask_indices, mask_ds_index)
 
