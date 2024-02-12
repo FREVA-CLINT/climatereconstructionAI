@@ -185,7 +185,8 @@ class pyramid_step_model(nn.Module):
 
         
         if self.res_mode=='sample' and not isinstance(self.core_model, nn.Identity):
-            x_pre = self.output_net_pre(x_reg_lr[:,list(self.output_res_indices.values()),:,:], coords_target_hr, non_valid)[0]
+            coords_target_lr, non_valid = helpers.scale_coords(coords_target, self.range_region_source_radx, rngy=self.range_region_source_rady)
+            x_pre = self.output_net_pre(x_reg_lr[:,list(self.output_res_indices.values()),:,:], coords_target_lr, non_valid)[0]
 
             for var in self.output_res_indices.keys():
                 if self.use_gnlll:
@@ -227,10 +228,10 @@ class pyramid_step_model(nn.Module):
             return output, {}
 
     def check_model_dir(self):
-        if 'km' not in self.model_settings.keys():
-            self.model_settings['km']=False
+        if 'model_type' not in self.model_settings.keys():
+            self.model_settings['model_type']="patches"
 
-        self.km = self.model_settings['km']
+        self.model_type = self.model_settings['model_type']
 
         self.model_dir = self.model_settings['model_dir']
 
@@ -266,18 +267,42 @@ class pyramid_step_model(nn.Module):
         self.radius_region_source_km = self.model_settings['radius_region_source_km']
         self.radius_region_target_km = self.model_settings['radius_region_target_km']
 
-        if self.model_settings['km']:
+        if self.model_settings['model_type']=="patches_km":
             self.range_region_source_radx = [-self.radius_region_source_km/(6371), self.radius_region_source_km/(6371)]
             self.range_region_target_radx = [-self.radius_region_target_km/(6371), self.radius_region_target_km/(6371)]
 
             self.range_region_source_rady = self.range_region_source_radx
             self.range_region_target_rady = self.range_region_target_radx
-        else:
+
+        elif self.model_settings['model_type']=="global":
             self.range_region_source_radx = [-math.pi, math.pi]
             self.range_region_target_radx = [-math.pi, math.pi]
 
             self.range_region_source_rady = [-math.pi/2, math.pi/2]
             self.range_region_target_rady = [-math.pi/2, math.pi/2]
+        
+        elif self.model_settings['model_type']=="patches":
+            self.patches_source = gu.get_patches(
+                self.model_settings["grid_spacing_equator_km"],
+                self.model_settings["pix_size_patch"],
+                self.model_settings["patches_overlap_source"])
+
+            self.patches_target = gu.get_patches(
+                self.model_settings["grid_spacing_equator_km"],
+                self.model_settings["pix_size_patch"],
+                0)
+            range_target_lon = self.patches_target["borders_lon"][0]
+            range_source_lon = self.patches_source["borders_lon"][0]
+            range_source_lon_rel = (range_source_lon - range_target_lon[0])/(range_target_lon[1] - range_target_lon[0])
+
+            self.range_region_source_radx = [range_source_lon_rel[0], range_source_lon_rel[1]]
+            self.range_region_target_radx = [0, 1]
+
+            range_target_lat = self.patches_target["borders_lat"][0]
+            range_source_lat = self.patches_source["borders_lat"][0]
+            range_source_lat_rel = (range_source_lat - range_target_lat[0])/(range_target_lat[1] - range_target_lat[0])
+            self.range_region_source_rady = [range_source_lat_rel[0], range_source_lat_rel[1]]
+            self.range_region_target_rady = [0, 1]
  
         self.n_in, self.n_out = self.model_settings['n_regular']
 
@@ -372,7 +397,7 @@ class pyramid_step_model(nn.Module):
         if "use_samples" in train_settings.keys() and train_settings["use_samples"]:
             train_settings["rel_coords"]=True
         else:
-            if "random_region" not in self.train_settings.keys() and self.model_settings['km']:
+            if "random_region" not in self.train_settings.keys() and self.model_settings['model_type']=="patches_km":
                 train_settings["random_region"] = self.get_region_generator_settings()
             
             if 'lon_trans' in self.train_settings.keys() and self.train_settings['lon_trans']:

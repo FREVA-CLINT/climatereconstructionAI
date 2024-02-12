@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import xarray as xr
 import numpy as np
+import math
 
 from scipy.interpolate import griddata
 
@@ -665,8 +666,81 @@ def generate_region(coords, range_lon=None, range_lat=None, n_points=None, radiu
     return out_dict
 
 
+def get_patches(grid_spacing_equator_km, pix_size, overlap):
+
+    total_grid_size_lon_pix = (2 * math.pi * radius_earth)/grid_spacing_equator_km
+    total_grid_size_lon_pix = 2**np.ceil(np.log2(total_grid_size_lon_pix))
+
+
+    n_patches_lon = total_grid_size_lon_pix/pix_size
+
+    border_patches_lon = np.linspace(-math.pi, math.pi,int(n_patches_lon)+1)
+    border_patches_lat = np.linspace(-math.pi/2, math.pi/2,int(n_patches_lon/2)+1)
+
+    centers_lon = (border_patches_lon[1:] + border_patches_lon[:-1])/2
+    centers_lat = (border_patches_lat[1:] + border_patches_lat[:-1])/2
+
+    border_patches_lon = np.stack((border_patches_lon[:-1],border_patches_lon[1:]), axis=1)
+    border_patches_lat = np.stack((border_patches_lat[:-1],border_patches_lat[1:]), axis=1)
+
+    overlap_grad = overlap * (border_patches_lon[0,1]- border_patches_lon[0,0])
+    border_patches_lon = border_patches_lon + np.array([-overlap_grad, overlap_grad])
+
+    overlap_grad = overlap * (border_patches_lat[0,1]- border_patches_lat[0,0])
+    border_patches_lat = border_patches_lat + np.array([-overlap_grad, overlap_grad])
+
+    patches = {
+        'centers_lon':centers_lon, 
+        'centers_lat':centers_lat,
+        'borders_lon': border_patches_lon,
+        'borders_lat': border_patches_lat
+    }
+
+    return patches
+
+
+def get_ids_in_patches(patches, coords, return_torch=True):
+
+    centers_lon = patches['centers_lon']
+    centers_lat = patches['centers_lat']
+    border_patches_lon = patches['borders_lon']
+    border_patches_lat = patches['borders_lat']
+
+    ids_in_patches = []
+    patch_ids_lon = []
+    patch_ids_lat = []
+    for patch_lon in range(len(centers_lon)):
+        for patch_lat in range(len(centers_lat)):
+            border_patch_lon = border_patches_lon[patch_lon]
+            border_patch_lat = border_patches_lat[patch_lat]
+            patch_ids_lon.append(patch_lon)
+            patch_ids_lat.append(patch_lat)
+
+            in_patch_lon = np.logical_and(coords[0] >= border_patch_lon[0], coords[0] <= border_patch_lon[1])
+
+            if border_patch_lon[0] < math.pi:
+                in_patch_lon = np.logical_or(in_patch_lon, (coords[0] >= (2*math.pi + border_patch_lon[0])))
+
+            elif border_patch_lon[1] > math.pi:
+                in_patch_lon = np.logical_or(in_patch_lon, (coords[0] <= (border_patch_lon[1] - 2*math.pi)))
+
+            in_patch_lat = np.logical_and(coords[1] >= border_patch_lat[0], coords[1] <= border_patch_lat[1])
+            
+            ids = np.where(np.logical_and(in_patch_lon, in_patch_lat))[0]
+
+            if return_torch:
+                ids = torch.tensor(ids)
+
+            ids_in_patches.append(ids)
+
+    patch_ids = {'lon': patch_ids_lon,
+                 'lat': patch_ids_lat}
+
+    
+    return ids_in_patches, patch_ids
+
 class grid_interpolator(nn.Module):
-    def __init__(self, x_grid, y_grid, method='nearest'):
+    def __init__(self, x_grid, y_grid, method='nearest', polar_shift=True):
         super().__init__()
 
         self.method = method
@@ -680,6 +754,7 @@ class grid_interpolator(nn.Module):
         device = data.device
         data = data.cpu()
         x,y = coords.cpu()
+
         grid_z = griddata((x, y), data, (self.x_grid, self.y_grid), method=self.method)
 
         return torch.tensor(grid_z, device=device).float()

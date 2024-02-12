@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import json
-
+import math
 import torch.multiprocessing
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -11,7 +11,7 @@ import netCDF4 as netcdf
 
 from .utils import twriter_t, early_stopping, optimization
 from .utils.io import save_ckpt
-from .utils.netcdfloader_samples import NetCDFLoader_lazy, InfiniteSampler, SampleLoader
+from .utils.netcdfloader_patches import NetCDFLoader_lazy, InfiniteSampler, SampleLoader
 
 def arclen(p1,p2):
   length = 2*torch.arcsin(torch.linalg.norm(p2-p1,axis=-1)/2)
@@ -156,40 +156,44 @@ def train(model, training_settings, model_settings={}):
                                     training_settings['variables_source'],
                                     training_settings['variables_target'],
                                     model_settings['normalization'],
-                                    random_region=random_region,
+                                    model_settings["grid_spacing_equator_km"],
+                                    model_settings["pix_size_patch"],
+                                    model_settings["patches_overlap_source"],
                                     p_dropout_source=training_settings['p_dropout_source'],
                                     p_dropout_target=training_settings['p_dropout_target'],
-                                    sampling_mode=training_settings['sampling_mode'],
+                                    n_pts_min = training_settings["n_pts_min"] if 'n_pts_min' in training_settings else True,
                                     save_nc_sample_path='',
                                     save_tensor_sample_path=sample_dir_train,
-                                    coordinate_pert=training_settings['coordinate_pertubation'],
                                     index_range_source=training_settings['index_range_source'] if 'index_range_source' in training_settings else None,
                                     index_offset_target=training_settings['index_offset_target'] if 'index_offset_target' in training_settings else 0,
                                     rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False,
                                     sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
                                     lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
                                     rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False,
-                                    interpolation_dict=training_settings['interpolation'])
+                                    interpolation_dict=training_settings['interpolation'],
+                                    sample_patch_range_lat=training_settings['sample_patch_range_lat'] if 'sample_patch_range_lat' in training_settings else [-math.pi,math.pi])
         
         dataset_val = NetCDFLoader_lazy(source_files_val, 
                                     target_files_val,
                                     training_settings['variables_source'],
                                     training_settings['variables_target'],
-                                    dataset_train.norm_dict,
-                                    random_region=random_region,
+                                    model_settings['normalization'],
+                                    model_settings["grid_spacing_equator_km"],
+                                    model_settings["pix_size_patch"],
+                                    model_settings["patches_overlap_source"],
                                     p_dropout_source=training_settings['p_dropout_source'],
                                     p_dropout_target=training_settings['p_dropout_target'],
-                                    sampling_mode=training_settings['sampling_mode'],
+                                    n_pts_min = training_settings["n_pts_min"] if 'n_pts_min' in training_settings else True,
                                     save_nc_sample_path='',
-                                    save_tensor_sample_path=sample_dir_val,
-                                    coordinate_pert=0,
+                                    save_tensor_sample_path=sample_dir_train,
                                     index_range_source=training_settings['index_range_source'] if 'index_range_source' in training_settings else None,
                                     index_offset_target=training_settings['index_offset_target'] if 'index_offset_target' in training_settings else 0,
                                     rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False,
                                     sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
                                     lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
                                     rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False,
-                                    interpolation_dict=training_settings['interpolation'])
+                                    interpolation_dict=training_settings['interpolation'],
+                                    sample_patch_range_lat=training_settings['sample_patch_range_lat'] if 'sample_patch_range_lat' in training_settings else [-math.pi,math.pi])
 
         model_settings['normalization'] = norm_dict = dataset_train.norm_dict
 

@@ -374,7 +374,7 @@ class core_ResUNet(psm.pyramid_step_model):
             if len(var_in_source)==1:
                 res_indices.append(var_in_source[0])
 
-        global_padding = True if model_settings['km']==False else False
+        global_padding = True if model_settings['model_type']=="global" else False
 
         self.core_model = ResUNet(hw_in, hw_out, depth, n_blocks, model_dim_core, input_dim, output_dim, model_settings['res_mode'], res_indices, input_stride, batch_norm=batch_norm, in_groups=in_groups, out_groups=out_groups, dropout=dropout, bias=bias, global_padding=global_padding)
 
