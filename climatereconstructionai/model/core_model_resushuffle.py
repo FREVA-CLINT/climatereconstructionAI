@@ -304,7 +304,7 @@ class out_net(nn.Module):
 
 
 class ResUNet(nn.Module): 
-    def __init__(self, hw_in, hw_out, n_levels, n_res_blocks, model_dim_unet, in_channels, out_channels, res_mode, res_indices, input_stride, batch_norm=True, k_size=3, in_groups=1, out_groups=1, dropout=0, bias=True, global_padding=False):
+    def __init__(self, hw_in, hw_out, n_levels, n_res_blocks, model_dim_unet, in_channels, out_channels, res_mode, res_indices, input_stride, batch_norm=True, k_size=3, in_groups=1, out_groups=1, dropout=0, bias=True, global_padding=False, mid_att=False):
         super().__init__()
 
         global_upscale_factor = int(torch.tensor([(hw_out[0]*input_stride) // hw_in[0], 1]).max())
@@ -315,7 +315,7 @@ class ResUNet(nn.Module):
         self.out_net = out_net(res_indices, hw_in, hw_out, res_mode=res_mode, global_padding=global_padding)
   
         hw_mid = torch.tensor(hw_in)// (input_stride*2**(n_levels-1))
-        self.mid = mid(hw_mid, n_res_blocks, model_dim_unet*(2**(n_levels-1)), with_att=True, bias=bias, global_padding=global_padding)
+        self.mid = mid(hw_mid, n_res_blocks, model_dim_unet*(2**(n_levels-1)), with_att=mid_att, bias=bias, global_padding=global_padding)
 
     def forward(self, x):
 
@@ -347,6 +347,7 @@ class core_ResUNet(psm.pyramid_step_model):
         model_dim_core = model_settings['model_dim_core']
         depth = model_settings["depth_core"]
         batch_norm = model_settings["batch_norm"]
+        mid_att = model_settings["mid_att"] if "mid_att" in model_settings.keys() else False
 
         dropout = 0 if 'dropout' not in model_settings.keys() else model_settings['dropout']
         grouped = False if 'grouped' not in model_settings.keys() else model_settings['grouped']
