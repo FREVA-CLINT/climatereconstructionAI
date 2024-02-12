@@ -294,9 +294,10 @@ class out_net(nn.Module):
     def forward(self, x, x_res):
         
         if self.res_mode == 'core_inter':
-            x_res = nn.functional.interpolate(x_res[:,self.res_indices_rhs,:,:],scale_factor=self.scale_factor, mode = 'bicubic', align_corners=True)
-        else:
-            x_res = self.res_interpolate(x_res[:,self.res_indices_rhs,:,:])
+            if self.scale_factor>1:
+                x_res = nn.functional.interpolate(x_res[:,self.res_indices_rhs,:,:],scale_factor=self.scale_factor, mode = 'bicubic', align_corners=True)
+            else:
+                x_res = x_res[:,self.res_indices_rhs,:,:]
         
         if self.global_residual:
             x[:,self.res_indices_lhs] = x[:,self.res_indices_lhs] + x_res
