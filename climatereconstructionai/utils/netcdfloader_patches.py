@@ -441,7 +441,8 @@ class NetCDFLoader_lazy(Dataset):
 
         if len(self.save_tensor_sample_path)>0:
             save_path = os.path.join(self.save_tensor_sample_path, os.path.basename(source_file).replace('.nc', f'_{float(patch_id):.3f}.pt'))
-            torch.save([data_source, data_target, rel_coords_source, rel_coords_target, spatial_dim_indices_source, spatial_dim_indices_target], save_path)
+            if not os.path.isfile(save_path):
+                torch.save([data_source, data_target, rel_coords_source, rel_coords_target, spatial_dim_indices_source, spatial_dim_indices_target], save_path)
 
             dict_file = os.path.join(self.save_tensor_sample_path,'dims_var_source.json')
             
