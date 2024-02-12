@@ -1,3 +1,4 @@
+import json
 import os
 import random
 
@@ -94,18 +95,32 @@ def load_netcdf(path, data_names, data_types, keep_dss=False):
     if data_names is None:
         return None, None, None
     else:
-        ndata = len(data_names)
-        assert ndata == len(data_types)
-
-        dss, data, lengths, sizes = zip(*[nc_loadchecker('{}{}'.format(path, data_names[i]),
-                                                         data_types[i]) for i in range(ndata)])
-
-        assert len(set(lengths)) == 1
-
-        if keep_dss:
-            return dss, data, lengths[0], sizes
+        assert len(data_names) == len(data_types)
+        if all('.nc' in data_name or '.h5' in data_name for data_name in data_names):
+            data_paths = [['{}{}'.format(path, data_names[i])] for i in range(len(data_names))]
+        elif all('.json' in data_name for data_name in data_names):
+            data_paths = []
+            for data_name in data_names:
+                with open('{}/{}'.format(path, data_name)) as json_file:
+                    data_paths.append(json.load(json_file))
         else:
-            return data, lengths[0], sizes
+            raise ValueError('Unsupported filetype. All data names must uniformly contain ".nc", ".h5" or ".json".')
+
+        dss, data, lengths, sizes = [], [], [], []
+        for i in range(len(data_paths)):
+            dss_list, data_list, length, size = zip(*[nc_loadchecker(data_paths[i][j], data_types[i])
+                                                      for j in range(len(data_paths[i]))])
+            dss.append(dss_list)
+            data.append(data_list)
+            lengths.append(length)
+            sizes.append(size[0])
+
+    assert len(set(lengths)) == 1
+
+    if keep_dss:
+        return dss, data, lengths[0], sizes
+    else:
+        return data, lengths[0], sizes
 
 
 class NetCDFLoader(Dataset):
@@ -146,15 +161,15 @@ class NetCDFLoader(Dataset):
 
         self.bounds = bnd_normalization(self.img_mean, self.img_std)
 
-    def load_data(self, ind_data, img_indices, mask_indices):
+    def load_data(self, ind_data, img_indices, ds_index, mask_indices, mask_ds_index):
 
         if self.mask_data is None:
             # Get masks from images
-            image = np.array(self.img_data[ind_data][mask_indices])
+            image = np.array(self.img_data[ind_data][mask_ds_index][mask_indices])
             mask = torch.from_numpy((1 - (np.isnan(image))).astype(image.dtype))
         else:
-            mask = torch.from_numpy(np.array(self.mask_data[ind_data][mask_indices]))
-        image = np.array(self.img_data[ind_data][img_indices])
+            mask = torch.from_numpy(np.array(self.mask_data[ind_data][mask_ds_index][mask_indices]))
+        image = np.array(self.img_data[ind_data][ds_index][img_indices])
         image = torch.from_numpy(np.nan_to_num(image))
 
         if cfg.normalize_data:
@@ -163,19 +178,37 @@ class NetCDFLoader(Dataset):
         return image, mask
 
     def get_single_item(self, ind_data, index, shuffle_masks):
+        # get index of dataset
+        ds_index = 0
+        current_index = 0
+        for l in range(len(self.img_length)):
+            if index > current_index + self.img_length[l]:
+                current_index += self.img_length[l]
+                ds_index += 1
+        index -= current_index
+
         # define range of lstm or prev-next steps -> adjust, if out of boundaries
         img_indices = np.array(list(range(index - self.time_steps[0], index + self.time_steps[1] + 1)))
         img_indices[img_indices < 0] = 0
-        img_indices[img_indices > self.img_length - 1] = self.img_length - 1
+        img_indices[img_indices > self.img_length[ds_index] - 1] = self.img_length[ds_index] - 1
         if shuffle_masks:
-            mask_indices = []
-            for j in range(self.n_time_steps):
-                mask_indices.append(self.random.randint(0, self.mask_length - 1))
-            mask_indices = sorted(mask_indices)
+            mask_index = self.random.randint(0, sum(self.mask_length) - 1)
+            mask_ds_index = 0
+            current_index = 0
+            for l in range(len(self.mask_length)):
+                if mask_index > current_index + self.mask_length[l]:
+                    current_index += self.mask_length[l]
+                    mask_ds_index += 1
+            mask_index -= current_index
+
+            # define range of lstm or prev-next steps -> adjust, if out of boundaries
+            mask_indices = np.array(list(range(mask_index - self.time_steps[0], mask_index + self.time_steps[1] + 1)))
+            mask_indices[mask_indices < 0] = 0
+            mask_indices[mask_indices > self.mask_length[mask_ds_index] - 1] = self.mask_length[mask_ds_index] - 1
         else:
             mask_indices = img_indices
         # load data from ranges
-        images, masks = self.load_data(ind_data, img_indices, mask_indices)
+        images, masks = self.load_data(ind_data, img_indices, ds_index, mask_indices, mask_ds_index)
 
         # stack to correct dimensions
         images = torch.stack([images], dim=1)
@@ -209,4 +242,4 @@ class NetCDFLoader(Dataset):
             return torch.cat(masked, dim=1), torch.cat(masks, dim=1), torch.cat(images, dim=1), index
 
     def __len__(self):
-        return self.img_length
+        return sum(self.img_length)
