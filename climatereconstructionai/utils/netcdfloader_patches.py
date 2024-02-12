@@ -161,7 +161,8 @@ class NetCDFLoader_lazy(Dataset):
                  lazy_load=False,
                  rotate_cs=False,
                  interpolation_dict=None,
-                 sample_patch_range_lat=[-math.pi/2,math.pi/2]):
+                 sample_patch_range_lat=[-math.pi/2,math.pi/2],
+                 sample_condition_dict={}):
         
         super(NetCDFLoader_lazy, self).__init__()
         
@@ -179,6 +180,7 @@ class NetCDFLoader_lazy(Dataset):
         self.lazy_load=lazy_load
         self.rotate_cs = rotate_cs
         self.sample_patch_range_lat = sample_patch_range_lat
+        self.sample_condition_dict = sample_condition_dict
 
         self.patches_source = get_patches(grid_spacing_equator_km, pix_size_patch, patches_overlap_source)
         self.patches_target = get_patches(grid_spacing_equator_km, pix_size_patch, 0)
@@ -266,14 +268,7 @@ class NetCDFLoader_lazy(Dataset):
         spatial_dim_indices = {}
         rel_coords_dict = {} 
 
-        if patch_id is None:
-            in_lat_range = False
-            while not in_lat_range:
-                patch_id = torch.randint(0, len(patches['centers_lon'])* len(patches['centers_lat']) -1, (1,))
-                center_lat = patches["centers_lat"][self.patch_ids["lat"][int(patch_id)]]
-
-                if self.sample_patch_range_lat[0]<center_lat and self.sample_patch_range_lat[1]>center_lat:
-                    in_lat_range = True
+        
 
         for spatial_dim, coord_dict in dims_variables_dict['coord_dicts'].items():
             
@@ -374,22 +369,43 @@ class NetCDFLoader_lazy(Dataset):
             else:
                 ds_target = xr.load_dataset(file_path_target)
 
+        not_condition = True 
 
-        spatial_dim_indices_source, rel_coords_dict_source, patch_id = self.get_coordinates(ds_source, self.dims_variables_source, self.spatial_dims_patches_ids_source, self.n_dict_source, self.patches_source)
-        spatial_dim_indices_target, rel_coords_dict_target, _ = self.get_coordinates(ds_target, self.dims_variables_target, self.spatial_dims_patches_ids_target, self.n_dict_target, self.patches_target, patch_id=patch_id)
+        while not_condition:
 
-        ds_source = self.apply_spatial_dim_indices(ds_source, self.dims_variables_source, spatial_dim_indices_source, rel_coords_dict=rel_coords_dict_source)
-        ds_target = self.apply_spatial_dim_indices(ds_target, self.dims_variables_target, spatial_dim_indices_target, rel_coords_dict=rel_coords_dict_target)
+            in_lat_range = False
+
+            while not in_lat_range:
+                patch_id = torch.randint(0, len(self.patches_source['centers_lon'])* len(self.patches_source['centers_lat']) -1, (1,))
+                center_lat = self.patches_source["centers_lat"][self.patch_ids["lat"][int(patch_id)]]
+
+                if self.sample_patch_range_lat[0]<center_lat and self.sample_patch_range_lat[1]>center_lat:
+                    in_lat_range = True
+
+            spatial_dim_indices_source, rel_coords_dict_source, _ = self.get_coordinates(ds_source, self.dims_variables_source, self.spatial_dims_patches_ids_source, self.n_dict_source, self.patches_source, patch_id=patch_id)
+            spatial_dim_indices_target, rel_coords_dict_target, _ = self.get_coordinates(ds_target, self.dims_variables_target, self.spatial_dims_patches_ids_target, self.n_dict_target, self.patches_target, patch_id=patch_id)
+
+            ds_source_sampled = self.apply_spatial_dim_indices(ds_source, self.dims_variables_source, spatial_dim_indices_source, rel_coords_dict=rel_coords_dict_source)
+            ds_target_sampled = self.apply_spatial_dim_indices(ds_target, self.dims_variables_target, spatial_dim_indices_target, rel_coords_dict=rel_coords_dict_target)
+
+            if len(self.sample_condition_dict)==0:
+                not_condition = False
+
+            else:
+                for var, threshold in self.sample_condition_dict.items():
+                    not_condition = ~(np.mean(np.abs(ds_source_sampled[var].values)) > threshold) 
+                    if not_condition:
+                        break
 
         if len(self.save_nc_sample_path)>0:
             
             save_path_source = os.path.join(self.save_nc_sample_path, os.path.basename(file_path_source).replace('.nc', f'_{float(patch_id):.3f}_source.nc'))
-            ds_source.to_netcdf(save_path_source)
+            ds_source_sampled.to_netcdf(save_path_source)
 
             save_path_target = os.path.join(self.save_nc_sample_path, os.path.basename(file_path_target).replace('.nc', f'_{float(patch_id):.3f}_target.nc'))
-            ds_target.to_netcdf(save_path_target)
+            ds_target_sampled.to_netcdf(save_path_target)
 
-        return ds_source, ds_target, patch_id, spatial_dim_indices_source, spatial_dim_indices_target
+        return ds_source_sampled, ds_target_sampled, patch_id, spatial_dim_indices_source, spatial_dim_indices_target
 
 
     def get_data(self, ds, index, dims_variables_dict):

@@ -171,7 +171,8 @@ def train(model, training_settings, model_settings={}):
                                     lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
                                     rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False,
                                     interpolation_dict=training_settings['interpolation'],
-                                    sample_patch_range_lat=training_settings['sample_patch_range_lat'] if 'sample_patch_range_lat' in training_settings else [-math.pi,math.pi])
+                                    sample_patch_range_lat=training_settings['sample_patch_range_lat'] if 'sample_patch_range_lat' in training_settings else [-math.pi,math.pi],
+                                    sample_condition_dict=training_settings['sample_condition_dict'] if 'sample_condition_dict' in training_settings else {})
         
         dataset_val = NetCDFLoader_lazy(source_files_val, 
                                     target_files_val,
@@ -193,7 +194,8 @@ def train(model, training_settings, model_settings={}):
                                     lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
                                     rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False,
                                     interpolation_dict=training_settings['interpolation'],
-                                    sample_patch_range_lat=training_settings['sample_patch_range_lat'] if 'sample_patch_range_lat' in training_settings else [-math.pi,math.pi])
+                                    sample_patch_range_lat=training_settings['sample_patch_range_lat'] if 'sample_patch_range_lat' in training_settings else [-math.pi,math.pi],
+                                    sample_condition_dict=training_settings['sample_condition_dict'] if 'sample_condition_dict' in training_settings else {})
 
         model_settings['normalization'] = norm_dict = dataset_train.norm_dict
 
