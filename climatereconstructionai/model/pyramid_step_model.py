@@ -271,7 +271,7 @@ class pyramid_step_model(nn.Module):
                 spatial_dims_patches_target[spatial_dim] = ids_in_patches_target
 
 
-            for patch_id_idx in patch_ids['lon']:
+            for patch_id_idx in range(len(patch_ids['lon'])):
 
                 patch_borders_source_lon = self.patches_source["borders_lon"][patch_ids["lon"][int(patch_id_idx)]]
                 patch_borders_source_lat = self.patches_source["borders_lat"][patch_ids["lat"][int(patch_id_idx)]]
