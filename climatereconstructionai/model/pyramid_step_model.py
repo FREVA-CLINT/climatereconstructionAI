@@ -295,7 +295,7 @@ class pyramid_step_model(nn.Module):
                 for spatial_dim, vars in self.model_settings["spatial_dims_var_target"].items():
             
                     coord_dict = gu.get_coord_dict_from_var(ds_target, spatial_dim)
-                    coords = gu.get_coords_as_tensor(ds, lon=coord_dict['lon'], lat=coord_dict['lat'])
+                    coords = gu.get_coords_as_tensor(ds_target, lon=coord_dict['lon'], lat=coord_dict['lat'])
 
                     indices = spatial_dims_patches_target[spatial_dim][patch_id_idx]
 
