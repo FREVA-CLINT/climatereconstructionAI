@@ -246,10 +246,10 @@ class pyramid_step_model(nn.Module):
 
             #collect all data
             vars_target = self.model_settings['variables_target']
-            output_global = dict(zip(vars_target, [torch.tensor(ds_target[variable][0].values).squeeze() for variable in vars_target]))
+            output_global = dict(zip(vars_target, [torch.tensor(ds_target[variable][0].values).squeeze().to(device) for variable in vars_target]))
 
             if self.model_settings['gauss']:
-                output_global_std = dict(zip(vars_target, [torch.tensor(ds_target[variable][0].values).squeeze() for variable in vars_target]))
+                output_global_std = dict(zip(vars_target, [torch.tensor(ds_target[variable][0].values).squeeze().to(device) for variable in vars_target]))
             else:
                 output_global_std = {}
 
@@ -288,10 +288,10 @@ class pyramid_step_model(nn.Module):
 
                     indices = spatial_dims_patches_source[spatial_dim][patch_id_idx]
 
-                    coords_source[spatial_dim] = self.get_coordinates_frame(coords[:,indices], patch_borders_source_lon, patch_borders_source_lat).unsqueeze(dim=0)
+                    coords_source[spatial_dim] = self.get_coordinates_frame(coords[:,indices], patch_borders_source_lon, patch_borders_source_lat).unsqueeze(dim=0).to(device)
                     
                     for variable in vars:
-                        data_source[variable] = torch.tensor(ds[variable].values[ts,0,indices]).to(device).unsqueeze(dim=-1).unsqueeze(dim=0)
+                        data_source[variable] = torch.tensor(ds[variable].values[ts,0,indices]).unsqueeze(dim=-1).unsqueeze(dim=0).to(device)
 
 
                 var_spatial_dims = {}
@@ -303,7 +303,7 @@ class pyramid_step_model(nn.Module):
 
                     indices = spatial_dims_patches_target[spatial_dim][patch_id_idx]
 
-                    coords_target[spatial_dim] = self.get_coordinates_frame(coords[:,indices], patch_borders_target_lon, patch_borders_target_lat).unsqueeze(dim=0)
+                    coords_target[spatial_dim] = self.get_coordinates_frame(coords[:,indices], patch_borders_target_lon, patch_borders_target_lat).unsqueeze(dim=0).to(device)
                     var_spatial_dims.update(dict(zip(vars,[spatial_dim]*len(vars))))
 
                 with torch.no_grad():
