@@ -259,11 +259,15 @@ class pyramid_step_model(nn.Module):
                 coords = gu.get_coords_as_tensor(ds, lon=coord_dict['lon'], lat=coord_dict['lat'])
 
                 ids_in_patches_source, patch_ids = gu.get_ids_in_patches(self.patches_source, coords.numpy())
-                ids_in_patches_target, patch_ids = gu.get_ids_in_patches(patches_target, coords.numpy())
-             
-                spatial_dims_n_pts[spatial_dim] = torch.tensor([len(ids_in_patch) for ids_in_patch in ids_in_patches_target])
 
                 spatial_dims_patches_source[spatial_dim] = ids_in_patches_source
+
+            for spatial_dim, vars in self.model_settings["spatial_dims_var_target"].items():
+
+                coord_dict = gu.get_coord_dict_from_var(ds_target, spatial_dim)
+                coords = gu.get_coords_as_tensor(ds_target, lon=coord_dict['lon'], lat=coord_dict['lat'])
+
+                ids_in_patches_target, patch_ids = gu.get_ids_in_patches(patches_target, coords.numpy())
                 spatial_dims_patches_target[spatial_dim] = ids_in_patches_target
 
 
