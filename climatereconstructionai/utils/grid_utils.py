@@ -716,7 +716,7 @@ def get_ids_in_patches(patches, coords, return_torch=True):
             patch_ids_lon.append(patch_lon)
             patch_ids_lat.append(patch_lat)
 
-            in_patch_lon = np.logical_and(coords[0] >= border_patch_lon[0], coords[0] <= border_patch_lon[1])
+            in_patch_lon = np.logical_and(coords[0] >= border_patch_lon[0], coords[0] < border_patch_lon[1])
 
             if np.round(border_patch_lon[0],6) < np.round(math.pi,6):
                 in_patch_lon = np.logical_or(in_patch_lon, (coords[0] >= (2*math.pi + border_patch_lon[0])))
@@ -724,7 +724,7 @@ def get_ids_in_patches(patches, coords, return_torch=True):
             elif np.round(border_patch_lon[1],6) > np.round(math.pi,6):
                 in_patch_lon = np.logical_or(in_patch_lon, (coords[0] <= (border_patch_lon[1] - 2*math.pi)))
 
-            in_patch_lat = np.logical_and(coords[1] >= border_patch_lat[0], coords[1] <= border_patch_lat[1])
+            in_patch_lat = np.logical_and(coords[1] >= border_patch_lat[0], coords[1] < border_patch_lat[1])
             
             ids = np.where(np.logical_and(in_patch_lon, in_patch_lat))[0]
 

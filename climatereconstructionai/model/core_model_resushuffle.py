@@ -127,12 +127,13 @@ class res_blocks(nn.Module):
         return self.max_pool(x), x
 
 class encoder(nn.Module): 
-    def __init__(self, hw_in, n_levels, n_blocks, u_net_channels, in_channels, k_size=3, k_size_in=7, input_stride=1, batch_norm=True, n_groups=1, dropout=0, bias=True, global_padding=False):
+    def __init__(self, hw_in, n_levels, n_blocks, u_net_channels, in_channels, k_size=3, k_size_in=7, input_stride=1, batch_norm=True, n_groups=1, dropout=0, bias=True, global_padding=False, full_res=False):
         super().__init__()
 
         hw_in = torch.tensor(hw_in)
         u_net_channels_g = u_net_channels * n_groups
-        self.in_layer = res_net_block(hw_in, in_channels, u_net_channels_g, stride=input_stride, k_size=k_size_in, batch_norm=batch_norm, groups=n_groups, dropout=dropout, with_res=False, bias=bias, global_padding=global_padding)
+
+        self.in_layer = res_net_block(hw_in, in_channels, u_net_channels_g, stride=input_stride, k_size=k_size_in, batch_norm=batch_norm, groups=n_groups, dropout=dropout, with_res=full_res, bias=bias, global_padding=global_padding)
         
         self.layer_configs = []
         
@@ -279,9 +280,12 @@ class out_net(nn.Module):
                                                  res_net_block(hw_out, len(res_indices), len(res_indices), k_size=5, batch_norm=False, stride=stride2, groups=len(res_indices), dropout=0, with_att=False, with_res=False, bias=False, out_activation=False, global_padding=global_padding))
 
         elif res_mode=='core_train_res':
-            total_stride = int(1/scale_factor)
-            stride1 = total_stride // 2 if total_stride > 2 else 2
-            stride2 = stride1 // 2 if stride1 > 2 else 1
+            if scale_factor>1:
+                total_stride = int(1/scale_factor)
+                stride1 = total_stride // 2 if total_stride > 2 else 2
+                stride2 = stride1 // 2 if stride1 > 2 else 1
+            else:
+                stride1 = stride2 = 1
             self.res_interpolate = nn.Sequential(res_net_block(hw_out, len(res_indices), len(res_indices), k_size=5, batch_norm=False, stride=stride1, groups=len(res_indices), dropout=0, with_att=False, with_res=True, bias=False, out_activation=False, global_padding=global_padding),
                                                  res_net_block(hw_out, len(res_indices), len(res_indices), k_size=5, batch_norm=False, stride=stride2, groups=len(res_indices), dropout=0, with_att=False, with_res=True, bias=False, out_activation=False, global_padding=global_padding))
 
@@ -298,6 +302,8 @@ class out_net(nn.Module):
                 x_res = nn.functional.interpolate(x_res[:,self.res_indices_rhs,:,:],scale_factor=self.scale_factor, mode = 'bicubic', align_corners=True)
             else:
                 x_res = x_res[:,self.res_indices_rhs,:,:]
+        else:
+            x_res = self.res_interpolate(x_res[:,self.res_indices_rhs,:,:])
         
         if self.global_residual:
             x[:,self.res_indices_lhs] = x[:,self.res_indices_lhs] + x_res
@@ -349,6 +355,7 @@ class core_ResUNet(psm.pyramid_step_model):
         depth = model_settings["depth_core"]
         batch_norm = model_settings["batch_norm"]
         mid_att = model_settings["mid_att"] if "mid_att" in model_settings.keys() else False
+        full_res = model_settings["full_res"] if "full_res" in model_settings.keys() else False
 
         dropout = 0 if 'dropout' not in model_settings.keys() else model_settings['dropout']
         grouped = False if 'grouped' not in model_settings.keys() else model_settings['grouped']
@@ -378,7 +385,7 @@ class core_ResUNet(psm.pyramid_step_model):
 
         global_padding = True if model_settings['model_type']=="global" else False
 
-        self.core_model = ResUNet(hw_in, hw_out, depth, n_blocks, model_dim_core, input_dim, output_dim, model_settings['res_mode'], res_indices, input_stride, batch_norm=batch_norm, in_groups=in_groups, out_groups=out_groups, dropout=dropout, bias=bias, global_padding=global_padding)
+        self.core_model = ResUNet(hw_in, hw_out, depth, n_blocks, model_dim_core, input_dim, output_dim, model_settings['res_mode'], res_indices, input_stride, batch_norm=batch_norm, in_groups=in_groups, out_groups=out_groups, dropout=dropout, bias=bias, global_padding=global_padding, mid_att=mid_att)
 
         if "pretrained_path" in self.model_settings.keys():
             self.check_pretrained(log_dir_check=self.model_settings['pretrained_path'])

@@ -227,6 +227,108 @@ class pyramid_step_model(nn.Module):
                 
             return output, {}
 
+    def apply_patches(self, ds, ts=-1, device='cpu', ds_target=None):
+            
+            data_source = {}
+            coords_source = {}
+
+            patches_target = gu.get_patches(
+                self.model_settings["grid_spacing_equator_km"],
+                self.model_settings["pix_size_patch"],
+                0)
+            
+            self.set_input_mapper(mode="interpolation")
+
+            spatial_dims_patches_source = {}
+            spatial_dims_patches_target = {}
+            spatial_dims_n_pts = {}
+
+
+            #collect all data
+            vars_target = self.model_settings['variables_target']
+            output_global = dict(zip(vars_target, [torch.tensor(ds_target[variable][0].values).squeeze() for variable in vars_target]))
+
+            if self.model_settings['gauss']:
+                output_global_std = dict(zip(vars_target, [torch.tensor(ds_target[variable][0].values).squeeze() for variable in vars_target]))
+            else:
+                output_global_std = {}
+
+            for spatial_dim, vars in self.model_settings["spatial_dims_var_source"].items():
+
+                coord_dict = gu.get_coord_dict_from_var(ds, spatial_dim)
+                coords = gu.get_coords_as_tensor(ds, lon=coord_dict['lon'], lat=coord_dict['lat'])
+
+                ids_in_patches_source, patch_ids = gu.get_ids_in_patches(self.patches_source, coords.numpy())
+                ids_in_patches_target, patch_ids = gu.get_ids_in_patches(patches_target, coords.numpy())
+             
+                spatial_dims_n_pts[spatial_dim] = torch.tensor([len(ids_in_patch) for ids_in_patch in ids_in_patches_target])
+
+                spatial_dims_patches_source[spatial_dim] = ids_in_patches_source
+                spatial_dims_patches_target[spatial_dim] = ids_in_patches_target
+
+
+            for patch_id_idx in patch_ids['lon']:
+
+                patch_borders_source_lon = self.patches_source["borders_lon"][patch_ids["lon"][int(patch_id_idx)]]
+                patch_borders_source_lat = self.patches_source["borders_lat"][patch_ids["lat"][int(patch_id_idx)]]
+
+                patch_borders_target_lon = self.patches_target["borders_lon"][patch_ids["lon"][int(patch_id_idx)]]
+                patch_borders_target_lat = self.patches_target["borders_lat"][patch_ids["lat"][int(patch_id_idx)]]
+        
+                coords_source = {}
+                data_source = {}
+                for spatial_dim, vars in self.model_settings["spatial_dims_var_source"].items():
+            
+                    coord_dict = gu.get_coord_dict_from_var(ds, spatial_dim)
+                    coords = gu.get_coords_as_tensor(ds, lon=coord_dict['lon'], lat=coord_dict['lat'])
+
+                    indices = spatial_dims_patches_source[spatial_dim][patch_id_idx]
+
+                    coords_source[spatial_dim] = self.get_coordinates_frame(coords[:,indices], patch_borders_source_lon, patch_borders_source_lat).unsqueeze(dim=0)
+                    
+                    for variable in vars:
+                        data_source[variable] = torch.tensor(ds[variable].values[ts,0,indices]).to(device).unsqueeze(dim=-1).unsqueeze(dim=0)
+
+
+                var_spatial_dims = {}
+                coords_target = {}
+                for spatial_dim, vars in self.model_settings["spatial_dims_var_target"].items():
+            
+                    coord_dict = gu.get_coord_dict_from_var(ds_target, spatial_dim)
+                    coords = gu.get_coords_as_tensor(ds, lon=coord_dict['lon'], lat=coord_dict['lat'])
+
+                    indices = spatial_dims_patches_target[spatial_dim][patch_id_idx]
+
+                    coords_target[spatial_dim] = self.get_coordinates_frame(coords[:,indices], patch_borders_target_lon, patch_borders_target_lat).unsqueeze(dim=0)
+                    var_spatial_dims.update(dict(zip(vars,[spatial_dim]*len(vars))))
+
+                with torch.no_grad():
+                    output = self(data_source, coords_target, coords_source=coords_source, norm=True)[0]
+
+                for variable in output.keys():
+                    indices = spatial_dims_patches_target[var_spatial_dims[variable]][patch_id_idx]
+                    output_global[variable][indices] = output[variable][0,0,0]
+
+                    if self.model_settings['gauss']:
+                        output_global_std[variable][indices] = output[variable][0,0,1]
+                
+            return output_global, output_global_std
+
+    def get_coordinates_frame(self, coords, patch_borders_lon, patch_borders_lat):
+
+        if patch_borders_lon[0] < -math.pi:
+            shift_indices = coords[0,:] > 2*math.pi + patch_borders_lon[0]
+            coords[0,shift_indices] =  coords[0, shift_indices] - 2*math.pi
+
+        elif patch_borders_lon[1] > math.pi:
+            shift_indices = coords[0,:] < patch_borders_lon[1] - 2*math.pi
+            coords[0,shift_indices] =  coords[0,shift_indices] + 2*math.pi
+
+        rel_coords_lon = (coords[0,:] - patch_borders_lon[0])/(patch_borders_lon[1]-patch_borders_lon[0])
+        rel_coords_lat = (coords[1,:] - patch_borders_lat[0])/(patch_borders_lat[1]-patch_borders_lat[0])
+
+        return torch.stack((rel_coords_lon,rel_coords_lat),dim=0)
+
     def check_model_dir(self):
         if 'model_type' not in self.model_settings.keys():
             self.model_settings['model_type']="patches"
