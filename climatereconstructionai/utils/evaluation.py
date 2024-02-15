@@ -128,8 +128,8 @@ def infill(model, dataset, eval_path, output_names, steady_mask, data_stats, xr_
 
         if steady_mask is not None:
             for key in ('gt', 'image'):
-                data_dict[key][:, steady_mask.type(torch.bool)] = np.nan
-            data_dict['output'][:, np.repeat(steady_mask, cfg.n_pred_steps, axis=0).type(torch.bool)] = np.nan
+                data_dict[key][:, ~steady_mask.type(torch.bool)] = np.nan
+            data_dict['output'][:, ~np.repeat(steady_mask, cfg.n_pred_steps, axis=0).type(torch.bool)] = np.nan
 
         data_dict["image"] /= data_dict["mask"]
 
@@ -207,9 +207,13 @@ def create_outputs(data_dict, eval_path, output_names, data_stats, xr_dss, i_mod
                     ds[var] = xr_dss[i_data]["ds"][var].isel(time=index)
                 else:
                     ds[var] = xr_dss[i_data]["ds"][var]
-
+            
+            if "history" in ds.attrs:
+                history = "\n" + ds.attrs["history"]
+            else:
+                history = ""
             ds.attrs["history"] = "Infilled using CRAI (Climate Reconstruction AI: " \
-                                  "https://github.com/FREVA-CLINT/climatereconstructionAI)\n" + ds.attrs["history"]
+                                  "https://github.com/FREVA-CLINT/climatereconstructionAI)" + history
             ds.to_netcdf(output_names[rootname][i_model][-1])
 
         for time_step in cfg.plot_results:
