@@ -310,6 +310,7 @@ class VortLoss(nn.Module):
         super().__init__()
         self.phys_calc = phys_calc
         self.loss_fcn = L1Loss(loss='l2')
+        self.loss = torch.nn.MSELoss()
 
     def forward(self, output, target, target_indices, spatial_dim_var_target, val=False):
 
@@ -319,10 +320,11 @@ class VortLoss(nn.Module):
 
         if 'vort' not in target.keys():
             target_vort = get_vorticity(self.phys_calc, target, uv_dim_indices)[0]
+            vort_loss = self.loss_fcn(output_vort, target_vort, non_valid_mask_vort)  
         else:
             target_vort = target['vort'].double()
-
-        vort_loss = self.loss_fcn(output_vort, target_vort, non_valid_mask_vort)  
+            output_vort = torch.gather(output_vort, dim=-1, index=target_indices['ncells_2'].unsqueeze(dim=1).unsqueeze(dim=1))
+            vort_loss = self.loss(output_vort.squeeze(), target_vort.squeeze())  
 
         if val:
             return vort_loss, output_vort, target_vort, non_valid_mask_vort
