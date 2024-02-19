@@ -237,7 +237,7 @@ class LogLoss(nn.Module):
         super().__init__()
         self.loss = torch.nn.MSELoss()
 
-    def forward(self, output, target, non_valid_mask):
+    def forward(self, output, target, non_valid_mask, k=None):
         output_valid = output[:,0,0][~non_valid_mask]
         target_valid = target.squeeze()[~non_valid_mask].squeeze()
 
