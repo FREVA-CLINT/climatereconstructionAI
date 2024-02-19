@@ -336,6 +336,7 @@ def train(model, training_settings, model_settings={}):
             if training_settings['save_debug']:
                 torch.save(debug_dict, os.path.join(log_dir,'debug_dict.pt'))
                 torch.save(coords_source,os.path.join(log_dir,'coords_source.pt'))
+                torch.save(target_indices,os.path.join(log_dir,'target_indices.pt'))
                 torch.save(coords_target,os.path.join(log_dir,'coords_target.pt'))
                 torch.save(output, os.path.join(log_dir,'output.pt'))
                 torch.save(output_reg_hr, os.path.join(log_dir,'output_reg_hr.pt'))
