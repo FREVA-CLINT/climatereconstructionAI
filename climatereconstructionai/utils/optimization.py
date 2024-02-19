@@ -85,11 +85,11 @@ class physics_calculator():
         b,n = global_edge_indices.shape
         n_edges_global = self.zonal_normal_primal_edge.shape[-1]
 
-        global_edge_indices_b = global_edge_indices + (torch.arange(b, device=self.device)*n_edges_global).view(b,1)
+        global_edge_indices_b = global_edge_indices + (torch.arange(b, device=u.device)*n_edges_global).view(b,1)
 
-        u_global = torch.zeros((b*n_edges_global),device=self.device)
-        v_global = torch.zeros((b*n_edges_global),device=self.device)
-        valid_mask = torch.zeros((b*n_edges_global),device=self.device, dtype=bool)
+        u_global = torch.zeros((b*n_edges_global),device=u.device)
+        v_global = torch.zeros((b*n_edges_global),device=u.device)
+        valid_mask = torch.zeros((b*n_edges_global),device=u.device, dtype=bool)
 
         u_global[global_edge_indices_b.view(-1)] = u.contiguous().view(-1)
         v_global[global_edge_indices_b.view(-1)] = v.contiguous().view(-1)
@@ -99,7 +99,7 @@ class physics_calculator():
         v_global = v_global.view(b,n_edges_global)
         valid_mask = valid_mask.view(b,n_edges_global)
 
-        normalVelocity = u_global*self.zonal_normal_primal_edge + v_global*self.meridional_normal_primal_edge
+        normalVelocity = u_global*self.zonal_normal_primal_edge.to(u.device) + v_global*self.meridional_normal_primal_edge.to(u.device)
 
         return normalVelocity, valid_mask
 
@@ -126,7 +126,7 @@ class physics_calculator():
             dek = torch.stack([arclen(self.cartesian_cell_circumcenter[self.adjacent_cell_of_edge[:,0]],self.edge_middle_cartesian),
                         arclen(self.cartesian_cell_circumcenter[self.adjacent_cell_of_edge[:,1]],self.edge_middle_cartesian)]).T*self.rad
             
-            hPu = zos.unsqueeze(dim=-1)*Pu
+            hPu = Pu
             PThPu = ((hPu[self.adjacent_cell_of_edge]*dek.unsqueeze(dim=-1)).sum(dim=1)/self.dual_edge_length.unsqueeze(dim=-1)*self.edge_primal_normal_cartesian).sum(dim=-1)
             div = ((PThPu*self.edge_length)[self.edge_of_cell]*self.orientation_of_normal.T).sum(dim=-1)/self.cell_area 
 
