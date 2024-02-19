@@ -142,7 +142,7 @@ class encoder(nn.Module):
         for n in range(n_levels):
             if n==0:
                 in_channels_block = in_channels
-                out_channels_block = u_net_channels * n_groups 
+                out_channels_block = n_groups * (u_net_channels // n_groups + u_net_channels % n_groups)
                 with_res = initial_res
                 groups = n_groups
                 k_size = k_size_in
@@ -195,7 +195,7 @@ class decoder_block_shuffle(nn.Module):
         return x
 
 class decoder(nn.Module):
-    def __init__(self, layer_configs, factor, n_blocks, out_channels, global_upscale_factor=1, k_size=3, dropout=0, n_groups=1, bias=True, global_padding=False):
+    def __init__(self, layer_configs, factor, n_blocks, out_channels, channels_upscaling=None, global_upscale_factor=1, k_size=3, dropout=0, n_groups=1, bias=True, global_padding=False):
         super().__init__()
         # define total number of layers, first n_levels-1 with skip, others not
         #watch out for n_groups in last layer before last
@@ -217,6 +217,9 @@ class decoder(nn.Module):
                 out_channels_block = layer_configs[self.skip_blocks-n]['in_channels']
                 skip_channels = layer_configs[self.skip_blocks-(n+1)]['out_channels']
 
+                if n == self.skip_blocks-1:
+                    out_channels_block = channels_upscaling if channels_upscaling is not None else out_channels_block
+
                 if n == n_layers-2:
                     out_channels_block = n_groups * (out_channels_block // n_groups + out_channels_block % n_groups)
 
@@ -224,21 +227,19 @@ class decoder(nn.Module):
       
             else:
                 skip_channels = 0
+                in_channels_block = out_channels_block
+                out_channels_block = channels_upscaling if channels_upscaling is not None else out_channels_block
+                upscale_factor = 2
 
                 if n == n_layers-2:
-                    in_channels_block = out_channels_block
                     out_channels_block = n_groups * (out_channels_block // n_groups + out_channels_block % n_groups)
 
                 elif n == n_layers-1:
-                    in_channels_block = out_channels_block
                     out_channels_block = out_channels
                     out_activation = False
                     groups=n_groups
                     if global_upscale_factor==1:
                         upscale_factor=1
-                
-                else:
-                    in_channels_block = out_channels_block
 
             hw = hw_in/(factor**(n-1))
             self.decoder_blocks.append(decoder_block_shuffle(hw, n_blocks, in_channels_block, out_channels_block, skip_channels, k_size=k_size, dropout=dropout, bias=bias, global_padding=global_padding, upscale_factor=upscale_factor, groups=groups, out_activation=out_activation))      
@@ -320,13 +321,13 @@ class out_net(nn.Module):
 
 
 class ResUNet(nn.Module): 
-    def __init__(self, hw_in, hw_out, n_levels, factor, n_res_blocks, model_dim_unet, in_channels, out_channels, res_mode, res_indices, batch_norm=True, k_size=3, in_groups=1, out_groups=1, dropout=0, bias=True, global_padding=False, mid_att=False, initial_res=True, down_method="max"):
+    def __init__(self, hw_in, hw_out, n_levels, factor, n_res_blocks, model_dim_unet, in_channels, out_channels, res_mode, res_indices, channels_upscaling=None, batch_norm=True, k_size=3, in_groups=1, out_groups=1, dropout=0, bias=True, global_padding=False, mid_att=False, initial_res=True, down_method="max"):
         super().__init__()
 
         global_upscale_factor = int(torch.tensor([(hw_out[0]) // hw_in[0], 1]).max())
 
         self.encoder = encoder(hw_in, factor, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, 7, batch_norm=batch_norm, n_groups=in_groups, dropout=dropout, bias=bias, global_padding=global_padding, initial_res=initial_res, down_method=down_method)
-        self.decoder = decoder(self.encoder.layer_configs, factor, n_res_blocks, out_channels, global_upscale_factor=global_upscale_factor, k_size=k_size, dropout=dropout, n_groups=out_groups, bias=bias, global_padding=global_padding)
+        self.decoder = decoder(self.encoder.layer_configs, factor, n_res_blocks, out_channels, global_upscale_factor=global_upscale_factor, k_size=k_size, dropout=dropout, n_groups=out_groups, bias=bias, global_padding=global_padding, channels_upscaling=channels_upscaling)
 
         self.out_net = out_net(res_indices, hw_in, hw_out, res_mode=res_mode, global_padding=global_padding)
   
@@ -396,8 +397,9 @@ class core_ResUNet(psm.pyramid_step_model):
         factor = model_settings['factor'] if "factor" in model_settings.keys() else 2
         initial_res = model_settings['initial_res'] if "initial_res" in model_settings.keys() else False
         down_method = model_settings['down_method'] if "down_method" in model_settings.keys() else "max"
+        channels_upscaling = model_settings['channels_upscaling'] if "channels_upscaling" in model_settings.keys() else None
 
-        self.core_model = ResUNet(hw_in, hw_out, depth, factor, n_blocks, model_dim_core, input_dim, output_dim, model_settings['res_mode'], res_indices, batch_norm=batch_norm, in_groups=in_groups, out_groups=out_groups, dropout=dropout, bias=bias, global_padding=global_padding, mid_att=mid_att, initial_res=initial_res, down_method=down_method)
+        self.core_model = ResUNet(hw_in, hw_out, depth, factor, n_blocks, model_dim_core, input_dim, output_dim, model_settings['res_mode'], res_indices, batch_norm=batch_norm, in_groups=in_groups, out_groups=out_groups, dropout=dropout, bias=bias, global_padding=global_padding, mid_att=mid_att, initial_res=initial_res, down_method=down_method, channels_upscaling=channels_upscaling)
 
         if "pretrained_path" in self.model_settings.keys():
             self.check_pretrained(log_dir_check=self.model_settings['pretrained_path'])
