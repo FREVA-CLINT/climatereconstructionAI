@@ -29,6 +29,14 @@ class physics_calculator():
         self.dual_area = torch.tensor(dset['dual_area'][:].data, device=device)
 
         self.orientation_of_normal = torch.from_numpy(dset['orientation_of_normal'][:].data).to(device)
+        
+        
+        self.edge_primal_normal_cartesian = torch.tensor([dset['edge_primal_normal_cartesian_x'][:].data,dset['edge_primal_normal_cartesian_y'][:].data,
+                                            dset['edge_primal_normal_cartesian_z'][:].data],device=device).T
+        
+        self.cartesian_cell_circumcenter = torch.tensor([dset['cell_circumcenter_cartesian_x'][:].data,dset['cell_circumcenter_cartesian_y'][:].data,
+                                            dset['cell_circumcenter_cartesian_z'][:].data],device=device).T
+        
 
         edge_dual_normal_cartesian_x = dset['edge_dual_normal_cartesian_x'][:].data
         edge_dual_normal_cartesian_y = dset['edge_dual_normal_cartesian_y'][:].data
@@ -42,6 +50,7 @@ class physics_calculator():
         cartesian_y_vertices = dset['cartesian_y_vertices'][:].data
         cartesian_z_vertices = dset['cartesian_z_vertices'][:].data
 
+
         cartesian_vertices = torch.tensor([cartesian_x_vertices,cartesian_y_vertices,
                                             cartesian_z_vertices],device=device).T
 
@@ -54,6 +63,8 @@ class physics_calculator():
         
         self.nout = edge_middle_cartesian[self.edges_of_vertex]-cartesian_vertices.unsqueeze(dim=1)
         self.signorient = torch.sign((self.nout*edge_dual_normal_cartesian[self.edges_of_vertex]).sum(axis=-1))
+
+        self.edge_middle_cartesian = edge_middle_cartesian.to(device)
 
         self.nout = self.nout.to(device)
         self.signorient = self.signorient.to(device)
@@ -101,34 +112,40 @@ class physics_calculator():
 
         normalVelocity = u_global*self.zonal_normal_primal_edge.to(u.device) + v_global*self.meridional_normal_primal_edge.to(u.device)
 
-        return normalVelocity, valid_mask
+        return normalVelocity, valid_mask, u_global, v_global
 
 
     def get_vorticity_from_edge_indices(self, global_edge_indices, u, v):
         b,n = global_edge_indices.shape
-        normalVelocity, mask = self.get_normal_velocity_from_indices(global_edge_indices, u, v)
+        normalVelocity, mask,_,_ = self.get_normal_velocity_from_indices(global_edge_indices, u, v)
         vort_mask = ((mask)[:,self.edges_of_vertex]).sum(axis=-1) == 6
         vort = ((normalVelocity*self.dual_edge_length)[:,self.edges_of_vertex]*self.signorient).sum(axis=-1)/self.dual_area.unsqueeze(dim=0)
 
         return vort.view(b,1,1,-1), ~vort_mask
 
+    def get_filtered_div(self, normalVelocity):
+        dek = arclen((self.cartesian_cell_circumcenter/torch.linalg.norm(self.cartesian_cell_circumcenter,dim=-1).unsqueeze(dim=-1)).unsqueeze(dim=1),
+                (self.edge_middle_cartesian[self.edge_of_cell]/torch.linalg.norm(self.edge_middle_cartesian[self.edge_of_cell],dim=-1).unsqueeze(dim=-1)))*self.rad
 
-    def get_divergence_from_edge_indices(self, global_edge_indices, u, v, zos=None):
+        Pu = ((((normalVelocity*self.edge_length)[:,self.edge_of_cell]*dek).unsqueeze(dim=-1)*self.edge_primal_normal_cartesian[self.edge_of_cell].unsqueeze(dim=0)).sum(dim=2)/self.cell_area.unsqueeze(dim=-1).unsqueeze(dim=0))
 
-        normalVelocity, mask = self.get_normal_velocity_from_indices(global_edge_indices, u, v)
+        dek = torch.stack([arclen(self.cartesian_cell_circumcenter[self.adjacent_cell_of_edge[:,0]],self.edge_middle_cartesian),
+            arclen(self.cartesian_cell_circumcenter[self.adjacent_cell_of_edge[:,1]],self.edge_middle_cartesian)]).T*self.rad
+
+        hPu = Pu
+        PThPu = ((hPu[:,self.adjacent_cell_of_edge]*dek.unsqueeze(dim=-1).unsqueeze(dim=0)).sum(dim=2)/self.dual_edge_length.unsqueeze(dim=-1).unsqueeze(dim=0)*self.edge_primal_normal_cartesian.unsqueeze(dim=0)).sum(dim=-1)
+        div = ((PThPu*self.edge_length.unsqueeze(dim=0))[:,self.edge_of_cell]*self.orientation_of_normal.T.unsqueeze(dim=0)).sum(dim=-1)/self.cell_area.unsqueeze(dim=0) 
+
+        return div
+
+    def get_divergence_from_edge_indices(self, global_edge_indices, u, v, filtered=True):
+
+        normalVelocity, mask,_,_ = self.get_normal_velocity_from_indices(global_edge_indices, u, v)
         
-        if zos is not None:
+        if filtered:
             # to be implemented
-            dek = arclen((self.cartesian_cell_circumcenter/torch.linalg.norm(self.cartesian_cell_circumcenter,dim=-1).unsqueeze(dim=-1)).unsqueeze(dim=1),
-                    (self.edge_middle_cartesian[self.edge_of_cell]/torch.linalg.norm(self.edge_middle_cartesian[self.edge_of_cell],dim=-1).unsqueeze(dim=-1)))*self.rad
-            
-            Pu = (((normalVelocity*self.edge_length)[self.edge_of_cell]*dek).unsqueeze(dim=-1)*self.edge_primal_normal_cartesian[self.edge_of_cell]).sum(dim=1)/self.cell_area.unsqueeze(dim=-1)
-            dek = torch.stack([arclen(self.cartesian_cell_circumcenter[self.adjacent_cell_of_edge[:,0]],self.edge_middle_cartesian),
-                        arclen(self.cartesian_cell_circumcenter[self.adjacent_cell_of_edge[:,1]],self.edge_middle_cartesian)]).T*self.rad
-            
-            hPu = Pu
-            PThPu = ((hPu[self.adjacent_cell_of_edge]*dek.unsqueeze(dim=-1)).sum(dim=1)/self.dual_edge_length.unsqueeze(dim=-1)*self.edge_primal_normal_cartesian).sum(dim=-1)
-            div = ((PThPu*self.edge_length)[self.edge_of_cell]*self.orientation_of_normal.T).sum(dim=-1)/self.cell_area 
+            div = self.get_filtered_div(normalVelocity)
+            div_mask = mask[:,self.edge_of_cell].sum(dim=-1) == 3
 
         else:
             div_mask = mask[:,self.edge_of_cell].sum(dim=-1) == 3
@@ -137,6 +154,16 @@ class physics_calculator():
         div_sum = (self.cell_area.unsqueeze(dim=0)*div/self.rad).sum(dim=1)
        
         return div, ~div_mask, div_sum
+    
+
+    def get_kinetic_energy_from_edge_indices(self, global_edge_indices, u, v):
+
+        _, mask, u_global, v_global = self.get_normal_velocity_from_indices(global_edge_indices, u, v)
+
+        kin_energy = (((u_global**2+v_global**2)/2)[:,self.edge_of_cell]).sum(dim=-1)/self.cell_area.unsqueeze(dim=0)
+        kin_energy_mask = mask[:,self.edge_of_cell].sum(dim=-1) == 3
+               
+        return kin_energy, ~kin_energy_mask
     
 
 def get_vorticity(phys_calc, tensor_dict, global_edge_indices):
@@ -277,7 +304,7 @@ class DictLoss(nn.Module):
         total_loss = 0
 
         for var in output.keys():
-            if var != 'vort' and var !='div' and var != 'normalv':
+            if var != 'vort' and var !='div' and var != 'normalv' and var != 'spatial_div' and var != 'kin_energy':
                 loss = self.loss_fcn(output[var], target[var], non_valid_mask[var], k)
                 total_loss+=loss
                 loss_dict[f'{var}_{str(self.loss_fcn._get_name())}'] = loss.item()
@@ -353,6 +380,68 @@ class DivLoss(nn.Module):
         loss = div_sum.abs().mean()
 
         return loss
+
+class KinEnergyLoss(nn.Module):
+    def __init__(self, phys_calc):
+        super().__init__()
+        self.phys_calc = phys_calc
+        self.loss_fcn = nn.MSELoss()
+
+    def forward(self, output, target, target_indices, spatial_dim_var_target, val=False):
+       
+        u = output['u']
+        v = output['v']
+
+        u = u[:,0,0] if u.dim()==4 else u
+        v = v[:,0,0] if v.dim()==4 else v
+
+        spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
+        uv_dim_indices = target_indices[spatial_dim_uv]
+
+        ke_output, non_valid_mask = self.phys_calc.get_kinetic_energy_from_edge_indices(uv_dim_indices, u, v)
+
+        ke_target, _ = self.phys_calc.get_kinetic_energy_from_edge_indices(uv_dim_indices, target['u'].squeeze(), target['v'].squeeze())
+
+        output_valid = ke_output[~non_valid_mask]
+        target_valid = ke_target[~non_valid_mask]
+
+        loss = self.loss_fcn(output_valid,target_valid)
+
+        if val:
+            return loss, output_valid, target_valid, non_valid_mask
+        else:
+            return loss    
+
+
+class SpatialDivLoss(nn.Module):
+    def __init__(self, phys_calc):
+        super().__init__()
+        self.phys_calc = phys_calc
+        self.loss_fcn = nn.MSELoss()
+
+    def forward(self, output, target, target_indices, spatial_dim_var_target, val=False):
+       
+        u = output['u']
+        v = output['v']
+
+        u = u[:,0,0] if u.dim()==4 else u
+        v = v[:,0,0] if v.dim()==4 else v
+
+        spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
+        uv_dim_indices = target_indices[spatial_dim_uv]
+
+        div_output, non_valid_mask, _ = self.phys_calc.get_divergence_from_edge_indices(uv_dim_indices, u, v)
+
+        div_target, _, _ = self.phys_calc.get_divergence_from_edge_indices(uv_dim_indices, target['u'].squeeze(), target['v'].squeeze())
+
+        output_valid = div_output[~non_valid_mask]
+        target_valid = div_target[~non_valid_mask]
+        loss = self.loss_fcn(output_valid,target_valid)
+
+        if val:
+            return loss, div_output, div_target, non_valid_mask
+        else:
+            return loss    
 
 class Trivial_loss(nn.Module):
     def __init__(self):
@@ -439,6 +528,15 @@ class loss_calculator(nn.Module):
                     phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
                 self.loss_fcn_dict['normalv'] = NormalVLoss(phys_calc)
 
+            elif loss_type == 'spatial_div' and value > 0:
+                if phys_calc is None:
+                    phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
+                self.loss_fcn_dict['spatial_div'] = SpatialDivLoss(phys_calc)
+
+            elif loss_type == 'kin_energy' and value > 0:
+                if phys_calc is None:
+                    phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
+                self.loss_fcn_dict['kin_energy'] = KinEnergyLoss(phys_calc)
 
     def forward(self, lambdas_optim, target, model, source, coords_target, target_indices, coords_source=None, val=False, k=None):
         
@@ -470,18 +568,12 @@ class loss_calculator(nn.Module):
             elif loss_type == 'rel':
                 loss =  loss_fcn(output, target, non_valid_mask)
 
-            elif loss_type == 'vort':
-                loss =  loss_fcn(output, target, target_indices, self.spatial_dim_var_target, val=val)
+            elif loss_type == 'vort' or loss_type == 'spatial_div' or loss_type == 'kin_energy' or loss_type == 'normalv':
+                loss = loss_fcn(output, target, target_indices, self.spatial_dim_var_target, val=val)
                 if val:
-                    output['vort'], target['vort'], _ = loss[1:]
+                    output[loss_type], target[loss_type], _ = loss[1:]
                     loss = loss[0]
 
-            elif loss_type == 'normalv':
-                loss =  loss_fcn(output, target, target_indices, self.spatial_dim_var_target, val=val)
-                if val:
-                    output['normalv'], target['normalv'], _ = loss[1:]
-                    loss = loss[0]
-            
             elif loss_type == 'div':
                 loss =  loss_fcn(output, target_indices, self.spatial_dim_var_target)
             
