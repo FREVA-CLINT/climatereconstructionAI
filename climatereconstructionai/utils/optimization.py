@@ -336,7 +336,7 @@ class DictLoss(nn.Module):
         total_loss = 0
 
         for var in output.keys():
-            if var != 'vort' and var !='div' and var != 'normalv' and var != 'spatial_div' and var != 'kin_energy':
+            if var != 'vort' and var !='div' and var != 'normalv' and var != 'spatial_div' and var != 'kin_energy'and var != 'rel_normalv'and var != 'gauss_normalv':
                 loss = self.loss_fcn(output[var], target[var], non_valid_mask[var], k)
                 total_loss+=loss
                 loss_dict[f'{var}_{str(self.loss_fcn._get_name())}'] = loss.item()
