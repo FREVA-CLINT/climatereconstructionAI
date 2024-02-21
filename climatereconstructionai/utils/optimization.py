@@ -252,7 +252,7 @@ class L1Loss_rel(nn.Module):
         output_valid = output[:,0,0][~non_valid_mask]
         target_valid = target[~non_valid_mask].squeeze()
         abs_loss = ((output_valid - target_valid)/(target_valid+1e-10)).abs()
-        loss = abs_loss.clamp(max=10)
+        loss = abs_loss.clamp(max=1)
         loss = loss.mean()
         return loss
     
@@ -265,7 +265,7 @@ class L1Loss_relv(nn.Module):
         output_valid = output[:,0,0][~non_valid_mask]
         target_valid = target[~non_valid_mask].squeeze()
         abs_loss = ((output_valid - target_valid)/(target_valid.abs()**k+1e-10)).abs()
-        loss = abs_loss.clamp(max=10)
+        loss = abs_loss.clamp(max=1)
         loss = loss.mean()
         return loss
     
