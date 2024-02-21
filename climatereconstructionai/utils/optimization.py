@@ -114,6 +114,29 @@ class physics_calculator():
 
         return normalVelocity, valid_mask, u_global, v_global
 
+    def get_normal_velocity_var_from_indices(self, global_edge_indices, var_u, var_v):
+
+        b,n = global_edge_indices.shape
+        n_edges_global = self.zonal_normal_primal_edge.shape[-1]
+
+        global_edge_indices_b = global_edge_indices + (torch.arange(b, device=var_u.device)*n_edges_global).view(b,1)
+
+        var_u_global = torch.zeros((b*n_edges_global),device=var_u.device)
+        var_v_global = torch.zeros((b*n_edges_global),device=var_u.device)
+        valid_mask = torch.zeros((b*n_edges_global),device=var_u.device, dtype=bool)
+
+        var_u_global[global_edge_indices_b.view(-1)] = var_u.contiguous().view(-1)
+        var_v_global[global_edge_indices_b.view(-1)] = var_v.contiguous().view(-1)
+        valid_mask[global_edge_indices_b.view(-1)] = True
+
+        var_u_global = var_u_global.view(b,n_edges_global)
+        var_v_global = var_v_global.view(b,n_edges_global)
+        valid_mask = valid_mask.view(b,n_edges_global)
+
+        var_normalVelocity = var_u_global*(self.zonal_normal_primal_edge**2).to(var_u_global.device) + var_v_global*(self.meridional_normal_primal_edge**2).to(var_v_global.device)
+
+        return var_normalVelocity, valid_mask, var_u_global, var_v_global
+
 
     def get_vorticity_from_edge_indices(self, global_edge_indices, u, v):
         b,n = global_edge_indices.shape
@@ -122,6 +145,7 @@ class physics_calculator():
         vort = ((normalVelocity*self.dual_edge_length)[:,self.edges_of_vertex]*self.signorient).sum(axis=-1)/self.dual_area.unsqueeze(dim=0)
 
         return vort.view(b,1,1,-1), ~vort_mask
+
 
     def get_filtered_div(self, normalVelocity):
         dek = arclen((self.cartesian_cell_circumcenter/torch.linalg.norm(self.cartesian_cell_circumcenter,dim=-1).unsqueeze(dim=-1)).unsqueeze(dim=1),
@@ -182,9 +206,17 @@ def get_normalv(phys_calc, tensor_dict, global_edge_indices):
 
     u = u[:,0,0] if u.dim()==4 else u
     v = v[:,0,0] if v.dim()==4 else v
-    normalv, valid_mask = phys_calc.get_normal_velocity_from_indices(global_edge_indices, u, v)
+    normalv, valid_mask, _, _ = phys_calc.get_normal_velocity_from_indices(global_edge_indices, u, v)
     return normalv.unsqueeze(dim=1).unsqueeze(dim=2), ~valid_mask
 
+def get_normalv_var(phys_calc, tensor_dict, global_edge_indices):
+    u = tensor_dict['u']
+    v = tensor_dict['v']
+
+    var_u = u[:,0,1]
+    var_v = v[:,0,1] 
+    normalv, valid_mask, _, _ = phys_calc.get_normal_velocity_var_from_indices(global_edge_indices, var_u, var_v)
+    return normalv.unsqueeze(dim=1).unsqueeze(dim=2), ~valid_mask
 
 class GaussLoss(nn.Module):
     def __init__(self):
@@ -332,6 +364,51 @@ class NormalVLoss(nn.Module):
         else:
             return loss    
 
+class RelNormalVLoss(nn.Module):
+    def __init__(self, phys_calc):
+        super().__init__()
+        self.phys_calc = phys_calc
+        self.loss_fcn = L1Loss_rel()
+
+    def forward(self, output, target, target_indices, spatial_dim_var_target, val=False):
+
+        spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
+        uv_dim_indices = target_indices[spatial_dim_uv]
+
+        output_normal_v, non_valid_mask = get_normalv(self.phys_calc, output, uv_dim_indices)
+        target_normal_v = get_normalv(self.phys_calc, target, uv_dim_indices)[0]
+
+        loss = self.loss_fcn(output_normal_v, target_normal_v.squeeze(), non_valid_mask)  
+
+        if val:
+            return loss, output_normal_v, target_normal_v, non_valid_mask
+        else:
+            return loss   
+
+class GaussNormalVLoss(nn.Module):
+    def __init__(self, phys_calc):
+        super().__init__()
+        self.phys_calc = phys_calc
+        self.loss_fcn = GaussLoss()
+
+    def forward(self, output, target, target_indices, spatial_dim_var_target, val=False):
+
+        spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
+        uv_dim_indices = target_indices[spatial_dim_uv]
+
+        output_normal_v, non_valid_mask = get_normalv(self.phys_calc, output, uv_dim_indices)
+        output_normal_v_var = get_normalv_var(self.phys_calc, output, uv_dim_indices)[0]
+
+        target_normal_v = get_normalv(self.phys_calc, target, uv_dim_indices)[0]
+
+        output_normal_v = torch.concat([output_normal_v,output_normal_v_var], dim=2)
+        loss = self.loss_fcn(output_normal_v, target_normal_v.squeeze(), non_valid_mask)  
+
+        if val:
+            return loss, output_normal_v, target_normal_v, non_valid_mask
+        else:
+            return loss  
+
 class VortLoss(nn.Module):
     def __init__(self, phys_calc):
         super().__init__()
@@ -408,7 +485,7 @@ class KinEnergyLoss(nn.Module):
         loss = self.loss_fcn(output_valid,target_valid)
 
         if val:
-            return loss, output_valid, target_valid, non_valid_mask
+            return loss, ke_output, ke_target, non_valid_mask
         else:
             return loss    
 
@@ -527,6 +604,16 @@ class loss_calculator(nn.Module):
                 if phys_calc is None:
                     phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
                 self.loss_fcn_dict['normalv'] = NormalVLoss(phys_calc)
+            
+            elif loss_type == 'rel_normalv' and value > 0:
+                if phys_calc is None:
+                    phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
+                self.loss_fcn_dict['rel_normalv'] = RelNormalVLoss(phys_calc)
+
+            elif loss_type == 'gauss_normalv' and value > 0:
+                if phys_calc is None:
+                    phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
+                self.loss_fcn_dict['gauss_normalv'] = GaussNormalVLoss(phys_calc)
 
             elif loss_type == 'spatial_div' and value > 0:
                 if phys_calc is None:
@@ -568,7 +655,7 @@ class loss_calculator(nn.Module):
             elif loss_type == 'rel':
                 loss =  loss_fcn(output, target, non_valid_mask)
 
-            elif loss_type == 'vort' or loss_type == 'spatial_div' or loss_type == 'kin_energy' or loss_type == 'normalv':
+            elif loss_type == 'vort' or loss_type == 'spatial_div' or loss_type == 'kin_energy' or loss_type == 'normalv' or loss_type == 'gauss_normalv' or loss_type == 'rel_normalv':
                 loss = loss_fcn(output, target, target_indices, self.spatial_dim_var_target, val=val)
                 if val:
                     output[loss_type], target[loss_type], _ = loss[1:]
