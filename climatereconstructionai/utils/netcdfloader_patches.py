@@ -9,7 +9,7 @@ import numpy as np
 import torch
 import xarray as xr
 from torch.utils.data import Dataset, Sampler
-from .grid_utils import generate_region, get_coord_dict_from_var, get_coords_as_tensor, invert_dict, get_ids_in_patches, get_patches
+from .grid_utils import generate_region, get_coord_dict_from_var, get_coords_as_tensor, invert_dict, get_ids_in_patches, get_patches, rotate_ds
 from climatereconstructionai.model.transformer_helpers import unstructured_to_reg_interpolator
 from .normalizer import normalizer
 
@@ -369,6 +369,18 @@ class NetCDFLoader_lazy(Dataset):
             else:
                 ds_target = xr.load_dataset(file_path_target)
 
+        if self.rotate_cs:
+            rot_angle = np.random.rand(1)*np.pi-np.pi/2
+            ds_source = rotate_ds(ds_source, rot_angle)
+            ds_target = rotate_ds(ds_target, rot_angle)
+            spatial_dims_patches_ids_source, _, _ = self.get_ids_patches(ds_source, self.dims_variables_source, self.patches_source)
+            spatial_dims_patches_ids_target, _, _ = self.get_ids_patches(ds_target, self.dims_variables_target, self.patches_target)
+
+        else:
+            rot_angle=0
+            spatial_dims_patches_ids_source = self.spatial_dims_patches_ids_source
+            spatial_dims_patches_ids_target = self.spatial_dims_patches_ids_target
+
         not_condition = True 
 
         while not_condition:
@@ -382,8 +394,9 @@ class NetCDFLoader_lazy(Dataset):
                 if self.sample_patch_range_lat[0]<center_lat and self.sample_patch_range_lat[1]>center_lat:
                     in_lat_range = True
 
-            spatial_dim_indices_source, rel_coords_dict_source, _ = self.get_coordinates(ds_source, self.dims_variables_source, self.spatial_dims_patches_ids_source, self.n_dict_source, self.patches_source, patch_id=patch_id)
-            spatial_dim_indices_target, rel_coords_dict_target, _ = self.get_coordinates(ds_target, self.dims_variables_target, self.spatial_dims_patches_ids_target, self.n_dict_target, self.patches_target, patch_id=patch_id)
+           
+            spatial_dim_indices_source, rel_coords_dict_source, _ = self.get_coordinates(ds_source, self.dims_variables_source, spatial_dims_patches_ids_source, self.n_dict_source, self.patches_source, patch_id=patch_id)
+            spatial_dim_indices_target, rel_coords_dict_target, _ = self.get_coordinates(ds_target, self.dims_variables_target, spatial_dims_patches_ids_target, self.n_dict_target, self.patches_target, patch_id=patch_id)
 
             ds_source_sampled = self.apply_spatial_dim_indices(ds_source, self.dims_variables_source, spatial_dim_indices_source, rel_coords_dict=rel_coords_dict_source)
             ds_target_sampled = self.apply_spatial_dim_indices(ds_target, self.dims_variables_target, spatial_dim_indices_target, rel_coords_dict=rel_coords_dict_target)
@@ -398,14 +411,19 @@ class NetCDFLoader_lazy(Dataset):
                         break
 
         if len(self.save_nc_sample_path)>0:
-            
-            save_path_source = os.path.join(self.save_nc_sample_path, os.path.basename(file_path_source).replace('.nc', f'_{float(patch_id):.3f}_source.nc'))
+            if self.rotate_cs:
+                save_path_source = os.path.join(self.save_nc_sample_path, os.path.basename(file_path_source).replace('.nc', f'_{float(rot_angle):.3f}_source.nc'))
+            else:
+                save_path_source = os.path.join(self.save_nc_sample_path, os.path.basename(file_path_source).replace('.nc', f'_{float(patch_id):.3f}_source.nc'))
             ds_source_sampled.to_netcdf(save_path_source)
 
-            save_path_target = os.path.join(self.save_nc_sample_path, os.path.basename(file_path_target).replace('.nc', f'_{float(patch_id):.3f}_target.nc'))
+            if self.rotate_cs:
+                save_path_target = os.path.join(self.save_nc_sample_path, os.path.basename(file_path_target).replace('.nc', f'_{float(rot_angle):.3f}_target.nc'))
+            else:
+                save_path_target = os.path.join(self.save_nc_sample_path, os.path.basename(file_path_target).replace('.nc', f'_{float(patch_id):.3f}_target.nc'))
             ds_target_sampled.to_netcdf(save_path_target)
 
-        return ds_source_sampled, ds_target_sampled, patch_id, spatial_dim_indices_source, spatial_dim_indices_target
+        return ds_source_sampled, ds_target_sampled, patch_id, spatial_dim_indices_source, spatial_dim_indices_target, rot_angle
 
 
     def get_data(self, ds, index, dims_variables_dict):
@@ -438,7 +456,7 @@ class NetCDFLoader_lazy(Dataset):
 
         target_file = self.files_target[source_index]
 
-        ds_source, ds_target, patch_id, spatial_dim_indices_source, spatial_dim_indices_target = self.get_files(source_file, file_path_target=target_file)
+        ds_source, ds_target, patch_id, spatial_dim_indices_source, spatial_dim_indices_target, rot_angle = self.get_files(source_file, file_path_target=target_file)
 
         data_source, rel_coords_source = self.get_data(ds_source, index, self.dims_variables_source)
         data_target, rel_coords_target = self.get_data(ds_target, index_target, self.dims_variables_target)
@@ -456,7 +474,7 @@ class NetCDFLoader_lazy(Dataset):
             rel_coords_target = dict(zip(rel_coords_target.keys(),[torch.empty(0) for _ in rel_coords_target.values()]))
 
         if len(self.save_tensor_sample_path)>0:
-            save_path = os.path.join(self.save_tensor_sample_path, os.path.basename(source_file).replace('.nc', f'_{float(patch_id):.3f}.pt'))
+            save_path = os.path.join(self.save_tensor_sample_path, os.path.basename(source_file).replace('.nc', f'_{float(patch_id):.3f}_{float(rot_angle):.3f}.pt'))
             if not os.path.isfile(save_path):
                 torch.save([data_source, data_target, rel_coords_source, rel_coords_target, spatial_dim_indices_source, spatial_dim_indices_target], save_path)
 
