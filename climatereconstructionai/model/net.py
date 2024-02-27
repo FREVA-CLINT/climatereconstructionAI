@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 
 from .attention_module import AttentionEncoderBlock
+from .vae_module import VAEBlock
 from .conv_configs import init_enc_conv_configs, init_dec_conv_configs, \
     init_enc_conv_configs_orig, init_dec_conv_configs_orig
 from .encoder_decoder import EncoderBlock, DecoderBlock
@@ -70,6 +71,9 @@ class CRAINet(nn.Module):
                 conv_config=enc_conv_configs[i],
                 kernel=enc_conv_configs[i]['kernel'], stride=(2, 2), activation=nn.ReLU()))
         self.encoder = nn.ModuleList(encoding_layers)
+
+        if cfg.vae_zdim != 0:
+            self.vae_module = VAEBlock(conv_config=enc_conv_configs[-1], n_steps=cfg.n_time_steps, z_dim=cfg.vae_zdim)
 
         # define decoding layers
         decoding_layers = []
@@ -164,6 +168,12 @@ class CRAINet(nn.Module):
 
         h, h_mask = hs[self.net_depth], hs_mask[self.net_depth]
 
+        if cfg.vae_zdim == 0:
+            latent_dist = None
+        else:
+            h, latent_dist = self.vae_module(h)
+
+
         # forward pass decoding layers
         for i in range(self.net_depth):
             if cfg.recurrent_steps:
@@ -178,7 +188,7 @@ class CRAINet(nn.Module):
         h = self.binder.scale(h)
 
         # return last element of output from last decoding layer
-        return h
+        return h, latent_dist
 
     def train(self, mode=True):
         super().train(mode)

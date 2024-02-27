@@ -38,7 +38,8 @@ def load_model(ckpt_dict, model, optimizer=None, label=None):
         label = ckpt_dict["labels"][-1]
 
     ckpt_dict[label]["model"] = \
-        {key.replace("module.", ""): value for key, value in ckpt_dict[label]["model"].items()}
+        {key: value for key, value in ckpt_dict[label]["model"].items()}
+        #{key.replace("module.", ""): value for key, value in ckpt_dict[label]["model"].items()}
     model.load_state_dict(ckpt_dict[label]["model"])
     if optimizer is not None:
         optimizer.load_state_dict(ckpt_dict[label]["optimizer"])

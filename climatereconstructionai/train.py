@@ -129,9 +129,9 @@ def train(arg_file=None):
         # train model
         model.train()
         image, in_mask, out_mask, gt = [x.to(cfg.device) for x in next(iterator_train)[:4]]
-        output = model(image, in_mask)
+        output, latent_dist = model(image, in_mask)
 
-        train_loss = loss_comp(out_mask, output, gt)
+        train_loss = loss_comp(out_mask, output, latent_dist, gt)
 
         optimizer.zero_grad()
         train_loss['total'].backward()
@@ -145,8 +145,8 @@ def train(arg_file=None):
             for _ in range(cfg.n_iters_val):
                 image, in_mask, out_mask, gt = [x.to(cfg.device) for x in next(iterator_val)[:4]]
                 with torch.no_grad():
-                    output = model(image, in_mask)
-                val_losses.append(list(loss_comp(out_mask, output, gt).values()))
+                    output, latent_dist = model(image, in_mask)
+                val_losses.append(list(loss_comp(out_mask, output, latent_dist, gt).values()))
 
             val_loss = torch.tensor(val_losses).mean(dim=0)
             val_loss = dict(zip(train_loss.keys(), val_loss))
@@ -192,8 +192,8 @@ def train(arg_file=None):
         for _ in range(cfg.n_iters_val):
             image, in_mask, out_mask, gt = [x.to(cfg.device) for x in next(iterator_val)[:4]]
             with torch.no_grad():
-                output = model(image, in_mask)
-            metric_dict = get_metrics(out_mask, output, gt, 'val')
+                output, latent_dist = model(image, in_mask)
+            metric_dict = get_metrics(out_mask, output, latent_dist, gt, 'val')
             val_metrics.append(list(metric_dict.values()))
         val_metrics = torch.tensor(val_metrics).mean(dim=0)
 

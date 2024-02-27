@@ -4,15 +4,17 @@ from .feature_loss import FeatureLoss
 from .hole_loss import HoleLoss
 from .total_variation_loss import TotalVariationLoss
 from .valid_loss import ValidLoss
+from .kldiv_loss import KLDivLoss
 from .. import config as cfg
 from ..utils.featurizer import VGG16FeatureExtractor
 
 
-def prepare_data_dict(mask, output, gt, tensor_keys):
+def prepare_data_dict(mask, output, latent_dist, gt, tensor_keys):
     data_dict = dict(zip(list(tensor_keys),[None]*len(tensor_keys)))
 
     data_dict['mask'] = mask[:, 0]
     data_dict['output'] = output[:, cfg.recurrent_steps]
+    data_dict['latent_dist'] = latent_dist
     data_dict['gt'] = gt[:, 0]
 
     if 'comp' in tensor_keys:
@@ -26,8 +28,9 @@ class loss_criterion(torch.nn.Module):
         super().__init__()
 
         self.criterions = []
-        self.tensors = ['output', 'gt', 'mask']
+        self.tensors = ['output', 'latent_dist', 'gt', 'mask']
         style_added = False
+        print("lambda_dict", lambda_dict)
 
         for loss, lambda_ in lambda_dict.items():
             if lambda_ > 0:
@@ -49,10 +52,13 @@ class loss_criterion(torch.nn.Module):
                     if 'comp' not in self.tensors:
                         self.tensors.append('comp')
 
+                elif loss == 'kldiv':
+                    self.criterions.append(KLDivLoss().to(cfg.device))
 
-    def forward(self, mask, output, gt):
 
-        data_dict = prepare_data_dict(mask, output, gt, self.tensors)
+    def forward(self, mask, output, latent_dist, gt):
+
+        data_dict = prepare_data_dict(mask, output, latent_dist, gt, self.tensors)
 
         loss_dict = {}
         for criterion in self.criterions:
@@ -76,6 +82,6 @@ class LossComputation(torch.nn.Module):
         else:
             self.criterion = loss_criterion(lambda_dict)
 
-    def forward(self, mask, output, gt):
-        loss_dict = self.criterion(mask, output ,gt)
+    def forward(self, mask, output, latent_dist, gt):
+        loss_dict = self.criterion(mask, output, latent_dist, gt)
         return loss_dict

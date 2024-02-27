@@ -70,8 +70,12 @@ def set_lambdas():
         lambda_dict['tv'] = .1
         lambda_dict['prc'] = .05
         lambda_dict['style'] = 120.
+
     elif loss_criterion == 3:
         lambda_dict['valid'] = 1.
+
+    if vae_zdim != 0:
+        lambda_dict['kldiv'] = 1.
 
     if lambda_loss is not None:
         lambda_dict.update(lambda_loss)
@@ -104,7 +108,7 @@ def set_steps(evaluate=False):
         n_channel_steps = 1
         gt_channels = [0 for i in range(n_output_data)]
 
-    global in_steps, out_steps, n_pred_steps, pred_timestep, out_channels
+    global n_time_steps, in_steps, out_steps, n_pred_steps, pred_timestep, out_channels
 
     n_time_steps = sum(time_steps) + 1
     pred_timestep = list(range(-pred_steps[0], pred_steps[1] + 1))
@@ -117,6 +121,7 @@ def set_steps(evaluate=False):
     else:
         in_step = max(pred_steps[0] - time_steps[0], 0)
         in_steps = range(in_step, in_step + n_time_steps)
+        n_time_steps = len(in_steps)
         interval = [max(time_steps[i], pred_steps[i]) for i in range(2)]
         out_steps = range(interval[0] - pred_steps[0], interval[0] + pred_steps[1] + 1)
         time_steps = interval
@@ -191,6 +196,7 @@ def set_common_args():
                             help="Number of data-names (from last) to be used as target data")
     arg_parser.add_argument('--device', type=str, default='cuda', help="Device used by PyTorch (cuda or cpu)")
     arg_parser.add_argument('--shuffle-masks', action='store_true', help="Select mask indices randomly")
+    arg_parser.add_argument('--vae-zdim', type=int, default=0, help="Use VAE with latent space dimension")
     arg_parser.add_argument('--channel-steps', type=int_list, default=None,
                             help="Comma separated number of considered sequences for channeled memory:"
                                  "past_steps,future_steps")
