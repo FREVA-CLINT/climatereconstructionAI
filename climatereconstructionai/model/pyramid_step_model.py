@@ -111,6 +111,9 @@ class pyramid_step_model(nn.Module):
         if 'calc_vort' not in self.model_settings.keys():
             self.model_settings['calc_vort'] = True
 
+        if 'input_avg_pool_kernel' not in self.model_settings.keys():
+            self.model_settings['input_avg_pool_kernel']=1
+
         self.model_settings['n_input_groups'] = len(self.model_settings['spatial_dims_var_source'])
         self.model_settings['input_dims'] = [len(values) for key, values in self.model_settings['spatial_dims_var_source'].items()]
 
@@ -158,8 +161,12 @@ class pyramid_step_model(nn.Module):
             self.set_input_mapper(mode='interpolation')
         else:
             self.set_input_mapper(mode=self.model_settings['input_type'])
-     
-        
+
+        if self.model_settings['input_avg_pool_kernel']>1:
+            self.input_avg_pooling = nn.AvgPool2d(self.model_settings['input_avg_pool_kernel'])
+        else:
+            self.input_avg_pooling = nn.Identity()
+
     def forward(self, x, coords_target, coords_source=None, norm=False, apply_res=True):
     
         if norm:
@@ -171,7 +178,8 @@ class pyramid_step_model(nn.Module):
         x_reg_lr = x
 
         if not isinstance(self.core_model, nn.Identity):
-
+            
+            x = self.input_avg_pooling(x)
             x = self.core_model(x)
             
             x_reg_hr = x
