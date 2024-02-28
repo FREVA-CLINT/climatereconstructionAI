@@ -311,7 +311,10 @@ class pyramid_step_model(nn.Module):
 
                 with torch.no_grad():
                     if self.model_settings['res_mode']=='sample':
-                        apply_res = False
+                        if 'apply_res' not in self.model_settings['res_mode']:
+                            apply_res = False
+                        else:
+                            apply_res = self.model_settings['apply_res']
                     else:
                         apply_res = True
 
