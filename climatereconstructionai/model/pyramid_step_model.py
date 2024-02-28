@@ -446,14 +446,14 @@ class pyramid_step_model(nn.Module):
         elif mode == 'quantdiscretizer':
             self.input_mapper = helpers.unstructured_to_reg_qdiscretizer(
                 self.model_settings['n_regular'][0],
-                self.model_settings['range_region_target_rad']
+                self.model_settings['range_region_source_rad']
             )
 
         elif mode == 'interpolation': 
             self.input_mapper = helpers.unstructured_to_reg_interpolator(
                 self.model_settings['n_regular'][0],
-                self.model_settings['range_region_target_radx'],
-                self.model_settings['range_region_target_rady'],
+                self.model_settings['range_region_source_radx'],
+                self.model_settings['range_region_source_rady'],
                 method=self.model_settings['interpolation_method'] if 'interpolation_method' in self.model_settings else 'nearest' 
             )
 
