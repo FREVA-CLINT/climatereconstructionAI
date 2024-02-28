@@ -180,7 +180,7 @@ class pyramid_step_model(nn.Module):
 
         else:
             x_reg_hr = x
-            coords_target_hr, non_valid = helpers.scale_coords(coords_target, self.range_region_target_radx, rngy=self.range_region_target_rady)
+            coords_target_hr, non_valid = helpers.scale_coords(coords_target, self.range_region_source_radx, rngy=self.range_region_source_rady)
             x, non_valid_var = self.output_net_post(x[:,list(self.output_res_indices.values()),:,:], coords_target_hr, non_valid)
 
         
