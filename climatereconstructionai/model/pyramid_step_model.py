@@ -175,17 +175,17 @@ class pyramid_step_model(nn.Module):
             x = self.core_model(x)
             
             x_reg_hr = x
-            coords_target_hr, non_valid = helpers.scale_coords(coords_target, self.range_region_target_radx_sample, rngy=self.range_region_target_rady_sample)
+            coords_target_hr, non_valid = helpers.scale_coords(coords_target, self.range_region_target_radx, rngy=self.range_region_target_rady)
             x, non_valid_var = self.output_net_post(x, coords_target_hr, non_valid)
 
         else:
             x_reg_hr = x
-            coords_target_hr, non_valid = helpers.scale_coords(coords_target, self.range_region_target_radx_sample, rngy=self.range_region_target_rady_sample)
+            coords_target_hr, non_valid = helpers.scale_coords(coords_target, self.range_region_target_radx, rngy=self.range_region_target_rady)
             x, non_valid_var = self.output_net_post(x[:,list(self.output_res_indices.values()),:,:], coords_target_hr, non_valid)
 
         
         if self.res_mode=='sample' and not isinstance(self.core_model, nn.Identity):
-            coords_target_lr, non_valid = helpers.scale_coords(coords_target, self.range_region_source_radx_sample, rngy=self.range_region_source_rady_sample)
+            coords_target_lr, non_valid = helpers.scale_coords(coords_target, self.range_region_source_radx, rngy=self.range_region_source_rady)
             x_pre = self.output_net_pre(x_reg_lr[:,list(self.output_res_indices.values()),:,:], coords_target_lr, non_valid)[0]
 
             for var in self.output_res_indices.keys():
@@ -418,29 +418,27 @@ class pyramid_step_model(nn.Module):
             
             range_target_lon = self.patches_target["borders_lon"][0]
             range_source_lon = self.patches_source["borders_lon"][0]
-            self.range_region_source_radx = [range_source_lon[0], range_source_lon[1]]
+           
 
             range_source_lon_rel = (range_source_lon - range_target_lon[0])/(range_target_lon[1] - range_target_lon[0])
-            self.range_region_source_radx_sample = [range_source_lon_rel[0], range_source_lon_rel[1]]
-            self.range_region_target_radx_sample = [0, 1]
+            self.range_region_source_radx = [range_source_lon_rel[0], range_source_lon_rel[1]]
+            self.range_region_target_radx = [0, 1]
 
             range_target_lat = self.patches_target["borders_lat"][0]
             range_source_lat = self.patches_source["borders_lat"][0]
-            self.range_region_source_rady = [range_source_lat[0], range_source_lat[1]]
+
 
             range_source_lat_rel = (range_source_lat - range_target_lat[0])/(range_target_lat[1] - range_target_lat[0])
-            self.range_region_source_rady_sample = [range_source_lat_rel[0], range_source_lat_rel[1]]
-            self.range_region_target_rady_sample = [0, 1]
+            self.range_region_source_rady = [range_source_lat_rel[0], range_source_lat_rel[1]]
+            self.range_region_target_rady = [0, 1]
  
         self.n_in, self.n_out = self.model_settings['n_regular']
 
-        self.model_settings['range_region_source_radx'] = self.range_region_source_radx
-        self.model_settings['range_region_source_rady'] = self.range_region_source_rady
 
-        self.model_settings['range_region_source_radx_sample'] = self.range_region_source_radx_sample
-        self.model_settings['range_region_target_radx_sample'] = self.range_region_target_radx_sample
-        self.model_settings['range_region_source_rady_sample'] = self.range_region_source_rady_sample
-        self.model_settings['range_region_target_rady_sample'] = self.range_region_target_rady_sample
+        self.model_settings['range_region_source_radx'] = self.range_region_source_radx
+        self.model_settings['range_region_target_radx'] = self.range_region_target_radx
+        self.model_settings['range_region_source_rady'] = self.range_region_source_rady
+        self.model_settings['range_region_target_rady'] = self.range_region_target_rady
 
     def set_normalizer(self):
         self.normalize = normalizer(self.model_settings['normalization'])
@@ -458,8 +456,8 @@ class pyramid_step_model(nn.Module):
         elif mode == 'interpolation': 
             self.input_mapper = helpers.unstructured_to_reg_interpolator(
                 self.model_settings['n_regular'][0],
-                self.model_settings['range_region_source_radx'],
-                self.model_settings['range_region_source_rady'],
+                [0,1],
+                [0,1],
                 method=self.model_settings['interpolation_method'] if 'interpolation_method' in self.model_settings else 'nearest' 
             )
 
