@@ -160,7 +160,7 @@ class pyramid_step_model(nn.Module):
             self.set_input_mapper(mode=self.model_settings['input_type'])
      
         
-    def forward(self, x, coords_target, coords_source=None, norm=False):
+    def forward(self, x, coords_target, coords_source=None, norm=False, apply_res=True):
     
         if norm:
             x = self.normalize(x)
@@ -194,7 +194,10 @@ class pyramid_step_model(nn.Module):
                     mu = mu + x_pre[var]
                     x[var] = torch.concat((mu,std), dim=2)
                 else:
-                    x[var] = x[var] + x_pre[var]
+                    if apply_res:
+                        x[var] = x[var] + x_pre[var]
+                    else:
+                        x[var]
         
         if norm:
             x = self.normalize(x, denorm=True)
@@ -307,7 +310,12 @@ class pyramid_step_model(nn.Module):
                     var_spatial_dims.update(dict(zip(vars,[spatial_dim]*len(vars))))
 
                 with torch.no_grad():
-                    output = self(data_source, coords_target, coords_source=coords_source, norm=True)[0]
+                    if self.model_settings['res_mode']=='sample':
+                        apply_res = False
+                    else:
+                        apply_res = True
+
+                    output = self(data_source, coords_target, coords_source=coords_source, norm=True, apply_res=apply_res)[0]
 
                 for variable in output.keys():
                     indices = spatial_dims_patches_target[var_spatial_dims[variable]][patch_id_idx]
@@ -317,6 +325,13 @@ class pyramid_step_model(nn.Module):
                         output_global_std[variable][indices] = output[variable][0,0,1]
                 
             return output_global, output_global_std
+    
+    def apply_patches_rot_iter(self, ds, ts=-1, device='cpu', ds_target=None, iters=5):
+        shift = np.pi/4
+        vlon = np.mod((vlon + shift)+np.pi, 2*np.pi)-np.pi
+        pass
+        
+
 
     def get_coordinates_frame(self, coords, patch_borders_lon, patch_borders_lat):
 
