@@ -196,8 +196,6 @@ class pyramid_step_model(nn.Module):
                 else:
                     if apply_res:
                         x[var] = x[var] + x_pre[var]
-                    else:
-                        x[var]
         
         if norm:
             x = self.normalize(x, denorm=True)
@@ -311,7 +309,7 @@ class pyramid_step_model(nn.Module):
 
                 with torch.no_grad():
                     if self.model_settings['res_mode']=='sample':
-                        if 'apply_res' not in self.model_settings['res_mode']:
+                        if 'apply_res' not in self.model_settings.keys():
                             apply_res = False
                         else:
                             apply_res = self.model_settings['apply_res']
