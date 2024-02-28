@@ -761,6 +761,11 @@ class grid_interpolator(nn.Module):
         data = data.cpu()
         x,y = coords.cpu()
 
-        grid_z = griddata((x, y), data, (self.x_grid, self.y_grid), method=self.method)
+        if self.method=='nearest':
+            grid_z = griddata((x, y), data, (self.x_grid, self.y_grid), method=self.method)
+        else:
+            grid_z = griddata((x, y), data, (self.x_grid, self.y_grid), method=self.method)
+            grid_z_nn = griddata((x, y), data, (self.x_grid, self.y_grid), method='nearest')
+            grid_z[np.isnan(grid_z)] = grid_z_nn[np.isnan(grid_z)]
 
         return torch.tensor(grid_z, device=device).float()
