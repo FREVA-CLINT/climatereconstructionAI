@@ -313,13 +313,14 @@ def set_train_args(arg_file=None):
 def set_evaluate_args(arg_file=None, prog_func=None):
     arg_parser = set_common_args()
     arg_parser.add_argument('--model-dir', type=str, default='snapshots/ckpt/', help="Directory of the trained models")
-    arg_parser.add_argument('--model-names', type=str_list, default='1000000.pth', help="Model names")
+    arg_parser.add_argument('--model-names', type=str_list, default='final.pth', help="Model names")
     arg_parser.add_argument('--evaluation-dirs', type=str_list, default='evaluation/',
                             help="Directory where the output files will be stored")
     arg_parser.add_argument('--eval-names', type=str_list, default='output',
                             help="Prefix used for the output filenames")
     arg_parser.add_argument('--use-train-stats', action='store_true',
                             help="Use mean and std from training data for normalization")
+    arg_parser.add_argument('--n-evaluations', type=int, default=1, help="Number of evaluations")
     arg_parser.add_argument('--create-graph', action='store_true', help="Create a Tensorboard graph of the NN")
     arg_parser.add_argument('--plot-results', type=int_list, default=[],
                             help="Create plot images of the results for the comma separated list of time indices")
@@ -336,3 +337,4 @@ def set_evaluate_args(arg_file=None, prog_func=None):
     global_args(arg_parser, arg_file, prog_func)
     set_steps(evaluate=True)
     assert len(eval_names) == n_output_data
+    globals()["model_names"] *= globals()["n_evaluations"]

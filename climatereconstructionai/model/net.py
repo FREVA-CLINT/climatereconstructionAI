@@ -117,7 +117,7 @@ class CRAINet(nn.Module):
             h, h_mask, recurrent_state = self.encoder[i](hs[i],
                                                          hs_mask[i],
                                                          None)
-
+            
             # execute attention module if configured
             if cfg.attention and i >= (self.net_depth - self.attention_depth):
                 attention_index = i - (self.net_depth - self.attention_depth)

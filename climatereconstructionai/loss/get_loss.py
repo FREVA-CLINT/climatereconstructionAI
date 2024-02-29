@@ -30,7 +30,6 @@ class loss_criterion(torch.nn.Module):
         self.criterions = []
         self.tensors = ['output', 'latent_dist', 'gt', 'mask']
         style_added = False
-        print("lambda_dict", lambda_dict)
 
         for loss, lambda_ in lambda_dict.items():
             if lambda_ > 0:

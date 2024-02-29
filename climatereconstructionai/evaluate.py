@@ -22,6 +22,7 @@ def evaluate(arg_file=None, prog_func=None):
         os.makedirs(cfg.log_dir)
 
     n_models = len(cfg.model_names)
+    print("n_models", n_models)
 
     eval_path = ["{}/{}".format(cfg.evaluation_dirs[0], name) for name in cfg.eval_names]
     output_names = {}
