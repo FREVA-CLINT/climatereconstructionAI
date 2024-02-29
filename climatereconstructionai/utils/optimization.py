@@ -229,6 +229,28 @@ class GaussLoss(nn.Module):
         loss =  self.Gauss(output_valid[:,0],target_valid,output_valid[:,1])
         return loss
 
+class StdLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.loss = torch.nn.MSELoss()
+
+    def forward(self, output, target, non_valid_mask, k=None):
+        output_std = output.squeeze().std(dim=-1)
+        target_std = target.squeeze().std(dim=-1)
+        loss = self.loss(output_std, target_std)
+        return loss
+    
+class RelStdLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.loss = torch.nn.MSELoss()
+
+    def forward(self, output, target, non_valid_mask, k=None):
+        output_rel_std = output.squeeze().std(dim=-1)/output.squeeze().mean(dim=-1)
+        target_rel_std = target.squeeze().std(dim=-1)/target.squeeze().mean(dim=-1)
+        loss = self.loss(output_rel_std, target_rel_std)
+        return loss
+
 class L1Loss(nn.Module):
     def __init__(self, loss='l1'):
         super().__init__()
@@ -574,6 +596,12 @@ class loss_calculator(nn.Module):
 
             elif loss_type == 'l1' and value > 0:
                 self.loss_fcn_dict['l1'] = DictLoss(L1Loss(loss='l1'))
+
+            elif loss_type == 'std' and value > 0:
+                self.loss_fcn_dict['std'] = DictLoss(StdLoss())
+
+            elif loss_type == 'rel_std' and value > 0:
+                self.loss_fcn_dict['rel_std'] = DictLoss(RelStdLoss())
             
             elif loss_type == 'l1_relv' and value > 0:
                 self.loss_fcn_dict['l1_relv'] = DictLoss(L1Loss_relv())
@@ -646,7 +674,7 @@ class loss_calculator(nn.Module):
             elif loss_type == 'tv' or loss_type == 'tv_rel' or loss_type == 'tv_log':
                 loss =  loss_fcn(output_reg_hr)
 
-            elif loss_type == 'l2' or loss_type == 'l1' or loss_type == 'gauss' or loss_type == 'log':
+            elif loss_type == 'l2' or loss_type == 'l1' or loss_type == 'gauss' or loss_type == 'log' or loss_type == 'std' or loss_type == 'rel_std':
                 loss =  loss_fcn(output, target, non_valid_mask)
             
             elif loss_type == 'l1_relv':

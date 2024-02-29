@@ -118,7 +118,17 @@ def train(model, training_settings, model_settings={}):
                                              train_or_val='val')
     target_files_val = check_get_data_files(training_settings['val_data']['data_names_target'], 
                                             root_path = training_settings['root_dir'], 
-                                            train_or_val='val')      
+                                            train_or_val='val')
+    
+    if 'data_names_target_past' in training_settings['train_data'].keys():
+        target_files_past_train = check_get_data_files(training_settings['train_data']['data_names_target_past'], 
+                                                root_path = training_settings['root_dir'], 
+                                                train_or_val='train')
+        target_files_past_val = check_get_data_files(training_settings['val_data']['data_names_target_past'], 
+                                                root_path = training_settings['root_dir'], 
+                                                train_or_val='val')
+    else:
+        target_files_past_train = target_files_past_val = None
 
 
     if 'save_tensor_samples_path' in training_settings and len(training_settings['save_tensor_samples_path'])>0:
@@ -160,6 +170,7 @@ def train(model, training_settings, model_settings={}):
                                     model_settings["pix_size_patch"],
                                     model_settings["patches_overlap_source"],
                                     model_settings["patches_overlap_target"],
+                                    files_target_past=target_files_past_train,
                                     p_dropout_source=training_settings['p_dropout_source'],
                                     p_dropout_target=training_settings['p_dropout_target'],
                                     n_pts_min = training_settings["n_pts_min"] if 'n_pts_min' in training_settings else True,
@@ -184,6 +195,7 @@ def train(model, training_settings, model_settings={}):
                                     model_settings["pix_size_patch"],
                                     model_settings["patches_overlap_source"],
                                     model_settings["patches_overlap_target"],
+                                    files_target_past=target_files_past_val,
                                     p_dropout_source=training_settings['p_dropout_source'],
                                     p_dropout_target=training_settings['p_dropout_target'],
                                     n_pts_min = training_settings["n_pts_min"] if 'n_pts_min' in training_settings else True,
