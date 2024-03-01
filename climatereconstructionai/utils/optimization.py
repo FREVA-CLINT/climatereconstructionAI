@@ -249,6 +249,7 @@ class RelStdLoss(nn.Module):
         output_rel_std = output.squeeze().std(dim=-1)/output.squeeze().mean(dim=-1)
         target_rel_std = target.squeeze().std(dim=-1)/target.squeeze().mean(dim=-1)
         loss = self.loss(output_rel_std, target_rel_std)
+        loss = loss.clamp(max=10)
         return loss
 
 class L1Loss(nn.Module):
@@ -512,6 +513,34 @@ class KinEnergyLoss(nn.Module):
             return loss    
 
 
+class SummedKinEnergyLoss(nn.Module):
+    def __init__(self, phys_calc):
+        super().__init__()
+        self.phys_calc = phys_calc
+        self.loss_fcn = nn.MSELoss()
+
+    def forward(self, output, target, target_indices, spatial_dim_var_target, val=False):
+       
+        u = output['u']
+        v = output['v']
+
+        u = u[:,0,0] if u.dim()==4 else u
+        v = v[:,0,0] if v.dim()==4 else v
+
+        spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
+        uv_dim_indices = target_indices[spatial_dim_uv]
+
+        ke_output, non_valid_mask = self.phys_calc.get_kinetic_energy_from_edge_indices(uv_dim_indices, u, v)
+
+        ke_target, _ = self.phys_calc.get_kinetic_energy_from_edge_indices(uv_dim_indices, target['u'].squeeze(), target['v'].squeeze())
+
+        loss = self.loss_fcn(ke_output.sum(dim=-1),ke_target.sum(dim=-1))
+
+        if val:
+            return loss, ke_output, ke_target, non_valid_mask
+        else:
+            return loss   
+
 class SpatialDivLoss(nn.Module):
     def __init__(self, phys_calc):
         super().__init__()
@@ -653,6 +682,11 @@ class loss_calculator(nn.Module):
                     phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
                 self.loss_fcn_dict['kin_energy'] = KinEnergyLoss(phys_calc)
 
+            elif loss_type == 'kin_energy_sum' and value > 0:
+                if phys_calc is None:
+                    phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
+                self.loss_fcn_dict['kin_energy_sum'] = SummedKinEnergyLoss(phys_calc)
+
     def forward(self, lambdas_optim, target, model, source, coords_target, target_indices, coords_source=None, val=False, k=None):
         
         if val:
@@ -683,7 +717,7 @@ class loss_calculator(nn.Module):
             elif loss_type == 'rel':
                 loss =  loss_fcn(output, target, non_valid_mask)
 
-            elif loss_type == 'vort' or loss_type == 'spatial_div' or loss_type == 'kin_energy' or loss_type == 'normalv' or loss_type == 'gauss_normalv' or loss_type == 'rel_normalv':
+            elif loss_type == 'vort' or loss_type == 'spatial_div' or loss_type == 'kin_energy' or loss_type == 'kin_energy_sum' or loss_type == 'normalv' or loss_type == 'gauss_normalv' or loss_type == 'rel_normalv':
                 loss = loss_fcn(output, target, target_indices, self.spatial_dim_var_target, val=val)
                 if val:
                     output[loss_type], target[loss_type], _ = loss[1:]
