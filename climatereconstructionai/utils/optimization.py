@@ -235,7 +235,7 @@ class StdLoss(nn.Module):
         self.loss = torch.nn.MSELoss()
 
     def forward(self, output, target, non_valid_mask, k=None):
-        output_std = output.squeeze().std(dim=-1)
+        output_std = output[:,0,0].squeeze().std(dim=-1)
         target_std = target.squeeze().std(dim=-1)
         loss = self.loss(output_std, target_std)
         return loss
