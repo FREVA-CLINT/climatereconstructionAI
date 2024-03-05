@@ -95,6 +95,8 @@ class ResVAE(nn.Module):
         self.encoder = encoder(hw_in, factor, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, 7, min_att_dim=min_att_dim, batch_norm=batch_norm, n_groups=in_groups, dropout=dropout, bias=bias, global_padding=global_padding, initial_res=initial_res, down_method=down_method)
         
         self.encoder.layer_configs[-1]['out_channels']=latent_dim
+
+        self.post_conv = nn.Conv2d(latent_dim, latent_dim, kernel_size=k_size, padding=1)
         self.decoder = decoder(self.encoder.layer_configs, phys_size_factor, factor, n_res_blocks, out_channels, global_upscale_factor=global_upscale_factor, k_size=k_size, dropout=dropout, n_groups=out_groups, bias=bias, global_padding=global_padding, channels_upscaling=channels_upscaling, skip_channels=False)
 
         self.out_net = out_net(res_indices, hw_in, hw_out, res_mode=res_mode, global_padding=global_padding)
@@ -108,6 +110,7 @@ class ResVAE(nn.Module):
         return self.mid(x)       
 
     def decode(self, x):
+        x = self.post_conv(x)
         return self.decoder(x)
 
     def forward(self, x):
