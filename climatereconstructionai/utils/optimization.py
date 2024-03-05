@@ -270,8 +270,12 @@ class KLLoss(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, kl_loss):
-        loss = kl_loss.mean()
+    def forward(self, model):
+        if isinstance(model, nn.DataParallel):
+            kl = model.module.core_model.kl
+        else:
+            kl = model.core_model.kl
+        loss = kl.mean()
         return loss
 
 class L1Loss_rel(nn.Module):
@@ -726,7 +730,7 @@ class loss_calculator(nn.Module):
                 loss =  loss_fcn(output, target, non_valid_mask, k=k)
 
             elif loss_type == 'kl':
-                loss =  loss_fcn(model.core_model.kl)
+                loss =  loss_fcn(model)
 
             elif loss_type == 'rel':
                 loss =  loss_fcn(output, target, non_valid_mask)
