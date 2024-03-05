@@ -48,11 +48,12 @@ class DiagonalGaussianDistribution(object):
 
 
 class mid(nn.Module):
-    def __init__(self, hw, n_blocks, channels, k_size=3,  dropout=0, with_att=False, bias=True, global_padding=False):
+    def __init__(self, hw, n_blocks, channels, laten_dim=None, k_size=3,  dropout=0, with_att=False, bias=True, global_padding=False):
         super().__init__()
-
-        self.res_blocks = res_blocks(hw, n_blocks, channels, channels, k_size=k_size, batch_norm=False, groups=1,  dropout=dropout, with_att=with_att, bias=bias, global_padding=global_padding, factor=1)
-        self.quant_conv = nn.Conv2d(channels, 2*channels, groups=2, kernel_size=k_size, padding=1)
+        if laten_dim is None:
+            laten_dim = channels
+        self.res_blocks = res_blocks(hw, n_blocks, channels, laten_dim, k_size=k_size, batch_norm=False, groups=1,  dropout=dropout, with_att=with_att, bias=bias, global_padding=global_padding, factor=1)
+        self.quant_conv = nn.Conv2d(laten_dim, 2*laten_dim, groups=2, kernel_size=k_size, padding=1)
 
     def forward(self, x):
 
@@ -86,18 +87,20 @@ class out_net(nn.Module):
 
 
 class ResVAE(nn.Module): 
-    def __init__(self, hw_in, hw_out, phys_size_factor, n_levels, factor, n_res_blocks, model_dim_unet, in_channels, out_channels, res_mode, res_indices, channels_upscaling=None, batch_norm=True, k_size=3, min_att_dim=0, in_groups=1, out_groups=1, dropout=0, bias=True, global_padding=False, mid_att=False, initial_res=True, down_method="max"):
+    def __init__(self, hw_in, hw_out, phys_size_factor, n_levels, factor, n_res_blocks, model_dim_unet, in_channels, out_channels, res_mode, res_indices, latent_dim=None, channels_upscaling=None, batch_norm=True, k_size=3, min_att_dim=0, in_groups=1, out_groups=1, dropout=0, bias=True, global_padding=False, mid_att=False, initial_res=True, down_method="max"):
         super().__init__()
 
         global_upscale_factor = int(torch.tensor([(hw_out[0]) // hw_in[0], 1]).max())
 
         self.encoder = encoder(hw_in, factor, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, 7, min_att_dim=min_att_dim, batch_norm=batch_norm, n_groups=in_groups, dropout=dropout, bias=bias, global_padding=global_padding, initial_res=initial_res, down_method=down_method)
+        
+        self.encoder.layer_configs[-1]['out_channels']=latent_dim
         self.decoder = decoder(self.encoder.layer_configs, phys_size_factor, factor, n_res_blocks, out_channels, global_upscale_factor=global_upscale_factor, k_size=k_size, dropout=dropout, n_groups=out_groups, bias=bias, global_padding=global_padding, channels_upscaling=channels_upscaling, skip_channels=False)
 
         self.out_net = out_net(res_indices, hw_in, hw_out, res_mode=res_mode, global_padding=global_padding)
   
         hw_mid = torch.tensor(hw_in)// (factor**(n_levels-1))
-        self.mid = mid(hw_mid, n_res_blocks, model_dim_unet*(2**(n_levels-1)), with_att=mid_att, bias=bias, global_padding=global_padding)
+        self.mid = mid(hw_mid, n_res_blocks, model_dim_unet*(2**(n_levels-1)), latent_dim, with_att=mid_att, bias=bias, global_padding=global_padding)
         self.kl = 0
 
     def encode(self, x):
@@ -140,6 +143,7 @@ class core_ResVAE(psm.pyramid_step_model):
         depth = model_settings["depth_core"]
         batch_norm = model_settings["batch_norm"]
         mid_att = model_settings["mid_att"] if "mid_att" in model_settings.keys() else False
+        latent_dim = model_settings["latent_dim"] if "latent_dim" in model_settings.keys() else model_dim_core*2**model_settings['depth_core']
 
         dropout = 0 if 'dropout' not in model_settings.keys() else model_settings['dropout']
         grouped = False if 'grouped' not in model_settings.keys() else model_settings['grouped']
@@ -176,7 +180,7 @@ class core_ResVAE(psm.pyramid_step_model):
 
         phys_size_factor = (1+2*model_settings["patches_overlap_source"])/(1+2*model_settings["patches_overlap_target"]) 
 
-        self.core_model = ResVAE(hw_in, hw_out, phys_size_factor, depth, factor, n_blocks, model_dim_core, input_dim, output_dim, model_settings['res_mode'], res_indices, min_att_dim=min_att_dim, batch_norm=batch_norm, in_groups=in_groups, out_groups=out_groups, dropout=dropout, bias=bias, global_padding=global_padding, mid_att=mid_att, initial_res=initial_res, down_method=down_method, channels_upscaling=channels_upscaling)
+        self.core_model = ResVAE(hw_in, hw_out, phys_size_factor, depth, factor, n_blocks, model_dim_core, input_dim, output_dim, model_settings['res_mode'], res_indices, latent_dim=latent_dim, min_att_dim=min_att_dim, batch_norm=batch_norm, in_groups=in_groups, out_groups=out_groups, dropout=dropout, bias=bias, global_padding=global_padding, mid_att=mid_att, initial_res=initial_res, down_method=down_method, channels_upscaling=channels_upscaling)
 
         if "pretrained_path" in self.model_settings.keys():
             self.check_pretrained(log_dir_check=self.model_settings['pretrained_path'])
