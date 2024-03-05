@@ -214,7 +214,7 @@ class center_crop(nn.Module):
         return x[:,:,crop_size:w-crop_size,crop_size:w-crop_size]
 
 class decoder(nn.Module):
-    def __init__(self, layer_configs, phys_size_factor, factor, n_blocks, out_channels, channels_upscaling=None, global_upscale_factor=1, k_size=3, dropout=0, n_groups=1, bias=True, global_padding=False):
+    def __init__(self, layer_configs, phys_size_factor, factor, n_blocks, out_channels, channels_upscaling=None, global_upscale_factor=1, k_size=3, dropout=0, n_groups=1, bias=True, global_padding=False, skip_channels=True):
         super().__init__()
         # define total number of layers, first n_levels-1 with skip, others not
         #watch out for n_groups in last layer before last
@@ -237,7 +237,7 @@ class decoder(nn.Module):
             if n < self.skip_blocks:
                 in_channels_block = layer_configs[self.skip_blocks-n]['out_channels']
                 out_channels_block = layer_configs[self.skip_blocks-n]['in_channels']
-                skip_channels = layer_configs[self.skip_blocks-(n+1)]['out_channels']
+                skip_channels = layer_configs[self.skip_blocks-(n+1)]['out_channels'] if skip_channels else 0
 
                 if n == self.skip_blocks-1:
                     out_channels_block = channels_upscaling if channels_upscaling is not None else out_channels_block
@@ -266,12 +266,15 @@ class decoder(nn.Module):
             hw = hw_in/(factor**(n-1))
             self.decoder_blocks.append(decoder_block_shuffle(hw, n_blocks, in_channels_block, out_channels_block, skip_channels, k_size=k_size, dropout=dropout, bias=bias, global_padding=global_padding, upscale_factor=upscale_factor, groups=groups, out_activation=out_activation))      
         
-    def forward(self, x, skip_channels):
+    def forward(self, x, skip_channels=None):
 
         for k, layer in enumerate(self.decoder_blocks):
             if k < self.skip_blocks:
-                x_skip = skip_channels[-(k+2)]  
-                x = layer(x, x_skip)
+                if skip_channels is not None:
+                    x_skip = skip_channels[-(k+2)]  
+                    x = layer(x, x_skip)
+                else:
+                    x = layer(x)
             else:
                 if k==self.skip_blocks:
                     x = self.center_crop(x)

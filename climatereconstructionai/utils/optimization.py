@@ -266,6 +266,14 @@ class L1Loss(nn.Module):
         loss = self.loss(output_valid,target_valid)
         return loss
 
+class KLLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, kl_loss):
+        loss = kl_loss.mean()
+        return loss
+
 class L1Loss_rel(nn.Module):
     def __init__(self):
         super().__init__()
@@ -641,6 +649,9 @@ class loss_calculator(nn.Module):
             elif loss_type == 'rel' and value > 0:
                 self.loss_fcn_dict['rel'] = DictLoss(L1Loss_rel())
 
+            elif loss_type == 'kl' and value > 0:
+                self.loss_fcn_dict['kl'] = KLLoss()
+
             elif loss_type == 'trivial' and value > 0:
                 self.loss_fcn_dict['trivial'] = Trivial_loss()
             
@@ -713,6 +724,9 @@ class loss_calculator(nn.Module):
             
             elif loss_type == 'l1_relv':
                 loss =  loss_fcn(output, target, non_valid_mask, k=k)
+
+            elif loss_type == 'kl':
+                loss =  loss_fcn(model.core_model.kl)
 
             elif loss_type == 'rel':
                 loss =  loss_fcn(output, target, non_valid_mask)
