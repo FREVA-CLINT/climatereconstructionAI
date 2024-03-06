@@ -180,14 +180,14 @@ class pyramid_step_model(nn.Module):
         if not isinstance(self.core_model, nn.Identity):
             
             x = self.input_avg_pooling(x)
-            x = self.core_model(x)
+            output = self.core_model(x)
+            core_output = output
             
-            x_reg_hr = x
             coords_target_hr, non_valid = helpers.scale_coords(coords_target, self.range_region_target_radx, rngy=self.range_region_target_rady)
-            x, non_valid_var = self.output_net_post(x, coords_target_hr, non_valid)
+            x, non_valid_var = self.output_net_post(output['x'], coords_target_hr, non_valid)
 
         else:
-            x_reg_hr = x
+            core_output = {'x': x}
             coords_target_hr, non_valid = helpers.scale_coords(coords_target, self.range_region_source_radx, rngy=self.range_region_source_rady)
             x, non_valid_var = self.output_net_post(x[:,list(self.output_res_indices.values()),:,:], coords_target_hr, non_valid)
 
@@ -208,7 +208,7 @@ class pyramid_step_model(nn.Module):
         if norm:
             x = self.normalize(x, denorm=True)
 
-        return x, x_reg_lr, x_reg_hr, non_valid_var
+        return x, x_reg_lr, core_output, non_valid_var
     
     def apply_global(self, ds, ts=-1, device='cpu', ds_target=None):
             

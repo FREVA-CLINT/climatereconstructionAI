@@ -103,7 +103,7 @@ class ResVAE(nn.Module):
   
         hw_mid = torch.tensor(hw_in)// (factor**(n_levels-1))
         self.mid = mid(hw_mid, n_res_blocks, model_dim_unet*(2**(n_levels-1)), latent_dim, with_att=mid_att, bias=bias, global_padding=global_padding)
-        self.kl = 0
+
 
     def encode(self, x):
         x, _ = self.encoder(x)
@@ -117,13 +117,11 @@ class ResVAE(nn.Module):
 
         posterior = self.encode(x)
 
-        self.kl = posterior.kl()
-
         sample = posterior.sample()
 
         x = self.decode(sample)
 
-        return x
+        return {'x': x, 'kl': posterior.kl()}
 
 
 class core_ResVAE(psm.pyramid_step_model): 

@@ -270,11 +270,7 @@ class KLLoss(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, model):
-        if isinstance(model, nn.DataParallel):
-            kl = model.module.core_model.kl
-        else:
-            kl = model.core_model.kl
+    def forward(self, kl):
         loss = kl.mean()
         return loss
 
@@ -706,9 +702,9 @@ class loss_calculator(nn.Module):
         
         if val:
             with torch.no_grad():
-                output, output_reg_lr, output_reg_hr, non_valid_mask = model(source, coords_target, coords_source=coords_source)
+                output, output_reg_lr, output_core, non_valid_mask = model(source, coords_target, coords_source=coords_source)
         else:
-            output, _, output_reg_hr, non_valid_mask = model(source, coords_target, coords_source=coords_source)
+            output, _, output_core, non_valid_mask = model(source, coords_target, coords_source=coords_source)
 
         if 'trivial' in self.loss_fcn_dict.keys() and not self.loss_fcn_dict['trivial'].registered:
             self.loss_fcn_dict['trivial'].register_samples(source, coords_target, target)
@@ -721,7 +717,7 @@ class loss_calculator(nn.Module):
                 loss =  loss_fcn(model)
 
             elif loss_type == 'tv' or loss_type == 'tv_rel' or loss_type == 'tv_log':
-                loss =  loss_fcn(output_reg_hr)
+                loss =  loss_fcn(output_core['x'])
 
             elif loss_type == 'l2' or loss_type == 'l1' or loss_type == 'gauss' or loss_type == 'log' or loss_type == 'std' or loss_type == 'rel_std':
                 loss =  loss_fcn(output, target, non_valid_mask)
@@ -730,7 +726,7 @@ class loss_calculator(nn.Module):
                 loss =  loss_fcn(output, target, non_valid_mask, k=k)
 
             elif loss_type == 'kl':
-                loss =  loss_fcn(model)
+                loss =  loss_fcn(output_core['kl'])
 
             elif loss_type == 'rel':
                 loss =  loss_fcn(output, target, non_valid_mask)
@@ -750,6 +746,6 @@ class loss_calculator(nn.Module):
         loss_dict['total_loss'] = total_loss.item()
         
         if val:
-            return total_loss, loss_dict, output, target, output_reg_hr, output_reg_lr, non_valid_mask
+            return total_loss, loss_dict, output, target, output_core, output_reg_lr, non_valid_mask
         else:
             return total_loss, loss_dict
