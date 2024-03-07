@@ -367,7 +367,7 @@ class DictLoss(nn.Module):
         total_loss = 0
 
         for var in output.keys():
-            if var != 'vort' and var !='div' and var != 'normalv' and var != 'spatial_div' and var != 'kin_energy'and var != 'rel_normalv'and var != 'gauss_normalv':
+            if var != 'vort' and var != 'calc_vort' and var !='div' and var != 'normalv' and var != 'spatial_div' and var != 'kin_energy'and var != 'rel_normalv'and var != 'gauss_normalv':
                 loss = self.loss_fcn(output[var], target[var], non_valid_mask[var], k)
                 total_loss+=loss
                 loss_dict[f'{var}_{str(self.loss_fcn._get_name())}'] = loss.item()
@@ -441,9 +441,10 @@ class GaussNormalVLoss(nn.Module):
             return loss  
 
 class VortLoss(nn.Module):
-    def __init__(self, phys_calc):
+    def __init__(self, phys_calc, calc_target=False):
         super().__init__()
         self.phys_calc = phys_calc
+        self.calc_target=calc_target
         self.loss_fcn = L1Loss(loss='l1')
 
     def forward(self, output, target, target_indices, spatial_dim_var_target, val=False):
@@ -453,14 +454,14 @@ class VortLoss(nn.Module):
         output_vort, non_valid_mask_vort = get_vorticity(self.phys_calc, output, uv_dim_indices)
         non_valid_mask_vort[output_vort.squeeze().isnan()]=True
 
-        if 'vort' not in target.keys():
+        if self.calc_target:
             target_vort = get_vorticity(self.phys_calc, target, uv_dim_indices)[0]
-            non_valid_mask_vort[target_vort.squeeze().isnan()]=True
         else:
             target_vort = target['vort'].double()
             output_vort = torch.gather(output_vort, dim=-1, index=target_indices['ncells_2'].unsqueeze(dim=1).unsqueeze(dim=1))
             non_valid_mask_vort = torch.gather(non_valid_mask_vort, dim=-1, index=target_indices['ncells_2'])
 
+        non_valid_mask_vort[target_vort.squeeze().isnan()]=True
         vort_loss = self.loss_fcn(output_vort, target_vort, non_valid_mask_vort)  
 
         if val:
@@ -665,6 +666,11 @@ class loss_calculator(nn.Module):
                     phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
                 self.loss_fcn_dict['vort'] = VortLoss(phys_calc)
 
+            elif loss_type == 'calc_vort' and value > 0:
+                if phys_calc is None:
+                    phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
+                self.loss_fcn_dict['calc_vort'] = VortLoss(phys_calc, calc_target=True)
+
             elif loss_type == 'div' and value > 0:
                 if phys_calc is None:
                     phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
@@ -733,7 +739,7 @@ class loss_calculator(nn.Module):
             elif loss_type == 'rel':
                 loss =  loss_fcn(output, target, non_valid_mask)
 
-            elif loss_type == 'vort' or loss_type == 'spatial_div' or loss_type == 'kin_energy' or loss_type == 'kin_energy_sum' or loss_type == 'normalv' or loss_type == 'gauss_normalv' or loss_type == 'rel_normalv':
+            elif loss_type == 'vort' or loss_type == 'calc_vort'or loss_type == 'spatial_div' or loss_type == 'kin_energy' or loss_type == 'kin_energy_sum' or loss_type == 'normalv' or loss_type == 'gauss_normalv' or loss_type == 'rel_normalv':
                 loss = loss_fcn(output, target, target_indices, self.spatial_dim_var_target, val=val)
                 if val:
                     output[loss_type], target[loss_type], non_valid_mask[loss_type] = loss[1:]
