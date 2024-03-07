@@ -734,7 +734,7 @@ class loss_calculator(nn.Module):
             elif loss_type == 'vort' or loss_type == 'spatial_div' or loss_type == 'kin_energy' or loss_type == 'kin_energy_sum' or loss_type == 'normalv' or loss_type == 'gauss_normalv' or loss_type == 'rel_normalv':
                 loss = loss_fcn(output, target, target_indices, self.spatial_dim_var_target, val=val)
                 if val:
-                    output[loss_type], target[loss_type], _ = loss[1:]
+                    output[loss_type], target[loss_type], non_valid_mask[loss_type] = loss[1:]
                     loss = loss[0]
 
             elif loss_type == 'div':
