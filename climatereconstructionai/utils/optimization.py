@@ -454,7 +454,6 @@ class VortLoss(nn.Module):
 
         if 'vort' not in target.keys():
             target_vort = get_vorticity(self.phys_calc, target, uv_dim_indices)[0]
-            vort_loss = self.loss_fcn(output_vort, target_vort, non_valid_mask_vort)  
         else:
             target_vort = target['vort'].double()
             output_vort = torch.gather(output_vort, dim=-1, index=target_indices['ncells_2'].unsqueeze(dim=1).unsqueeze(dim=1))
