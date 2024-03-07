@@ -358,22 +358,24 @@ class TVLoss_rel(nn.Module):
         return loss
 
 class DictLoss(nn.Module):
-    def __init__(self, loss_fcn):
+    def __init__(self, loss_fcn, lambdas_var):
         super().__init__()
         self.loss_fcn = loss_fcn
+        self.lambdas_var = lambdas_var
 
     def forward(self, output, target, non_valid_mask, k=None):
         loss_dict = {}
         total_loss = 0
 
         for var in output.keys():
-            if var != 'vort' and var != 'calc_vort' and var !='div' and var != 'normalv' and var != 'spatial_div' and var != 'kin_energy'and var != 'rel_normalv'and var != 'gauss_normalv':
-                loss = self.loss_fcn(output[var], target[var], non_valid_mask[var], k)
-                total_loss+=loss
-                loss_dict[f'{var}_{str(self.loss_fcn._get_name())}'] = loss.item()
+            if var in self.lambdas_var.keys() and self.lambdas_var[var]>0:
+                if var != 'vort' and var != 'calc_vort' and var !='div' and var != 'normalv' and var != 'spatial_div' and var != 'kin_energy'and var != 'rel_normalv'and var != 'gauss_normalv':
+                    loss = self.loss_fcn(output[var], target[var], non_valid_mask[var], k)
+                    total_loss+=self.lambdas_var[var]*loss
+                    loss_dict[f'{var}_{str(self.loss_fcn._get_name())}'] = loss.item()
 
         return total_loss
-
+    
 class NormalVLoss(nn.Module):
     def __init__(self, phys_calc):
         super().__init__()
@@ -636,25 +638,25 @@ class loss_calculator(nn.Module):
                 self.loss_fcn_dict['tv_rel'] = TVLoss_rel()
 
             elif loss_type == 'l2' and value > 0:
-                self.loss_fcn_dict['l2'] = DictLoss(L1Loss(loss='l2'))
+                self.loss_fcn_dict['l2'] = DictLoss(L1Loss(loss='l2'), training_settings['lambdas_var'])
 
             elif loss_type == 'l1' and value > 0:
-                self.loss_fcn_dict['l1'] = DictLoss(L1Loss(loss='l1'))
+                self.loss_fcn_dict['l1'] = DictLoss(L1Loss(loss='l1'), training_settings['lambdas_var'])
 
             elif loss_type == 'std' and value > 0:
-                self.loss_fcn_dict['std'] = DictLoss(StdLoss())
+                self.loss_fcn_dict['std'] = DictLoss(StdLoss(), training_settings['lambdas_var'])
 
             elif loss_type == 'rel_std' and value > 0:
-                self.loss_fcn_dict['rel_std'] = DictLoss(RelStdLoss())
+                self.loss_fcn_dict['rel_std'] = DictLoss(RelStdLoss(), training_settings['lambdas_var'])
             
             elif loss_type == 'l1_relv' and value > 0:
-                self.loss_fcn_dict['l1_relv'] = DictLoss(L1Loss_relv())
+                self.loss_fcn_dict['l1_relv'] = DictLoss(L1Loss_relv(), training_settings['lambdas_var'])
             
             elif loss_type == 'log' and value > 0:
-                self.loss_fcn_dict['log'] = DictLoss(LogLoss())
+                self.loss_fcn_dict['log'] = DictLoss(LogLoss(), training_settings['lambdas_var'])
 
             elif loss_type == 'rel' and value > 0:
-                self.loss_fcn_dict['rel'] = DictLoss(L1Loss_rel())
+                self.loss_fcn_dict['rel'] = DictLoss(L1Loss_rel(), training_settings['lambdas_var'])
 
             elif loss_type == 'kl' and value > 0:
                 self.loss_fcn_dict['kl'] = KLLoss()
@@ -663,7 +665,7 @@ class loss_calculator(nn.Module):
                 self.loss_fcn_dict['trivial'] = Trivial_loss()
             
             elif loss_type == 'gauss' and value > 0:
-                self.loss_fcn_dict['gauss'] =DictLoss(GaussLoss())
+                self.loss_fcn_dict['gauss'] =DictLoss(GaussLoss(), training_settings['lambdas_var'])
 
             elif loss_type == 'vort' and value > 0:
                 if phys_calc is None:
