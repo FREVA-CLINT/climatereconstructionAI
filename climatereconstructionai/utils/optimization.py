@@ -451,6 +451,7 @@ class VortLoss(nn.Module):
         spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
         uv_dim_indices = target_indices[spatial_dim_uv]
         output_vort, non_valid_mask_vort = get_vorticity(self.phys_calc, output, uv_dim_indices)
+        non_valid_mask_vort[output_vort.squeeze().isnan()]=True
 
         if 'vort' not in target.keys():
             target_vort = get_vorticity(self.phys_calc, target, uv_dim_indices)[0]
