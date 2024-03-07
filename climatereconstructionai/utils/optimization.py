@@ -138,10 +138,10 @@ class physics_calculator():
         return var_normalVelocity, valid_mask, var_u_global, var_v_global
 
 
-    def get_vorticity_from_edge_indices(self, global_edge_indices, u, v):
+    def get_vorticity_from_edge_indices(self, global_edge_indices, u, v, n_vert=6):
         b,n = global_edge_indices.shape
         normalVelocity, mask,_,_ = self.get_normal_velocity_from_indices(global_edge_indices, u, v)
-        vort_mask = ((mask)[:,self.edges_of_vertex]).sum(axis=-1) == 6
+        vort_mask = ((mask)[:,self.edges_of_vertex]).sum(axis=-1) >= n_vert
         vort = ((normalVelocity*self.dual_edge_length)[:,self.edges_of_vertex]*self.signorient).sum(axis=-1)/self.dual_area.unsqueeze(dim=0)
 
         return vort.view(b,1,1,-1), ~vort_mask
@@ -190,13 +190,13 @@ class physics_calculator():
         return kin_energy, ~kin_energy_mask
     
 
-def get_vorticity(phys_calc, tensor_dict, global_edge_indices):
+def get_vorticity(phys_calc, tensor_dict, global_edge_indices, n_vert=6):
     u = tensor_dict['u']
     v = tensor_dict['v']
 
     u = u[:,0,0] if u.dim()==4 else u
     v = v[:,0,0] if v.dim()==4 else v
-    vort, non_valid_mask = phys_calc.get_vorticity_from_edge_indices(global_edge_indices, u, v)
+    vort, non_valid_mask = phys_calc.get_vorticity_from_edge_indices(global_edge_indices, u, v, n_vert=n_vert)
     return vort, non_valid_mask
 
 
@@ -449,13 +449,17 @@ class VortLoss(nn.Module):
 
     def forward(self, output, target, target_indices, spatial_dim_var_target, val=False):
 
+        if self.calc_target:
+            n_vert=3
+        else:
+            n_vert=6
         spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
         uv_dim_indices = target_indices[spatial_dim_uv]
-        output_vort, non_valid_mask_vort = get_vorticity(self.phys_calc, output, uv_dim_indices)
+        output_vort, non_valid_mask_vort = get_vorticity(self.phys_calc, output, uv_dim_indices, n_vert=n_vert)
         non_valid_mask_vort[output_vort.squeeze().isnan()]=True
 
         if self.calc_target:
-            target_vort = get_vorticity(self.phys_calc, target, uv_dim_indices)[0]
+            target_vort = get_vorticity(self.phys_calc, target, uv_dim_indices, n_vert=n_vert)[0]
         else:
             target_vort = target['vort'].double()
             output_vort = torch.gather(output_vort, dim=-1, index=target_indices['ncells_2'].unsqueeze(dim=1).unsqueeze(dim=1))
