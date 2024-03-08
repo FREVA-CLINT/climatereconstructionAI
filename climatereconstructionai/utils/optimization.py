@@ -281,7 +281,7 @@ class L1Loss_rel(nn.Module):
 
     def forward(self, output, target, non_valid_mask, k=None):
         output_valid = output[:,0,0][~non_valid_mask]
-        target_valid = target[~non_valid_mask].squeeze()
+        target_valid = target.squeeze()[~non_valid_mask].squeeze()
         abs_loss = ((output_valid - target_valid)/(target_valid+1e-10)).abs()
         loss = abs_loss.clamp(max=1)
         loss = loss.mean()
@@ -369,13 +369,13 @@ class DictLoss(nn.Module):
 
         for var in output.keys():
             if var in self.lambdas_var.keys() and self.lambdas_var[var]>0:
-                if var != 'vort' and var != 'calc_vort' and var !='div' and var != 'normalv' and var != 'spatial_div' and var != 'kin_energy'and var != 'rel_normalv'and var != 'gauss_normalv':
+                if var != 'vort' and var != 'calc_vort' and var != 'rel_calc_vort' and var != 'rel_vort' and var !='div' and var != 'normalv' and var != 'spatial_div' and var != 'kin_energy'and var != 'rel_normalv'and var != 'gauss_normalv':
                     loss = self.loss_fcn(output[var], target[var], non_valid_mask[var], k)
                     total_loss+=self.lambdas_var[var]*loss
                     loss_dict[f'{var}_{str(self.loss_fcn._get_name())}'] = loss.item()
 
         return total_loss
-    
+
 class NormalVLoss(nn.Module):
     def __init__(self, phys_calc):
         super().__init__()
@@ -418,6 +418,9 @@ class RelNormalVLoss(nn.Module):
         else:
             return loss   
 
+
+
+
 class GaussNormalVLoss(nn.Module):
     def __init__(self, phys_calc):
         super().__init__()
@@ -443,12 +446,12 @@ class GaussNormalVLoss(nn.Module):
             return loss  
 
 class VortLoss(nn.Module):
-    def __init__(self, phys_calc, calc_target=False):
+    def __init__(self, phys_calc, calc_target=False, rel=False):
         super().__init__()
         self.phys_calc = phys_calc
         self.calc_target=calc_target
-        self.loss_fcn = L1Loss(loss='l1')
-
+        self.loss_fcn = L1Loss(loss='l1') if not rel else L1Loss_rel()
+        
     def forward(self, output, target, target_indices, spatial_dim_var_target, val=False):
 
         if self.calc_target:
@@ -671,11 +674,21 @@ class loss_calculator(nn.Module):
                 if phys_calc is None:
                     phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
                 self.loss_fcn_dict['vort'] = VortLoss(phys_calc)
+            
+            elif loss_type == 'rel_vort' and value > 0:
+                if phys_calc is None:
+                    phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
+                self.loss_fcn_dict['rel_vort'] = VortLoss(phys_calc, rel=True)
 
             elif loss_type == 'calc_vort' and value > 0:
                 if phys_calc is None:
                     phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
                 self.loss_fcn_dict['calc_vort'] = VortLoss(phys_calc, calc_target=True)
+            
+            elif loss_type == 'rel_calc_vort' and value > 0:
+                if phys_calc is None:
+                    phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
+                self.loss_fcn_dict['rel_calc_vort'] = VortLoss(phys_calc, calc_target=True, rel=True)
 
             elif loss_type == 'div' and value > 0:
                 if phys_calc is None:
@@ -745,7 +758,7 @@ class loss_calculator(nn.Module):
             elif loss_type == 'rel':
                 loss =  loss_fcn(output, target, non_valid_mask)
 
-            elif loss_type == 'vort' or loss_type == 'calc_vort'or loss_type == 'spatial_div' or loss_type == 'kin_energy' or loss_type == 'kin_energy_sum' or loss_type == 'normalv' or loss_type == 'gauss_normalv' or loss_type == 'rel_normalv':
+            elif loss_type == 'vort' or loss_type == 'calc_vort' or loss_type == 'rel_calc_vort' or loss_type == 'rel_vort' or loss_type == 'spatial_div' or loss_type == 'kin_energy' or loss_type == 'kin_energy_sum' or loss_type == 'normalv' or loss_type == 'gauss_normalv' or loss_type == 'rel_normalv':
                 loss = loss_fcn(output, target, target_indices, self.spatial_dim_var_target, val=val)
                 if val:
                     output[loss_type], target[loss_type], non_valid_mask[loss_type] = loss[1:]
