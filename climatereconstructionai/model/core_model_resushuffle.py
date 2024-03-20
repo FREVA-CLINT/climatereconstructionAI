@@ -145,13 +145,13 @@ class encoder(nn.Module):
                 out_channels_block = n_groups * (u_net_channels // n_groups + u_net_channels % n_groups)
                 with_res = initial_res
                 groups = n_groups
-                k_size = k_size_in
+                k_size_layer = k_size_in
             else:
                 in_channels_block = out_channels_block
                 out_channels_block = u_net_channels*(2**(n))
                 groups=1
                 with_res = True
-                k_size = k_size
+                k_size_layer = k_size
 
             factor_level = 1 if n == n_levels-1 else factor
             hw = hw_in/(factor**(n))
@@ -166,7 +166,7 @@ class encoder(nn.Module):
                                  'hw': hw})
             
 
-            self.layers.append(res_blocks(list(hw.long()), n_blocks, in_channels_block, out_channels_block, k_size=k_size, batch_norm=batch_norm, groups=groups, with_att=with_att, with_res=with_res, factor=factor_level, dropout=dropout, bias=bias, global_padding=global_padding, down_method=down_method))
+            self.layers.append(res_blocks(list(hw.long()), n_blocks, in_channels_block, out_channels_block, k_size=k_size_layer, batch_norm=batch_norm, groups=groups, with_att=with_att, with_res=with_res, factor=factor_level, dropout=dropout, bias=bias, global_padding=global_padding, down_method=down_method))
 
     
     def forward(self, x):
