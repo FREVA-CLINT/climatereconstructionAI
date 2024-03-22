@@ -330,8 +330,8 @@ def set_evaluate_args(arg_file=None, prog_func=None):
                             help="Maximum available memory in MB (overwrite partitions parameter)")
     arg_parser.add_argument('--time-freq', type=str, default=None,
                             help="Time frequency for pred-steps option (only for D,H,M,S,etc.)")
-    arg_parser.add_argument('--split-outputs', action='store_true',
-                            help="Do not merge the outputs when using multiple models and/or partitions")
+    arg_parser.add_argument('--split-outputs', type=str, default="all", const=None, nargs='?',
+                            help="Split the outputs according to members and/or partitions")
     arg_parser.add_argument('-f', '--load-from-file', type=str, action=LoadFromFile,
                             help="Load all the arguments from a text file")
     global_args(arg_parser, arg_file, prog_func)
