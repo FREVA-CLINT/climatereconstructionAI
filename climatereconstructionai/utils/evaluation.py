@@ -136,7 +136,7 @@ def infill(model, dataset, eval_path, output_names, steady_mask, data_stats, xr_
         if cfg.n_target_data == 0 and cfg.n_pred_steps == 1:
             data_dict["infilled"] = (1 - data_dict["mask"])
             data_dict["infilled"] *= data_dict["output"]
-            data_dict["infilled"] += data_dict["mask"] * data_dict["gt"]
+            data_dict["infilled"] += data_dict["mask"] * data_dict["gt"].nan_to_num()
 
         create_outputs(data_dict, eval_path, output_names, data_stats, xr_dss, i_model, split, index)
 
