@@ -360,7 +360,7 @@ class pyramid_step_model(nn.Module):
         comm = MPI.COMM_WORLD
         rank = comm.Get_rank() # get your process ID
 
-        data = []
+        data_input = []
 
         if rank == 0: 
             data_input = self.preprocess_data_patches(ds, ts=ts, device='cpu', ds_target=ds_target)[0]
