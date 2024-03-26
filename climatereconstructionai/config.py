@@ -137,6 +137,10 @@ def global_args(parser, arg_file=None, prog_func=None):
 
     assert len(time_steps) == 2
 
+    if all('.json' in data_name for data_name in data_names) and (lstm_steps or channel_steps):
+        print('Warning: Each input file defined in your ".json" files will be considered individually.'
+              ' This means the defined timesteps will not go beyond each files\' boundary.')
+
     return args
 
 
