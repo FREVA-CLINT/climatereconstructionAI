@@ -6,7 +6,7 @@ testdir = "tests/"
 
 
 @pytest.mark.training
-@pytest.mark.parametrize("file", os.listdir(testdir + "in/training/"))
+@pytest.mark.parametrize("file", sorted(os.listdir(testdir + "in/training/")))
 def test_training_run(file):
     from climatereconstructionai import train
     train('{}in/training/{}'.format(testdir, file))
