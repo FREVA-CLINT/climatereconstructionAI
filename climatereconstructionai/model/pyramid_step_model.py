@@ -365,6 +365,7 @@ class pyramid_step_model(nn.Module):
         if rank == 0: 
             data_input = self.preprocess_data_patches(ds, ts=ts, device='cpu', ds_target=ds_target)[0]
             data_input = split_list(data_input, n_procs)
+            print(f'prepared data for {n_procs} processes')
 
         data_input = comm.scatter(data_input, root=0)
 
@@ -380,6 +381,8 @@ class pyramid_step_model(nn.Module):
         results = comm.gather(result, root=0)            
         
         results = flatten_list(results)
+        
+        print(f'Got predictions from {len(results)} patches. Collecting data ...')
 
         var_spatial_dims = data_input[0][0][-1]
         spatial_dims_patches_target = data_input[0][0][-2]
