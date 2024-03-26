@@ -192,7 +192,7 @@ class pyramid_step_model(nn.Module):
             x, non_valid_var = self.output_net_post(x[:,list(self.output_res_indices.values()),:,:], coords_target_hr, non_valid)
 
         
-        if self.res_mode=='sample' and not isinstance(self.core_model, nn.Identity):
+        if self.res_mode == 'sample' and not isinstance(self.core_model, nn.Identity):
             coords_target_lr, non_valid = helpers.scale_coords(coords_target, self.range_region_source_radx, rngy=self.range_region_source_rady)
             x_pre = self.output_net_pre(x_reg_lr[:,list(self.output_res_indices.values()),:,:], coords_target_lr, non_valid)[0]
 
@@ -209,6 +209,7 @@ class pyramid_step_model(nn.Module):
             x = self.normalize(x, denorm=True)
 
         return x, x_reg_lr, core_output, non_valid_var
+    
     
     def apply_global(self, ds, ts=-1, device='cpu', ds_target=None):
             
@@ -236,102 +237,168 @@ class pyramid_step_model(nn.Module):
                 
             return output, {}
 
-    def apply_patches(self, ds, ts=-1, device='cpu', ds_target=None):
+    
+      
+    
+    def preprocess_data_patches(self, ds, ts=-1, device='cpu', ds_target=None):
+        data_source = {}
+        coords_source = {}
+
+        patches_target = gu.get_patches(
+            self.model_settings["grid_spacing_equator_km"],
+            self.model_settings["pix_size_patch"],
+            0)
+        
+        self.set_input_mapper(mode="interpolation")
+
+        spatial_dims_patches_source = {}
+        spatial_dims_patches_target = {}
+        spatial_dims_n_pts = {}
+
+
+        #collect all data
+        vars_target = self.model_settings['variables_target']
+        
+
+        for spatial_dim, vars in self.model_settings["spatial_dims_var_source"].items():
+
+            coord_dict = gu.get_coord_dict_from_var(ds, spatial_dim)
+            coords = gu.get_coords_as_tensor(ds, lon=coord_dict['lon'], lat=coord_dict['lat'])
+
+            ids_in_patches_source, patch_ids = gu.get_ids_in_patches(self.patches_source, coords.numpy())
+
+            spatial_dims_patches_source[spatial_dim] = ids_in_patches_source
+
+        for spatial_dim, vars in self.model_settings["spatial_dims_var_target"].items():
+
+            coord_dict = gu.get_coord_dict_from_var(ds_target, spatial_dim)
+            coords = gu.get_coords_as_tensor(ds_target, lon=coord_dict['lon'], lat=coord_dict['lat'])
+
+            ids_in_patches_target, patch_ids = gu.get_ids_in_patches(patches_target, coords.numpy())
+            spatial_dims_patches_target[spatial_dim] = ids_in_patches_target
+
+        # to batch: patch_indices
             
-            data_source = {}
+        data_input = []
+        for patch_id_idx in range(len(patch_ids['lon'])):
+
+            patch_borders_source_lon = self.patches_source["borders_lon"][patch_ids["lon"][int(patch_id_idx)]]
+            patch_borders_source_lat = self.patches_source["borders_lat"][patch_ids["lat"][int(patch_id_idx)]]
+
+            patch_borders_target_lon = self.patches_target["borders_lon"][patch_ids["lon"][int(patch_id_idx)]]
+            patch_borders_target_lat = self.patches_target["borders_lat"][patch_ids["lat"][int(patch_id_idx)]]
+    
             coords_source = {}
-
-            patches_target = gu.get_patches(
-                self.model_settings["grid_spacing_equator_km"],
-                self.model_settings["pix_size_patch"],
-                0)
-            
-            self.set_input_mapper(mode="interpolation")
-
-            spatial_dims_patches_source = {}
-            spatial_dims_patches_target = {}
-            spatial_dims_n_pts = {}
-
-
-            #collect all data
-            vars_target = self.model_settings['variables_target']
-            output_global = dict(zip(vars_target, [torch.tensor(ds_target[variable][0].values).squeeze().to(device) for variable in vars_target]))
-
-            if self.model_settings['gauss']:
-                output_global_std = dict(zip(vars_target, [torch.tensor(ds_target[variable][0].values).squeeze().to(device) for variable in vars_target]))
-            else:
-                output_global_std = {}
-
+            data_source = {}
             for spatial_dim, vars in self.model_settings["spatial_dims_var_source"].items():
-
+        
                 coord_dict = gu.get_coord_dict_from_var(ds, spatial_dim)
                 coords = gu.get_coords_as_tensor(ds, lon=coord_dict['lon'], lat=coord_dict['lat'])
 
-                ids_in_patches_source, patch_ids = gu.get_ids_in_patches(self.patches_source, coords.numpy())
+                indices = spatial_dims_patches_source[spatial_dim][patch_id_idx]
 
-                spatial_dims_patches_source[spatial_dim] = ids_in_patches_source
+                coords_source[spatial_dim] = self.get_coordinates_frame(coords[:,indices], patch_borders_source_lon, patch_borders_source_lat).unsqueeze(dim=0).to(device)
+                
+                for variable in vars:
+                    data_source[variable] = torch.tensor(ds[variable].values[ts,0,indices]).unsqueeze(dim=-1).unsqueeze(dim=0).to(device)
 
+
+            var_spatial_dims = {}
+            coords_target = {}
             for spatial_dim, vars in self.model_settings["spatial_dims_var_target"].items():
-
+        
                 coord_dict = gu.get_coord_dict_from_var(ds_target, spatial_dim)
                 coords = gu.get_coords_as_tensor(ds_target, lon=coord_dict['lon'], lat=coord_dict['lat'])
 
-                ids_in_patches_target, patch_ids = gu.get_ids_in_patches(patches_target, coords.numpy())
-                spatial_dims_patches_target[spatial_dim] = ids_in_patches_target
+                indices = spatial_dims_patches_target[spatial_dim][patch_id_idx]
+
+                coords_target[spatial_dim] = self.get_coordinates_frame(coords[:,indices], patch_borders_target_lon, patch_borders_target_lat).unsqueeze(dim=0).to(device)
+                var_spatial_dims.update(dict(zip(vars,[spatial_dim]*len(vars))))
 
 
-            for patch_id_idx in range(len(patch_ids['lon'])):
+            data_input.append([patch_id_idx, data_source, coords_target, coords_source, spatial_dims_patches_target, var_spatial_dims])
 
-                patch_borders_source_lon = self.patches_source["borders_lon"][patch_ids["lon"][int(patch_id_idx)]]
-                patch_borders_source_lat = self.patches_source["borders_lat"][patch_ids["lat"][int(patch_id_idx)]]
+        return data_input, spatial_dims_patches_target, var_spatial_dims
 
-                patch_borders_target_lon = self.patches_target["borders_lon"][patch_ids["lon"][int(patch_id_idx)]]
-                patch_borders_target_lat = self.patches_target["borders_lat"][patch_ids["lat"][int(patch_id_idx)]]
-        
-                coords_source = {}
-                data_source = {}
-                for spatial_dim, vars in self.model_settings["spatial_dims_var_source"].items():
+    def apply_patches(self, ds, ts=-1, device='cpu', ds_target=None):
             
-                    coord_dict = gu.get_coord_dict_from_var(ds, spatial_dim)
-                    coords = gu.get_coords_as_tensor(ds, lon=coord_dict['lon'], lat=coord_dict['lat'])
+        data_input, spatial_dims_patches_target, var_spatial_dims = self.preprocess_data_patches(ds, ts=ts, device='cpu', ds_target=ds_target)
 
-                    indices = spatial_dims_patches_source[spatial_dim][patch_id_idx]
+        output_global = dict(zip(var_spatial_dims.keys(), [torch.tensor(ds_target[variable][0].values).squeeze().to(device) for variable in var_spatial_dims.keys()]))
 
-                    coords_source[spatial_dim] = self.get_coordinates_frame(coords[:,indices], patch_borders_source_lon, patch_borders_source_lat).unsqueeze(dim=0).to(device)
-                    
-                    for variable in vars:
-                        data_source[variable] = torch.tensor(ds[variable].values[ts,0,indices]).unsqueeze(dim=-1).unsqueeze(dim=0).to(device)
+        if self.model_settings['gauss']:
+            output_global_std = dict(zip(var_spatial_dims.keys(), [torch.tensor(ds_target[variable][0].values).squeeze().to(device) for variable in var_spatial_dims.keys()]))
+        else:
+            output_global_std = {}
 
+        for data in data_input:
+            patch_id_idx, data_source, coords_target, coords_source = data[:4]
 
-                var_spatial_dims = {}
-                coords_target = {}
-                for spatial_dim, vars in self.model_settings["spatial_dims_var_target"].items():
-            
-                    coord_dict = gu.get_coord_dict_from_var(ds_target, spatial_dim)
-                    coords = gu.get_coords_as_tensor(ds_target, lon=coord_dict['lon'], lat=coord_dict['lat'])
-
-                    indices = spatial_dims_patches_target[spatial_dim][patch_id_idx]
-
-                    coords_target[spatial_dim] = self.get_coordinates_frame(coords[:,indices], patch_borders_target_lon, patch_borders_target_lat).unsqueeze(dim=0).to(device)
-                    var_spatial_dims.update(dict(zip(vars,[spatial_dim]*len(vars))))
-
-                with torch.no_grad():
-                    if self.model_settings['res_mode']=='sample':
-                        if 'apply_res' not in self.model_settings.keys():
-                            apply_res = False
-                        else:
-                            apply_res = self.model_settings['apply_res']
+            with torch.no_grad():
+                if self.model_settings['res_mode']=='sample':
+                    if 'apply_res' not in self.model_settings.keys():
+                        apply_res = False
                     else:
-                        apply_res = True
+                        apply_res = self.model_settings['apply_res']
+                else:
+                    apply_res = True
+                output = self(data_source, coords_target, coords_source=coords_source, norm=True, apply_res=apply_res)[0]
 
-                    output = self(data_source, coords_target, coords_source=coords_source, norm=True, apply_res=apply_res)[0]
+            for variable in output.keys():
+                indices = spatial_dims_patches_target[var_spatial_dims[variable]][patch_id_idx]
+                output_global[variable][indices] = output[variable][0,0,0]
 
-                for variable in output.keys():
-                    indices = spatial_dims_patches_target[var_spatial_dims[variable]][patch_id_idx]
-                    output_global[variable][indices] = output[variable][0,0,0]
+                if self.model_settings['gauss']:
+                    output_global_std[variable][indices] = output[variable][0,0,1]
+                
+            return output_global, output_global_std
+        
+    def apply_parallel(self, ds, ts=-1, device='cpu', ds_target=None, n_procs=1):
 
-                    if self.model_settings['gauss']:
-                        output_global_std[variable][indices] = output[variable][0,0,1]
+        from mpi4py import MPI
+
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank() # get your process ID
+
+        data = []
+
+        if rank == 0: 
+            data_input = self.preprocess_data_patches(ds, ts=ts, device='cpu', ds_target=ds_target)[0]
+            data_input = split_list(data_input, n_procs)
+
+        data_input = comm.scatter(data_input, root=0)
+
+        result = []
+        for data in data_input:
+            patch_id_idx, data_source, coords_target, coords_source, spatial_dims_patches_target, var_spatial_dims = data
+            
+            with torch.no_grad():
+                output = self(data_source, coords_target, coords_source=coords_source, norm=True)[0]
+            result.append([patch_id_idx, output])
+
+        # Send the results back to the master processes
+        results = comm.gather(result, root=0)            
+        
+        results = flatten_list(results)
+
+        var_spatial_dims = data_input[0][0][-1]
+        spatial_dims_patches_target = data_input[0][0][-2]
+
+        output_global = dict(zip(var_spatial_dims.keys(), [torch.tensor(ds_target[variable][0].values).squeeze().to(device) for variable in var_spatial_dims.keys()]))
+        if self.model_settings['gauss']:
+            output_global_std = dict(zip(var_spatial_dims.keys(), [torch.tensor(ds_target[variable][0].values).squeeze().to(device) for variable in var_spatial_dims.keys()]))
+        else:
+            output_global_std = {}
+
+        for result in results:
+            patch_id_idx, output = result
+
+            for variable in output.keys():
+                indices = spatial_dims_patches_target[var_spatial_dims[variable]][patch_id_idx]
+                output_global[variable][indices] = output[variable][0,0,0]
+
+                if self.model_settings['gauss']:
+                    output_global_std[variable][indices] = output[variable][0,0,1]
                 
             return output_global, output_global_std
     
@@ -340,7 +407,6 @@ class pyramid_step_model(nn.Module):
         vlon = np.mod((vlon + shift)+np.pi, 2*np.pi)-np.pi
         pass
         
-
 
     def get_coordinates_frame(self, coords, patch_borders_lon, patch_borders_lat):
 
@@ -466,14 +532,6 @@ class pyramid_step_model(nn.Module):
                 [0,1],
                 method=self.model_settings['interpolation_method'] if 'interpolation_method' in self.model_settings else 'nearest' 
             )
-
-    # -> high-level models first, cache results, then fusion
-    def apply_serial(self):
-        pass
-
-    # feed data from all levels into the model at once
-    def apply_parallel(self):
-        pass
     
     def get_region_generator_settings(self, lon_trans=False):
         if lon_trans:
@@ -632,3 +690,18 @@ def merge_debug_information(debug_info, debug_info_new):
     return debug_info
 
 
+def split_list(lst, num_sublists):
+    sublist_length = len(lst) // num_sublists
+    sublists = [lst[i*sublist_length:(i+1)*sublist_length] for i in range(num_sublists)]
+    sublists[-1].extend(lst[num_sublists*sublist_length:])
+
+    return sublists
+
+def flatten_list(lst):
+    flattened = []
+    for item in lst:
+        if isinstance(item, list):
+            flattened.extend(flatten_list(item))
+        else:
+            flattened.append(item)
+    return flattened
