@@ -137,6 +137,10 @@ def global_args(parser, arg_file=None, prog_func=None):
 
     assert len(time_steps) == 2
 
+    if all('.json' in data_name for data_name in data_names) and (lstm_steps or channel_steps):
+        print('Warning: Each input file defined in your ".json" files will be considered individually.'
+              ' This means the defined timesteps will not go beyond each files\' boundary.')
+
     return args
 
 
@@ -147,7 +151,8 @@ def set_common_args():
     arg_parser.add_argument('--mask-dir', type=str, default='masks/', help="Directory containing the mask datasets")
     arg_parser.add_argument('--log-dir', type=str, default='logs/', help="Directory where the log files will be stored")
     arg_parser.add_argument('--data-names', type=str_list, default='train.nc',
-                            help="Comma separated list of netCDF files (climate dataset) for training/infilling")
+                            help="Comma separated list of netCDF files (climate dataset) or JSON files"
+                                 " containing a list of paths to netCDF files for training/infilling")
     arg_parser.add_argument('--mask-names', type=str_list, default=None,
                             help="Comma separated list of netCDF files (mask dataset). "
                                  "If None, it extracts the masks from the climate dataset")

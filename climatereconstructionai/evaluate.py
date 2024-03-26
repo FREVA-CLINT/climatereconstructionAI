@@ -38,7 +38,7 @@ def evaluate(arg_file=None, prog_func=None):
         dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.data_names, cfg.mask_dir, cfg.mask_names, "infill",
                                    cfg.data_types, cfg.time_steps, data_stats)
 
-        n_samples = dataset_val.img_length
+        n_samples = len(dataset_val)
 
         if data_stats is None:
             if cfg.normalize_data:
