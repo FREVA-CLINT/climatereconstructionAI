@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 import copy
 import xarray as xr
 import math
@@ -249,8 +250,6 @@ class pyramid_step_model(nn.Module):
             self.model_settings["pix_size_patch"],
             0)
         
-        self.set_input_mapper(mode="interpolation")
-
         spatial_dims_patches_source = {}
         spatial_dims_patches_target = {}
         spatial_dims_n_pts = {}
@@ -259,7 +258,6 @@ class pyramid_step_model(nn.Module):
         #collect all data
         vars_target = self.model_settings['variables_target']
         
-
         for spatial_dim, vars in self.model_settings["spatial_dims_var_source"].items():
 
             coord_dict = gu.get_coord_dict_from_var(ds, spatial_dim)
@@ -316,13 +314,15 @@ class pyramid_step_model(nn.Module):
                 var_spatial_dims.update(dict(zip(vars,[spatial_dim]*len(vars))))
 
 
-            data_input.append([patch_id_idx, data_source, coords_target, coords_source, spatial_dims_patches_target, var_spatial_dims])
+            data_input.append([patch_id_idx, data_source, coords_target, coords_source])
 
         return data_input, spatial_dims_patches_target, var_spatial_dims
 
     def apply_patches(self, ds, ts=-1, device='cpu', ds_target=None):
             
         data_input, spatial_dims_patches_target, var_spatial_dims = self.preprocess_data_patches(ds, ts=ts, device='cpu', ds_target=ds_target)
+
+        print(f'prepared data for {len(data_input)} patches')
 
         output_global = dict(zip(var_spatial_dims.keys(), [torch.tensor(ds_target[variable][0].values).squeeze().to(device) for variable in var_spatial_dims.keys()]))
 
@@ -332,7 +332,8 @@ class pyramid_step_model(nn.Module):
             output_global_std = {}
 
         for data in data_input:
-            patch_id_idx, data_source, coords_target, coords_source = data[:4]
+            patch_id_idx, data_source, coords_target, coords_source = data
+            print(f'processing patch {patch_id_idx}')
 
             with torch.no_grad():
                 if self.model_settings['res_mode']=='sample':
@@ -350,31 +351,27 @@ class pyramid_step_model(nn.Module):
 
                 if self.model_settings['gauss']:
                     output_global_std[variable][indices] = output[variable][0,0,1]
-                
-            return output_global, output_global_std
+            
+        return output_global, output_global_std
         
     def apply_parallel(self, ds, ts=-1, device='cpu', ds_target=None, n_procs=1):
-
+        
         self.set_input_mapper(mode="interpolation")
 
         from mpi4py import MPI
 
         comm = MPI.COMM_WORLD
-        rank = comm.Get_rank() # get your process ID
+        rank = comm.Get_rank() 
 
         torch.set_num_threads(1)
 
-        print(f'number of cpus: {os.cpu_count()}')
-        print(f'number of threads: {torch.get_num_threads()}')
-
         data_input = []
+         
+        data_input, spatial_dims_patches_target, var_spatial_dims = self.preprocess_data_patches(ds, ts=ts, device='cpu', ds_target=ds_target)
+        data_input = split_list(data_input, n_procs)
+        print(f'prepared data for {n_procs} processes')
 
-        if rank == 0: 
-            data_input, spatial_dims_patches_target, var_spatial_dims = self.preprocess_data_patches(ds, ts=ts, device='cpu', ds_target=ds_target)
-            data_input = split_list(data_input, n_procs)
-            print(f'prepared data for {n_procs} processes')
-
-        data_input = comm.scatter(data_input, root=0)
+        data_input = data_input[rank]
 
         result = []
         for data in data_input:
