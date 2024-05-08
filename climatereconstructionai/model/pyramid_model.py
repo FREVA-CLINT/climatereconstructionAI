@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import xarray as xr
 import math
-from .. import transformer_training as trainer
+from .. import unet_training as trainer
 
 import climatereconstructionai.model.transformer_helpers as helpers
 import climatereconstructionai.model.pyramid_step_model as pysm

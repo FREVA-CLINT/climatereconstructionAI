@@ -16,7 +16,17 @@ def distance_on_sphere(lon1,lat1,lon2,lat2):
     d_rad = 2*torch.arcsin(torch.sqrt(asin + (1-asin-torch.sin((lat1+lat2)/2)**2)*torch.sin(d_lon/2)**2))
     return d_rad
 
-def get_coords_as_tensor(grid, lon='vlon', lat='vlat'):
+def get_coords_as_tensor(grid, lon='vlon', lat='vlat', grid_type=None):
+
+    if grid_type == 'cell':
+        lon, lat = 'clon', 'clat'
+
+    elif grid_type == 'vertex':
+        lon, lat = 'vlon', 'vlat'
+
+    elif grid_type == 'edge':
+        lon, lat = 'elon', 'elat'
+    
     lons = torch.tensor(grid[lon].values)
     lats = torch.tensor(grid[lat].values)
     coords = torch.stack((lons, lats))
@@ -769,3 +779,145 @@ class grid_interpolator(nn.Module):
             grid_z[np.isnan(grid_z)] = grid_z_nn[np.isnan(grid_z)]
 
         return torch.tensor(grid_z, device=device).float()
+    
+
+
+def get_distance_angle(lon1, lat1, lon2, lat2):
+
+    d_lats = distance_on_sphere(lon1, lat1, lon2, lat1)
+    d_lons = distance_on_sphere(lon1, lat1, lon1, lat2)
+
+    sgn = torch.sign(lat2-lat1)
+    sgn[(d_lats ).abs()/torch.pi>1] = sgn[(d_lats).abs()/torch.pi>1]*-1
+    d_lats_s = d_lats*sgn
+
+    sgn = torch.sign(lon2-lon1)
+    sgn[(d_lons).abs()/torch.pi>1] = sgn[(d_lons).abs()/torch.pi>1]*-1
+    d_lons_s = d_lons*sgn
+
+
+    distance = torch.sqrt(d_lats**2 + d_lons**2)
+    phi = torch.atan2(d_lats_s, d_lons_s)
+
+    return distance, phi
+
+
+
+def get_nearest_to_icon_rec(c_t_global, c_i, level=7, global_indices_i=None, nh=5, search_radius=5):
+
+    n_coords, n_sec_i, n_pts_i = c_i.shape
+    n_target = c_t_global.shape[-1]
+
+    id_t = torch.arange(n_target)
+
+    n_level = n_target // 4**level
+
+    if level > 0:
+        mid_points_corners = id_t.reshape(-1, 4, 4**(level-1))[:,1:,0]
+        mid_points = id_t.reshape(-1, 4, 4**(level-1))[:,[0],0]
+    else:
+        mid_points_corners = id_t.reshape(-1,4)[:,1:].repeat_interleave(4, dim=0)
+        mid_points = id_t.unsqueeze(dim=-1)
+
+    # get radius
+    c_t_ = c_t_global[:,mid_points_corners]
+    c_t_m = c_t_global[:,mid_points]
+
+    dist_corners = get_distance_angle(c_t_[0].unsqueeze(dim=-1),c_t_[1].unsqueeze(dim=-1), c_t_m[0].unsqueeze(dim=-2),c_t_m[1].unsqueeze(dim=-2))[0]
+    dist_corners_max = search_radius*dist_corners.max(dim=-1).values.max()
+
+    c_i_ = c_i
+
+    c_t_m = c_t_m.reshape(2, n_sec_i, -1)
+
+    dist, phi = get_distance_angle(c_t_m[0].unsqueeze(dim=-1),c_t_m[1].unsqueeze(dim=-1), c_i_[0].unsqueeze(dim=-2),c_i_[1].unsqueeze(dim=-2))
+    dist = dist.reshape(n_level, -1)
+    phi = phi.reshape(n_level, -1)
+
+    in_rad = dist <= dist_corners_max
+
+    dist_values, indices_rel = dist.topk(in_rad.sum(dim=-1).max(), dim=-1, largest=False, sorted=True)
+    
+
+    if global_indices_i is None:
+        global_indices = indices_rel
+    else:
+        global_indices = torch.gather(global_indices_i, index=indices_rel.reshape(global_indices_i.shape[0],-1), dim=-1)
+        global_indices = global_indices.reshape(n_level,-1)
+    
+    n_keep = torch.tensor([nh*4**level, dist_values.shape[1]]).min()
+
+    indices_keep = dist_values.topk(int(n_keep), dim=-1, largest=False, sorted=True)[1]
+
+    dist_values = torch.gather(dist_values, index=indices_keep, dim=-1)
+    in_rad = torch.gather(in_rad.reshape(n_level, -1), index=indices_keep, dim=-1)
+    global_indices = torch.gather(global_indices, index=indices_keep, dim=-1)
+
+    phi_values = torch.gather(phi, index=indices_keep, dim=-1)
+
+    return global_indices, in_rad, (dist_values, phi_values)
+
+
+def get_mapping_to_icon_grid(coords_icon, coords_input, search_raadius=3, max_nh=10, level_start=7):
+
+    grid_mapping = []
+    for k in range(level_start+1):
+        level = level_start - (k)
+
+        if k == 0:
+            indices, in_rng, pos = get_nearest_to_icon_rec(coords_icon, coords_input.unsqueeze(dim=1), level=level, nh=max_nh, search_radius=search_raadius)
+        else:
+            indices, in_rng, pos = get_nearest_to_icon_rec(coords_icon, coords_input[:,indices], level=level, global_indices_i=indices, nh=max_nh, search_radius=search_raadius)
+
+        grid_mapping.append({'level': level, 'indices': indices, 'pos': pos, 'in_rng_mask': in_rng}) 
+
+    return grid_mapping
+
+
+def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, grid_types, search_raadius=3, max_nh=10, level_start=7):
+    
+    grid_icon = xr.open_dataset(grid_file_icon)
+    grid = xr.open_dataset(grid_file)
+
+    lookup = {'edge': {'cell': 'adjacent_cell_of_edge',
+                       'vertex': 'edge_vertices',
+                       'edge': 'edge_index'},
+
+              'cell': {'edge': 'edge_of_cell',
+                       'vertex': 'vertex_of_cell',
+                       'cell': 'cell_index'},
+
+               'vertex': {'edge': 'edges_of_vertex',
+                       'cell': 'cells_of_vertex',
+                        'vertex': 'vertex_index'}}
+
+    mapping_icon = {}
+
+    for grid_type_icon in grid_types_icon:
+        
+        coords_icon = get_coords_as_tensor(grid_icon, grid_type=grid_type_icon)
+
+        mapping_grid_type = {}
+        for grid_type in grid_types:
+            coords_input = get_coords_as_tensor(grid, grid_type=grid_type)
+
+            if grid_file_icon == grid_file:
+                indices = torch.tensor(grid_icon[lookup[grid_type_icon][grid_type]].values -1).T
+                if grid_type_icon == grid_type:
+                    indices = indices.unsqueeze(dim=-1)
+
+            else:
+                mapping = get_mapping_to_icon_grid(
+                    coords_icon,
+                    coords_input,
+                    search_raadius=search_raadius,
+                    max_nh=max_nh,
+                    level_start=level_start)[-1]
+                
+                indices = mapping['indices']
+
+            mapping_grid_type[grid_type] = indices
+        mapping_icon[grid_type_icon] = mapping_grid_type
+
+    return mapping_icon
+

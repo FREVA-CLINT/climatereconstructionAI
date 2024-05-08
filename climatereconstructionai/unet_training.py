@@ -11,13 +11,11 @@ import netCDF4 as netcdf
 
 from .utils import twriter_t, early_stopping, optimization
 from .utils.io import save_ckpt
-from .utils.netcdfloader_trans import NetCDFLoader_lazy, InfiniteSampler
+from .utils.netcdfloader_patches import NetCDFLoader_lazy, InfiniteSampler, SampleLoader
 
 def arclen(p1,p2):
   length = 2*torch.arcsin(torch.linalg.norm(p2-p1,axis=-1)/2)
   return length
-
-
 
 
 class AscentFunction(torch.autograd.Function):
@@ -146,40 +144,78 @@ def train(model, training_settings, model_settings={}):
         sample_dir_train=''
         sample_dir_val=''
 
+    if 'train_on_samples' in training_settings.keys() and training_settings['train_on_samples']:
 
-    dataset_train = NetCDFLoader_lazy(source_files_train, 
-                                target_files_train,
-                                training_settings['variables_source'],
-                                training_settings['variables_target'],
-                                model_settings['normalization'],
-                                training_settings['coarsen_sample_level'],
-                                files_target_past=target_files_past_train,
-                                index_range_source=training_settings['index_range_source'] if 'index_range_source' in training_settings else None,
-                                index_offset_target=training_settings['index_offset_target'] if 'index_offset_target' in training_settings else 0,
-                                sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
-                                lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
-                                sample_condition_dict=training_settings['sample_condition_dict'],
-                                model_settings=model_settings)
-    
-    dataset_val = NetCDFLoader_lazy(source_files_val, 
-                                target_files_val,
-                                training_settings['variables_source'],
-                                training_settings['variables_target'],
-                                model_settings['normalization'],
-                                training_settings['coarsen_sample_level'],
-                                files_target_past=target_files_past_val,
-                                index_range_source=training_settings['index_range_source'] if 'index_range_source' in training_settings else None,
-                                index_offset_target=training_settings['index_offset_target'] if 'index_offset_target' in training_settings else 0,
-                                sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
-                                lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
-                                sample_condition_dict=training_settings['sample_condition_dict'],
-                                model_settings=model_settings)
+        with open(os.path.join(sample_dir_train, 'dims_var_target.json'), 'r') as f:
+            dims_variables_target = json.load(f)
 
-    model_settings['normalization'] = norm_dict = dataset_train.norm_dict
+        with open(os.path.join(sample_dir_train, 'dims_var_source.json'), 'r') as f:
+            dims_variables_source = json.load(f)
 
-    if len(sample_dir_train)>0:
-        with open(os.path.join(sample_dir_train,'norm_dict.json'), 'w') as f:
-            json.dump(norm_dict, f, indent=4)
+        dataset_train = SampleLoader(sample_dir_train, dims_variables_source, dims_variables_target, training_settings['variables_source'], training_settings['variables_target'])
+        dataset_val = SampleLoader(sample_dir_val, dims_variables_source, dims_variables_target, training_settings['variables_source'], training_settings['variables_target'])
+       
+        with open(os.path.join(sample_dir_train,'norm_dict.json'), 'r') as f:
+            norm_dict = json.load(f)
+
+        model_settings['normalization'] = norm_dict
+    else:
+
+        dataset_train = NetCDFLoader_lazy(source_files_train, 
+                                    target_files_train,
+                                    training_settings['variables_source'],
+                                    training_settings['variables_target'],
+                                    model_settings['normalization'],
+                                    model_settings["grid_spacing_equator_km"],
+                                    model_settings["pix_size_patch"],
+                                    model_settings["patches_overlap_source"],
+                                    model_settings["patches_overlap_target"],
+                                    files_target_past=target_files_past_train,
+                                    p_dropout_source=training_settings['p_dropout_source'],
+                                    p_dropout_target=training_settings['p_dropout_target'],
+                                    n_pts_min = training_settings["n_pts_min"] if 'n_pts_min' in training_settings else True,
+                                    save_nc_sample_path='',
+                                    save_tensor_sample_path=sample_dir_train,
+                                    index_range_source=training_settings['index_range_source'] if 'index_range_source' in training_settings else None,
+                                    index_offset_target=training_settings['index_offset_target'] if 'index_offset_target' in training_settings else 0,
+                                    rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False,
+                                    sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
+                                    lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
+                                    rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False,
+                                    interpolation_dict=training_settings['interpolation'],
+                                    sample_patch_range_lat=training_settings['sample_patch_range_lat'] if 'sample_patch_range_lat' in training_settings else [-math.pi,math.pi],
+                                    sample_condition_dict=training_settings['sample_condition_dict'] if 'sample_condition_dict' in training_settings else {})
+        
+        dataset_val = NetCDFLoader_lazy(source_files_val, 
+                                    target_files_val,
+                                    training_settings['variables_source'],
+                                    training_settings['variables_target'],
+                                    model_settings['normalization'],
+                                    model_settings["grid_spacing_equator_km"],
+                                    model_settings["pix_size_patch"],
+                                    model_settings["patches_overlap_source"],
+                                    model_settings["patches_overlap_target"],
+                                    files_target_past=target_files_past_val,
+                                    p_dropout_source=training_settings['p_dropout_source'],
+                                    p_dropout_target=training_settings['p_dropout_target'],
+                                    n_pts_min = training_settings["n_pts_min"] if 'n_pts_min' in training_settings else True,
+                                    save_nc_sample_path='',
+                                    save_tensor_sample_path=sample_dir_val,
+                                    index_range_source=training_settings['index_range_source'] if 'index_range_source' in training_settings else None,
+                                    index_offset_target=training_settings['index_offset_target'] if 'index_offset_target' in training_settings else 0,
+                                    rel_coords=training_settings['rel_coords'] if 'rel_coords' in training_settings else False,
+                                    sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
+                                    lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
+                                    rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False,
+                                    interpolation_dict=training_settings['interpolation'],
+                                    sample_patch_range_lat=training_settings['sample_patch_range_lat'] if 'sample_patch_range_lat' in training_settings else [-math.pi,math.pi],
+                                    sample_condition_dict=training_settings['sample_condition_dict'] if 'sample_condition_dict' in training_settings else {})
+
+        model_settings['normalization'] = norm_dict = dataset_train.norm_dict
+
+        if len(sample_dir_train)>0:
+            with open(os.path.join(sample_dir_train,'norm_dict.json'), 'w') as f:
+                json.dump(norm_dict, f, indent=4)
 
     model_settings_path = os.path.join(model_settings['model_dir'],'model_settings.json')
     with open(model_settings_path, 'w') as f:
@@ -207,7 +243,7 @@ def train(model, training_settings, model_settings={}):
 
     early_stop = early_stopping.early_stopping(training_settings['early_stopping_delta'], training_settings['early_stopping_patience'])
 
-    loss_calculator = optimization.loss_calculator(training_settings, model_settings['variables_target'])    
+    loss_calculator = optimization.loss_calculator(training_settings, model.model_settings['spatial_dims_var_target'])    
 
     lambdas_var = training_settings['lambdas_var']
     lambdas_stat = training_settings['lambdas']
@@ -251,12 +287,13 @@ def train(model, training_settings, model_settings={}):
         model.train()
 
         data = [data_to_device(x, device) for x in next(iterator_train)]
-        source, target, indices = data
+        source, target, coords_source, coords_target = data[:4] # for backward compability
+        target_indices = data[-1]
 
         if 'k_l1_relv' in lambdas_optim.keys():
-            train_total_loss, train_loss_dict = loss_calculator(lambdas_optim, target, model, source, source_indices=indices, k=lambdas_optim['k_l1_relv'], model_type='transformer')
+            train_total_loss, train_loss_dict = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, k=lambdas_optim['k_l1_relv'])
         else:
-            train_total_loss, train_loss_dict = loss_calculator(lambdas_optim, target, model, source, source_indices=indices, k=None, model_type='transformer')
+            train_total_loss, train_loss_dict = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, k=None)
 
         train_losses_hist.append(train_loss_dict['total_loss'])
 
@@ -293,26 +330,32 @@ def train(model, training_settings, model_settings={}):
             for _ in range(training_settings['n_iters_val']):
 
                 data = [data_to_device(x, device) for x in next(iterator_val)]
-                source, target, indices = data
+                source, target, coords_source, coords_target = data[:4] # for backward compability
+                target_indices = data[-1]               
 
                 if 'k_l1_relv' in lambdas_optim.keys():
-                    val_total_loss, val_loss_dict, output, target, _, debug_dict = loss_calculator(lambdas_optim, target, model, source, source_indices=indices, k=lambdas_optim['k_l1_relv'], val=True, model_type='transformer')
+                    _, val_loss_dict, output, target, output_reg_hr, output_reg_lr, non_valid_mask = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, val=True, k=lambdas_optim['k_l1_relv'])
                 else:
-                    val_total_loss, val_loss_dict, output, target, _,debug_dict = loss_calculator(lambdas_optim, target, model, source, source_indices=indices, k=None, val=True, model_type='transformer')
-                
+                    _, val_loss_dict, output, target, output_reg_hr, output_reg_lr, non_valid_mask = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, val=True, k=None)
+
                 val_losses.append(list(val_loss_dict.values()))
             
             val_loss = torch.tensor(val_losses).mean(dim=0)
             val_loss = dict(zip(val_loss_dict.keys(), val_loss))
             
             val_losses_hist.append(val_loss['total_loss'])
-            
+            debug_dict = {}
             if training_settings['save_debug']:
                 torch.save(debug_dict, os.path.join(log_dir,'debug_dict.pt'))
+                torch.save(coords_source,os.path.join(log_dir,'coords_source.pt'))
+                torch.save(target_indices,os.path.join(log_dir,'target_indices.pt'))
+                torch.save(coords_target,os.path.join(log_dir,'coords_target.pt'))
                 torch.save(output, os.path.join(log_dir,'output.pt'))
+                torch.save(output_reg_hr, os.path.join(log_dir,'output_reg_hr.pt'))
+                torch.save(output_reg_lr, os.path.join(log_dir,'output_reg_lr.pt'))
                 torch.save(target, os.path.join(log_dir,'target.pt'))
                 torch.save(source, os.path.join(log_dir,'source.pt'))
-                torch.save(indices, os.path.join(log_dir,'indices.pt'))
+                torch.save(non_valid_mask, os.path.join(log_dir,'non_valid_mask.pt'))
                 np.savetxt(os.path.join(log_dir,'losses_val.txt'),np.array(val_losses_hist))
                 np.savetxt(os.path.join(log_dir,'losses_train.txt'),np.array(train_losses_hist))
                 np.savetxt(os.path.join(log_dir,'lrs.txt'),np.array(lrs))

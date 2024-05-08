@@ -132,7 +132,7 @@ class res_blocks(nn.Module):
         return self.pool(x), x
 
 class encoder(nn.Module): 
-    def __init__(self, hw_in, factor, n_levels, n_blocks, u_net_channels, in_channels, k_size=3, k_size_in=7, min_att_dim=0, batch_norm=True, n_groups=1, dropout=0, bias=True, global_padding=False, initial_res=False, down_method='max'):
+    def __init__(self, hw_in, factor, n_levels, n_blocks, u_net_channels, in_channels, k_size=3, k_size_in=7, min_att_dim=0, batch_norm=True, n_groups=1, dropout=0, bias=True, global_padding=False, initial_res=False, initial_stride=1, down_method='max'):
         super().__init__()
 
         hw_in = torch.tensor(hw_in)
@@ -147,12 +147,14 @@ class encoder(nn.Module):
                 with_res = initial_res
                 groups = n_groups
                 k_size_layer = k_size_in
+                stride = initial_stride
             else:
                 in_channels_block = out_channels_block
                 out_channels_block = u_net_channels*(2**(n))
                 groups=1
                 with_res = True
                 k_size_layer = k_size
+                stride = 1
 
             factor_level = 1 if n == n_levels-1 else factor
             hw = hw_in/(factor**(n))
@@ -164,7 +166,8 @@ class encoder(nn.Module):
 
             self.layer_configs.append({'in_channels': in_channels_block,
                                  'out_channels': out_channels_block,
-                                 'hw': hw})
+                                 'hw': hw,
+                                 'stride': stride})
             
 
             self.layers.append(res_blocks(list(hw.long()), n_blocks, in_channels_block, out_channels_block, k_size=k_size_layer, batch_norm=batch_norm, groups=groups, with_att=with_att, with_res=with_res, factor=factor_level, dropout=dropout, bias=bias, global_padding=global_padding, down_method=down_method))

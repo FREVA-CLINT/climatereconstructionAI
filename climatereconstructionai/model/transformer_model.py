@@ -2,7 +2,7 @@ import json
 import os
 import copy
 import torch.nn as nn
-from .. import transformer_training as trainer
+from .. import unet_training as trainer
 from .. import transformer_infer as inference
 from ..utils.io import load_ckpt
 

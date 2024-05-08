@@ -73,6 +73,41 @@ class normalizer(torch.nn.Module):
             data[var] = norm_fcn(data_var, moments, denorm)
         return data
 
+class grid_normalizer(torch.nn.Module):
+    def __init__(self, norm_dict):
+        super().__init__()
+
+        self.norm_dict = norm_dict
+
+        self.norm_fcn_dict = {
+            'quantile':norm_min_max,
+            'quantile_abs':norm_max,
+            'min_max':norm_max,
+            'normal':norm_mean_std,
+            "None":identity
+        }
+       
+        if 'uv' in norm_dict.keys():
+            self.uniform_norm_uv = True
+        else:
+            self.uniform_norm_uv = False
+
+    def __call__(self, data, grid_vars, denorm=False):
+        for grid_type, vars in grid_vars.items():
+            
+            for k, var in enumerate(vars):
+                data_var = data[grid_type]
+                data_var = data_var[:,:,k]
+                
+                if self.uniform_norm_uv and (var=='u' or var=='v'):
+                    var_lookup = 'uv'
+                else:
+                    var_lookup= var
+                moments = self.norm_dict[var_lookup]['moments']
+                norm_fcn = self.norm_fcn_dict[self.norm_dict[var_lookup]['type']]
+                data[grid_type][:,:,k] = norm_fcn(data_var, moments, denorm)
+        return data
+
 def identity(data, moments, denorm=False):
     return data 
 

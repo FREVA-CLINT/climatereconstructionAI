@@ -40,29 +40,46 @@ class ConvSelfAttention(nn.Module):
 
        
 
-def scaled_dot_product_rpe(q, k, v, a_k, a_v):
+def scaled_dot_product_rpe(q, k, v, aq=None, ak=None, av=None, bias=None, mask=None):
     # with relative position embeddings by shaw et al. (2018)
+    b, n_heads, t, head_dim = q.shape
+    s = k.shape[2]
 
     # q is the size of (t, dk)
     d_z = q.size()[-1] # embedding dimension
 
-    attn_logits_k = torch.matmul(q, k.transpose(-2, -1))
-    attn_logits_ak = torch.matmul(q, a_k.transpose(-2, -1))
+    attn_logits = torch.matmul(q, k.transpose(-2, -1))
+    
+    if ak is not None:
+        attn_logits_ak = torch.matmul(q.unsqueeze(dim=-2), ak.unsqueeze(dim=1).transpose(-2, -1)).view(b, n_heads, t, s)
+        attn_logits = (attn_logits + attn_logits_ak)
 
-    attn_logits = (attn_logits_k + attn_logits_ak)/torch.sqrt(torch.tensor(d_z))
+    if aq is not None:
+        attn_logits_aq = torch.matmul(k.unsqueeze(dim=-2), aq.unsqueeze(dim=1).transpose(-2, -1)).view(b, n_heads, t, s)
+        attn_logits = (attn_logits + attn_logits_aq)    
+    
+    attn_logits = attn_logits/torch.sqrt(torch.tensor(d_z))
+
+    if bias is not None:
+        attn_logits = attn_logits + bias
+
+    if mask is not None:
+        mask = mask.reshape(attn_logits.shape[0],1,mask.shape[-2],mask.shape[-1]).repeat(1,attn_logits.shape[1],1,1)
+        attn_logits = attn_logits.masked_fill(mask, -1e10)
 
     #softmax and scale
     attention = F.softmax(attn_logits, dim=-1)
 
-    attention_v = torch.matmul(attention, v)
-    attention_av = torch.matmul(attention, a_v)
+    values = torch.matmul(attention, v)
 
-    values = attention_v + attention_av
+    if av is not None:
+        attention_av = torch.matmul(attention.unsqueeze(dim=-2), av.unsqueeze(dim=1)).squeeze(dim=-2)
+        values = values + attention_av
 
     return values, attention
 
 
-def scaled_dot_product_rpe_swin(q, k, v, b=None, logit_scale=None):
+def scaled_dot_product_rpe_swin(q, k, v, b=None, logit_scale=None, mask=None):
     # with relative position embeddings swin transformer (2022)
     
     # q is the size of (t, dk)
@@ -81,8 +98,11 @@ def scaled_dot_product_rpe_swin(q, k, v, b=None, logit_scale=None):
     if b is not None:
         attn =  attn + b
 
-    attn = F.softmax(attn, dim=-1)
+    if mask is not None:
+        mask = mask.reshape(attn.shape[0],1,mask.shape[-2],mask.shape[-1]).repeat(1,attn.shape[1],1,1)
+        attn = attn.masked_fill(mask, -1e10)
 
+    attn = F.softmax(attn, dim=-1)
     values = torch.matmul(attn, v)
 
     return values, attn
@@ -118,15 +138,24 @@ class PositionEmbedder_phys_log(nn.Module):
         self.max_pos_phys = max_pos_phys
         self.min_pos_phys = min_pos_phys
         self.n_pos_emb = n_pos_emb
+        self.mn_mx_log = torch.tensor([self.min_pos_phys, self.max_pos_phys]).log10()
 
         self.embeddings_table = nn.Parameter(torch.Tensor(n_pos_emb + 1, n_heads))
         nn.init.xavier_uniform_(self.embeddings_table)
 
     def forward(self, d_mat, return_emb_idx=False):
         
-        d_mat_pos = (d_mat-self.min_pos_phys) / (self.max_pos_phys - self.min_pos_phys)
-    
-        d_mat_clipped = torch.clamp(torch.log(d_mat_pos), max=torch.tensor(0)).exp()
+        # not ready
+        sgn = torch.sign(d_mat)
+
+        d_mat_pos = torch.clamp(d_mat, min=self.min_pos_phys, max=self.max_pos_phys)
+        d_mat_pos = (d_mat) / (self.max_pos_phys - self.min_pos_phys)
+
+        d_mat_clipped = torch.log10(d_mat_pos) - self.mn_mx_log[0]
+
+        
+        d_mat_clipped = d_mat_clipped/torch.log10(self.max_pos_phys +1)
+
         d_mat_clipped = self.n_pos_emb * d_mat_clipped
         
         embeddings = self.embeddings_table[d_mat_clipped.long()]
@@ -294,8 +323,59 @@ class SelfAttentionRPPEBlock(nn.Module):
 
         return x 
 
-
 class MultiHeadAttentionBlock(nn.Module):
+    def __init__(self, model_dim, output_dim, n_heads, qkv_proj=False, dropout=0):
+        super().__init__()
+
+        self.n_heads = n_heads
+        self.head_dim = model_dim // n_heads
+        
+        self.output_projection = nn.Linear(model_dim, output_dim, bias=False)
+                
+        if qkv_proj:
+            self.qkv_projection = nn.ModuleList([nn.Linear(model_dim, model_dim, bias=False)]*3)
+        else:
+            self.qkv_projection = nn.ModuleList([nn.Identity()]*3)
+        
+        self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
+
+
+    def forward(self, q, k, v, ak=None, av=None, aq=None, bias=None, return_debug=False, mask=None):
+        # batch, sequence length, embedding dimension
+        bq, t = q.shape[0], q.shape[1] 
+        bk, s = k.shape[0], k.shape[1] 
+        bv, s = v.shape[0], v.shape[1] 
+
+        q = self.qkv_projection[0](q)
+        k = self.qkv_projection[1](k)
+        v = self.qkv_projection[2](v)
+
+        q = q.reshape(bq, t, self.n_heads, self.head_dim).permute(0,2,1,3)
+        k = k.reshape(bk, s, self.n_heads, self.head_dim).permute(0,2,1,3)
+        v = v.reshape(bv, s, self.n_heads, self.head_dim).permute(0,2,1,3)
+
+        if ak is not None:
+            ak = ak.reshape(bk, t, s, self.head_dim)
+        if av is not None:
+            av = av.reshape(bk, t, s, self.head_dim)
+        if aq is not None:
+            aq = aq.reshape(bk, t, s, self.head_dim).transpose(1,2)
+        if bias is not None:
+            bias = bias.reshape(bk, t, s, self.n_heads).permute(0,-1,1,2)
+
+        values, att = scaled_dot_product_rpe(q, k, v, ak=ak, av=av, aq=aq, bias=bias, mask=mask)
+
+        values = values.permute(0,2,1,3)
+        values = values.reshape(bv, t, self.head_dim*self.n_heads)
+
+        x = self.output_projection(values)
+
+        if return_debug:
+            return x , att
+        else:
+            return x    
+        
+class MultiHeadAttentionBlock_swin(nn.Module):
     def __init__(self, model_dim, output_dim, n_heads, logit_scale=False, qkv_proj=False, dropout=0):
         super().__init__()
 
@@ -317,7 +397,7 @@ class MultiHeadAttentionBlock(nn.Module):
         self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
 
 
-    def forward(self, q, k, v, rel_pos_bias=None, return_debug=False):
+    def forward(self, q, k, v, rel_pos_bias=None, return_debug=False, mask=None):
         # batch, sequence length, embedding dimension
         bq, t = q.shape[0], q.shape[1] 
         bk, s = k.shape[0], k.shape[1] 
@@ -339,7 +419,7 @@ class MultiHeadAttentionBlock(nn.Module):
         else:
             rel_pos_bias=None
 
-        values, att = scaled_dot_product_rpe_swin(q, k, v, rel_pos_bias, self.logit_scale)
+        values, att = scaled_dot_product_rpe_swin(q, k, v, rel_pos_bias, self.logit_scale, mask=mask)
 
         values = values.permute(0,2,1,3)
         values = values.reshape(bv, t, self.head_dim*self.n_heads)
@@ -830,3 +910,78 @@ class unstructured_to_reg_interpolator():
             x = torch.stack(x_spatial_dims, dim=0)
 
         return x
+    
+
+
+def unique_values(row):
+    return np.unique(row)
+
+def unique_count(row):
+    return np.unique(row, return_counts=True)[1].max()
+
+def coarsen_global_cells(cells, eoc, acoe, global_level=1, nh=1):
+
+    n_cells = cells.shape[-1]
+    n_cells_coarse = n_cells // 4**global_level
+
+    if len(cells.shape)>1:
+        batched=True
+        cells = cells.reshape(cells.shape[0],-1,4**global_level)
+        adjc = acoe.T[eoc.T[cells]]
+        for _ in range(nh-1):
+            adjc = acoe.T[eoc.T[adjc]]
+
+        adjc = adjc.reshape(cells.shape[0],n_cells_coarse,-1) // 4**global_level
+    else:
+        batched=False
+        cells = cells.reshape(-1,4**global_level)
+        adjc = acoe.T[eoc.T[cells]].reshape(n_cells_coarse,-1) // 4**global_level
+        for _ in range(nh-1):
+            adjc = acoe.T[eoc.T[adjc]]
+        
+        adjc = adjc.reshape(n_cells_coarse,-1) // 4**global_level
+
+    local_cells = cells // 4**global_level
+
+    out_of_fov = None
+
+    adjc_unique = (adjc).long().unique(dim=-1)
+
+    if batched:
+        self_indices = local_cells[:,:,[0]]
+    else:
+        self_indices = local_cells[:,[0]]
+    
+    is_self = adjc_unique - self_indices == 0
+
+    is_self_count = is_self.sum(axis=-1)
+
+    if torch.all(is_self_count==is_self_count[0]):
+
+        cells_nh = adjc_unique[~is_self]
+
+        if batched:
+            cells_nh = cells_nh.reshape(cells.shape[0], n_cells_coarse,-1)
+            
+            out_of_fov = torch.logical_or(cells_nh > local_cells.amax(dim=(-2,-1)).reshape(-1,1,1),
+                            cells_nh < local_cells.amin(dim=(-2,-1)).reshape(-1,1,1))
+            ind = torch.where(out_of_fov)
+            cells_nh[ind] = local_cells[ind[0],ind[1],0]
+        else:
+            cells_nh = cells_nh.reshape(cells.shape[0],3)
+
+    else:
+        cells_nh = None
+
+    return cells, local_cells, cells_nh, out_of_fov
+
+
+def get_nh_values(values, indices_nh=None, sample_indices=None, coarsest_level=4, global_level=0, nh=1):
+    if indices_nh is None:
+        return values[indices_nh]
+    else:
+        b,n,e = values.reshape(values.shape[0],values.shape[1],-1).shape
+        indices_offset_level = sample_indices*4**(coarsest_level-global_level)
+        indices_level = indices_nh - indices_offset_level.reshape(-1,1,1)
+
+        return torch.gather(values.reshape(b,-1,e),1, index=indices_level.reshape(b,-1,1).repeat(1,1,e)).reshape(b,n,3,e)

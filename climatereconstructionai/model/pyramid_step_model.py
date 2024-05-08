@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from .. import transformer_training as trainer
+from .. import unet_training as trainer
 from torchvision.transforms import GaussianBlur
 
 import climatereconstructionai.model.transformer_helpers as helpers

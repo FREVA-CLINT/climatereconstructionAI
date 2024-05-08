@@ -138,11 +138,14 @@ class physics_calculator():
         return var_normalVelocity, valid_mask, var_u_global, var_v_global
 
 
-    def get_vorticity_from_edge_indices(self, global_edge_indices, u, v, n_vert=6):
+    def get_vorticity_from_edge_indices(self, global_edge_indices, u, v, n_vert=6, normalv=None, normalvmask=None):
         b,n = global_edge_indices.shape
-        normalVelocity, mask,_,_ = self.get_normal_velocity_from_indices(global_edge_indices, u, v)
+
+        if normalv is None:
+            normalv, mask,_,_ = self.get_normal_velocity_from_indices(global_edge_indices, u, v)
+
         vort_mask = ((mask)[:,self.edges_of_vertex]).sum(axis=-1) >= n_vert
-        vort = ((normalVelocity*self.dual_edge_length)[:,self.edges_of_vertex]*self.signorient).sum(axis=-1)/self.dual_area.unsqueeze(dim=0)
+        vort = ((normalv*self.dual_edge_length)[:,self.edges_of_vertex]*self.signorient).sum(axis=-1)/self.dual_area.unsqueeze(dim=0)
 
         return vort.view(b,1,1,-1), ~vort_mask
 
@@ -162,18 +165,19 @@ class physics_calculator():
 
         return div
 
-    def get_divergence_from_edge_indices(self, global_edge_indices, u, v, filtered=True):
+    def get_divergence_from_edge_indices(self, global_edge_indices, u, v, filtered=True, normalv=None):
 
-        normalVelocity, mask,_,_ = self.get_normal_velocity_from_indices(global_edge_indices, u, v)
+        if normalv is None:
+            normalv, mask,_,_ = self.get_normal_velocity_from_indices(global_edge_indices, u, v)
         
         if filtered:
             # to be implemented
-            div = self.get_filtered_div(normalVelocity)
+            div = self.get_filtered_div(normalv)
             div_mask = mask[:,self.edge_of_cell].sum(dim=-1) == 3
 
         else:
             div_mask = mask[:,self.edge_of_cell].sum(dim=-1) == 3
-            div = ((normalVelocity*self.edge_length.unsqueeze(dim=0))[:,self.edge_of_cell]*self.orientation_of_normal.T.unsqueeze(dim=0)).sum(dim=-1)/self.cell_area.unsqueeze(dim=0)
+            div = ((normalv*self.edge_length.unsqueeze(dim=0))[:,self.edge_of_cell]*self.orientation_of_normal.T.unsqueeze(dim=0)).sum(dim=-1)/self.cell_area.unsqueeze(dim=0)
 
         div_sum = (self.cell_area.unsqueeze(dim=0)*div/self.rad).sum(dim=1)
        
@@ -190,13 +194,13 @@ class physics_calculator():
         return kin_energy, ~kin_energy_mask
     
 
-def get_vorticity(phys_calc, tensor_dict, global_edge_indices, n_vert=6):
+def get_vorticity(phys_calc, tensor_dict, global_edge_indices, n_vert=6, normalv=None):
     u = tensor_dict['u']
     v = tensor_dict['v']
 
     u = u[:,0,0] if u.dim()==4 else u
     v = v[:,0,0] if v.dim()==4 else v
-    vort, non_valid_mask = phys_calc.get_vorticity_from_edge_indices(global_edge_indices, u, v, n_vert=n_vert)
+    vort, non_valid_mask = phys_calc.get_vorticity_from_edge_indices(global_edge_indices, u, v, n_vert=n_vert, normalv=normalv)
     return vort, non_valid_mask
 
 
@@ -260,9 +264,13 @@ class L1Loss(nn.Module):
         else:
             self.loss = torch.nn.MSELoss()
 
-    def forward(self, output, target, non_valid_mask, k=None):
-        output_valid = output[:,0,0][~non_valid_mask]
-        target_valid = target.squeeze()[~non_valid_mask].squeeze()
+    def forward(self, output, target, non_valid_mask=None, k=None):
+        if non_valid_mask is not None:
+            output_valid = output[:,0,0][~non_valid_mask]
+            target_valid = target.squeeze()[~non_valid_mask].squeeze()
+        else:
+            output_valid = output
+            target_valid = target
         loss = self.loss(output_valid,target_valid)
         return loss
 
@@ -363,14 +371,15 @@ class DictLoss(nn.Module):
         self.loss_fcn = loss_fcn
         self.lambdas_var = lambdas_var
 
-    def forward(self, output, target, non_valid_mask, k=None):
+    def forward(self, output, target, non_valid_mask=None, k=None):
         loss_dict = {}
         total_loss = 0
 
         for var in output.keys():
             if var in self.lambdas_var.keys() and self.lambdas_var[var]>0:
                 if var != 'vort' and var != 'calc_vort' and var != 'rel_calc_vort' and var != 'rel_vort' and var !='div' and var != 'normalv' and var != 'spatial_div' and var != 'kin_energy'and var != 'rel_normalv'and var != 'gauss_normalv':
-                    loss = self.loss_fcn(output[var], target[var], non_valid_mask[var], k)
+                    non_valid_mask_var = non_valid_mask[var] if non_valid_mask is not None else None
+                    loss = self.loss_fcn(output[var], target[var], non_valid_mask_var, k)
                     total_loss+=self.lambdas_var[var]*loss
                     loss_dict[f'{var}_{str(self.loss_fcn._get_name())}'] = loss.item()
 
@@ -460,11 +469,17 @@ class VortLoss(nn.Module):
             n_vert=6
         spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
         uv_dim_indices = target_indices[spatial_dim_uv]
-        output_vort, non_valid_mask_vort = get_vorticity(self.phys_calc, output, uv_dim_indices, n_vert=n_vert)
+
+        if 'normalv' in output.keys():
+            normalv_output = output['normalv'].squeeze()
+            normalv_target = target['normalv'].squeeze()
+        else: normalv_output=normalv_target=None
+
+        output_vort, non_valid_mask_vort = get_vorticity(self.phys_calc, output, uv_dim_indices, n_vert=n_vert, normalv=normalv_output)
         non_valid_mask_vort[output_vort.squeeze().isnan()]=True
 
         if self.calc_target:
-            target_vort = get_vorticity(self.phys_calc, target, uv_dim_indices, n_vert=n_vert)[0]
+            target_vort = get_vorticity(self.phys_calc, target, uv_dim_indices, n_vert=n_vert, normalv=normalv_target)[0]
         else:
             target_vort = target['vort'].double()
             output_vort = torch.gather(output_vort, dim=-1, index=target_indices['ncells_2'].unsqueeze(dim=1).unsqueeze(dim=1))
@@ -578,9 +593,13 @@ class SpatialDivLoss(nn.Module):
         spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
         uv_dim_indices = target_indices[spatial_dim_uv]
 
-        div_output, non_valid_mask, _ = self.phys_calc.get_divergence_from_edge_indices(uv_dim_indices, u, v)
+        if 'normalv' in output.keys():
+            normalv_output = output['normalv'].squeeze()
+            normalv_target = target['normalv'].squeeze()
+        else: normalv_output=normalv_target=None
 
-        div_target, _, _ = self.phys_calc.get_divergence_from_edge_indices(uv_dim_indices, target['u'].squeeze(), target['v'].squeeze())
+        div_output, non_valid_mask, _ = self.phys_calc.get_divergence_from_edge_indices(uv_dim_indices, u, v, normalv=normalv_output)
+        div_target, _, _ = self.phys_calc.get_divergence_from_edge_indices(uv_dim_indices, target['u'].squeeze(), target['v'].squeeze(),normalv=normalv_target)
 
         output_valid = div_output[~non_valid_mask]
         target_valid = div_target[~non_valid_mask]
@@ -619,12 +638,12 @@ class Trivial_loss(nn.Module):
         return total_loss
 
 class loss_calculator(nn.Module):
-    def __init__(self, training_settings, spatial_dim_var_target):
+    def __init__(self, training_settings, grid_variables_dict):
         super().__init__()
 
-        self.spatial_dim_var_target = spatial_dim_var_target
         self.lambdas_var = training_settings['lambdas_var']
         self.lambdas_static = training_settings['lambdas']
+        self.grid_variables_dict = grid_variables_dict
 
         self.loss_fcn_dict = {} 
 
@@ -725,13 +744,25 @@ class loss_calculator(nn.Module):
                     phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
                 self.loss_fcn_dict['kin_energy_sum'] = SummedKinEnergyLoss(phys_calc)
 
-    def forward(self, lambdas_optim, target, model, source, coords_target, target_indices, coords_source=None, val=False, k=None):
+    def forward(self, lambdas_optim, target, model, source, coords_target=None, target_indices=None, source_indices=None, coords_source=None, val=False, k=None, model_type=None):
         
         if val:
             with torch.no_grad():
-                output, output_reg_lr, output_core, non_valid_mask = model(source, coords_target, coords_source=coords_source)
+                if model_type=='transformer':
+                    output, debug_dict = model(source, source_indices, debug=True)
+                    output = grid_dict_to_var_dict(output, self.grid_variables_dict)
+                    target = grid_dict_to_var_dict(target, self.grid_variables_dict)
+                    non_valid_mask = None
+                else:
+                    output, _, output_core, non_valid_mask = model(source, coords_target, coords_source=coords_source)
         else:
-            output, _, output_core, non_valid_mask = model(source, coords_target, coords_source=coords_source)
+            if model_type=='transformer':
+                output= model(source, source_indices)
+                output = grid_dict_to_var_dict(output, self.grid_variables_dict)
+                target = grid_dict_to_var_dict(target, self.grid_variables_dict)
+                non_valid_mask = None
+            else:
+                output, _, output_core, non_valid_mask = model(source, coords_target, coords_source=coords_source)
 
         if 'trivial' in self.loss_fcn_dict.keys() and not self.loss_fcn_dict['trivial'].registered:
             self.loss_fcn_dict['trivial'].register_samples(source, coords_target, target)
@@ -759,13 +790,13 @@ class loss_calculator(nn.Module):
                 loss =  loss_fcn(output, target, non_valid_mask)
 
             elif loss_type == 'vort' or loss_type == 'calc_vort' or loss_type == 'rel_calc_vort' or loss_type == 'rel_vort' or loss_type == 'spatial_div' or loss_type == 'kin_energy' or loss_type == 'kin_energy_sum' or loss_type == 'normalv' or loss_type == 'gauss_normalv' or loss_type == 'rel_normalv':
-                loss = loss_fcn(output, target, target_indices, self.spatial_dim_var_target, val=val)
+                loss = loss_fcn(output, target, target_indices, model.spatial_dim_var_target, val=val)
                 if val:
                     output[loss_type], target[loss_type], non_valid_mask[loss_type] = loss[1:]
                     loss = loss[0]
 
             elif loss_type == 'div':
-                loss =  loss_fcn(output, target_indices, self.spatial_dim_var_target)
+                loss =  loss_fcn(output, target_indices, model.spatial_dim_var_target)
             
             total_loss += self.lambdas_static[loss_type]*lambdas_optim[loss_type] * loss
             loss_dict[loss_type] = loss.item()
@@ -773,6 +804,15 @@ class loss_calculator(nn.Module):
         loss_dict['total_loss'] = total_loss.item()
         
         if val:
-            return total_loss, loss_dict, output, target, output_core, output_reg_lr, non_valid_mask
+            return total_loss, loss_dict, output, target, non_valid_mask, debug_dict
         else:
             return total_loss, loss_dict
+        
+
+def grid_dict_to_var_dict(grid_dict, grid_var_dict):
+    var_dict = {}
+    for grid_type, data in grid_dict.items():
+        variables = grid_var_dict[grid_type]
+        data = data.split([1]*len(variables), dim=-1)
+        var_dict.update(dict(zip(variables, data)))
+    return var_dict
