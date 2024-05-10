@@ -243,7 +243,7 @@ class NetCDFLoader_lazy(Dataset):
             data_target = self.get_data(ds_target, index, global_cells_sample, self.variables_target, self.output_mapping['cell'])
 
             for key, val in self.sample_condition_dict.items():
-                if data_source['edge'][:,:,0].abs().mean() >= val:
+                if data_source['cell'][:,:,0].abs().mean() >= val:
                     condition_not_met = False
 
 
