@@ -11,6 +11,14 @@ import climatereconstructionai.model.transformer_helpers as helpers
 from climatereconstructionai.utils.grid_utils import get_distance_angle, get_coords_as_tensor, get_mapping_to_icon_grid, get_nh_variable_mapping_icon
 from .. import transformer_training as trainer
 
+def dict_to_device(d, device):
+    for key, value in d.items():
+        if isinstance(value, dict):
+            for key2, value2 in value.items():
+                d[key][key2] = value2.to(device)
+        else:
+            d[key] = value.float().to(device)
+    return d
 
 def load_settings(dict_or_file, id='model'):
     if isinstance(dict_or_file, dict):
@@ -785,6 +793,9 @@ class ICON_Transformer(nn.Module):
                                     self.model_settings['input_grid'], self.input_data, 
                                     search_raadius=self.model_settings['search_raadius'], max_nh=self.model_settings['nh_input'], level_start=self.model_settings['level_start_input'])
 
+        self.input_mapping = dict_to_device(self.input_mapping, self.model_settings['device'])
+        self.input_coordinates = dict_to_device(self.input_coordinates, self.model_settings['device'])
+
         self.grid_n_input = {}
         for grid_type, mapping in self.input_mapping['cell'].items():   
             self.grid_n_input[grid_type] = mapping.shape[-1]   
@@ -800,6 +811,8 @@ class ICON_Transformer(nn.Module):
         for grid_type in self.output_data.keys():
             self.output_coordinates[grid_type] = get_coords_as_tensor(xr.open_dataset(self.model_settings['processing_grid']),grid_type=grid_type)
 
+        self.output_mapping = dict_to_device(self.output_mapping, self.model_settings['device'])
+        self.output_coordinates = dict_to_device(self.output_coordinates, self.model_settings['device'])
 
         self.grid_n_output = {}
         for grid_type, mapping in self.output_mapping['cell'].items():
@@ -857,10 +870,10 @@ class ICON_Transformer(nn.Module):
         distances_source, phis_source = get_distance_angle(coords1[0], coords1[1], coords2[0], coords2[1])
 
         #distances, phis = get_distance_angle(coords1[0].unsqueeze(dim=-1), coords1[1].unsqueeze(dim=-1), coords1[0].unsqueeze(dim=-2), coords1[1].unsqueeze(dim=-2))
-        distances_grid = torch.zeros_like(distances_source[:,:,[0]], device=sample_indices.device).float()
-        phi_grid = torch.zeros_like(phis_source[:,:,[0]], device=sample_indices.device).float()
+        distances_grid = torch.zeros_like(distances_source[:,:,[0]], device=self.model_settings['device']).float()
+        phi_grid = torch.zeros_like(phis_source[:,:,[0]], device=self.model_settings['device']).float()
 
-        return (distances_source.float().to(sample_indices.device), phis_source.float().to(sample_indices.device)), (distances_grid, phi_grid)
+        return (distances_source.float().to(self.model_settings['device']), phis_source.float().to(self.model_settings['device'])), (distances_grid, phi_grid)
     
 
 
@@ -877,7 +890,7 @@ class ICON_Transformer(nn.Module):
 
         distances, phis = get_distance_angle(coords1[0], coords1[1], coords2[0], coords2[1])
 
-        return distances.float().to(sample_indices.device), phis.float().to(sample_indices.device)
+        return distances.float().to(self.model_settings['device']), phis.float().to(self.model_settings['device'])
 
 
     def get_relative_positions(self, cell_indices1, cell_indices2):
@@ -897,7 +910,7 @@ class ICON_Transformer(nn.Module):
 
         distances, phis = get_distance_angle(coords1[0], coords1[1], coords2[0], coords2[1])
 
-        return distances.float().to(cell_indices1.device), phis.float().to(cell_indices1.device)
+        return distances.float().to(self.model_settings['device']), phis.float().to(self.model_settings['device'])
 
 
     def init_pos_embedding_table(self, n_out, embed_dim=64):
