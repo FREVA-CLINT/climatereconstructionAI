@@ -477,9 +477,9 @@ class ICON_Transformer(nn.Module):
 
         self.grid = xr.open_dataset(self.model_settings['processing_grid'])
         
-        self.cell_coords = get_coords_as_tensor(self.grid, lon='clon', lat='clat')
-        self.eoc = torch.tensor(self.grid.edge_of_cell.values - 1)
-        self.acoe = torch.tensor(self.grid.adjacent_cell_of_edge.values - 1)
+        self.cell_coords = get_coords_as_tensor(self.grid, lon='clon', lat='clat').to(self.model_settings['device'])
+        self.eoc = torch.tensor(self.grid.edge_of_cell.values - 1).to(self.model_settings['device'])
+        self.acoe = torch.tensor(self.grid.adjacent_cell_of_edge.values - 1).to(self.model_settings['device'])
 
         self.input_data  = self.model_settings['variables_source']
         self.output_data = self.model_settings['variables_target']
