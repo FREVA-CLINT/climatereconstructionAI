@@ -847,7 +847,7 @@ class ICON_Transformer(nn.Module):
 
     def coarsen_indices(self, global_level, indices=None, nh=1):
         if indices is None:
-            indices = torch.arange(len(self.grid.clon)).unsqueeze(dim=0)
+            indices = torch.arange(len(self.grid.clon)).unsqueeze(dim=0).to(self.model_settings['device'])
 
         global_cells, local_cells, cells_nh, out_of_fov_mask = helpers.coarsen_global_cells(indices, self.eoc, self.acoe, global_level=global_level, nh=nh)
         
