@@ -237,7 +237,7 @@ class NetCDFLoader_lazy(Dataset):
 
         if self.random_time_idx:
             index = int(torch.randint(0, len(ds_source.time.values), (1,1)))
-
+        '''
         condition_not_met = True
         while condition_not_met:
             
@@ -250,7 +250,7 @@ class NetCDFLoader_lazy(Dataset):
             for key, val in self.sample_condition_dict.items():
                 if data_source['cell'][:,:,0].abs().mean() >= val:
                     condition_not_met = False
-
+        '''
 
         if self.normalization is not None:
             data_source = self.normalizer(data_source, self.variables_source)
