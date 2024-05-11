@@ -271,9 +271,12 @@ class processing_layer(nn.Module):
         return x   
 
 class input_layer(nn.Module):
-    def __init__(self, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, use_nha=True, output_mlp=False, pos_emb_type='bias', pos_embedding_table=None, pos_emb_dim=None) -> None: 
+    def __init__(self, input_mapping, input_coordinates, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, use_nha=True, output_mlp=False, pos_emb_type='bias', pos_embedding_table=None, pos_emb_dim=None) -> None: 
         super().__init__()
         self.use_nha = use_nha
+
+        self.register_buffer("input_mapping", input_mapping)
+        self.register_buffer("input_coordinates", input_coordinates)
 
         if use_nha:
             self.nha_layer = nha_layer(
@@ -302,7 +305,30 @@ class input_layer(nn.Module):
         
         self.emb_proj = position_embedding_proj(model_dim, model_dim)
 
-    def forward(self, x, pos_source, pos_grid, reshape=True, mask=None):
+
+    def get_relative_positions(self, grid_sample_indices, grid_coords):
+        
+        indices = self.input_mapping[grid_sample_indices]
+
+        coords1 = grid_coords[:,grid_sample_indices]
+
+        coords2 = self.input_coordinates[:, indices]
+
+        coords1 = coords1.unsqueeze(dim=-1)
+        coords2 = coords2
+
+        distances_source, phis_source = get_distance_angle(coords1[0], coords1[1], coords2[0], coords2[1])
+
+        distances_grid = torch.zeros_like(distances_source[:,:,[0]], device=grid_sample_indices.device).float()
+        phi_grid = torch.zeros_like(phis_source[:,:,[0]], device=grid_sample_indices.device).float()
+
+        return (distances_source.float(), phis_source.float()), (distances_grid, phi_grid)
+    
+
+    def forward(self, x, grid_sample_indices, grid_coords, reshape=True, mask=None):
+
+        pos_source, pos_grid = self.get_relative_positions(grid_sample_indices,
+                                                            grid_coords)
 
         x = self.input_mlp(x)
 
@@ -319,6 +345,52 @@ class input_layer(nn.Module):
 
         return x.squeeze(dim=-2)
 
+
+class output_layer(nn.Module):
+    # change to dynamic output sequences
+    def __init__(self, output_mapping, output_coordinates, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, output_dim=None, output_mlp=False, pos_emb_type='bias', pos_embedding_table=None, pos_emb_dim=None) -> None: 
+        super().__init__()    
+
+        self.register_buffer("output_mapping", output_mapping)
+        self.register_buffer("output_coordinates", output_coordinates)
+
+        self.layer = refinement_layer(
+                input_dim=input_dim,
+                model_dim = model_dim,
+                output_dim = output_dim,
+                ff_dim = ff_dim,
+                n_heads = n_heads,
+                output_mlp=True,
+                pos_emb_type=pos_emb_type,
+                pos_embedding_table= pos_embedding_table,
+                pos_emb_dim=pos_emb_dim)
+
+
+    def get_relative_positions(self, grid_sample_indices, grid_sample_indices_nh, grid_coords):
+        
+        indices = self.output_mapping[grid_sample_indices]
+        coords1 = self.output_coordinates[:, indices]
+
+        coords2 = grid_coords[:,grid_sample_indices_nh]
+
+        if coords1.dim()==4:
+            coords1 = coords1.unsqueeze(dim=-1)
+        if coords2.dim()==4:
+            coords2 = coords2.unsqueeze(dim=-2)  
+
+        distances, phis = get_distance_angle(coords1[0], coords1[1], coords2[0], coords2[1])
+
+        return distances.float(), phis.float()
+    
+    def forward(self, x, x_nh, grid_sample_indices, grid_sample_indices_nh, grid_coords, mask=None):
+        
+        pos_output = self.get_relative_positions(grid_sample_indices,
+                                            grid_sample_indices_nh,
+                                            grid_coords)
+        
+        x = self.layer(x, x_nh, mask=mask, pos=pos_output, reshape=False)
+
+        return x
 
 class skip_layer(nn.Module):
     def __init__(self, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, output_dim=None, output_mlp=False, pos_emb_type='bias', pos_embedding_table=None, pos_emb_dim=None, seq_level=1) -> None: 
@@ -355,10 +427,8 @@ class skip_layer(nn.Module):
         return x
 
 class refinement_layer(nn.Module):
-    def __init__(self,  input_dim, model_dim, ff_dim, n_refine=4, n_heads=4, dropout=0, output_dim=None, output_mlp=False, pos_emb_type='bias', pos_embedding_table=None, pos_emb_dim=None) -> None: 
+    def __init__(self,  input_dim, model_dim, ff_dim, n_heads=4, dropout=0, output_dim=None, output_mlp=False, pos_emb_type='bias', pos_embedding_table=None, pos_emb_dim=None) -> None: 
         super().__init__()
-        
-        self.n_refine = n_refine
 
         self.nha_layer = nha_layer(
                     input_dim = input_dim,
@@ -383,13 +453,13 @@ class refinement_layer(nn.Module):
             self.mlp_layer = nn.Identity()
 
     def forward(self, x, x_nh, reshape=True, mask=None, pos=None):
+        
+        n_refine = pos[0].shape[-2]
 
-        #add position embeddings of refined layer level(x_nh) != level(xq)
-        x = x.unsqueeze(dim=-2).repeat_interleave(self.n_refine, dim=-2)
+        x = x.unsqueeze(dim=-2).repeat_interleave(n_refine, dim=-2)
 
         if mask is not None:
-            mask = mask.unsqueeze(dim=-2).repeat_interleave(self.n_refine, dim=-2)
-        #pos = pos.reshape(xq.shape[0], xq.shape[1], 1, pos.shape[-2], pos.shape[-1])
+            mask = mask.unsqueeze(dim=-2).repeat_interleave(n_refine, dim=-2)
 
         x = self.nha_layer(x_nh, xq=x, mask=mask, pos=pos)
 
@@ -401,6 +471,7 @@ class refinement_layer(nn.Module):
 
         return x
     
+
 
 class reduction_mlp(nn.Module):
     def __init__(self, model_dim, nh_reduction=1, output_dim=None, activation=nn.SiLU(), dropout=0) -> None: 
@@ -477,14 +548,20 @@ class ICON_Transformer(nn.Module):
 
         self.grid = xr.open_dataset(self.model_settings['processing_grid'])
         
-        self.cell_coords = get_coords_as_tensor(self.grid, lon='clon', lat='clat').to(self.model_settings['device'])
-        self.eoc = torch.tensor(self.grid.edge_of_cell.values - 1).to(self.model_settings['device'])
-        self.acoe = torch.tensor(self.grid.adjacent_cell_of_edge.values - 1).to(self.model_settings['device'])
+        cell_coords = get_coords_as_tensor(self.grid, lon='clon', lat='clat').float()
+        self.register_buffer('cell_coords', cell_coords)
+
+        eoc = torch.tensor(self.grid.edge_of_cell.values - 1)
+        self.register_buffer('eoc', eoc)
+
+        acoe = torch.tensor(self.grid.adjacent_cell_of_edge.values - 1)
+        self.register_buffer('acoe', acoe)
+
+        self.register_buffer('global_indices', torch.arange(len(self.grid.clon)).unsqueeze(dim=0))
 
         self.input_data  = self.model_settings['variables_source']
         self.output_data = self.model_settings['variables_target']
 
-           
 
         n_input_grids = len(self.input_data)
         self.pos_emb_type = self.model_settings["pos_embedding_type"]
@@ -492,20 +569,13 @@ class ICON_Transformer(nn.Module):
         self.n_encoder_layers = len(self.model_settings["encoder_dims"])
         self.n_decoder_layers = self.n_encoder_layers -1 
 
-        self.set_input_grid_mapping()
-        self.set_output_grid_mapping()
-
         self.global_emb_table = self.init_pos_embedding_table(self.model_settings["emb_table_dim"], embed_dim=self.model_settings["emb_table_bins"])
+        
+        input_mapping, input_coordinates = self.get_input_grid_mapping()
+        output_mapping, output_coordinates = self.get_output_grid_mapping()
 
-        self.input_layers = nn.ModuleDict()
-        self.input_layers['edge'] = self.init_input_layer('edge')
-        self.input_layers['vertex'] = self.init_input_layer('vertex')   
-        self.input_layers['cell'] = self.init_input_layer('cell')
-
-        self.output_layers = nn.ModuleDict()
-        self.output_layers['edge'] = self.init_output_layer('edge')
-        self.output_layers['vertex'] = self.init_output_layer('vertex')   
-        self.output_layers['cell'] = self.init_output_layer('cell')
+        self.input_layers = self.init_input_layers(input_mapping, input_coordinates)
+        self.output_layers = self.init_output_layers(output_mapping, output_coordinates)
 
         self.input_projection = nn.Sequential(nn.Linear(self.model_settings["encoder_dims"][0] * n_input_grids,
                                           self.model_settings["encoder_dims"][0], bias=True))
@@ -629,21 +699,8 @@ class ICON_Transformer(nn.Module):
 
         input_data = []
         for key, values in x.items():
- #           if self.grid_n_input[key]==1:
-  #              input = self.input_layers[key](values).squeeze()
-   #         else:
-                
-          #  pos_input = self.get_relative_positions_input(indices['global_cell'],
-           #                                                 grid_type_source=key)
-            pos_source, pos_grid = self.get_relative_positions_input(indices['global_cell'],
-                                                            grid_type_source=key)
-            input = self.input_layers[key](values, pos_source, pos_grid)
 
-            if debug:
-                debug_list.append({'pos':pos_source,
-                                    'input': values,
-                                    'output':input,
-                                    'layer': f'input_{key}'})
+            input = self.input_layers[key](values, indices["global_cell"], self.cell_coords)
             input_data.append(input) 
         
         x = torch.concat(input_data, dim=-1)
@@ -761,20 +818,8 @@ class ICON_Transformer(nn.Module):
         x_nh, mask, indices_global, indices_global_nh = self.get_nh(x, indices, 0)
 
         output_data = {}
-        for key in self.output_data.keys():
-
-            pos_output = self.get_relative_positions_output(indices['global_cell'],
-                                            indices_global_nh.squeeze(),
-                                            grid_type_target=key)
-                        
-            output_data[key] = self.output_layers[key](x, x_nh, pos=pos_output, reshape=False)
-
-            if debug:
-                debug_list.append({'pos':pos_output,
-                                   'input': x_nh,
-                                   'output':output_data[key],
-                                    'layer': f'output_{key}'})
-
+        for key in self.output_data.keys():         
+            output_data[key] = self.output_layers[key](x, x_nh, indices['global_cell'], indices_global_nh.squeeze(), self.cell_coords, mask=mask)
 
         if debug:
             return output_data, debug_list
@@ -782,41 +827,31 @@ class ICON_Transformer(nn.Module):
             return output_data
     
 
-    def set_input_grid_mapping(self):
+    def get_input_grid_mapping(self):
         
-        self.input_coordinates = {}
+        input_coordinates = {}
         for grid_type in self.input_data.keys():
-            self.input_coordinates[grid_type] = get_coords_as_tensor(xr.open_dataset(self.model_settings['input_grid']),grid_type=grid_type)
+            input_coordinates[grid_type] = get_coords_as_tensor(xr.open_dataset(self.model_settings['input_grid']),grid_type=grid_type)
        
 
-        self.input_mapping = get_nh_variable_mapping_icon(self.model_settings['processing_grid'], ['cell'], 
+        input_mapping = get_nh_variable_mapping_icon(self.model_settings['processing_grid'], ['cell'], 
                                     self.model_settings['input_grid'], self.input_data, 
                                     search_raadius=self.model_settings['search_raadius'], max_nh=self.model_settings['nh_input'], level_start=self.model_settings['level_start_input'])
 
-        self.input_mapping = dict_to_device(self.input_mapping, self.model_settings['device'])
-        self.input_coordinates = dict_to_device(self.input_coordinates, self.model_settings['device'])
-
-        self.grid_n_input = {}
-        for grid_type, mapping in self.input_mapping['cell'].items():   
-            self.grid_n_input[grid_type] = mapping.shape[-1]   
         
+        return input_mapping, input_coordinates
 
-    def set_output_grid_mapping(self):
+    def get_output_grid_mapping(self):
         
-        self.output_mapping = get_nh_variable_mapping_icon(self.model_settings['processing_grid'], ['cell'], 
+        output_mapping = get_nh_variable_mapping_icon(self.model_settings['processing_grid'], ['cell'], 
                                     self.model_settings['processing_grid'], self.output_data, 
                                     search_raadius=self.model_settings['search_raadius'], max_nh=self.model_settings['nh_input'], level_start=self.model_settings['level_start_input'])
 
-        self.output_coordinates = {}
+        output_coordinates = {}
         for grid_type in self.output_data.keys():
-            self.output_coordinates[grid_type] = get_coords_as_tensor(xr.open_dataset(self.model_settings['processing_grid']),grid_type=grid_type)
+            output_coordinates[grid_type] = get_coords_as_tensor(xr.open_dataset(self.model_settings['processing_grid']),grid_type=grid_type)
 
-        self.output_mapping = dict_to_device(self.output_mapping, self.model_settings['device'])
-        self.output_coordinates = dict_to_device(self.output_coordinates, self.model_settings['device'])
-
-        self.grid_n_output = {}
-        for grid_type, mapping in self.output_mapping['cell'].items():
-            self.grid_n_output[grid_type] = mapping.shape[-1] 
+        return output_mapping, output_coordinates
 
     def forward_input_layer(self, global_level, proc_layer, x, x_att=[]):
         
@@ -847,50 +882,13 @@ class ICON_Transformer(nn.Module):
 
     def coarsen_indices(self, global_level, indices=None, nh=1):
         if indices is None:
-            indices = torch.arange(len(self.grid.clon)).unsqueeze(dim=0).to(self.model_settings['device'])
+            indices = self.global_indices
 
         global_cells, local_cells, cells_nh, out_of_fov_mask = helpers.coarsen_global_cells(indices, self.eoc, self.acoe, global_level=global_level, nh=nh)
         
 
         return global_cells, local_cells, cells_nh, out_of_fov_mask 
     
-
-
-    def get_relative_positions_input(self, sample_indices, grid_type_source='cell'):
-        
-        indices = self.input_mapping['cell'][grid_type_source][sample_indices]
-
-        coords1 = self.cell_coords[:,sample_indices]
-
-        coords2 = self.input_coordinates[grid_type_source][:, indices]
-
-        coords1 = coords1.unsqueeze(dim=-1)
-        coords2 = coords2
-
-        distances_source, phis_source = get_distance_angle(coords1[0], coords1[1], coords2[0], coords2[1])
-
-        #distances, phis = get_distance_angle(coords1[0].unsqueeze(dim=-1), coords1[1].unsqueeze(dim=-1), coords1[0].unsqueeze(dim=-2), coords1[1].unsqueeze(dim=-2))
-        distances_grid = torch.zeros_like(distances_source[:,:,[0]], device=self.model_settings['device']).float()
-        phi_grid = torch.zeros_like(phis_source[:,:,[0]], device=self.model_settings['device']).float()
-
-        return (distances_source.float().to(self.model_settings['device']), phis_source.float().to(self.model_settings['device'])), (distances_grid, phi_grid)
-    
-
-
-    def get_relative_positions_output(self, sample_indices, sample_indices_nh, grid_type_target='cell'):
-        
-        indices = self.output_mapping['cell'][grid_type_target][sample_indices]
-        coords1 = self.output_coordinates[grid_type_target][:, indices]
-
-        coords2 = self.cell_coords[:,sample_indices_nh]
-
-        if grid_type_target != 'cell':
-            coords1 = coords1.unsqueeze(dim=-1)
-            coords2 = coords2.unsqueeze(dim=-2)  
-
-        distances, phis = get_distance_angle(coords1[0], coords1[1], coords2[0], coords2[1])
-
-        return distances.float().to(self.model_settings['device']), phis.float().to(self.model_settings['device'])
 
 
     def get_relative_positions(self, cell_indices1, cell_indices2):
@@ -910,7 +908,7 @@ class ICON_Transformer(nn.Module):
 
         distances, phis = get_distance_angle(coords1[0], coords1[1], coords2[0], coords2[1])
 
-        return distances.float().to(self.model_settings['device']), phis.float().to(self.model_settings['device'])
+        return distances.float(), phis.float()
 
 
     def init_pos_embedding_table(self, n_out, embed_dim=64):
@@ -930,30 +928,21 @@ class ICON_Transformer(nn.Module):
         return emb_table
     
 
-    def init_input_layer(self, key):
-        if key in self.input_data.keys():
+    def init_input_layers(self, input_mapping, input_coordinates):
+
+        input_layers = nn.ModuleDict()
+        for key in input_mapping["cell"].keys():
             
             n_input = len(self.input_data[key])
 
             model_dim = ff_dim =  self.model_settings['encoder_dims'][0]
             n_heads = self.model_settings['n_heads'][0]
 
-            nh = self.grid_n_input[key]
-           # if nh > 1:
-
-                #layer = nha_reduction_layer(
-                #        input_dim = n_input,
-                #        model_dim = model_dim,
-                #        ff_dim = ff_dim,
-                #        n_heads = n_heads,
-                #        nh_reduction = nh,
-                #        pos_emb_type=self.pos_emb_type,
-                #        pos_embedding_table=self.global_emb_table,
-                #        pos_emb_dim=self.model_settings["emb_table_dim"])
-
             emb_table = self.init_pos_embedding_table(model_dim, embed_dim=self.model_settings["emb_table_bins"])
 
             layer = input_layer(
+                    input_mapping["cell"][key],
+                    input_coordinates[key],
                     input_dim = n_input,
                     model_dim = model_dim,
                     ff_dim = ff_dim,
@@ -962,20 +951,17 @@ class ICON_Transformer(nn.Module):
                     pos_emb_type=self.pos_emb_type,
                     pos_embedding_table=emb_table,
                     pos_emb_dim=self.model_settings["emb_table_dim"])
-         #   else:
-         #       layer = nn.Sequential(
-         #               nn.Linear(n_input, model_dim, bias=False),
-         #               nn.SiLU()
-          #          )
-        else:
-            layer = nn.Identity()
+            
+            input_layers[key] = layer
 
-        return layer
+        return input_layers
     
  
-    def init_output_layer(self, key):
+    def init_output_layers(self, output_mapping, output_coordinates):
+        
+        output_layers = nn.ModuleDict()
 
-        if key in self.output_data.keys():
+        for key in self.output_data.keys():
             
             input_dim = self.model_settings['encoder_dims'][0]
             model_dim = ff_dim = input_dim
@@ -983,22 +969,22 @@ class ICON_Transformer(nn.Module):
             output_dim = len(self.output_data[key])
             n_heads = self.model_settings['n_heads'][0]            
             
-            input_layer = refinement_layer(
+            layer = output_layer(
+                output_mapping["cell"][key],
+                output_coordinates[key],
                 input_dim=input_dim,
                 model_dim = model_dim,
                 output_dim = output_dim,
                 ff_dim = ff_dim,
                 n_heads = n_heads,
                 output_mlp=True,
-                n_refine = self.grid_n_output[key],
                 pos_emb_type=self.pos_emb_type,
                 pos_embedding_table=self.global_emb_table,
                 pos_emb_dim=self.model_settings["emb_table_dim"])
         
-        else:
-            input_layer = nn.Identity()
+            output_layers[key] = layer
 
-        return input_layer
+        return output_layers
     
     def init_processing_layer(self):
         pass
