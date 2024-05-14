@@ -911,7 +911,7 @@ def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, gri
                 if indices.dim()<2:
                     indices = indices.reshape(-1, 4**lowest_level)[:,0]
                 else:
-                    indices = indices.reshape(-1, 4**lowest_level, indices.shape[-1])[:,0].transpose(-2,-1)
+                    indices = indices.transpose(-2,-1).reshape(-1, 4**lowest_level, indices.shape[0])[:,0]
 
             else:
                 mapping = get_mapping_to_icon_grid(

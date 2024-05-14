@@ -203,7 +203,7 @@ class NetCDFLoader_lazy(Dataset):
         return ds_source, ds_target
 
 
-    def get_data(self, ds, ts, global_indices, variables_dict, index_mapping_dict=None):
+    def get_data(self, ds, ts, global_indices, variables_dict, global_level_start, index_mapping_dict=None):
         
         
         sampled_data = {}
@@ -217,7 +217,8 @@ class NetCDFLoader_lazy(Dataset):
             data_g = torch.stack(data_g, dim=-1)
 
             if index_mapping_dict is not None:
-                indices = index_mapping_dict[key][global_indices // 4**(self.model_settings['global_level_start'])]
+                indices = index_mapping_dict[key][global_indices // 4**global_level_start]
+
             else:
                 indices = global_indices.reshape(-1,1)
 
@@ -250,8 +251,8 @@ class NetCDFLoader_lazy(Dataset):
         global_cells_sample_input = self.global_cells_input[sample_index]
         global_cells_sample_target = self.global_cells[sample_index]
         
-        data_source = self.get_data(ds_source, index, global_cells_sample_input, self.variables_source, self.input_mapping['cell'])
-        data_target = self.get_data(ds_target, index, global_cells_sample_target, self.variables_target, self.output_mapping['cell'])
+        data_source = self.get_data(ds_source, index, global_cells_sample_input, self.variables_source, self.model_settings['global_level_start'], self.input_mapping['cell'])
+        data_target = self.get_data(ds_target, index, global_cells_sample_target, self.variables_target, 0, self.output_mapping['cell'])
         '''
         condition_not_met = True
         while condition_not_met:
