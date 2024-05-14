@@ -222,7 +222,7 @@ class NetCDFLoader_lazy(Dataset):
                 indices = global_indices.reshape(-1,1)
 
             data_g = data_g[indices]
-            data_g = data_g.view(data_g.shape[0], data_g.shape[1], -1)
+            data_g = data_g.view(indices.shape[0], -1, len(variables))
 
             sampled_data[key] = data_g
 
