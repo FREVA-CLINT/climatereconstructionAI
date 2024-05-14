@@ -1,4 +1,5 @@
 import json,os
+import math
 
 import torch
 import torch.nn as nn
@@ -264,7 +265,7 @@ class processing_layer(nn.Module):
             x = x.view(b, n, -1)
         
         if self.seq_att:
-            x = x.reshape(x.shape[0],-1, 4**self.seq_level, x.shape[-1])
+            x = sequenize(x, self.seq_level)
             x = self.seq_layer(x, pos=pos_seq)
             x = x.view(b, n, -1)
 
@@ -323,13 +324,13 @@ class input_layer(nn.Module):
     def forward(self, x, grid_level_indices, grid_level_coords, reshape=True, mask=None):
         b,n,nh,f = x.shape
 
-        grid_level_indices = grid_level_indices.reshape(b, -1, 4**self.seq_level)
+        grid_level_indices = sequenize(grid_level_indices, self.seq_level)
 
         pos_source, pos_grid = self.get_relative_positions(grid_level_indices,
                                                             grid_level_coords)
         
-        x = x.reshape(b,-1,4**self.seq_level,nh,f)
-        x = x.reshape(b,-1,4**self.seq_level*nh,f)
+        x = sequenize(x, self.seq_level)
+        x = x.reshape(b,x.shape[1],-1,f)
 
         x = self.input_mlp(x)
 
@@ -412,9 +413,8 @@ class skip_layer(nn.Module):
     def forward(self, x, x_skip, reshape=True, mask=None, pos=None):
 
         #add position embeddings of refined layer level(x_nh) != level(xq)
-        x = x.reshape(x.shape[0],-1, 4**self.seq_level, x.shape[-1])
-
-        x_skip = x_skip.reshape(x_skip.shape[0],-1, 4**self.seq_level, x_skip.shape[-1])
+        x = sequenize(x, self.seq_level)
+        x_skip = sequenize(x_skip, self.seq_level)
 
         x = self.nha_layer(x_skip, xq=x, mask=mask, pos=pos)
 
@@ -591,7 +591,7 @@ class ICON_Transformer(nn.Module):
         self.processing_layers_dec = nn.ModuleDict()
         self.skip_layers = nn.ModuleDict()
 
-        self.processing_seq_level = self.model_settings["processing_seq_level"]
+        self.max_seq_level = self.model_settings["max_seq_level"]
         #self.mid_layers = nn.ModuleList()        
         self.encoder_dims_level = {}
 
@@ -623,7 +623,7 @@ class ICON_Transformer(nn.Module):
                                         pos_emb_type= self.pos_emb_type,
                                         pos_embedding_table=self.global_emb_table,
                                         pos_emb_dim=self.model_settings["emb_table_dim"],
-                                        seq_level=self.processing_seq_level))
+                                        seq_level=self.max_seq_level))
         
             self.processing_layers_enc[global_level] = processing_layers    
 
@@ -671,7 +671,7 @@ class ICON_Transformer(nn.Module):
                                         pos_emb_type= self.pos_emb_type,
                                         pos_embedding_table=self.global_emb_table,
                                         pos_emb_dim=self.model_settings["emb_table_dim"],
-                                        seq_level=self.processing_seq_level))
+                                        seq_level=self.max_seq_level))
                 
             self.processing_layers_dec[global_level] = processing_layers               
                 
@@ -696,7 +696,7 @@ class ICON_Transformer(nn.Module):
                                             pos_emb_type= self.pos_emb_type,
                                             pos_embedding_table=self.global_emb_table,
                                             pos_emb_dim=self.model_settings["emb_table_dim"],
-                                            seq_level=self.processing_seq_level)
+                                            seq_level=self.max_seq_level)
         
 
 
@@ -734,7 +734,7 @@ class ICON_Transformer(nn.Module):
             pos_nh = self.get_relative_positions(indices_global_level, 
                                             indices_global_nh.squeeze())
             
-            indices_sequence = self.sequenize(indices_global_level, self.processing_seq_level)
+            indices_sequence = sequenize(indices_global_level, self.max_seq_level)
             pos_seq = self.get_relative_positions(indices_sequence, 
                                             indices_sequence)
             
@@ -784,7 +784,7 @@ class ICON_Transformer(nn.Module):
             pos_nh = self.get_relative_positions(indices_global_level, 
                                             indices_global_nh.squeeze())
             
-            indices_sequence = self.sequenize(indices_global_level, self.processing_seq_level)
+            indices_sequence = sequenize(indices_global_level, self.max_seq_level)
             pos_seq = self.get_relative_positions(indices_sequence, 
                                             indices_sequence)
             
@@ -809,7 +809,7 @@ class ICON_Transformer(nn.Module):
                 
                 global_level = str(int(global_level) -1)
                 if self.use_skip_layers and global_level in x_skip.keys():
-                    indices_sequence = self.sequenize(indices_global_refined, self.processing_seq_level)
+                    indices_sequence = sequenize(indices_global_refined, self.max_seq_level)
                     pos_seq = self.get_relative_positions(indices_sequence, 
                                                     indices_sequence)
                     
@@ -926,11 +926,7 @@ class ICON_Transformer(nn.Module):
     def get_global_indices_relative(self, sampled_indices, level):
         return sampled_indices.reshape(sampled_indices.shape[0], -1, 4**level)[:,:,0]
 
-    def sequenize(self, indices, seq_level):
-
-        indices = indices.reshape(indices.shape[0], -1, 4**(seq_level))
-
-        return indices
+    
     
 
     def localize_global_indices(self, sample_indices_dict, level):
@@ -1132,7 +1128,20 @@ class ICON_Transformer(nn.Module):
         ckpt_dict = torch.load(ckpt_path, map_location=torch.device(device))
         load_model(ckpt_dict, self)
 
- 
+def sequenize(tensor, max_seq_level):
+    
+    seq_len = tensor.shape[1]
+    max_seq_level_seq = int(math.log(seq_len)/math.log(4))
+    seq_level = min([max_seq_level_seq, max_seq_level])
+    
+    if tensor.dim()==3:
+        tensor = tensor.reshape(tensor.shape[0], -1, 4**(seq_level), tensor.shape[-1])
+    elif tensor.dim()==2:
+        tensor = tensor.reshape(tensor.shape[0], -1, 4**(seq_level))
+    elif tensor.dim()==4:
+        tensor = tensor.reshape(tensor.shape[0], -1, 4**(seq_level), tensor.shape[-2], tensor.shape[-1])
+
+    return tensor
     
 def getint(name):
     basename = name.partition('.')

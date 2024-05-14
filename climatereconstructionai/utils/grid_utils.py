@@ -845,7 +845,7 @@ def get_nearest_to_icon_rec(c_t_global, c_i, level=7, global_indices_i=None, nh=
         global_indices = torch.gather(global_indices_i, index=indices_rel.reshape(global_indices_i.shape[0],-1), dim=-1)
         global_indices = global_indices.reshape(n_level,-1)
     
-    n_keep = torch.tensor([nh*4**level, dist_values.shape[1]]).min()
+    n_keep = torch.tensor([nh, dist_values.shape[1]]).min()
 
     indices_keep = dist_values.topk(int(n_keep), dim=-1, largest=False, sorted=True)[1]
 
@@ -864,10 +864,15 @@ def get_mapping_to_icon_grid(coords_icon, coords_input, search_raadius=3, max_nh
     for k in range(level_start + 1 - lowest_level):
         level = level_start - (k)
 
+        nh = max_nh*4**level
+
+        if k == level_start-lowest_level:
+            nh = max_nh
+
         if k == 0:
-            indices, in_rng, pos = get_nearest_to_icon_rec(coords_icon, coords_input.unsqueeze(dim=1), level=level, nh=max_nh, search_radius=search_raadius)
+            indices, in_rng, pos = get_nearest_to_icon_rec(coords_icon, coords_input.unsqueeze(dim=1), level=level, nh=nh, search_radius=search_raadius)
         else:
-            indices, in_rng, pos = get_nearest_to_icon_rec(coords_icon, coords_input[:,indices], level=level, global_indices_i=indices, nh=max_nh, search_radius=search_raadius)
+            indices, in_rng, pos = get_nearest_to_icon_rec(coords_icon, coords_input[:,indices], level=level, global_indices_i=indices, nh=nh, search_radius=search_raadius)
 
         grid_mapping.append({'level': level, 'indices': indices, 'pos': pos, 'in_rng_mask': in_rng}) 
 
