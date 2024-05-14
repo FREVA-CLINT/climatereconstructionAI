@@ -302,30 +302,31 @@ class input_layer(nn.Module):
         self.emb_proj = position_embedding_proj(model_dim, model_dim)
 
 
-    def get_relative_positions(self, grid_sample_indices, grid_coords):
+    def get_relative_positions(self, grid_level_indices, grid_level_coords):
         
-        indices = self.input_mapping[grid_sample_indices]
+        indices = self.input_mapping[grid_level_indices]
 
-        coords1 = grid_coords[:,grid_sample_indices]
+        coords1 = grid_level_coords[:, grid_level_indices]
 
         coords2 = self.input_coordinates[:, indices]
 
+        # use mid point of sequence for "absolute-relative" coordinates
         coords_ref = coords1[:,:,:,[0]]
         coords2 = coords2.view(coords2.shape[0], coords2.shape[1],coords2.shape[2],-1)
 
         distances_grid, phis_grid = get_distance_angle(coords1[0], coords1[1], coords_ref[0], coords_ref[1])
         distances_source, phis_source = get_distance_angle(coords2[0], coords2[1], coords_ref[0], coords_ref[1])
 
-
         return (distances_source.float(), phis_source.float()), (distances_grid.float(), phis_grid.float())
     
 
-    def forward(self, x, grid_sample_indices, grid_coords, reshape=True, mask=None):
+    def forward(self, x, grid_level_indices, grid_level_coords, reshape=True, mask=None):
         b,n,nh,f = x.shape
-        grid_sample_indices = grid_sample_indices.reshape(b,-1,4**self.seq_level)
 
-        pos_source, pos_grid = self.get_relative_positions(grid_sample_indices,
-                                                            grid_coords)
+        grid_level_indices = grid_level_indices.reshape(b, -1, 4**self.seq_level)
+
+        pos_source, pos_grid = self.get_relative_positions(grid_level_indices,
+                                                            grid_level_coords)
         
         x = x.reshape(b,-1,4**self.seq_level,nh,f)
         x = x.reshape(b,-1,4**self.seq_level*nh,f)
@@ -370,7 +371,7 @@ class output_layer(nn.Module):
 
         coords2 = grid_coords[:,grid_sample_indices_nh]
 
-        if coords1.dim()==4:
+        while coords1.dim()<=4:
             coords1 = coords1.unsqueeze(dim=-1)
         if coords2.dim()==4:
             coords2 = coords2.unsqueeze(dim=-2)  
@@ -424,7 +425,7 @@ class skip_layer(nn.Module):
         return x
 
 class refinement_layer(nn.Module):
-    def __init__(self,  input_dim, model_dim, ff_dim, n_heads=4, dropout=0, output_dim=None, output_mlp=False, pos_emb_type='bias', pos_embedding_table=None, pos_emb_dim=None) -> None: 
+    def __init__(self, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, output_dim=None, output_mlp=False, pos_emb_type='bias', pos_embedding_table=None, pos_emb_dim=None) -> None: 
         super().__init__()
 
         self.nha_layer = nha_layer(
@@ -448,6 +449,7 @@ class refinement_layer(nn.Module):
             )
         else:
             self.mlp_layer = nn.Identity()
+
 
     def forward(self, x, x_nh, reshape=True, mask=None, pos=None):
         
@@ -544,9 +546,7 @@ class ICON_Transformer(nn.Module):
         self.check_model_dir()
 
         self.grid = xr.open_dataset(self.model_settings['processing_grid'])
-        
-        cell_coords = get_coords_as_tensor(self.grid, lon='clon', lat='clat').float()
-        self.register_buffer('cell_coords', cell_coords)
+        self.register_buffer('global_indices', torch.arange(len(self.grid.clon)).unsqueeze(dim=0))
 
         eoc = torch.tensor(self.grid.edge_of_cell.values - 1)
         self.register_buffer('eoc', eoc)
@@ -554,17 +554,24 @@ class ICON_Transformer(nn.Module):
         acoe = torch.tensor(self.grid.adjacent_cell_of_edge.values - 1)
         self.register_buffer('acoe', acoe)
 
-        self.register_buffer('global_indices', torch.arange(len(self.grid.clon)).unsqueeze(dim=0))
+        self.global_level_start = self.model_settings['global_level_start']
+
+        global_indices_start = self.coarsen_indices(self.global_level_start)[0][0,:,0]
+        self.register_buffer('global_indices_start', global_indices_start)
+
+        cell_coords_global = get_coords_as_tensor(self.grid, lon='clon', lat='clat').double()
+        self.register_buffer('cell_coords_global', cell_coords_global)        
+
+        self.register_buffer('cell_coords_input', cell_coords_global[:, global_indices_start])    
 
         self.input_data  = self.model_settings['variables_source']
         self.output_data = self.model_settings['variables_target']
 
-
         n_input_grids = len(self.input_data)
         self.pos_emb_type = self.model_settings["pos_embedding_type"]
 
-        self.n_encoder_layers = len(self.model_settings["encoder_dims"])
-        self.n_decoder_layers = self.n_encoder_layers -1 
+        self.n_decoder_layers = len(self.model_settings["encoder_dims"])
+        self.n_encoder_layers = len(self.model_settings["encoder_dims"]) - self.global_level_start
 
         self.global_emb_table = self.init_pos_embedding_table(self.model_settings["emb_table_dim"], embed_dim=self.model_settings["emb_table_bins"])
         
@@ -575,23 +582,27 @@ class ICON_Transformer(nn.Module):
         self.output_layers = self.init_output_layers(output_mapping, output_coordinates)
 
         self.input_projection = nn.Sequential(nn.Linear(self.model_settings["encoder_dims"][0] * n_input_grids,
-                                          self.model_settings["encoder_dims"][0], bias=True))
+                                          self.model_settings["encoder_dims"][self.global_level_start], bias=True))
 
-        self.coarsen_layers = nn.ModuleList()
-        self.processing_layers_enc = nn.ModuleList()
+        self.coarsen_layers = nn.ModuleDict()
+        self.processing_layers_enc = nn.ModuleDict()
 
-        self.refinement_layers = nn.ModuleList()
-        self.processing_layers_dec = nn.ModuleList()
-        self.skip_layers = nn.ModuleList()
+        self.refinement_layers = nn.ModuleDict()
+        self.processing_layers_dec = nn.ModuleDict()
+        self.skip_layers = nn.ModuleDict()
 
         self.processing_seq_level = self.model_settings["processing_seq_level"]
         #self.mid_layers = nn.ModuleList()        
-   
+        self.encoder_dims_level = {}
 
-        for k in range(1, self.n_encoder_layers):
+        for k in range(1 + self.global_level_start, len(self.model_settings["encoder_dims"])):
+            
+            global_level = str(k - 1)
 
             dim_in  = self.model_settings["encoder_dims"][k-1]
             dim_out = self.model_settings["encoder_dims"][k]
+
+            self.encoder_dims_level[global_level] = {'in': dim_in, 'out': dim_out} 
             
             processing_layers = nn.ModuleList()
             for l in range(self.model_settings["n_processing_layers"]):
@@ -614,30 +625,33 @@ class ICON_Transformer(nn.Module):
                                         pos_emb_dim=self.model_settings["emb_table_dim"],
                                         seq_level=self.processing_seq_level))
         
-            self.processing_layers_enc.append(processing_layers)    
+            self.processing_layers_enc[global_level] = processing_layers    
 
             
-            self.coarsen_layers.append(
-                coarsen_layer(
-                    input_dim= dim_out,
-                    model_dim = dim_out,
-                    ff_dim = dim_out,
-                    n_heads = self.model_settings["n_heads"][k],
-                    pos_emb_type= self.pos_emb_type,
-                    pos_embedding_table=self.global_emb_table,
-                    pos_emb_dim=self.model_settings["emb_table_dim"]))
-        ## decoder
+            self.coarsen_layers[global_level] = coarsen_layer(
+                                                    input_dim= dim_out,
+                                                    model_dim = dim_out,
+                                                    ff_dim = dim_out,
+                                                    n_heads = self.model_settings["n_heads"][k],
+                                                    pos_emb_type= self.pos_emb_type,
+                                                    pos_embedding_table=self.global_emb_table,
+                                                    pos_emb_dim=self.model_settings["emb_table_dim"])
 
 
         self.use_skip_layers = self.model_settings['use_skip_layers']
         self.use_skip_channels = self.model_settings['use_skip_channels']
 
-        for k in range(self.n_decoder_layers + 1):
-            dim_in  = self.model_settings["encoder_dims"][::-1][k]
-            dim_out = self.model_settings["encoder_dims"][::-1][k+1] if k < self.n_decoder_layers else dim_in
-            dim_in = dim_in*2 if self.use_skip_channels and k>0 else dim_in
-            
+        for k in range(self.n_decoder_layers):
 
+            global_level = str(self.n_decoder_layers - 1 - k)
+
+            dim_in  = self.model_settings["encoder_dims"][::-1][k]
+            dim_out = self.model_settings["encoder_dims"][::-1][k+1] if k < self.n_decoder_layers - 1 else dim_in
+
+            if self.use_skip_channels:
+                if global_level in self.encoder_dims_level.keys() and k>0:
+                    dim_in += self.encoder_dims_level[global_level]["out"]
+            
             processing_layers = nn.ModuleList()
             for l in range(self.model_settings["n_processing_layers"]):
                 if l==0:
@@ -659,20 +673,21 @@ class ICON_Transformer(nn.Module):
                                         pos_emb_dim=self.model_settings["emb_table_dim"],
                                         seq_level=self.processing_seq_level))
                 
-            self.processing_layers_dec.append(processing_layers)               
+            self.processing_layers_dec[global_level] = processing_layers               
                 
-            if k < self.n_decoder_layers:
-                self.refinement_layers.append(refinement_layer(
+            if k < self.n_decoder_layers - 1:
+                self.refinement_layers[global_level] = refinement_layer(
                         input_dim = dim_out,
                         model_dim = dim_out,
                         ff_dim = dim_out,
                         n_heads = self.model_settings["n_heads"][k],
                         pos_emb_type= self.pos_emb_type,
                         pos_embedding_table=self.global_emb_table,
-                        pos_emb_dim=self.model_settings["emb_table_dim"]))
+                        pos_emb_dim=self.model_settings["emb_table_dim"])
                 
-                if self.use_skip_layers:
-                    self.skip_layers.append(skip_layer(
+                global_level = str(int(global_level)-1)
+                if self.use_skip_layers and global_level in self.encoder_dims_level.keys():
+                    self.skip_layers[global_level] = skip_layer(
                                             input_dim = dim_out,
                                             model_dim = dim_out,
                                             ff_dim = dim_out,
@@ -681,142 +696,139 @@ class ICON_Transformer(nn.Module):
                                             pos_emb_type= self.pos_emb_type,
                                             pos_embedding_table=self.global_emb_table,
                                             pos_emb_dim=self.model_settings["emb_table_dim"],
-                                            seq_level=self.processing_seq_level))
+                                            seq_level=self.processing_seq_level)
         
 
 
-    def forward(self, x, indices=None, debug=False):
+    def forward(self, x, indices_batch_dict=None, debug=False):
         # if global_indices are provided, batches in x are treated as independent
         debug_list = []
 
-        if indices is None:
-            indices = {'global_cell': None,
+        if indices_batch_dict is None:
+            indices_batch_dict = {'global_cell': None,
                        'sample': None,
                        'sample_level': None}
 
         input_data = []
         for key, values in x.items():
-
-            input = self.input_layers[key](values, indices["global_cell"], self.cell_coords)
+            
+            input = self.input_layers[key](values, indices_batch_dict["local_cell"], self.cell_coords_input)
             input_data.append(input) 
         
         x = torch.concat(input_data, dim=-1)
 
         x = self.input_projection(x)
 
-        x_skip = []
-        for k, coarsen_layer in enumerate(self.coarsen_layers):
+        x_skip = {}
+        indices_global_level = indices_batch_dict['global_cell']
+        for global_level, coarsen_layer in self.coarsen_layers.items():
             
             if self.use_skip_channels or self.use_skip_layers:
-                x_skip.append(x)
+                x_skip[global_level] = x
 
-            global_level = k
+            
+            local_indices_nh, mask = self.get_nh_indices(int(global_level), global_cell_indices=indices_global_level)
 
-            x_nh, mask, indices_global, indices_global_nh = self.get_nh(x, indices, global_level)
-
-            pos_nh = self.get_relative_positions(indices_global[:,:,0], 
+            indices_global_nh = self.gather_nh_data(indices_global_level, local_indices_nh, indices_batch_dict['sample'], indices_batch_dict['sample_level'], int(global_level))
+            
+            pos_nh = self.get_relative_positions(indices_global_level, 
                                             indices_global_nh.squeeze())
             
-            indices_global = indices_global[:,:,0].reshape(indices_global.shape[0], -1, 4**self.processing_seq_level)
-            pos_seq = self.get_relative_positions(indices_global, 
-                                            indices_global)
+            indices_sequence = self.sequenize(indices_global_level, self.processing_seq_level)
+            pos_seq = self.get_relative_positions(indices_sequence, 
+                                            indices_sequence)
             
-            for l, layer in enumerate(self.processing_layers_enc[k]):
+            for l, layer in enumerate(self.processing_layers_enc[global_level]):
+                x_nh = self.gather_nh_data(x, local_indices_nh, indices_batch_dict['sample'], indices_batch_dict['sample_level'],  int(global_level))
+        
                 x = layer(x, pos_seq, x_nh=x_nh, mask=mask.unsqueeze(dim=-2), pos_nh=pos_nh)
 
-                if l < len(self.processing_layers_enc[k])-1:
-                    x_nh = self.get_nh(x, indices, global_level)[0]
+
 
             if debug:
                 debug_list.append({'pos':pos_nh,
-                                   'indices':indices_global,
+                                   'indices':indices_global_level,
                                    'indices_att':indices_global_nh,
                                    'input': x_nh,
                                     'output':x,
-                                    'layer': f'processing_enc_{k}'})
+                                    'layer': f'processing_enc_{global_level}'})
 
-            indices_coarsed = indices_global.reshape(indices_global.shape[0],-1,4)
+            indices_global_level = indices_global_level.reshape(indices_global_level.shape[0],-1,4)
 
-            pos = self.get_relative_positions(indices_coarsed,
-                                            indices_coarsed)
+            pos = self.get_relative_positions(indices_global_level,
+                                            indices_global_level)
             
             x = coarsen_layer(x, pos=pos)
 
+            indices_global_level = indices_global_level[:,:,0]
+
             if debug:
                 debug_list.append({'pos':pos,
-                                   'indices':indices_coarsed,
+                                   'indices':indices_global_level,
                                    'input': x,
                                    'output':x,
-                                    'layer': f'coarsen_enc_{k}'})
+                                    'layer': f'coarsen_enc_{global_level}'})
 
-        global_level+=1
-
-        for k, processing_layers in enumerate(self.processing_layers_dec):
-
-            global_level_dec = torch.max(torch.tensor([global_level-k, 0]))
+        #continue here
+        for global_level, processing_layers in self.processing_layers_dec.items():
             
-            if k > 0 and self.use_skip_channels:
-                x = torch.concat((x, x_skip[-k]), dim=-1)
-            # processing_layers
-            x_nh, mask, indices_global, indices_global_nh = self.get_nh(x, indices, global_level_dec)
+            if self.use_skip_channels and global_level in x_skip.keys():
+                x = torch.concat((x, x_skip[global_level]), dim=-1)
+            
+            indices_global_level = self.get_global_indices_global(indices_batch_dict['sample'], indices_batch_dict['sample_level'], int(global_level))
 
-            pos_nh = self.get_relative_positions(indices_global[:,:,0], 
+            local_indices_nh, mask = self.get_nh_indices(int(global_level), global_cell_indices=indices_global_level)
+
+            indices_global_nh = self.gather_nh_data(indices_global_level, local_indices_nh, indices_batch_dict['sample'], indices_batch_dict['sample_level'], int(global_level))
+            
+            pos_nh = self.get_relative_positions(indices_global_level, 
                                             indices_global_nh.squeeze())
             
-            indices_global = indices_global[:,:,0].reshape(indices_global.shape[0], -1, 4**self.processing_seq_level)
-            pos_seq = self.get_relative_positions(indices_global, 
-                                            indices_global)
-
+            indices_sequence = self.sequenize(indices_global_level, self.processing_seq_level)
+            pos_seq = self.get_relative_positions(indices_sequence, 
+                                            indices_sequence)
             
             for l, layer in enumerate(processing_layers):
+                x_nh = self.gather_nh_data(x, local_indices_nh, indices_batch_dict['sample'], indices_batch_dict['sample_level'],  int(global_level))
+        
                 x = layer(x, pos_seq, x_nh=x_nh, mask=mask.unsqueeze(dim=-2), pos_nh=pos_nh)
-
-                if l < len(processing_layers)-1:
-                    x_nh = self.get_nh(x, indices, global_level_dec)[0]
 
              
             # refinement layers
-            if k < len(self.refinement_layers):
-                x_nh, mask, indices_global, indices_global_nh = self.get_nh(x, indices, global_level_dec)
+            if global_level in self.refinement_layers.keys():
+                #x_nh, mask, indices_global, indices_global_nh = self.get_nh(x, indices, int(global_level))
+                x_nh = self.gather_nh_data(x, local_indices_nh, indices_batch_dict['sample'], indices_batch_dict['sample_level'],  int(global_level))
 
-                indices_global = indices_global.reshape(indices_global.shape[0], indices_global.shape[1],4,-1)
-                indices_refined = indices_global[:,:,:,0]
+                indices_global_refined = self.get_global_indices_global(indices_batch_dict['sample'], indices_batch_dict['sample_level'], int(global_level)-1)
 
-                pos = self.get_relative_positions(indices_refined,
+                
+                pos = self.get_relative_positions(indices_global_refined.reshape(-1, indices_global_nh.shape[1], 4),
                                                 indices_global_nh.squeeze())
 
-                x = self.refinement_layers[k](x, x_nh, mask=mask, pos=pos)
-
-                if self.use_skip_layers:
-                    _, _, indices_global, _ = self.get_nh(x, indices, global_level_dec - 1)
-                    indices_global = indices_global[:,:,0].reshape(indices_global.shape[0], -1, 4**self.processing_seq_level)
-                    pos_seq = self.get_relative_positions(indices_global, 
-                                                    indices_global)
-                    x = self.skip_layers[k](x, x_skip[-(1+k)], pos=pos_seq)
+                x = self.refinement_layers[global_level](x, x_nh, mask=mask, pos=pos)
+                
+                global_level = str(int(global_level) -1)
+                if self.use_skip_layers and global_level in x_skip.keys():
+                    indices_sequence = self.sequenize(indices_global_refined, self.processing_seq_level)
+                    pos_seq = self.get_relative_positions(indices_sequence, 
+                                                    indices_sequence)
+                    
+                    x = self.skip_layers[global_level](x, x_skip[global_level], pos=pos_seq)
 
             if debug:
                 debug_list.append({'pos':pos,
-                                   'indices':indices_refined,
+                                   'indices':indices_global_refined,
                                    'indices_att':indices_global_nh,
                                    'input': x_nh,
                                    'output':x,
-                                    'layer': f'refine_dec_{k}'})
+                                    'layer': f'refine_dec_{global_level}'})
                 
 
-
-            if debug:
-                debug_list.append({'pos':pos_nh,
-                                   'indices':indices_global[:,:,0],
-                                   'indices_att':indices_global_nh,
-                                   'input': x_nh,
-                                   'output':x,
-                                    'layer': f'processing_dec_{k}'})
-
-        x_nh, mask, indices_global, indices_global_nh = self.get_nh(x, indices, 0)
+        x_nh = self.gather_nh_data(x, local_indices_nh, indices_batch_dict['sample'], indices_batch_dict['sample_level'],  0)
 
         output_data = {}
         for key in self.output_data.keys():         
-            output_data[key] = self.output_layers[key](x, x_nh, indices['global_cell'], indices_global_nh.squeeze(), self.cell_coords, mask=mask)
+            output_data[key] = self.output_layers[key](x, x_nh, indices_global_level, indices_global_nh.squeeze(), self.cell_coords_global, mask=mask)
 
         if debug:
             return output_data, debug_list
@@ -829,11 +841,16 @@ class ICON_Transformer(nn.Module):
         input_coordinates = {}
         for grid_type in self.input_data.keys():
             input_coordinates[grid_type] = get_coords_as_tensor(xr.open_dataset(self.model_settings['input_grid']),grid_type=grid_type)
+           #global_indices = self.coarsen_indices(self.global_level_start)[0]
+           # input_coordinates[grid_type] = input_coordinates[grid_type][:,global_indices[0,:,0]]
        
 
         input_mapping = get_nh_variable_mapping_icon(self.model_settings['processing_grid'], ['cell'], 
                                     self.model_settings['input_grid'], self.input_data, 
-                                    search_raadius=self.model_settings['search_raadius'], max_nh=self.model_settings['nh_input'], level_start=self.model_settings['level_start_input'])
+                                    search_raadius=self.model_settings['search_raadius'], 
+                                    max_nh=self.model_settings['nh_input'], 
+                                    level_start=self.model_settings['level_start_input'], 
+                                    lowest_level=self.model_settings['global_level_start'])
 
         
         return input_mapping, input_coordinates
@@ -864,31 +881,96 @@ class ICON_Transformer(nn.Module):
         pass
 
 
-    def get_nh(self, x, indices, global_level, nh=1):
+    def get_nh(self, x, indices, global_level, nh_level=None, nh=1):
+        if nh_level is None:
+            nh_level = global_level
 
-        global_indices, _ ,cells_nh, mask = self.coarsen_indices(global_level, indices=indices['global_cell'], nh=nh)
+        global_indices, _ ,cells_nh, mask = self.coarsen_indices(global_level, indices=indices['global_cell'], coarsen_level=nh_level, nh=nh)
         x_nh = helpers.get_nh_values(x, indices_nh=cells_nh, sample_indices=indices['sample'], coarsest_level=indices['sample_level'], global_level=global_level)
 
         global_indices_nh = helpers.get_nh_values(global_indices[:,:,[0]], indices_nh=cells_nh, sample_indices=indices['sample'], coarsest_level=indices['sample_level'], global_level=global_level)
 
         return x_nh, mask, global_indices, global_indices_nh
 
+    def get_nh_indices(self, global_level, global_cell_indices=None, local_cell_indices=None):
+ 
+        adjc_global = self.get_adjacent_global_cell_indices(global_level)
 
-    def coarsen_indices(self, global_level, indices=None, nh=1):
+        if global_cell_indices is not None:
+            local_cell_indices =  global_cell_indices // 4**global_level
+
+        local_cell_indices_nh, mask = helpers.get_nh_of_batch_indices(local_cell_indices, adjc_global)
+
+        return local_cell_indices_nh, mask
+
+    def gather_nh_data(self, x, local_cell_indices_nh, batch_sample_indices, sampled_level, global_level):
+        # x in batches sampled from local_cell_indices_nh
+        if x.dim()<3:
+            x = x.unsqueeze(dim=-1)
+
+        b,n,e = x.shape
+        nh = local_cell_indices_nh.shape[-1]
+
+        local_cell_indices_nh_batch = local_cell_indices_nh - (batch_sample_indices*4**(sampled_level - global_level)).view(-1,1,1)
+
+        return torch.gather(x.reshape(b,-1,e),1, index=local_cell_indices_nh_batch.reshape(b,-1,1).repeat(1,1,e)).reshape(b,n,nh,e)
+
+
+    def get_global_indices_global(self, batch_sample_indices, sampled_level_fov, global_level):
+
+        global_indices_sampled  = self.global_indices.reshape(-1, 4**sampled_level_fov[0])[batch_sample_indices]
+        
+        return self.get_global_indices_relative(global_indices_sampled, global_level)
+    
+
+    def get_global_indices_relative(self, sampled_indices, level):
+        return sampled_indices.reshape(sampled_indices.shape[0], -1, 4**level)[:,:,0]
+
+    def sequenize(self, indices, seq_level):
+
+        indices = indices.reshape(indices.shape[0], -1, 4**(seq_level))
+
+        return indices
+    
+
+    def localize_global_indices(self, sample_indices_dict, level):
+        
+        b,n = sample_indices_dict['global_cell'].shape[:2]
+        indices_offset_level = sample_indices_dict['sample']*4**(sample_indices_dict['sample_level']-level)
+        indices_level = sample_indices_dict['global_cell'].view(b,n) - indices_offset_level.view(-1,1)
+
+        return indices_level
+    
+    def coarsen_indices(self, global_level, coarsen_level=None, indices=None, nh=1):
         if indices is None:
             indices = self.global_indices
 
-        global_cells, local_cells, cells_nh, out_of_fov_mask = helpers.coarsen_global_cells(indices, self.eoc, self.acoe, global_level=global_level, nh=nh)
+        global_cells, local_cells, cells_nh, out_of_fov_mask = helpers.coarsen_global_cells(indices, self.eoc, self.acoe, global_level=global_level, coarsen_level=coarsen_level, nh=nh)
         
 
         return global_cells, local_cells, cells_nh, out_of_fov_mask 
     
+    def get_adjacent_global_cell_indices(self, global_level):
+        adjc_indices = self.acoe.T[self.eoc.T].reshape(-1,4**global_level,6)
+        self_indices = self.global_indices.view(-1,4**global_level)[:,0]
 
+        adjc_indices = adjc_indices.view(self_indices.shape[0],-1) // 4**global_level
+        self_indices = self_indices // 4**global_level
+
+        adjc_unique = (adjc_indices).long().unique(dim=-1)
+        
+        is_self = adjc_unique - self_indices.view(-1,1) == 0
+
+        adjc = adjc_unique[~is_self]
+
+        adjc = adjc.reshape(self_indices.shape[0], -1)
+
+        return adjc
 
     def get_relative_positions(self, cell_indices1, cell_indices2):
       
-        coords1 = self.cell_coords[:,cell_indices1]
-        coords2 = self.cell_coords[:,cell_indices2]
+        coords1 = self.cell_coords_global[:,cell_indices1]
+        coords2 = self.cell_coords_global[:,cell_indices2]
   
         if coords2.dim() > coords1.dim():
             coords1 = coords1.unsqueeze(dim=-1)

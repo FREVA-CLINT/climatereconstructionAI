@@ -858,10 +858,10 @@ def get_nearest_to_icon_rec(c_t_global, c_i, level=7, global_indices_i=None, nh=
     return global_indices, in_rad, (dist_values, phi_values)
 
 
-def get_mapping_to_icon_grid(coords_icon, coords_input, search_raadius=3, max_nh=10, level_start=7):
+def get_mapping_to_icon_grid(coords_icon, coords_input, search_raadius=3, max_nh=10, level_start=7, lowest_level=0):
 
     grid_mapping = []
-    for k in range(level_start+1):
+    for k in range(level_start + 1 - lowest_level):
         level = level_start - (k)
 
         if k == 0:
@@ -874,7 +874,7 @@ def get_mapping_to_icon_grid(coords_icon, coords_input, search_raadius=3, max_nh
     return grid_mapping
 
 
-def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, grid_types, search_raadius=3, max_nh=10, level_start=7):
+def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, grid_types, search_raadius=3, max_nh=10, level_start=7, lowest_level = 0):
     
     grid_icon = xr.open_dataset(grid_file_icon)
     grid = xr.open_dataset(grid_file)
@@ -902,9 +902,11 @@ def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, gri
             coords_input = get_coords_as_tensor(grid, grid_type=grid_type)
 
             if grid_file_icon == grid_file:
-                indices = torch.tensor(grid_icon[lookup[grid_type_icon][grid_type]].values -1).T
-                if grid_type_icon == grid_type:
-                    indices = indices.unsqueeze(dim=-1)
+                indices = torch.tensor(grid_icon[lookup[grid_type_icon][grid_type]].values -1)
+                if indices.dim()<2:
+                    indices = indices.reshape(-1, 4**lowest_level)[:,0]
+                else:
+                    indices = indices.reshape(-1, 4**lowest_level, indices.shape[-1])[:,0].transpose(-2,-1)
 
             else:
                 mapping = get_mapping_to_icon_grid(
@@ -912,7 +914,8 @@ def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, gri
                     coords_input,
                     search_raadius=search_raadius,
                     max_nh=max_nh,
-                    level_start=level_start)[-1]
+                    level_start=level_start,
+                    lowest_level = lowest_level)[-1]
                 
                 indices = mapping['indices']
 

@@ -919,14 +919,30 @@ def unique_values(row):
 def unique_count(row):
     return np.unique(row, return_counts=True)[1].max()
 
-def coarsen_global_cells(cells, eoc, acoe, global_level=1, nh=1):
+def get_nh_of_batch_indices(cell_indices, adjc):
+    
+    cells_nh = adjc[cell_indices]
+
+    out_of_fov = torch.logical_or(cells_nh > cell_indices.amax(dim=(-1)).reshape(-1,1,1),
+                        cells_nh < cell_indices.amin(dim=(-1)).reshape(-1,1,1))
+    
+    ind = torch.where(out_of_fov)
+    cells_nh[ind] = cell_indices[ind[0],ind[1]]
+    
+    return cells_nh, out_of_fov
+
+def coarsen_global_cells(cells, eoc, acoe, global_level=1, coarsen_level=None, nh=1):
+    if coarsen_level is None:
+        coarsen_level = global_level
+    
+    coarsen_level = global_level
 
     n_cells = cells.shape[-1]
-    n_cells_coarse = n_cells // 4**global_level
+    n_cells_coarse = n_cells // 4**coarsen_level
 
     if len(cells.shape)>1:
         batched=True
-        cells = cells.reshape(cells.shape[0],-1,4**global_level)
+        cells = cells.reshape(cells.shape[0],-1,4**coarsen_level)
         adjc = acoe.T[eoc.T[cells]]
         for _ in range(nh-1):
             adjc = acoe.T[eoc.T[adjc]]
@@ -977,11 +993,11 @@ def coarsen_global_cells(cells, eoc, acoe, global_level=1, nh=1):
 
 
 def get_nh_values(values, indices_nh=None, sample_indices=None, coarsest_level=4, global_level=0, nh=1):
-    if indices_nh is None:
+    if sample_indices is None:
         return values[indices_nh]
     else:
         b,n,e = values.reshape(values.shape[0],values.shape[1],-1).shape
-        indices_offset_level = sample_indices*4**(coarsest_level-global_level)
+        indices_offset_level = sample_indices*(4**(coarsest_level-global_level))
         indices_level = indices_nh - indices_offset_level.reshape(-1,1,1)
 
         return torch.gather(values.reshape(b,-1,e),1, index=indices_level.reshape(b,-1,1).repeat(1,1,e)).reshape(b,n,3,e)

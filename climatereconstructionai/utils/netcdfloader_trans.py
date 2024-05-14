@@ -128,7 +128,10 @@ class NetCDFLoader_lazy(Dataset):
 
         self.input_mapping = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
                                                      model_settings['input_grid'], self.variables_source.keys(), 
-                                                     search_raadius=model_settings['search_raadius'], max_nh=model_settings['nh_input'], level_start=model_settings['level_start_input'])
+                                                     search_raadius=model_settings['search_raadius'], 
+                                                     max_nh=model_settings['nh_input'], 
+                                                     level_start=model_settings['level_start_input'],
+                                                     lowest_level=model_settings['global_level_start'])
 
         self.output_mapping = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
                                                      model_settings['processing_grid'], self.variables_target.keys(), 
@@ -136,7 +139,12 @@ class NetCDFLoader_lazy(Dataset):
 
         ds_source = xr.open_dataset(files_source[0])
 
-        self.global_cells = coarsen_global_cells(torch.arange(len(grid_processing.clon)), torch.tensor(grid_processing.edge_of_cell.values-1), torch.tensor(grid_processing.adjacent_cell_of_edge.values-1), global_level=coarsen_sample_level)[0]
+        global_indices = torch.arange(len(grid_processing.clon))
+        eoc =  torch.tensor(grid_processing.edge_of_cell.values-1)
+        adjc =  torch.tensor(grid_processing.adjacent_cell_of_edge.values-1)
+
+        self.global_cells = coarsen_global_cells(global_indices, eoc, adjc, global_level=coarsen_sample_level)[0]
+        self.global_cells_input = self.global_cells.reshape(self.global_cells.shape[0],-1,4**model_settings['global_level_start'])[:,:,0]
 
         self.num_datapoints_time = ds_source[list(self.variables_source.values())[0][0]].shape[0]
 
@@ -209,7 +217,7 @@ class NetCDFLoader_lazy(Dataset):
             data_g = torch.stack(data_g, dim=-1)
 
             if index_mapping_dict is not None:
-                indices = index_mapping_dict[key][global_indices]
+                indices = index_mapping_dict[key][global_indices // 4**(self.model_settings['global_level_start'])]
             else:
                 indices = global_indices.reshape(-1,1)
 
@@ -239,10 +247,11 @@ class NetCDFLoader_lazy(Dataset):
             index = int(torch.randint(0, len(ds_source.time.values), (1,1)))
 
         sample_index = torch.randint(self.global_cells.shape[0],(1,))[0]
-        global_cells_sample = self.global_cells[sample_index]
+        global_cells_sample_input = self.global_cells_input[sample_index]
+        global_cells_sample_target = self.global_cells[sample_index]
         
-        data_source = self.get_data(ds_source, index, global_cells_sample, self.variables_source, self.input_mapping['cell'])
-        data_target = self.get_data(ds_target, index, global_cells_sample, self.variables_target, self.output_mapping['cell'])
+        data_source = self.get_data(ds_source, index, global_cells_sample_input, self.variables_source, self.input_mapping['cell'])
+        data_target = self.get_data(ds_target, index, global_cells_sample_target, self.variables_target, self.output_mapping['cell'])
         '''
         condition_not_met = True
         while condition_not_met:
@@ -262,9 +271,10 @@ class NetCDFLoader_lazy(Dataset):
             data_source = self.normalizer(data_source, self.variables_source)
             data_target = self.normalizer(data_target, self.variables_target)
 
-        indices = {'global_cell': global_cells_sample,
-             'sample': sample_index,
-             'sample_level': self.coarsen_sample_level}
+        indices = {'global_cell': global_cells_sample_input,
+                   'local_cell': global_cells_sample_input // 4**self.model_settings['global_level_start'],
+                    'sample': sample_index,
+                    'sample_level': self.coarsen_sample_level}
 
         return data_source, data_target, indices
 

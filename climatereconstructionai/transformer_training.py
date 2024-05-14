@@ -9,6 +9,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import netCDF4 as netcdf
 
+from torch.cuda.amp import GradScaler
+
 from .utils import twriter_t, early_stopping, optimization
 from .utils.io import save_ckpt
 from .utils.netcdfloader_trans import NetCDFLoader_lazy, InfiniteSampler
@@ -229,8 +231,10 @@ def train(model, training_settings, model_settings={}):
     
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=training_settings['lr'])
     lr_scheduler = CosineWarmupScheduler(optimizer, training_settings["T_warmup"], training_settings['max_iter'])
-  
     
+    if training_settings['mixed_precision']:
+        scaler = GradScaler()
+
     if training_settings['multi_gpus']:
         model = torch.nn.DataParallel(model)
 
@@ -253,22 +257,45 @@ def train(model, training_settings, model_settings={}):
         data = [data_to_device(x, device) for x in next(iterator_train)]
         source, target, indices = data
 
-        if 'k_l1_relv' in lambdas_optim.keys():
-            train_total_loss, train_loss_dict = loss_calculator(lambdas_optim, target, model, source, source_indices=indices, k=lambdas_optim['k_l1_relv'], model_type='transformer')
+        if training_settings['mixed_precision']:
+            with torch.autocast(device_type=training_settings['device'], dtype=torch.bfloat16):
+                train_total_loss, train_loss_dict = loss_calculator(lambdas_optim, 
+                                                                        target, 
+                                                                        model, 
+                                                                        source, 
+                                                                        source_indices=indices, 
+                                                                        k=lambdas_optim['k_l1_relv'] if 'k_l1_relv' in lambdas_optim.keys() else None, 
+                                                                        val=False, 
+                                                                        model_type='transformer')
         else:
-            train_total_loss, train_loss_dict = loss_calculator(lambdas_optim, target, model, source, source_indices=indices, k=None, model_type='transformer')
-
+            train_total_loss, train_loss_dict = loss_calculator(lambdas_optim, 
+                                                                        target, 
+                                                                        model, 
+                                                                        source, 
+                                                                        source_indices=indices, 
+                                                                        k=lambdas_optim['k_l1_relv'] if 'k_l1_relv' in lambdas_optim.keys() else None, 
+                                                                        val=False, 
+                                                                        model_type='transformer')
+        
         train_losses_hist.append(train_loss_dict['total_loss'])
+
 
         optimizer.zero_grad()
         if dw_train and len(train_losses_hist)>=dw_patience and (torch.tensor(train_losses_hist)).diff()[-dw_patience:].sum()<0:
             
-            train_total_loss.backward(retain_graph=True) 
-
+            if training_settings['mixed_precision']:
+                scaler.scale(train_total_loss).backward(retain_graph=True)
+            else:
+                train_total_loss.backward() 
+      
             dw_loss = make_ascent(train_total_loss)
 
             optimizer2.zero_grad()
-            dw_loss.backward()
+            if training_settings['mixed_precision']:
+                scaler.scale(dw_loss).backward(retain_graph=True)
+            else:
+                dw_loss.backward()
+
             optimizer2.step()
             lr_scheduler2.step()
 
@@ -277,10 +304,19 @@ def train(model, training_settings, model_settings={}):
             writer.update_scalars(dict(zip(lambda_keys, lambda_vals)), n_iter, 'train')
         
         else:
-            train_total_loss.backward() 
+            if training_settings['mixed_precision']:
+                scaler.scale(train_total_loss).backward()
+            else:
+                train_total_loss.backward() 
 
         nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        optimizer.step()
+
+        if training_settings['mixed_precision']:
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            optimizer.step()
+
         lr_scheduler.step()
 
 
@@ -295,10 +331,26 @@ def train(model, training_settings, model_settings={}):
                 data = [data_to_device(x, device) for x in next(iterator_val)]
                 source, target, indices = data
 
-                if 'k_l1_relv' in lambdas_optim.keys():
-                    val_total_loss, val_loss_dict, output, target, _, debug_dict = loss_calculator(lambdas_optim, target, model, source, source_indices=indices, k=lambdas_optim['k_l1_relv'], val=True, model_type='transformer')
+                if training_settings['mixed_precision']:
+                    with torch.autocast(device_type=training_settings['device'], dtype=torch.bfloat16):
+                        val_total_loss, val_loss_dict, output, target, _, debug_dict = loss_calculator(lambdas_optim, 
+                                                                                                target, 
+                                                                                                model, 
+                                                                                                source, 
+                                                                                                source_indices=indices, 
+                                                                                                k=lambdas_optim['k_l1_relv'] if 'k_l1_relv' in lambdas_optim.keys() else None, 
+                                                                                                val=True, 
+                                                                                                model_type='transformer')
                 else:
-                    val_total_loss, val_loss_dict, output, target, _,debug_dict = loss_calculator(lambdas_optim, target, model, source, source_indices=indices, k=None, val=True, model_type='transformer')
+                    val_total_loss, val_loss_dict, output, target, _, debug_dict = loss_calculator(lambdas_optim, 
+                                                                                                target, 
+                                                                                                model, 
+                                                                                                source, 
+                                                                                                source_indices=indices, 
+                                                                                                k=lambdas_optim['k_l1_relv'] if 'k_l1_relv' in lambdas_optim.keys() else None, 
+                                                                                                val=True, 
+                                                                                                model_type='transformer')
+
                 
                 val_losses.append(list(val_loss_dict.values()))
             
