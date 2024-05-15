@@ -135,7 +135,9 @@ class NetCDFLoader_lazy(Dataset):
 
         self.output_mapping = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
                                                      model_settings['processing_grid'], self.variables_target.keys(), 
-                                                     search_raadius=model_settings['search_raadius'], max_nh=model_settings['nh_input'], level_start=model_settings['level_start_input'])
+                                                     search_raadius=model_settings['search_raadius'], 
+                                                     max_nh=model_settings['nh_input'], 
+                                                     level_start=model_settings['level_start_input'])
 
         ds_source = xr.open_dataset(files_source[0])
 

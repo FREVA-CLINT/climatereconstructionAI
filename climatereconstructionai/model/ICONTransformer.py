@@ -237,8 +237,7 @@ class processing_layers(nn.Module):
         self.register_buffer("adjc", adjc)
 
         self.input_mlp = self.input_mlp = nn.Sequential(
-                nn.Linear(input_dim, model_dim, bias=False),
-                activation
+                nn.Linear(input_dim, model_dim, bias=False)
             )
 
         if nh_att:
@@ -515,9 +514,7 @@ class refinement_layer(nn.Module):
         
         n_refine = pos[0].shape[1]*pos[0].shape[2] // x.shape[1]
 
-        x = x.unsqueeze(dim=-2).repeat_interleave(n_refine, dim=-2)
-
-        x = x.reshape(x.shape[0], -1, x.shape[-1])
+        x = x.repeat_interleave(n_refine, dim=1)
 
         x = sequenize(x, max_seq_level=self.seq_level)
 
