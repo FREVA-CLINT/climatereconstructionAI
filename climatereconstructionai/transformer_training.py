@@ -5,11 +5,16 @@ import torch.nn as nn
 import json
 import math
 import torch.multiprocessing
+import torch.utils
 from torch.utils.data import DataLoader
+import torch.utils.data
+import torch.utils.data.distributed
 from tqdm import tqdm
 import netCDF4 as netcdf
 
 from torch.cuda.amp import GradScaler
+from torch.nn.parallel import DistributedDataParallel as DDP
+import torch.distributed as dist
 
 from .utils import twriter_t, early_stopping, optimization
 from .utils.io import save_ckpt
@@ -19,6 +24,13 @@ def arclen(p1,p2):
   length = 2*torch.arcsin(torch.linalg.norm(p2-p1,axis=-1)/2)
   return length
 
+
+def set_device_and_init_torch_dist():
+    
+    torch.distributed.init_process_group(backend='nccl')
+       
+    local_rank = dist.get_rank() % torch.cuda.device_count()
+    torch.cuda.set_device(local_rank)
 
 
 
@@ -86,9 +98,11 @@ def check_get_data_files(list_or_path, root_path = '', train_or_val='train'):
 def train(model, training_settings, model_settings={}):
  
     torch.multiprocessing.set_sharing_strategy('file_system')
-
-    print("* Number of GPUs: ", torch.cuda.device_count())
-
+    
+    if training_settings['distributed']:
+        set_device_and_init_torch_dist()
+    else:
+        print("* Number of GPUs: ", torch.cuda.device_count())
 
     log_dir = training_settings['log_dir']
     if not os.path.exists(log_dir):
@@ -186,17 +200,32 @@ def train(model, training_settings, model_settings={}):
     model_settings_path = os.path.join(model_settings['model_dir'],'model_settings.json')
     with open(model_settings_path, 'w') as f:
         json.dump(model_settings, f, indent=4)
+    
+    if training_settings['distributed']:
+        train_sampler = torch.utils.data.distributed.DistributedSampler(
+                dataset_train,
+                num_replicas=dist.get_world_size(),
+                rank=dist.get_rank(),
+            )
+        val_sampler = torch.utils.data.distributed.DistributedSampler(
+                dataset_val,
+                num_replicas=dist.get_world_size(),
+                rank=dist.get_rank(),
+            )
+    else:
+        train_sampler = InfiniteSampler(len(dataset_train))
+        val_sampler = InfiniteSampler(len(dataset_val))    
 
     iterator_train = iter(DataLoader(dataset_train,
                                     batch_size=batch_size,
-                                    sampler=InfiniteSampler(len(dataset_train)),
+                                    sampler=train_sampler,
                                     num_workers=training_settings['n_workers'], 
                                     pin_memory=True if device == 'cuda' else False,
                                     pin_memory_device=device))
 
     iterator_val = iter(DataLoader(dataset_val,
                                     batch_size=batch_size,
-                                    sampler=InfiniteSampler(len(dataset_val)),
+                                    sampler=val_sampler,
                                     num_workers=training_settings['n_workers'] if 'n_workers_val' not in training_settings.keys() else training_settings['n_workers_val'], 
                                     pin_memory=True if device == 'cuda' else False,
                                     pin_memory_device=device))
@@ -205,7 +234,18 @@ def train(model, training_settings, model_settings={}):
     if 'dw_train' in training_settings.keys() and training_settings['dw_train']:
         dw_train = True
 
-    model = model.to(device)
+    
+    
+
+    if training_settings['distributed']:
+        model = DDP(model, device_ids=[torch.cuda.current_device()])
+
+    elif training_settings['multi_gpus']:
+        model = model.to(device)
+        model = torch.nn.DataParallel(model)      
+    
+    else:
+        model = model.to(device)
 
     early_stop = early_stopping.early_stopping(training_settings['early_stopping_delta'], training_settings['early_stopping_patience'])
 
@@ -235,8 +275,7 @@ def train(model, training_settings, model_settings={}):
     if training_settings['mixed_precision']:
         scaler = GradScaler()
 
-    if training_settings['multi_gpus']:
-        model = torch.nn.DataParallel(model)
+    
 
     pbar = tqdm(range(0, training_settings['max_iter']))
 

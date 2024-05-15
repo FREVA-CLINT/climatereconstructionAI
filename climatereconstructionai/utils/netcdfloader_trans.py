@@ -245,9 +245,9 @@ class NetCDFLoader_lazy(Dataset):
 
     def __getitem__(self, index):
         
-        if self.index_range_source is not None:
-            if (index < self.index_range_source[0]) or (index > self.index_range_source[1]):
-                index = int(torch.randint(self.index_range_source[0], self.index_range_source[1]+1, (1,1)))
+       # if self.index_range_source is not None:
+       #     if (index < self.index_range_source[0]) or (index > self.index_range_source[1]):
+       #         index = int(torch.randint(self.index_range_source[0], self.index_range_source[1]+1, (1,1)))
 
         if len(self.files_source)>0:
             source_index = torch.randint(0, len(self.files_source), (1,1))
@@ -260,6 +260,9 @@ class NetCDFLoader_lazy(Dataset):
 
         if self.random_time_idx:
             index = int(torch.randint(0, len(ds_source.time.values), (1,1)))
+            if self.index_range_source is not None:
+                if (index < self.index_range_source[0]) or (index > self.index_range_source[1]):
+                    index = int(torch.randint(self.index_range_source[0], self.index_range_source[1]+1, (1,1)))
 
         global_cells = torch.load(self.global_cells_path)
         sample_index = torch.randint(global_cells.shape[0],(1,))[0]
@@ -299,4 +302,4 @@ class NetCDFLoader_lazy(Dataset):
         return data_source, data_target, indices
 
     def __len__(self):
-        return self.num_datapoints_time
+        return len(self.files_source)
