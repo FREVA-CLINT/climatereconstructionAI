@@ -406,16 +406,16 @@ def train(model, training_settings, model_settings={}):
                 torch.save(output, os.path.join(log_dir,'output.pt'))
                 torch.save(target, os.path.join(log_dir,'target.pt'))
                 torch.save(source, os.path.join(log_dir,'source.pt'))
-                input_mapping = {}
-                for key, layer in model.input_layers.items():
-                    input_mapping[key] = layer.input_mapping
+                #input_mapping = {}
+                #for key, layer in model.input_layers.items():
+                #    input_mapping[key] = layer.input_mapping
 
-                input_coordinates = {}
-                for key, layer in model.input_layers.items():
-                    input_coordinates[key] = layer.input_coordinates
+                #input_coordinates = {}
+                #for key, layer in model.input_layers.items():
+                #    input_coordinates[key] = layer.input_coordinates
 
-                torch.save(input_mapping, os.path.join(log_dir,'input_mapping.pt'))
-                torch.save(input_coordinates, os.path.join(log_dir,'input_coordinates.pt'))
+                #torch.save(input_mapping, os.path.join(log_dir,'input_mapping.pt'))
+                #torch.save(input_coordinates, os.path.join(log_dir,'input_coordinates.pt'))
                 torch.save(indices, os.path.join(log_dir,'indices.pt'))
                 np.savetxt(os.path.join(log_dir,'losses_val.txt'),np.array(val_losses_hist))
                 np.savetxt(os.path.join(log_dir,'losses_train.txt'),np.array(train_losses_hist))
