@@ -126,14 +126,14 @@ class NetCDFLoader_lazy(Dataset):
 
         self.coords_processing = get_coords_as_tensor(grid_processing, lon='clon', lat='clat')
 
-        self.input_mapping = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
+        input_mapping = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
                                                      model_settings['input_grid'], self.variables_source.keys(), 
                                                      search_raadius=model_settings['search_raadius'], 
                                                      max_nh=model_settings['nh_input'], 
                                                      level_start=model_settings['level_start_input'],
                                                      lowest_level=model_settings['global_level_start'])
 
-        self.output_mapping = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
+        output_mapping = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
                                                      model_settings['processing_grid'], self.variables_target.keys(), 
                                                      search_raadius=model_settings['search_raadius'], 
                                                      max_nh=model_settings['nh_input'], 
@@ -145,8 +145,20 @@ class NetCDFLoader_lazy(Dataset):
         eoc =  torch.tensor(grid_processing.edge_of_cell.values-1)
         adjc =  torch.tensor(grid_processing.adjacent_cell_of_edge.values-1)
 
-        self.global_cells = coarsen_global_cells(global_indices, eoc, adjc, global_level=coarsen_sample_level)[0]
-        self.global_cells_input = self.global_cells.reshape(self.global_cells.shape[0],-1,4**model_settings['global_level_start'])[:,:,0]
+        global_cells = coarsen_global_cells(global_indices, eoc, adjc, global_level=coarsen_sample_level)[0]
+        global_cells_input = global_cells.reshape(global_cells.shape[0],-1,4**model_settings['global_level_start'])[:,:,0]
+
+        self.global_cells_path = os.path.join(model_settings["model_dir"],"global_cells.pt")
+        self.global_cells_input_path = os.path.join(model_settings["model_dir"],"global_cells_input.pt")
+
+        self.input_mapping_path = os.path.join(model_settings["model_dir"],"input_mapping.pt")
+        self.output_mapping_path = os.path.join(model_settings["model_dir"],"output_mapping.pt")
+
+        torch.save(global_cells, self.global_cells_path)
+        torch.save(global_cells_input, self.global_cells_input_path)
+
+        torch.save(input_mapping, self.input_mapping_path)
+        torch.save(output_mapping, self.output_mapping_path)
 
         self.num_datapoints_time = ds_source[list(self.variables_source.values())[0][0]].shape[0]
 
@@ -249,12 +261,17 @@ class NetCDFLoader_lazy(Dataset):
         if self.random_time_idx:
             index = int(torch.randint(0, len(ds_source.time.values), (1,1)))
 
-        sample_index = torch.randint(self.global_cells.shape[0],(1,))[0]
-        global_cells_sample_input = self.global_cells_input[sample_index]
-        global_cells_sample_target = self.global_cells[sample_index]
+        global_cells = torch.load(self.global_cells_path)
+        sample_index = torch.randint(global_cells.shape[0],(1,))[0]
+
+        global_cells_sample_input = torch.load(self.global_cells_input_path)[sample_index]
+        global_cells_sample_target = global_cells[sample_index]
         
-        data_source = self.get_data(ds_source, index, global_cells_sample_input, self.variables_source, self.model_settings['global_level_start'], self.input_mapping['cell'])
-        data_target = self.get_data(ds_target, index, global_cells_sample_target, self.variables_target, 0, self.output_mapping['cell'])
+        output_mapping = torch.load(self.output_mapping_path)
+        input_mapping = torch.load(self.input_mapping_path)
+
+        data_source = self.get_data(ds_source, index, global_cells_sample_input, self.variables_source, self.model_settings['global_level_start'], input_mapping['cell'])
+        data_target = self.get_data(ds_target, index, global_cells_sample_target, self.variables_target, 0, output_mapping['cell'])
         '''
         condition_not_met = True
         while condition_not_met:
