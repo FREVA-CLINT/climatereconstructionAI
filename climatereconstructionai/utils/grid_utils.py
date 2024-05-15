@@ -909,9 +909,10 @@ def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, gri
             if grid_file_icon == grid_file:
                 indices = torch.tensor(grid_icon[lookup[grid_type_icon][grid_type]].values -1)
                 if indices.dim()<2:
-                    indices = indices.reshape(-1, 4**lowest_level)[:,0]
+                    indices = indices.reshape(-1, 4**lowest_level)
                 else:
-                    indices = indices.transpose(-2,-1).reshape(-1, 4**lowest_level, indices.shape[0])[:,0]
+                    indices = indices.transpose(-2,-1).reshape(-1, 4**lowest_level, indices.shape[0])
+                indices = indices.reshape(indices.shape[0],-1)
 
             else:
                 mapping = get_mapping_to_icon_grid(
