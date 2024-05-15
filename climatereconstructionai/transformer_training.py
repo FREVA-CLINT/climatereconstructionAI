@@ -238,6 +238,7 @@ def train(model, training_settings, model_settings={}):
     
 
     if training_settings['distributed']:
+        model = model.to(torch.cuda.current_device())
         model = DDP(model, device_ids=[torch.cuda.current_device()])
 
     elif training_settings['multi_gpus']:
