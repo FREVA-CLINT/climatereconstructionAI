@@ -858,8 +858,10 @@ class ICON_Transformer(nn.Module):
                     pos_seq = self.get_relative_positions(indices_sequence, 
                                                     indices_sequence)
                     
-                    x = self.skip_layers[global_level](x, x_skip[global_level], pos=pos_seq)
-                
+                    if self.model_settings['reverse_skip']:
+                        x = self.skip_layers[global_level](x_skip[global_level], x , pos=pos_seq)
+                    else:
+                        x = self.skip_layers[global_level](x, x_skip[global_level], pos=pos_seq)
 
 
         output_data = {}
