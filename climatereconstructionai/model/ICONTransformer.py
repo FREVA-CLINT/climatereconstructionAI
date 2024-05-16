@@ -720,7 +720,7 @@ class ICON_Transformer(nn.Module):
 
             if self.use_skip_channels:
                 if global_level in self.encoder_dims_level.keys() and k>0:
-                    dim_in += self.encoder_dims_level[global_level]["out"]
+                    dim_in += self.encoder_dims_level[global_level]["in"]
             
 
             
