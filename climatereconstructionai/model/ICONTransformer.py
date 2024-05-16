@@ -649,6 +649,9 @@ class ICON_Transformer(nn.Module):
         self.n_decoder_layers = len(self.model_settings["encoder_dims"])
         self.n_encoder_layers = len(self.model_settings["encoder_dims"]) - self.global_level_start
 
+        self.use_skip_layers = self.model_settings['use_skip_layers']
+        self.use_skip_channels = self.model_settings['use_skip_channels']
+
         self.global_emb_table = self.init_pos_embedding_table(self.model_settings["emb_table_dim"], embed_dim=self.model_settings["emb_table_bins"])
         
         input_mapping, input_coordinates = self.get_input_grid_mapping()
@@ -710,9 +713,6 @@ class ICON_Transformer(nn.Module):
                                                     pos_emb_operation = self.pos_emb_operation)
 
 
-        self.use_skip_layers = self.model_settings['use_skip_layers']
-        self.use_skip_channels = self.model_settings['use_skip_channels']
-
         for k in range(self.n_decoder_layers):
 
             global_level = str(self.n_decoder_layers - 1 - k)
@@ -721,7 +721,7 @@ class ICON_Transformer(nn.Module):
             dim_out = self.model_settings["encoder_dims"][::-1][k+1] if k < self.n_decoder_layers - 1 else dim_in
 
             if self.use_skip_channels:
-                if global_level in self.encoder_dims_level.keys() and k>0:
+                if global_level in self.encoder_dims_level.keys():
                     dim_in += self.encoder_dims_level[global_level]["in"]
             
 
@@ -1077,6 +1077,10 @@ class ICON_Transformer(nn.Module):
             
             input_dim = self.model_settings['encoder_dims'][0]
             model_dim = ff_dim = input_dim
+            
+            if self.global_level_start==0 and self.use_skip_channels:
+                input_dim += input_dim
+
 
             output_dim = len(self.output_data[key])
             n_heads = self.model_settings['n_heads'][0]            
