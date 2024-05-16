@@ -58,11 +58,12 @@ class nha_layer(nn.Module):
 
         if input_mlp:
             self.input_mlp = nn.Sequential(
-                nn.Linear(input_dim, model_dim, bias=False)
+                nn.Linear(input_dim, model_dim, bias=False),
+                nn.LayerNorm(model_dim)
             )
+            input_dim = model_dim
         else:
             self.input_mlp = nn.Identity()
-            input_dim=model_dim
         
         if output_mlp:
             self.output_mlp = nn.Sequential(
@@ -81,7 +82,7 @@ class nha_layer(nn.Module):
             self.emb_proj_v = position_embedding_proj(pos_emb_dim, model_dim // n_heads, operation=pos_emb_operation)
 
         self.MHA = helpers.MultiHeadAttentionBlock(
-            model_dim, model_dim, n_heads, qkv_proj=True
+            model_dim, model_dim, n_heads, input_dim=input_dim, qkv_proj=True
             )           
 
         self.mlp_layer = nn.Sequential(
@@ -160,7 +161,7 @@ class n_nha_layers(nn.Module):
                                         ff_dim, 
                                         n_heads=n_heads, 
                                         dropout=dropout, 
-                                        input_mlp=input_mlp, 
+                                        input_mlp=False, 
                                         output_mlp=output_mlp, 
                                         output_dim=output_dim, 
                                         activation=activation, 
@@ -212,7 +213,7 @@ class coarsen_layer(nn.Module):
                 ff_dim = ff_dim,
                 n_heads = n_heads,
                 nh_reduction = 4,
-                input_mlp = False,
+                input_mlp = True,
                 dropout=dropout,
                 pos_emb_type=pos_emb_type,
                 pos_embedding_table=pos_embedding_table,
@@ -238,9 +239,10 @@ class processing_layers(nn.Module):
         self.register_buffer("coordinates", coordinates)
         self.register_buffer("adjc", adjc)
 
-        self.input_mlp = self.input_mlp = nn.Sequential(
+        self.input_mlp = nn.Sequential(
                 nn.Linear(input_dim, model_dim, bias=False)
             )
+
 
         if nh_att:
             self.nh_layers = nn.ModuleList([nha_layer(input_dim= model_dim,
@@ -481,7 +483,7 @@ class refinement_layer(nn.Module):
                     ff_dim = ff_dim,
                     n_heads = n_heads,
                     output_mlp = False,
-                    input_mlp = False,
+                    input_mlp = True,
                     dropout=dropout,
                     pos_emb_type=pos_emb_type,
                     pos_embedding_table=pos_embedding_table,
@@ -687,8 +689,8 @@ class ICON_Transformer(nn.Module):
                                         coordinates,
                                         n_layers = self.model_settings['n_processing_layers'],
                                         input_dim = dim_in,
-                                        model_dim = dim_out,
-                                        ff_dim = dim_out,
+                                        model_dim = dim_in,
+                                        ff_dim = dim_in,
                                         n_heads =  self.model_settings["n_heads"][k],
                                         dropout=0,
                                         pos_emb_type= self.pos_emb_type,
@@ -698,7 +700,7 @@ class ICON_Transformer(nn.Module):
                                         pos_emb_operation = self.pos_emb_operation)   
             
             self.coarsen_layers[global_level] = coarsen_layer(
-                                                    input_dim= dim_out,
+                                                    input_dim= dim_in,
                                                     model_dim = dim_out,
                                                     ff_dim = dim_out,
                                                     n_heads = self.model_settings["n_heads"][k],
@@ -720,10 +722,9 @@ class ICON_Transformer(nn.Module):
 
             if self.use_skip_channels:
                 if global_level in self.encoder_dims_level.keys() and k>0:
-                    dim_in += self.encoder_dims_level[global_level]["out"]
+                    dim_in += self.encoder_dims_level[global_level]["in"]
             
 
-            
             adjc = self.get_adjacent_global_cell_indices(int(global_level))
             coordinates = self.get_coordinates_level(global_level)
 
@@ -733,7 +734,7 @@ class ICON_Transformer(nn.Module):
                                     coordinates,
                                     n_layers = self.model_settings['n_processing_layers'],
                                     input_dim = dim_in,
-                                    model_dim = dim_out,
+                                    model_dim = dim_in,
                                     ff_dim = dim_out,
                                     n_heads = self.model_settings["n_heads"][k],
                                     dropout=0,
@@ -750,7 +751,7 @@ class ICON_Transformer(nn.Module):
                         adjc,
                         coordinates_refined = self.get_coordinates_level(int(global_level)-1),
                         coordinates = coordinates,
-                        input_dim = dim_out,
+                        input_dim = dim_in,
                         model_dim = dim_out,
                         ff_dim = dim_out,
                         n_heads = self.model_settings["n_heads"][k],
@@ -851,7 +852,7 @@ class ICON_Transformer(nn.Module):
 
                 x = self.refinement_layers[global_level](x, local_indices_level, local_indices_refined, indices_batch_dict)
                 
-                global_level = str(int(global_level) -1)
+                global_level = str(int(global_level) - 1)
                 if self.use_skip_layers and global_level in x_skip.keys():
                     indices_sequence = sequenize(indices_global_refined, self.max_seq_level)
                     pos_seq = self.get_relative_positions(indices_sequence, 

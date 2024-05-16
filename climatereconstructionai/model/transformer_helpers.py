@@ -325,16 +325,18 @@ class SelfAttentionRPPEBlock(nn.Module):
         return x 
 
 class MultiHeadAttentionBlock(nn.Module):
-    def __init__(self, model_dim, output_dim, n_heads, qkv_proj=False, dropout=0):
+    def __init__(self,  model_dim, output_dim, n_heads, input_dim= None, qkv_proj=False, dropout=0):
         super().__init__()
 
         self.n_heads = n_heads
         self.head_dim = model_dim // n_heads
+        if input_dim is None:
+            input_dim = model_dim
         
         self.output_projection = nn.Linear(model_dim, output_dim, bias=False)
                 
         if qkv_proj:
-            self.qkv_projection = nn.ModuleList([nn.Linear(model_dim, model_dim, bias=False)]*3)
+            self.qkv_projection = nn.ModuleList([nn.Linear(input_dim, model_dim, bias=False)]*3)
         else:
             self.qkv_projection = nn.ModuleList([nn.Identity()]*3)
         
