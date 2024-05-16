@@ -720,7 +720,7 @@ class ICON_Transformer(nn.Module):
 
             if self.use_skip_channels:
                 if global_level in self.encoder_dims_level.keys() and k>0:
-                    dim_in += self.encoder_dims_level[global_level]["in"]
+                    dim_in += self.encoder_dims_level[global_level]["out"]
             
 
             
@@ -799,11 +799,12 @@ class ICON_Transformer(nn.Module):
         indices_global_level = indices_batch_dict['global_cell']
         for global_level, coarsen_layer in self.coarsen_layers.items():
             
+
+            x = self.processing_layers_enc[global_level](x, indices_global_level, indices_batch_dict)
+
             if self.use_skip_channels or self.use_skip_layers:
                 x_skip[global_level] = x
-
             
-            x = self.processing_layers_enc[global_level](x, indices_global_level, indices_batch_dict)
 
             indices_global_level = indices_global_level.reshape(indices_global_level.shape[0],-1,4)
 
