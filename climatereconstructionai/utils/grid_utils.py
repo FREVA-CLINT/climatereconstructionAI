@@ -782,24 +782,29 @@ class grid_interpolator(nn.Module):
     
 
 
-def get_distance_angle(lon1, lat1, lon2, lat2):
+def get_distance_angle(lon1, lat1, lon2, lat2, base="polar"):
 
     d_lats = distance_on_sphere(lon1, lat1, lon2, lat1)
     d_lons = distance_on_sphere(lon1, lat1, lon1, lat2)
 
-    sgn = torch.sign(lat2-lat1)
-    sgn[(d_lats ).abs()/torch.pi>1] = sgn[(d_lats).abs()/torch.pi>1]*-1
-    d_lats_s = d_lats*sgn
+    if base == "polar":
+        sgn = torch.sign(lat2-lat1)
+        sgn[(d_lats ).abs()/torch.pi>1] = sgn[(d_lats).abs()/torch.pi>1]*-1
+        d_lats_s = d_lats*sgn
 
-    sgn = torch.sign(lon2-lon1)
-    sgn[(d_lons).abs()/torch.pi>1] = sgn[(d_lons).abs()/torch.pi>1]*-1
-    d_lons_s = d_lons*sgn
+        sgn = torch.sign(lon2-lon1)
+        sgn[(d_lons).abs()/torch.pi>1] = sgn[(d_lons).abs()/torch.pi>1]*-1
+        d_lons_s = d_lons*sgn
 
 
-    distance = torch.sqrt(d_lats**2 + d_lons**2)
-    phi = torch.atan2(d_lats_s, d_lons_s)
+        distance = torch.sqrt(d_lats**2 + d_lons**2)
+        phi = torch.atan2(d_lats_s, d_lons_s)
 
-    return distance, phi
+        return distance, phi
+
+    else:
+        return d_lons, d_lats
+    
 
 
 
