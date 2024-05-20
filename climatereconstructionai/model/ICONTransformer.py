@@ -619,6 +619,7 @@ class ICON_Transformer(nn.Module):
         self.check_model_dir()
 
         self.max_seq_level = self.model_settings["max_seq_level"]
+        self.dropout = self.model_settings["dropout"]
 
         self.grid = xr.open_dataset(self.model_settings['processing_grid'])
         self.register_buffer('global_indices', torch.arange(len(self.grid.clon)).unsqueeze(dim=0))
@@ -695,7 +696,7 @@ class ICON_Transformer(nn.Module):
                                         model_dim = dim_in,
                                         ff_dim = dim_in,
                                         n_heads =  self.model_settings["n_heads"][k],
-                                        dropout=0,
+                                        dropout=self.dropout,
                                         pos_emb_type= self.pos_emb_type,
                                         pos_embedding_table=self.global_emb_table,
                                         pos_emb_dim=self.model_settings["emb_table_dim"],
@@ -708,6 +709,7 @@ class ICON_Transformer(nn.Module):
                                                     ff_dim = dim_out,
                                                     n_heads = self.model_settings["n_heads"][k],
                                                     pos_emb_type= self.pos_emb_type,
+                                                    dropout=self.dropout,
                                                     pos_embedding_table=self.global_emb_table,
                                                     pos_emb_dim=self.model_settings["emb_table_dim"],
                                                     pos_emb_operation = self.pos_emb_operation)
@@ -737,7 +739,7 @@ class ICON_Transformer(nn.Module):
                                     model_dim = dim_in,
                                     ff_dim = dim_out,
                                     n_heads = self.model_settings["n_heads"][k],
-                                    dropout=0,
+                                    dropout=self.dropout,
                                     pos_emb_type= self.pos_emb_type,
                                     pos_embedding_table=self.global_emb_table,
                                     pos_emb_dim=self.model_settings["emb_table_dim"],
@@ -754,6 +756,7 @@ class ICON_Transformer(nn.Module):
                         input_dim = dim_in,
                         model_dim = dim_out,
                         ff_dim = dim_out,
+                        dropout=self.dropout,
                         n_heads = self.model_settings["n_heads"][k],
                         pos_emb_type= self.pos_emb_type,
                         pos_embedding_table=self.global_emb_table,
@@ -768,7 +771,7 @@ class ICON_Transformer(nn.Module):
                                             model_dim = dim_out,
                                             ff_dim = dim_out,
                                             n_heads = self.model_settings["n_heads"][k],
-                                            dropout=0,
+                                            dropout= self.dropout,
                                             pos_emb_type= self.pos_emb_type,
                                             pos_embedding_table=self.global_emb_table,
                                             pos_emb_dim=self.model_settings["emb_table_dim"],
@@ -1054,6 +1057,7 @@ class ICON_Transformer(nn.Module):
                     seq_level=self.model_settings['input_seq_level'],
                     input_dim = n_input,
                     model_dim = model_dim,
+                    dropout=self.dropout,
                     ff_dim = ff_dim,
                     n_heads = n_heads,
                     pos_emb_type=self.pos_emb_type,
@@ -1093,6 +1097,7 @@ class ICON_Transformer(nn.Module):
                 input_dim=input_dim,
                 model_dim = model_dim,
                 output_dim = output_dim,
+                dropout=self.dropout,
                 ff_dim = ff_dim,
                 n_heads = n_heads,
                 output_mlp=True,
