@@ -76,6 +76,7 @@ class nha_layer(nn.Module):
 
         if self.pos_emb_type=='bias':
             self.emb_proj_bias = position_embedding_proj(pos_emb_dim, n_heads, operation=pos_emb_operation)
+
         elif self.pos_emb_type=='context':
             self.emb_proj_q = position_embedding_proj(pos_emb_dim, model_dim // n_heads, operation=pos_emb_operation)
             self.emb_proj_k = position_embedding_proj(pos_emb_dim, model_dim // n_heads, operation=pos_emb_operation)
@@ -119,7 +120,7 @@ class nha_layer(nn.Module):
             
 
         if self.pos_emb_type =='context' and pos is not None:
-            aq = self.emb_proj_k(pos[0], pos[1], self.pos_embedding_table)
+            aq = self.emb_proj_q(pos[0], pos[1], self.pos_embedding_table)
             ak = self.emb_proj_k(pos[0], pos[1], self.pos_embedding_table)
             av = self.emb_proj_v(pos[0], pos[1], self.pos_embedding_table)
 
@@ -343,7 +344,7 @@ class input_layer(nn.Module):
                     input_mlp = False,
                     dropout=dropout,
                     q_res=False,
-                    pos_emb_type=pos_emb_type,
+                    pos_emb_type=None,
                     pos_embedding_table=None,
                     pos_emb_dim=pos_emb_dim,
                     pos_emb_operation=pos_emb_operation)
