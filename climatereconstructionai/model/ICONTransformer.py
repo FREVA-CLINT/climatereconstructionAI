@@ -1122,10 +1122,17 @@ class ICON_Transformer(nn.Module):
             
             if int(global_level) <= self.global_level_output_start:
 
+                input_dim = self.decoder_dims_level[global_level]
+
+                if 'share_emb_w_output' in self.model_settings.keys() and not self.model_settings['share_emb_w_output']:
+                    emb_table = self.init_pos_embedding_table(input_dim, embed_dim=self.model_settings["emb_table_bins"])
+                    emb_dim = input_dim
+                else:
+                    emb_table = self.global_emb_table
+                    emb_dim = self.model_settings["emb_table_dim"]
+
                 output_layers_level = nn.ModuleDict()
-                for key in self.output_data.keys():
-                    
-                    input_dim = self.decoder_dims_level[global_level]
+                for key in self.output_data.keys():    
                     
                     output_dim = len(self.output_data[key])
                     n_heads = self.model_settings['n_heads'][0]
@@ -1147,9 +1154,9 @@ class ICON_Transformer(nn.Module):
                         ff_dim = input_dim,
                         n_heads = n_heads,
                         output_mlp=True,
-                        pos_emb_type=self.pos_emb_type,
-                        pos_embedding_table=self.global_emb_table,
-                        pos_emb_dim=self.model_settings["emb_table_dim"],
+                        pos_emb_type = self.pos_emb_type,
+                        pos_embedding_table = emb_table,
+                        pos_emb_dim = emb_dim,
                         seq_level = self.max_seq_level,
                         pos_emb_operation=self.pos_emb_operation,
                         pos_emb_calc = self.pos_emb_calc)
