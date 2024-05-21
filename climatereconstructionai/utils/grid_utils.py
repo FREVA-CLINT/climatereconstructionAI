@@ -884,7 +884,7 @@ def get_mapping_to_icon_grid(coords_icon, coords_input, search_raadius=3, max_nh
     return grid_mapping
 
 
-def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, grid_types, search_raadius=3, max_nh=10, level_start=7, lowest_level = 0):
+def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, grid_types, search_raadius=3, max_nh=10, level_start=7, lowest_level = 0, return_last=True):
     
     grid_icon = xr.open_dataset(grid_file_icon)
     grid = xr.open_dataset(grid_file)
@@ -926,7 +926,9 @@ def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, gri
                     search_raadius=search_raadius,
                     max_nh=max_nh,
                     level_start=level_start,
-                    lowest_level = lowest_level)[-1]
+                    lowest_level = lowest_level)
+                if return_last:
+                    mapping = mapping[-1]
                 
                 indices = mapping['indices']
 

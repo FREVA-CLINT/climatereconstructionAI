@@ -404,15 +404,21 @@ class input_layer(nn.Module):
 
 class output_layer(nn.Module):
     # change to dynamic output sequences
-    def __init__(self, adjc, coordinates, output_mapping, output_coordinates, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, output_dim=None, output_mlp=False, pos_emb_type='bias', pos_embedding_table=None, pos_emb_dim=None, seq_level=1, pos_emb_operation=None, pos_emb_calc="polar") -> None: 
+    def __init__(self, global_level, adjc, coordinates, output_mapping_0, output_coordinates, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, output_dim=None, output_mlp=False, pos_emb_type='bias', pos_embedding_table=None, pos_emb_dim=None, seq_level=1, pos_emb_operation=None, pos_emb_calc="polar") -> None: 
         super().__init__()    
+
+        self.n_output = output_mapping_0.shape[-1]
+        output_mapping = output_mapping_0.reshape(-1, 4**int(global_level), output_mapping_0.shape[-1])
+        output_mapping = output_mapping.reshape(output_mapping.shape[0], -1)
 
         self.register_buffer("output_mapping", output_mapping)
 
         self.seq_level = seq_level
+        self.global_level = global_level
+        self.output_dim = output_dim
 
         self.layer = refinement_layer(
-                0,
+                global_level,
                 adjc,
                 coordinates_refined=output_coordinates,
                 coordinates=coordinates,
@@ -430,11 +436,14 @@ class output_layer(nn.Module):
                 pos_emb_calc=pos_emb_calc)
 
     def forward(self, x, local_indices, sample_dict):
+        
+        local_indices = local_indices // 4**int(self.global_level)
 
         local_indices_refined = self.output_mapping[local_indices].view(local_indices.shape[0],-1)
         
         x = self.layer(x, local_indices, local_indices_refined, sample_dict, reshape=False)
-
+        
+        x = x.view(x.shape[0], -1, self.n_output, self.output_dim)
         return x
 
 class skip_layer(nn.Module):
@@ -643,6 +652,8 @@ class ICON_Transformer(nn.Module):
         self.register_buffer('acoe', acoe)
 
         self.global_level_start = self.model_settings['global_level_start']
+        self.global_level_end = self.model_settings['global_level_end']
+        self.global_level_output_start = self.model_settings['global_level_output_start']
 
         global_indices_start = self.coarsen_indices(self.global_level_start)[0][0,:,0]
         self.register_buffer('global_indices_start', global_indices_start)
@@ -659,7 +670,7 @@ class ICON_Transformer(nn.Module):
         self.pos_emb_type = self.model_settings["pos_embedding_type"]
         self.pos_emb_operation = self.model_settings['pos_emb_operation']
 
-        self.n_decoder_layers = len(self.model_settings["encoder_dims"])
+        self.n_decoder_layers = len(self.model_settings["encoder_dims"]) - self.global_level_end
         self.n_encoder_layers = len(self.model_settings["encoder_dims"]) - self.global_level_start
 
         self.use_skip_layers = self.model_settings['use_skip_layers']
@@ -671,7 +682,7 @@ class ICON_Transformer(nn.Module):
         output_mapping, output_coordinates = self.get_output_grid_mapping()
 
         self.input_layers = self.init_input_layers(input_mapping, input_coordinates)
-        self.output_layers = self.init_output_layers(output_mapping, output_coordinates)
+        
 
         self.input_projection = nn.Sequential(nn.Linear(self.model_settings["encoder_dims"][0] * n_input_grids,
                                           self.model_settings["encoder_dims"][self.global_level_start], bias=True))
@@ -727,10 +738,10 @@ class ICON_Transformer(nn.Module):
                                                     pos_emb_dim=self.model_settings["emb_table_dim"],
                                                     pos_emb_operation = self.pos_emb_operation)
 
-
+        self.decoder_dims_level = {}
         for k in range(self.n_decoder_layers):
 
-            global_level = str(self.n_decoder_layers - 1 - k)
+            global_level = str(len(self.model_settings["encoder_dims"]) - 1 - k)
 
             dim_in  = self.model_settings["encoder_dims"][::-1][k]
             dim_out = self.model_settings["encoder_dims"][::-1][k+1] if k < self.n_decoder_layers - 1 else dim_in
@@ -738,7 +749,8 @@ class ICON_Transformer(nn.Module):
             if self.use_skip_channels:
                 if global_level in self.encoder_dims_level.keys():
                     dim_in += self.encoder_dims_level[global_level]["in"]
-            
+
+            self.decoder_dims_level[global_level] = dim_in
 
             adjc = self.get_adjacent_global_cell_indices(int(global_level))
             coordinates = self.get_coordinates_level(global_level)
@@ -794,6 +806,8 @@ class ICON_Transformer(nn.Module):
                                             pos_emb_operation = self.pos_emb_operation)
         
 
+        self.output_layers = self.init_output_layers(output_mapping, output_coordinates)
+
         if "pretrained_path" in self.model_settings.keys():
             self.check_pretrained(log_dir_check=self.model_settings['pretrained_path'])
 
@@ -845,6 +859,7 @@ class ICON_Transformer(nn.Module):
 
         #continue here
         
+        x_output = {}
         for global_level, processing_layers in self.processing_layers_dec.items():
             
             if self.use_skip_channels and global_level in x_skip.keys():
@@ -853,6 +868,9 @@ class ICON_Transformer(nn.Module):
             indices_global_level = self.get_global_indices_global(indices_batch_dict['sample'], indices_batch_dict['sample_level'], int(global_level))
 
             x = processing_layers(x, indices_global_level, indices_batch_dict)
+
+            if int(global_level) <= self.global_level_output_start:
+                x_output[global_level] = x
 
             # refinement layers
             if global_level in self.refinement_layers.keys():
@@ -883,13 +901,21 @@ class ICON_Transformer(nn.Module):
                     else:
                         x = self.skip_layers[global_level](x, x_skip[global_level], pos=pos_seq)
 
+        k = 0
+        for global_level in self.output_layers.keys():
+            if k==0:
+                output_data = {}
 
-        output_data = {}
-        for key in self.output_data.keys():
-            if global_level != '0':
-                indices_global_level = self.get_global_indices_global(indices_batch_dict['sample'], indices_batch_dict['sample_level'], 0)
+            for key in self.output_data.keys():
+            
+                indices_global_level = self.get_global_indices_global(indices_batch_dict['sample'], indices_batch_dict['sample_level'], int(global_level))
 
-            output_data[key] = self.output_layers[key](x, indices_global_level, indices_batch_dict)
+                if key in output_data.keys():
+                    output_data[key] += self.output_layers[global_level][key](x_output[global_level], indices_global_level, indices_batch_dict)
+                else:
+                    output_data[key] = self.output_layers[global_level][key](x_output[global_level], indices_global_level, indices_batch_dict)
+
+            k+=1
 
         if debug:
             return output_data, debug_list
@@ -1092,41 +1118,45 @@ class ICON_Transformer(nn.Module):
         
         output_layers = nn.ModuleDict()
 
-        adjc = self.get_adjacent_global_cell_indices(int(0))
-        coordinates = self.get_coordinates_level(0)
-
-        for key in self.output_data.keys():
+        for global_level, input_dim in self.decoder_dims_level.items():
             
-            input_dim = self.model_settings['encoder_dims'][0]
-            model_dim = ff_dim = input_dim
-            
-            if self.global_level_start==0 and self.use_skip_channels:
-                input_dim += input_dim
+            if int(global_level) <= self.global_level_output_start:
 
+                output_layers_level = nn.ModuleDict()
+                for key in self.output_data.keys():
+                    
+                    input_dim = self.decoder_dims_level[global_level]
+                    
+                    output_dim = len(self.output_data[key])
+                    n_heads = self.model_settings['n_heads'][0]
 
-            output_dim = len(self.output_data[key])
-            n_heads = self.model_settings['n_heads'][0]            
-            
-            layer = output_layer(
-                adjc,
-                coordinates,
-                output_mapping["cell"][key],
-                output_coordinates[key],
-                input_dim=input_dim,
-                model_dim = model_dim,
-                output_dim = output_dim,
-                dropout=self.dropout,
-                ff_dim = ff_dim,
-                n_heads = n_heads,
-                output_mlp=True,
-                pos_emb_type=self.pos_emb_type,
-                pos_embedding_table=self.global_emb_table,
-                pos_emb_dim=self.model_settings["emb_table_dim"],
-                seq_level = self.max_seq_level,
-                pos_emb_operation=self.pos_emb_operation,
-                pos_emb_calc = self.pos_emb_calc)
-        
-            output_layers[key] = layer
+                    adjc = self.get_adjacent_global_cell_indices(int(global_level))
+                    coordinates = self.get_coordinates_level(int(global_level))  
+                    #output_mapping = 
+                    
+                    layer = output_layer(
+                        global_level,
+                        adjc,
+                        coordinates,
+                        output_mapping["cell"][key],
+                        output_coordinates[key],
+                        input_dim = input_dim,
+                        model_dim = input_dim,
+                        output_dim = output_dim,
+                        dropout=self.dropout,
+                        ff_dim = input_dim,
+                        n_heads = n_heads,
+                        output_mlp=True,
+                        pos_emb_type=self.pos_emb_type,
+                        pos_embedding_table=self.global_emb_table,
+                        pos_emb_dim=self.model_settings["emb_table_dim"],
+                        seq_level = self.max_seq_level,
+                        pos_emb_operation=self.pos_emb_operation,
+                        pos_emb_calc = self.pos_emb_calc)
+                
+                    output_layers_level[key] = layer
+
+                output_layers[global_level] = output_layers_level
 
         return output_layers
     
