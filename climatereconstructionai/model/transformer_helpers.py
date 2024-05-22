@@ -40,7 +40,7 @@ class ConvSelfAttention(nn.Module):
 
        
 
-def scaled_dot_product_rpe(q, k, v, aq=None, ak=None, av=None, bias=None, mask=None):
+def scaled_dot_product_rpe(q, k, v, aq=None, ak=None, av=None, bias=None, mask=None, logit_scale=None):
     # with relative position embeddings by shaw et al. (2018)
     b, n_heads, t, head_dim = q.shape
     s = k.shape[2]
@@ -58,7 +58,12 @@ def scaled_dot_product_rpe(q, k, v, aq=None, ak=None, av=None, bias=None, mask=N
         attn_logits_aq = torch.matmul(k.unsqueeze(dim=-2), aq.unsqueeze(dim=1).transpose(-2, -1)).view(b, n_heads, t, s)
         attn_logits = (attn_logits + attn_logits_aq)    
     
-    attn_logits = attn_logits/torch.sqrt(torch.tensor(d_z))
+    
+    if logit_scale is not None:
+        logit_scale = torch.clamp(logit_scale, max=math.log(100.0)).exp()
+        attn_logits = attn_logits * logit_scale
+    else:
+        attn_logits = attn_logits/torch.sqrt(torch.tensor(d_z))
 
     if bias is not None:
         attn_logits = attn_logits + bias
@@ -319,7 +324,7 @@ class SelfAttentionRPPEBlock(nn.Module):
         return x 
 
 class MultiHeadAttentionBlock(nn.Module):
-    def __init__(self,  model_dim, output_dim, n_heads, input_dim= None, qkv_proj=False, dropout=0):
+    def __init__(self,  model_dim, output_dim, n_heads, input_dim= None, qkv_proj=False, dropout=0, use_bias=True):
         super().__init__()
 
         self.n_heads = n_heads
@@ -336,6 +341,10 @@ class MultiHeadAttentionBlock(nn.Module):
         
         self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
 
+        if use_bias:
+            self.logit_scale = nn.Parameter(torch.log(10 * torch.ones((n_heads, 1, 1))))
+        else:
+            self.logit_scale = None
 
     def forward(self, q, k, v, ak=None, av=None, aq=None, bias=None, return_debug=False, mask=None):
         # batch, sequence length, embedding dimension
@@ -360,7 +369,7 @@ class MultiHeadAttentionBlock(nn.Module):
         if bias is not None:
             bias = bias.reshape(bk, t, s, self.n_heads).permute(0,-1,1,2)
 
-        values, att = scaled_dot_product_rpe(q, k, v, ak=ak, av=av, aq=aq, bias=bias, mask=mask)
+        values, att = scaled_dot_product_rpe(q, k, v, ak=ak, av=av, aq=aq, bias=bias, mask=mask, logit_scale=self.logit_scale)
 
         values = values.permute(0,2,1,3)
         values = values.reshape(bv, t, self.head_dim*self.n_heads)

@@ -327,7 +327,7 @@ class processing_layers(nn.Module):
 
 
 class input_layer(nn.Module):
-    def __init__(self, input_mapping, input_coordinates, input_dim, model_dim, ff_dim, seq_level=1, n_heads=4, dropout=0, pos_embedder=None, pos_emb_dim=None, polar=True) -> None: 
+    def __init__(self, input_mapping, input_coordinates, input_dim, model_dim, ff_dim, seq_level=1, n_heads=4, dropout=0, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, polar=True, pretraining=False) -> None: 
         super().__init__()
 
         self.register_buffer("input_mapping", input_mapping)
@@ -335,6 +335,8 @@ class input_layer(nn.Module):
         self.seq_level = seq_level
         self.pos_embedder = pos_embedder
         self.pos_calculation = "polar" if polar else "cartesian"
+
+        self.pretraining = pretraining
 
         self.nha_layer = nha_layer(
                     input_dim = model_dim,
@@ -344,10 +346,10 @@ class input_layer(nn.Module):
                     input_mlp = False,
                     dropout=dropout,
                     q_res=False,
-                    pos_emb_type=None,
-                    pos_embedder=None,
+                    pos_emb_type=pos_emb_type,
+                    pos_embedder=pos_embedder,
                     pos_emb_dim=pos_emb_dim)
-
+        '''
         if pos_emb_dim != input_dim:
             self.proj_q = nn.Linear(pos_emb_dim, model_dim, bias=False)
             self.proj_k = nn.Linear(pos_emb_dim, model_dim, bias=False)
@@ -356,7 +358,7 @@ class input_layer(nn.Module):
             self.proj_k = nn.Identity()
 
         self.pos_embedder = pos_embedder
-
+        '''
         self.input_mlp = nn.Sequential(
                         nn.Linear(input_dim, model_dim, bias=False),
                         nn.SiLU())
@@ -366,38 +368,42 @@ class input_layer(nn.Module):
         
         indices = self.input_mapping[grid_level_indices]
 
-        coords1 = grid_level_coords[:, grid_level_indices]
+        coords1 = grid_level_coords[:, grid_level_indices].unsqueeze(dim=-1)
 
         coords2 = self.input_coordinates[:, indices]
 
         # use mid point of sequence for "absolute-relative" coordinates
-        coords_ref = coords1[:,:,:,[0]]
-        coords2 = coords2.view(coords2.shape[0], coords2.shape[1],coords2.shape[2],-1)
+        #coords_ref = coords1[:,:,:,[0]]
+        coords2 = coords2.view(coords2.shape[0], coords2.shape[1],coords2.shape[2],1, -1)
 
-        pos1_grid, pos2_grid = get_distance_angle(coords1[0], coords1[1], coords_ref[0], coords_ref[1], base=self.pos_calculation)
-        pos1_source, pos2_source = get_distance_angle(coords2[0], coords2[1], coords_ref[0], coords_ref[1], base=self.pos_calculation)
+        pos1_grid, pos2_grid = get_distance_angle(coords1[0], coords1[1], coords2[0], coords2[1], base=self.pos_calculation)
 
-        return (pos1_source.float(), pos2_source.float()), (pos1_grid.float(), pos2_grid.float())
-    
+        return pos1_grid.float(), pos2_grid.float()
 
     def forward(self, x, grid_level_indices, grid_level_coords):
         b,n,nh,f = x.shape
 
         grid_level_indices = sequenize(grid_level_indices, self.seq_level)
 
-        pos_source, pos_grid = self.get_relative_positions(grid_level_indices,
-                                                            grid_level_coords)
+        pos = self.get_relative_positions(grid_level_indices,
+                                            grid_level_coords)
         
-        x = sequenize(x, self.seq_level)
-        x = x.reshape(b,x.shape[1],-1,f)
-
         x = self.input_mlp(x)
 
-        xk = self.proj_k(self.pos_embedder(pos_source[0], pos_source[1]))
-        xk = xk.view(x.shape)
+        # tale nearest for q
+        xq = x[:,:,[0],:]
+        xq = sequenize(xq, self.seq_level)
+        xq = xq.reshape(b, xq.shape[1],-1, x.shape[0])
 
-        xq = self.proj_q(self.pos_embedder(pos_grid[0], pos_grid[1]))
-        x = self.nha_layer(xk, xq=xq, xv=x)
+        x = sequenize(x, self.seq_level)
+        x = x.reshape(b, x.shape[1],-1, x.shape[0])
+
+
+       # xk = self.proj_k(self.pos_embedder(pos_source[0], pos_source[1]))
+       # xk = xk.view(x.shape)
+
+        #xq = self.proj_q(self.pos_embedder(pos_grid[0], pos_grid[1]))
+        x = self.nha_layer(x, xq=xq, pos=pos)
 
         x = x.view(b, n, -1)
 
@@ -417,16 +423,17 @@ class output_layer(nn.Module):
 
         self.seq_level = seq_level
         self.global_level = global_level
-        self.output_dim = output_dim
+        self.output_dim = model_dim
 
-        self.layer = pos_refinement_layer(
+        self.layer = refinement_layer(
                 global_level,
                 adjc,
                 coordinates_refined=output_coordinates,
                 coordinates=coordinates,
                 input_dim=input_dim,
                 model_dim = model_dim,
-                output_dim = output_dim,
+                output_dim = model_dim,
+                pos_emb_type = pos_emb_type,
                 ff_dim = ff_dim,
                 n_heads = n_heads,
                 pos_embedder= pos_embedder,
@@ -434,7 +441,7 @@ class output_layer(nn.Module):
                 seq_level=seq_level,
                 polar=polar)
 
-        self.output_mlp = nn.Sequential(nn.Linear(output_dim, output_dim))
+        self.output_mlp = nn.Sequential(nn.Linear(model_dim, output_dim, bias=False))
 
     def forward(self, x, local_indices, sample_dict):
         
@@ -499,7 +506,7 @@ class refinement_layer(nn.Module):
                     n_heads = n_heads,
                     output_dim=output_dim,
                     input_mlp = True,
-                    q_res=True,
+                    q_res=False,
                     dropout=dropout,
                     pos_emb_type=pos_emb_type,
                     pos_embedder=pos_embedder,
@@ -528,9 +535,12 @@ class refinement_layer(nn.Module):
 
     def forward(self, x, local_indices, local_indices_refined, sample_dict, reshape=True):
         
+        b, n, f = x.shape
         n_refine = local_indices_refined.shape[1]// local_indices.shape[1]
 
         indices_nh, mask = get_nh_indices(self.adjc, local_cell_indices=local_indices, global_level=int(self.global_level))
+
+        indices_nh = torch.concat((local_indices.view(b, n, 1), indices_nh), dim=-1)
 
         pos_nh = self.get_relative_positions(local_indices_refined.view(local_indices_refined.shape[0], -1, n_refine), 
                                             indices_nh.squeeze())
@@ -540,7 +550,7 @@ class refinement_layer(nn.Module):
 
         x_nh = gather_nh_data(x, indices_nh, sample_dict['sample'], sample_dict['sample_level'], int(self.global_level))
 
-        x = self.nha_layer(x_nh, xq=x_refined, mask=mask.unsqueeze(dim=-2), pos=pos_nh)
+        x = self.nha_layer(x_nh, xq=x_refined, pos=pos_nh)
 
         if reshape:
             x = x.view(x.shape[0],-1, x.shape[-1])
@@ -761,6 +771,7 @@ class ICON_Transformer(nn.Module):
 
         n_input_grids = len(self.input_data)
         self.pos_emb_type = self.model_settings["pos_embedding_type"]
+        self.pos_emb_type_IO = self.model_settings["pos_embedding_type_IO"]
 
         self.n_decoder_layers = len(self.model_settings["encoder_dims"]) - self.global_level_end
         self.n_encoder_layers = len(self.model_settings["encoder_dims"]) - self.global_level_start
@@ -779,7 +790,7 @@ class ICON_Transformer(nn.Module):
         
 
         self.input_projection = nn.Sequential(nn.Linear(self.model_settings["encoder_dims"][0] * n_input_grids,
-                                          self.model_settings["encoder_dims"][self.global_level_start], bias=True))
+                                          self.model_settings["encoder_dims"][self.global_level_start], bias=False))
 
         self.coarsen_layers = nn.ModuleDict()
         self.processing_layers_enc = nn.ModuleDict()
@@ -865,7 +876,7 @@ class ICON_Transformer(nn.Module):
                          
                 
             if k < self.n_decoder_layers - 1:
-                self.refinement_layers[global_level] = pos_refinement_layer(
+                self.refinement_layers[global_level] = refinement_layer(
                         global_level,
                         adjc,
                         coordinates_refined = self.get_coordinates_level(int(global_level)-1),
@@ -875,7 +886,7 @@ class ICON_Transformer(nn.Module):
                         ff_dim = dim_out,
                         dropout=self.dropout,
                         n_heads = self.model_settings["n_heads"][k],
-                       # pos_emb_type= self.pos_emb_type,
+                        pos_emb_type= self.pos_emb_type_IO,
                         pos_embedder=self.global_pos_embedder_refine,
                         pos_emb_dim=self.model_settings["emb_table_dim"],
                         seq_level=self.max_seq_level,
@@ -894,7 +905,7 @@ class ICON_Transformer(nn.Module):
                                             pos_emb_dim=self.model_settings["emb_table_dim"],
                                             seq_level=self.max_seq_level)
         
-
+        
         self.output_layers = self.init_output_layers(output_mapping, output_coordinates)
 
         if "pretrained_path" in self.model_settings.keys():
@@ -989,7 +1000,7 @@ class ICON_Transformer(nn.Module):
                         x = self.skip_layers[global_level](x_skip[global_level], x , pos=pos_seq)
                     else:
                         x = self.skip_layers[global_level](x, x_skip[global_level], pos=pos_seq)
-
+        
         k = 0
         for global_level in self.output_layers.keys():
             if k==0:
@@ -1201,6 +1212,7 @@ class ICON_Transformer(nn.Module):
                     ff_dim = ff_dim,
                     n_heads = n_heads,
                     pos_embedder=pos_embedder,
+                    pos_emb_type = self.pos_emb_type_IO,
                     pos_emb_dim=emb_dim,
                     polar=self.polar)
             
@@ -1248,7 +1260,7 @@ class ICON_Transformer(nn.Module):
                         dropout=self.dropout,
                         ff_dim = input_dim,
                         n_heads = n_heads,
-                        pos_emb_type = self.pos_emb_type,
+                        pos_emb_type = self.pos_emb_type_IO,
                         pos_embedder = pos_embedder,
                         pos_emb_dim = emb_dim,
                         seq_level = self.max_seq_level,
