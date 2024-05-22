@@ -250,7 +250,7 @@ def train(model, training_settings, model_settings={}):
 
     early_stop = early_stopping.early_stopping(training_settings['early_stopping_delta'], training_settings['early_stopping_patience'])
 
-    loss_calculator = optimization.loss_calculator(training_settings, model_settings['variables_target'])    
+    loss_calculator = optimization.loss_calculator(training_settings, model_settings['variables_target'], model_settings)    
 
     lambdas_var = training_settings['lambdas_var']
     lambdas_stat = training_settings['lambdas']

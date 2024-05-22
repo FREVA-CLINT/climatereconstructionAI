@@ -129,7 +129,7 @@ class PositionEmbedder_phys(nn.Module):
         
         embeddings = self.embeddings_table[coord_pos_clipped.long()]
 
-        return embeddings, coord_pos_clipped.long()
+        return embeddings
 
 
 class PositionEmbedder_phys_log(nn.Module):
@@ -144,27 +144,21 @@ class PositionEmbedder_phys_log(nn.Module):
         self.embeddings_table = nn.Parameter(torch.Tensor(n_pos_emb + 1, n_heads))
         nn.init.xavier_uniform_(self.embeddings_table)
 
-    def forward(self, d_mat, return_emb_idx=False):
+    def forward(self, d_mat):
         
         # not ready
         sgn = torch.sign(d_mat)
 
         d_mat_pos = torch.clamp(d_mat, min=self.min_pos_phys, max=self.max_pos_phys)
-        d_mat_pos = (d_mat) / (self.max_pos_phys - self.min_pos_phys)
+        d_mat_pos = d_mat_pos.log10()
 
-        d_mat_clipped = torch.log10(d_mat_pos) - self.mn_mx_log[0]
+        d_mat_pos = (d_mat_pos - self.mn_mx_log[0])/(self.mn_mx_log[1] - self.mn_mx_log[0])
 
+        d_mat_pos = self.n_pos_emb * d_mat_pos
         
-        d_mat_clipped = d_mat_clipped/torch.log10(self.max_pos_phys +1)
+        embeddings = self.embeddings_table[d_mat_pos.long()]
 
-        d_mat_clipped = self.n_pos_emb * d_mat_clipped
-        
-        embeddings = self.embeddings_table[d_mat_clipped.long()]
-
-        if return_emb_idx:
-            return embeddings, d_mat_clipped.long()
-        else:
-            return embeddings
+        return embeddings
 
 
 class RelPositionEmbedder_phys_log(nn.Module):

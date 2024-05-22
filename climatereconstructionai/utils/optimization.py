@@ -3,6 +3,7 @@ import torch.nn as nn
 import netCDF4 as netcdf
 import xarray as xr
 import numpy as np
+import climatereconstructionai.model.transformer_helpers as helpers
 
 def arclen(p1,p2):
   length = 2*torch.arcsin(torch.linalg.norm(p2-p1,axis=-1)/2)
@@ -193,6 +194,42 @@ class physics_calculator():
                
         return kin_energy, ~kin_energy_mask
     
+    
+    def get_adjacent_cells(self):
+        adjc_indices = self.adjacent_cell_of_edge[self.edge_of_cell].reshape(-1,1,6)
+        self_indices = torch.arange(self.cell_area.shape[0], device=adjc_indices.device).view(-1,1)
+
+        adjc_indices = adjc_indices.view(self_indices.shape[0],-1) 
+        self_indices = self_indices 
+
+        adjc_unique = (adjc_indices).long().unique(dim=-1)
+        
+        is_self = adjc_unique - self_indices.view(-1,1) == 0
+
+        adjc = adjc_unique[~is_self]
+
+        adjc = adjc.reshape(self_indices.shape[0], -1)
+
+        self.adjc = adjc
+
+
+    def get_nh(self, x, sample_dict):
+        indices_nh, mask = helpers.get_nh_of_batch_indices(sample_dict['global_cell'], self.adjc)
+
+        x_nh = {}
+        for key, data in x.items():
+            data = data.view(data.shape[0], data.shape[1],-1)
+
+            b,n,e = data.shape
+            nh = indices_nh.shape[-1]
+
+            local_cell_indices_nh_batch = indices_nh - (sample_dict['sample']*4**(sample_dict['sample_level'] - 0)).view(-1,1,1)
+
+            x_nh[key] =torch.gather(data.reshape(b,-1,e),1, index=local_cell_indices_nh_batch.reshape(b,-1,1).repeat(1,1,e)).reshape(b,n,nh,e)
+
+        return x_nh
+
+    
 
 def get_vorticity(phys_calc, tensor_dict, global_edge_indices, n_vert=6, normalv=None):
     u = tensor_dict['u']
@@ -221,6 +258,23 @@ def get_normalv_var(phys_calc, tensor_dict, global_edge_indices):
     var_v = v[:,0,1] 
     normalv, valid_mask, _, _ = phys_calc.get_normal_velocity_var_from_indices(global_edge_indices, var_u, var_v)
     return normalv.unsqueeze(dim=1).unsqueeze(dim=2), ~valid_mask
+
+class NHTVLoss(nn.Module):
+    def __init__(self, phys_calc):
+        super().__init__()
+        self.phys_calc = phys_calc
+        self.phys_calc.get_adjacent_cells()
+
+    def forward(self, output, target, sample_dict):
+        output = self.phys_calc.get_nh(output, sample_dict)
+        target = self.phys_calc.get_nh(target, sample_dict)
+
+        loss = 0
+        for key, data in output.items():
+            output_nh = (data - data[:,:,[0],:])
+            target_nh = (target[key] - target[key][:,:,[0],:])
+            loss += ((output_nh - target_nh)**2).mean()
+        return loss
 
 class GaussLoss(nn.Module):
     def __init__(self):
@@ -638,7 +692,7 @@ class Trivial_loss(nn.Module):
         return total_loss
 
 class loss_calculator(nn.Module):
-    def __init__(self, training_settings, grid_variables_dict):
+    def __init__(self, training_settings, grid_variables_dict, model_settings):
         super().__init__()
 
         self.lambdas_var = training_settings['lambdas_var']
@@ -652,6 +706,11 @@ class loss_calculator(nn.Module):
         
             if loss_type == 'tv' and value > 0:
                 self.loss_fcn_dict['tv'] = TVLoss()
+            
+            if loss_type == 'NHtv' and value > 0:
+                if phys_calc is None:
+                    phys_calc = physics_calculator(model_settings['output_grid'], device=training_settings['device'])
+                self.loss_fcn_dict['NHtv'] = NHTVLoss(phys_calc)
 
             elif loss_type == 'tv_log' and value > 0:
                 self.loss_fcn_dict['tv_log'] = TVLoss_log()
@@ -691,57 +750,57 @@ class loss_calculator(nn.Module):
 
             elif loss_type == 'vort' and value > 0:
                 if phys_calc is None:
-                    phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
+                    phys_calc = physics_calculator(model_settings['output_grid'], device=training_settings['device'])
                 self.loss_fcn_dict['vort'] = VortLoss(phys_calc)
             
             elif loss_type == 'rel_vort' and value > 0:
                 if phys_calc is None:
-                    phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
+                    phys_calc = physics_calculator(model_settings['output_grid'], device=training_settings['device'])
                 self.loss_fcn_dict['rel_vort'] = VortLoss(phys_calc, rel=True)
 
             elif loss_type == 'calc_vort' and value > 0:
                 if phys_calc is None:
-                    phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
+                    phys_calc = physics_calculator(model_settings['output_grid'], device=training_settings['device'])
                 self.loss_fcn_dict['calc_vort'] = VortLoss(phys_calc, calc_target=True)
             
             elif loss_type == 'rel_calc_vort' and value > 0:
                 if phys_calc is None:
-                    phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
+                    phys_calc = physics_calculator(model_settings['output_grid'], device=training_settings['device'])
                 self.loss_fcn_dict['rel_calc_vort'] = VortLoss(phys_calc, calc_target=True, rel=True)
 
             elif loss_type == 'div' and value > 0:
                 if phys_calc is None:
-                    phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
+                    phys_calc = physics_calculator(model_settings['output_grid'], device=training_settings['device'])
                 self.loss_fcn_dict['div'] = DivLoss(phys_calc)
 
             elif loss_type == 'normalv' and value > 0:
                 if phys_calc is None:
-                    phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
+                    phys_calc = physics_calculator(model_settings['output_grid'], device=training_settings['device'])
                 self.loss_fcn_dict['normalv'] = NormalVLoss(phys_calc)
             
             elif loss_type == 'rel_normalv' and value > 0:
                 if phys_calc is None:
-                    phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
+                    phys_calc = physics_calculator(model_settings['output_grid'], device=training_settings['device'])
                 self.loss_fcn_dict['rel_normalv'] = RelNormalVLoss(phys_calc)
 
             elif loss_type == 'gauss_normalv' and value > 0:
                 if phys_calc is None:
-                    phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
+                    phys_calc = physics_calculator(model_settings['output_grid'], device=training_settings['device'])
                 self.loss_fcn_dict['gauss_normalv'] = GaussNormalVLoss(phys_calc)
 
             elif loss_type == 'spatial_div' and value > 0:
                 if phys_calc is None:
-                    phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
+                    phys_calc = physics_calculator(model_settings['output_grid'], device=training_settings['device'])
                 self.loss_fcn_dict['spatial_div'] = SpatialDivLoss(phys_calc)
 
             elif loss_type == 'kin_energy' and value > 0:
                 if phys_calc is None:
-                    phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
+                    phys_calc = physics_calculator(model_settings['output_grid'], device=training_settings['device'])
                 self.loss_fcn_dict['kin_energy'] = KinEnergyLoss(phys_calc)
 
             elif loss_type == 'kin_energy_sum' and value > 0:
                 if phys_calc is None:
-                    phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
+                    phys_calc = physics_calculator(model_settings['output_grid'], device=training_settings['device'])
                 self.loss_fcn_dict['kin_energy_sum'] = SummedKinEnergyLoss(phys_calc)
 
     def forward(self, lambdas_optim, target, model, source, coords_target=None, target_indices=None, source_indices=None, coords_source=None, val=False, k=None, model_type=None):
@@ -773,6 +832,9 @@ class loss_calculator(nn.Module):
         for loss_type, loss_fcn in self.loss_fcn_dict.items():
             if loss_type == 'trivial':
                 loss =  loss_fcn(model)
+
+            elif loss_type == 'NHtv':
+                loss =  loss_fcn(output, target, source_indices)
 
             elif loss_type == 'tv' or loss_type == 'tv_rel' or loss_type == 'tv_log':
                 loss =  loss_fcn(output_core['x'])
