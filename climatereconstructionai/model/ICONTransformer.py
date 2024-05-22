@@ -348,6 +348,12 @@ class input_layer(nn.Module):
                     pos_embedder=None,
                     pos_emb_dim=pos_emb_dim)
 
+        if pos_emb_dim != input_dim:
+            self.proj_q = nn.Linear(pos_emb_dim, model_dim, bias=False)
+            self.proj_k = nn.Linear(pos_emb_dim, model_dim, bias=False)
+        else:
+            self.proj_q = nn.Identity()
+            self.proj_k = nn.Identity()
 
         self.pos_embedder = pos_embedder
 
@@ -387,10 +393,10 @@ class input_layer(nn.Module):
 
         x = self.input_mlp(x)
 
-        xk = self.pos_embedder(pos_source[0], pos_source[1])
+        xk = self.proj_k(self.pos_embedder(pos_source[0], pos_source[1]))
         xk = xk.view(x.shape)
 
-        xq = self.pos_embedder(pos_grid[0], pos_grid[1])
+        xq = self.proj_q(self.pos_embedder(pos_grid[0], pos_grid[1]))
         x = self.nha_layer(xk, xq=xq, xv=x)
 
         x = x.view(b, n, -1)
@@ -735,6 +741,9 @@ class ICON_Transformer(nn.Module):
         acoe = torch.tensor(self.grid.adjacent_cell_of_edge.values - 1)
         self.register_buffer('acoe', acoe)
 
+        self.pretrain = self.model_settings['pretrain'] if 'pretrain' in self.model_settings.keys() else False
+        self.pretrain_droprate = self.model_settings['pretrain_droprate'] if 'pretrain' in self.model_settings.keys() else False
+
         self.global_level_start = self.model_settings['global_level_start']
         self.global_level_end = self.model_settings['global_level_end']
         self.global_level_output_start = self.model_settings['global_level_output_start']
@@ -779,7 +788,7 @@ class ICON_Transformer(nn.Module):
         self.processing_layers_dec = nn.ModuleDict()
         self.skip_layers = nn.ModuleDict()
 
-        
+                
         #self.mid_layers = nn.ModuleList()        
         self.encoder_dims_level = {}
 
@@ -1170,7 +1179,12 @@ class ICON_Transformer(nn.Module):
         model_dim = ff_dim =  self.model_settings['encoder_dims'][0]
         n_heads = self.model_settings['n_heads'][0]
 
-        emb_table = self.init_position_embedder(model_dim, min_coarsen_level=0, max_coarsen_level=self.global_level_start+1, embed_dim=self.model_settings["emb_table_bins"])
+        if 'share_emb_w_input' in self.model_settings.keys() and not self.model_settings['share_emb_w_input']:
+            pos_embedder = self.init_position_embedder(model_dim, min_coarsen_level=0, max_coarsen_level=self.global_level_start+1, embed_dim=self.model_settings["emb_table_bins"])
+            emb_dim = model_dim
+        else:
+            pos_embedder = self.global_pos_embedder_refine
+            emb_dim = self.model_settings["emb_table_dim"]
 
         input_layers = nn.ModuleDict()
         for key in input_mapping["cell"].keys():
@@ -1186,8 +1200,8 @@ class ICON_Transformer(nn.Module):
                     dropout=self.dropout,
                     ff_dim = ff_dim,
                     n_heads = n_heads,
-                    pos_embedder=emb_table,
-                    pos_emb_dim=self.model_settings["emb_table_dim"],
+                    pos_embedder=pos_embedder,
+                    pos_emb_dim=emb_dim,
                     polar=self.polar)
             
             input_layers[key] = layer
@@ -1204,7 +1218,7 @@ class ICON_Transformer(nn.Module):
             if int(global_level) <= self.global_level_output_start:
 
                 input_dim = self.decoder_dims_level[global_level]
-
+              
                 if 'share_emb_w_output' in self.model_settings.keys() and not self.model_settings['share_emb_w_output']:
                     pos_embedder = self.init_position_embedder(input_dim, min_coarsen_level=int(global_level), max_coarsen_level=int(global_level), embed_dim=self.model_settings["emb_table_bins"])
                     emb_dim = input_dim
