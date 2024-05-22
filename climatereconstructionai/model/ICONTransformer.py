@@ -393,10 +393,10 @@ class input_layer(nn.Module):
         # tale nearest for q
         xq = x[:,:,[0],:]
         xq = sequenize(xq, self.seq_level)
-        xq = xq.reshape(b, xq.shape[1],-1, x.shape[0])
+        xq = xq.reshape(b, xq.shape[1],-1, x.shape[-1])
 
         x = sequenize(x, self.seq_level)
-        x = x.reshape(b, x.shape[1],-1, x.shape[0])
+        x = x.reshape(b, x.shape[1],-1, x.shape[-1])
 
 
        # xk = self.proj_k(self.pos_embedder(pos_source[0], pos_source[1]))
