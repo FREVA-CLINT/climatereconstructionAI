@@ -761,6 +761,8 @@ class ICON_Transformer(nn.Module):
 
         self.global_pos_embedder = self.init_position_embedder(self.model_settings["emb_table_dim"], min_coarsen_level=0, max_coarsen_level=len(self.model_settings["encoder_dims"]), embed_dim=self.model_settings["emb_table_bins"])
         
+        self.global_pos_embedder_refine = self.init_position_embedder(self.model_settings["emb_table_dim"], min_coarsen_level=0, max_coarsen_level=len(self.model_settings["encoder_dims"]), embed_dim=self.model_settings["emb_table_bins"])
+
         input_mapping, input_coordinates = self.get_input_grid_mapping()
         output_mapping, output_coordinates = self.get_output_grid_mapping()
 
@@ -865,7 +867,7 @@ class ICON_Transformer(nn.Module):
                         dropout=self.dropout,
                         n_heads = self.model_settings["n_heads"][k],
                        # pos_emb_type= self.pos_emb_type,
-                        pos_embedder=self.global_pos_embedder,
+                        pos_embedder=self.global_pos_embedder_refine,
                         pos_emb_dim=self.model_settings["emb_table_dim"],
                         seq_level=self.max_seq_level,
                         polar = self.polar)
@@ -1207,7 +1209,7 @@ class ICON_Transformer(nn.Module):
                     pos_embedder = self.init_position_embedder(input_dim, min_coarsen_level=int(global_level), max_coarsen_level=int(global_level), embed_dim=self.model_settings["emb_table_bins"])
                     emb_dim = input_dim
                 else:
-                    pos_embedder = self.global_pos_embedder
+                    pos_embedder = self.global_pos_embedder_refine
                     emb_dim = self.model_settings["emb_table_dim"]
 
                 output_layers_level = nn.ModuleDict()
