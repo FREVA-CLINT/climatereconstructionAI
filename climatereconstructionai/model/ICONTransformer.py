@@ -562,7 +562,7 @@ class pos_refinement_layer(nn.Module):
             self.proj_k = nn.Linear(pos_emb_dim, input_dim, bias=False)
         else:
             self.proj_q = nn.Identity()
-            self.proj_k = nn.Identity
+            self.proj_k = nn.Identity()
 
         self.nha_layer = nha_layer(
                     input_dim = input_dim,
