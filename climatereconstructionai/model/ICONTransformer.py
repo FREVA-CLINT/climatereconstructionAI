@@ -260,8 +260,8 @@ class processing_layers(nn.Module):
         self.global_level = global_level
         self.pos_calculation = "polar" if polar else "cartesian"
 
-        self.register_buffer("coordinates", coordinates)
-        self.register_buffer("adjc", adjc)
+        self.register_buffer("coordinates", coordinates, persistent=False)
+        self.register_buffer("adjc", adjc, persistent=False)
 
         self.input_mlp = nn.Sequential(
                 nn.Linear(input_dim, model_dim, bias=False)
@@ -348,8 +348,8 @@ class input_layer(nn.Module):
     def __init__(self, input_mapping, input_coordinates, input_dim, model_dim, ff_dim, seq_level=1, n_heads=4, dropout=0, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, polar=True, force_nha=False, kv_dropout=0, input_mlp=True) -> None: 
         super().__init__()
 
-        self.register_buffer("input_mapping", input_mapping)
-        self.register_buffer("input_coordinates", input_coordinates)
+        self.register_buffer("input_mapping", input_mapping, persistent=False)
+        self.register_buffer("input_coordinates", input_coordinates, persistent=False)
         self.seq_level = seq_level
         self.pos_embedder = pos_embedder
         self.pos_calculation = "polar" if polar else "cartesian"
@@ -452,7 +452,7 @@ class output_layer(nn.Module):
         output_mapping = output_mapping_0.reshape(-1, 4**int(global_level), output_mapping_0.shape[-1])
         output_mapping = output_mapping.reshape(output_mapping.shape[0], -1)
 
-        self.register_buffer("output_mapping", output_mapping)
+        self.register_buffer("output_mapping", output_mapping, persistent=False)
 
         self.seq_level = seq_level
         self.global_level = global_level
@@ -528,9 +528,9 @@ class refinement_layer(nn.Module):
         super().__init__()
 
         self.global_level = global_level
-        self.register_buffer("coordinates_refined", coordinates_refined)
-        self.register_buffer("coordinates", coordinates)
-        self.register_buffer("adjc", adjc)
+        self.register_buffer("coordinates_refined", coordinates_refined, persistent=False)
+        self.register_buffer("coordinates", coordinates, persistent=False)
+        self.register_buffer("adjc", adjc, persistent=False)
 
         self.pos_calculation = "polar" if polar else "cartesian"
 
@@ -603,9 +603,9 @@ class pos_refinement_layer(nn.Module):
         super().__init__()
 
         self.global_level = global_level
-        self.register_buffer("coordinates_refined", coordinates_refined)
-        self.register_buffer("coordinates", coordinates)
-        self.register_buffer("adjc", adjc)
+        self.register_buffer("coordinates_refined", coordinates_refined, persistent=False)
+        self.register_buffer("coordinates", coordinates, persistent=False)
+        self.register_buffer("adjc", adjc, persistent=False)
 
         self.pos_calculation = "polar" if polar else "cartesian"
         self.seq_level = seq_level
@@ -781,13 +781,13 @@ class ICON_Transformer(nn.Module):
         self.polar = True if "polar" in  self.pos_emb_calc else False
 
         self.grid = xr.open_dataset(self.model_settings['processing_grid'])
-        self.register_buffer('global_indices', torch.arange(len(self.grid.clon)).unsqueeze(dim=0))
+        self.register_buffer('global_indices', torch.arange(len(self.grid.clon)).unsqueeze(dim=0), persistent=False)
 
         eoc = torch.tensor(self.grid.edge_of_cell.values - 1)
-        self.register_buffer('eoc', eoc)
+        self.register_buffer('eoc', eoc, persistent=False)
 
         acoe = torch.tensor(self.grid.adjacent_cell_of_edge.values - 1)
-        self.register_buffer('acoe', acoe)
+        self.register_buffer('acoe', acoe, persistent=False)
 
         self.pretrain_bias = self.model_settings['pretrain'] if 'pretrain' in self.model_settings.keys() else False
         self.pretrain_droprate = self.model_settings['pretrain_droprate'] if 'pretrain' in self.model_settings.keys() else False
@@ -797,12 +797,12 @@ class ICON_Transformer(nn.Module):
         self.global_level_output_start = self.model_settings['global_level_output_start']
 
         global_indices_start = self.coarsen_indices(self.global_level_start)[0][0,:,0]
-        self.register_buffer('global_indices_start', global_indices_start)
+        self.register_buffer('global_indices_start', global_indices_start, persistent=False)
 
         cell_coords_global = get_coords_as_tensor(self.grid, lon='clon', lat='clat').double()
-        self.register_buffer('cell_coords_global', cell_coords_global)   
+        self.register_buffer('cell_coords_global', cell_coords_global, persistent=False)   
 
-        self.register_buffer('cell_coords_input', cell_coords_global[:, global_indices_start])    
+        self.register_buffer('cell_coords_input', cell_coords_global[:, global_indices_start], persistent=False)    
 
         self.input_data  = self.model_settings['variables_source']
         self.output_data = self.model_settings['variables_target']
