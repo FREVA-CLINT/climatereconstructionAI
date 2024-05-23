@@ -337,7 +337,7 @@ class processing_layers(nn.Module):
 
 
 class input_layer(nn.Module):
-    def __init__(self, input_mapping, input_coordinates, input_dim, model_dim, ff_dim, seq_level=1, n_heads=4, dropout=0, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, polar=True, force_nha=False, kv_dropout=0) -> None: 
+    def __init__(self, input_mapping, input_coordinates, input_dim, model_dim, ff_dim, seq_level=1, n_heads=4, dropout=0, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, polar=True, force_nha=False, kv_dropout=0, input_mlp=True) -> None: 
         super().__init__()
 
         self.register_buffer("input_mapping", input_mapping)
@@ -345,6 +345,15 @@ class input_layer(nn.Module):
         self.seq_level = seq_level
         self.pos_embedder = pos_embedder
         self.pos_calculation = "polar" if polar else "cartesian"
+        
+       # if input_mlp:
+        self.input_mlp = nn.Sequential(
+                        nn.Linear(input_dim, model_dim, bias=True),
+                        nn.SiLU())
+      #  else:
+      #      self.input_mlp= nn.Identity()
+
+        input_dim = model_dim if input_mlp else input_dim
 
         if input_mapping.shape[-1]>1 or force_nha:
             self.nha_layer = nha_layer(
@@ -372,10 +381,7 @@ class input_layer(nn.Module):
 
         self.pos_embedder = pos_embedder
         '''
-        self.input_mlp = nn.Sequential(
-                        nn.Linear(input_dim, model_dim, bias=False),
-                        nn.SiLU())
-
+        
 
     def get_relative_positions(self, grid_level_indices, grid_level_coords):
         
@@ -773,7 +779,7 @@ class ICON_Transformer(nn.Module):
         acoe = torch.tensor(self.grid.adjacent_cell_of_edge.values - 1)
         self.register_buffer('acoe', acoe)
 
-        self.pretrain = self.model_settings['pretrain'] if 'pretrain' in self.model_settings.keys() else False
+        self.pretrain_bias = self.model_settings['pretrain'] if 'pretrain' in self.model_settings.keys() else False
         self.pretrain_droprate = self.model_settings['pretrain_droprate'] if 'pretrain' in self.model_settings.keys() else False
 
         self.global_level_start = self.model_settings['global_level_start']
@@ -824,7 +830,7 @@ class ICON_Transformer(nn.Module):
         self.decoder_dims_level = {}
         self.encoder_dims_level = {}
 
-        if not self.pretrain:     
+        if not self.pretrain_bias:     
         #self.mid_layers = nn.ModuleList()        
 
             for k in range(1 + self.global_level_start, len(self.model_settings["encoder_dims"])):
@@ -984,7 +990,7 @@ class ICON_Transformer(nn.Module):
         #continue here
         
         x_output = {}
-        if self.pretrain:
+        if self.pretrain_bias:
             x_output['0'] = x
 
         for global_level, processing_layers in self.processing_layers_dec.items():
@@ -1242,8 +1248,9 @@ class ICON_Transformer(nn.Module):
                     pos_emb_type = self.pos_emb_type_IO,
                     pos_emb_dim=emb_dim,
                     polar=self.polar,
-                    force_nha=self.pretrain,
-                    kv_dropout=0 if not self.pretrain else self.pretrain_droprate)
+                    input_mlp = False if self.pretrain_bias else True,
+                    force_nha = self.pretrain_bias,
+                    kv_dropout=0 if not self.pretrain_bias else self.pretrain_droprate)
             
             input_layers[key] = layer
 

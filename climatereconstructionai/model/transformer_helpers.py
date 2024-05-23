@@ -342,7 +342,7 @@ class MultiHeadAttentionBlock(nn.Module):
         self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
 
         if use_bias:
-            self.logit_scale = nn.Parameter(torch.log(10 * torch.ones((n_heads, 1, 1))))
+            self.logit_scale = nn.Parameter(torch.log(0.1 * torch.ones((n_heads, 1, 1))))
         else:
             self.logit_scale = None
 
