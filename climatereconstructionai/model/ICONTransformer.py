@@ -123,7 +123,7 @@ class nha_layer(nn.Module):
 
         if self.kv_dropout > 0:
             n_keep = int((1-self.kv_dropout) * nh)
-            indices_keep = torch.arange(nh, device=xq.device)
+            indices_keep = torch.arange(nh, device=x.device)
 
             indices_keep = indices_keep[torch.randperm(len(indices_keep-1))[:n_keep]]
             k = k[:,indices_keep]
