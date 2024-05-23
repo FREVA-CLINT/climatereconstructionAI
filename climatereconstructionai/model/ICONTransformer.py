@@ -122,13 +122,16 @@ class nha_layer(nn.Module):
             v = xv.reshape(b*nv,-1,xv.shape[-1])
 
         if self.kv_dropout > 0:
-            n_keep = int((1-self.kv_dropout) * nh)
-            indices_keep = torch.arange(nh, device=x.device)
+            pos1 = pos[0].view(b*n,nh,-1)
+            pos2 = pos[1].view(b*n,nh,-1)
 
-            indices_keep = indices_keep[torch.randperm(len(indices_keep-1))[:n_keep]]
-            k = k[:,indices_keep]
-            v = v[:,indices_keep]
-            pos = (pos[0][:,:,:,indices_keep], pos[1][:,:,:,indices_keep])
+            indices_keep = (torch.randperm((nh)*(x.shape[0])) % (nh-1)).view(x.shape[0], nh)
+       
+            k = torch.gather(k, dim=1, index=indices_keep.unsqueeze(dim=-1).repeat(1,1,k.shape[-1]))
+            v = torch.gather(v, dim=1, index=indices_keep.unsqueeze(dim=-1).repeat(1,1,k.shape[-1]))
+            pos1 = torch.gather(pos1, dim=-1, index=indices_keep.view(b*n,1,-1).repeat(1, pos1.shape[1],1))
+            pos2 = torch.gather(pos2, dim=-1, index=indices_keep.view(b*n,1,-1).repeat(1, pos2.shape[1],1))
+            pos = (pos1.view(b,n,nh,-1), pos2.view(b,n,nh,-1))
 
         if self.qkv_bias:
 
@@ -139,7 +142,7 @@ class nha_layer(nn.Module):
                 ak = self.emb_proj_k(pos_embedding)
                 av = self.emb_proj_v(pos_embedding)
 
-                att_out, att = self.MHA(q, k, v, aq=None, ak=ak, av=av, return_debug=True, mask=mask) 
+                att_out, att = self.MHA(q=q, k=k, v=v, aq=None, ak=ak, av=av, return_debug=True, mask=mask) 
 
             elif self.pos_emb_type =='bias' and pos is not None:
                 pos_embedding = self.pos_embedder(pos[0], pos[1])
@@ -148,7 +151,7 @@ class nha_layer(nn.Module):
                 att_out, att = self.MHA(q=q, k=k, v=v, bias=bias, return_debug=True, mask=mask)    
 
             else:
-                att_out, att = self.MHA(q, k, v, return_debug=True, mask=mask) 
+                att_out, att = self.MHA(q=q, k=k, v=v, return_debug=True, mask=mask) 
 
         else:
             pos_embedding = self.pos_embedder(pos[0], pos[1])

@@ -355,7 +355,7 @@ class MultiHeadAttentionBlock(nn.Module):
         else:
             self.logit_scale = None
 
-    def forward(self, v, q=None, k=None, ak=None, av=None, aq=None, bias=None, return_debug=False, mask=None):
+    def forward(self, q=None, k=None, v=None, ak=None, av=None, aq=None, bias=None, return_debug=False, mask=None):
         # batch, sequence length, embedding dimension
 
         if self.qkv_bias:
