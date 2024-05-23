@@ -32,14 +32,24 @@ def load_ckpt(ckpt_name, device):
     return ckpt_dict
 
 
-def load_model(ckpt_dict, model, optimizer=None, label=None):
+def load_model(ckpt_dict, model, optimizer=None, label=None, strict=False, match_list=None):
     assert isinstance(model, nn.Module)
     if label is None:
         label = ckpt_dict["labels"][-1]
 
     ckpt_dict[label]["model"] = \
         {key.replace("module.", ""): value for key, value in ckpt_dict[label]["model"].items()}
-    model.load_state_dict(ckpt_dict[label]["model"])
+    
+    if match_list is not None:
+        ckpt_dict_match = {}
+        for key, value in ckpt_dict[label]["model"].items():
+            if match_list in key:
+                ckpt_dict_match[key]=value
+    else:
+        ckpt_dict_match = ckpt_dict[label]["model"]
+
+    model.load_state_dict(ckpt_dict_match, strict=strict)
+
     if optimizer is not None:
         optimizer.load_state_dict(ckpt_dict[label]["optimizer"])
     return ckpt_dict[label]["n_iter"]
