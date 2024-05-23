@@ -201,6 +201,10 @@ class NetCDFLoader_lazy(Dataset):
 
         if file_path_target is None:
             ds_target = copy.deepcopy(ds_source)
+
+        elif file_path_target==file_path_source:
+            ds_target = ds_source
+            
         else:
             if self.lazy_load:
                 ds_target = xr.open_dataset(file_path_target)
