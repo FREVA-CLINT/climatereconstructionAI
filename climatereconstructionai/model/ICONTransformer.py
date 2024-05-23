@@ -948,8 +948,10 @@ class ICON_Transformer(nn.Module):
 
         self.output_layers = self.init_output_layers(output_mapping, output_coordinates)
 
+        strict = self.model_settings['load_strict'] if 'load_strict' in self.model_settings.keys() else True
+
         if "pretrained_path" in self.model_settings.keys():
-            self.check_pretrained(log_dir_check=self.model_settings['pretrained_path'])
+            self.check_pretrained(log_dir_check=self.model_settings['pretrained_path'], strict=strict)
 
         if "pretrained_pos_embeddings_path" in self.model_settings.keys():
             self.check_pretrained(log_dir_check=self.model_settings['pretrained_pos_embeddings_path'], strict=False, match_list='pos_embedder')
