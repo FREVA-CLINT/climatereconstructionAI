@@ -49,14 +49,14 @@ def append_debug_dict(debug_dict_all, debug_dict):
 
 
 class nha_layer(nn.Module):
-    def __init__(self, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, input_mlp=False, output_dim=None, activation=nn.SiLU(), q_res=True, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, kv_dropout=0) -> None: 
+    def __init__(self, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, input_mlp=False, output_dim=None, activation=nn.SiLU(), q_res=True, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, kv_dropout=0, qkv_bias=True) -> None: 
         super().__init__()
 
         self.model_dim = model_dim
         self.n_heads = n_heads
         self.pos_emb_type = pos_emb_type
         self.kv_dropout = kv_dropout
-
+        self.qkv_bias= qkv_bias
         if input_mlp:
             self.input_mlp = nn.Sequential(
                 nn.Linear(input_dim, model_dim, bias=False),
@@ -86,7 +86,7 @@ class nha_layer(nn.Module):
             self.emb_proj_v = nn.Linear(pos_emb_dim, model_dim // n_heads, bias=False)
 
         self.MHA = helpers.MultiHeadAttentionBlock(
-            model_dim, model_dim, n_heads, input_dim=input_dim, qkv_proj=True
+            model_dim, model_dim, n_heads, input_dim=input_dim, qkv_proj=True, qkv_bias=qkv_bias
             )           
 
         self.mlp_layer = nn.Sequential(
@@ -130,25 +130,30 @@ class nha_layer(nn.Module):
             v = v[:,indices_keep]
             pos = (pos[0][:,:,:,indices_keep], pos[1][:,:,:,indices_keep])
 
-            
+        if self.qkv_bias:
 
-        if self.pos_emb_type =='context' and pos is not None:
-           # aq = self.emb_proj_q(pos[0], pos[1], self.pos_embedder)
-            pos_embedding = self.pos_embedder(pos[0], pos[1])
+            if self.pos_emb_type =='context' and pos is not None:
+            # aq = self.emb_proj_q(pos[0], pos[1], self.pos_embedder)
+                pos_embedding = self.pos_embedder(pos[0], pos[1])
 
-            ak = self.emb_proj_k(pos_embedding)
-            av = self.emb_proj_v(pos_embedding)
+                ak = self.emb_proj_k(pos_embedding)
+                av = self.emb_proj_v(pos_embedding)
 
-            att_out, att = self.MHA(q, k, v, aq=None, ak=ak, av=av, return_debug=True, mask=mask) 
+                att_out, att = self.MHA(q, k, v, aq=None, ak=ak, av=av, return_debug=True, mask=mask) 
 
-        elif self.pos_emb_type =='bias' and pos is not None:
-            pos_embedding = self.pos_embedder(pos[0], pos[1])
-            bias = self.emb_proj_bias(pos_embedding)
+            elif self.pos_emb_type =='bias' and pos is not None:
+                pos_embedding = self.pos_embedder(pos[0], pos[1])
+                bias = self.emb_proj_bias(pos_embedding)
 
-            att_out, att = self.MHA(q, k, v, bias=bias, return_debug=True, mask=mask)    
+                att_out, att = self.MHA(q=q, k=k, v=v, bias=bias, return_debug=True, mask=mask)    
+
+            else:
+                att_out, att = self.MHA(q, k, v, return_debug=True, mask=mask) 
 
         else:
-            att_out, att = self.MHA(q, k, v, return_debug=True, mask=mask) 
+            pos_embedding = self.pos_embedder(pos[0], pos[1])
+            bias = self.emb_proj_bias(pos_embedding)
+            att_out, att = self.MHA(v=v, bias=bias, return_debug=True, mask=mask) 
 
         if self.q_res:
             x = q + self.dropout1(att_out)
@@ -367,7 +372,8 @@ class input_layer(nn.Module):
                         pos_emb_type=pos_emb_type,
                         pos_embedder=pos_embedder,
                         pos_emb_dim=pos_emb_dim,
-                        kv_dropout=kv_dropout)
+                        kv_dropout=kv_dropout,
+                        qkv_bias=False)
         
         else:
             self.nha_layer = nn.Identity()
@@ -416,9 +422,9 @@ class input_layer(nn.Module):
         
 
             # tale nearest for q
-            xq = x[:,:,[0],:]
-            xq = sequenize(xq, self.seq_level)
-            xq = xq.reshape(b, xq.shape[1],-1, x.shape[-1])
+           # xq = x[:,:,[0],:]
+           # xq = sequenize(xq, self.seq_level)
+           # xq = xq.reshape(b, xq.shape[1],-1, x.shape[-1])
 
             x = sequenize(x, self.seq_level)
             x = x.reshape(b, x.shape[1],-1, x.shape[-1])
@@ -427,7 +433,7 @@ class input_layer(nn.Module):
             # xk = xk.view(x.shape)
 
             #xq = self.proj_q(self.pos_embedder(pos_grid[0], pos_grid[1]))
-            x = self.nha_layer(x, xq=xq, pos=pos)
+            x = self.nha_layer(x, pos=pos)
 
         x = x.view(b, n, -1)
     
@@ -538,7 +544,8 @@ class refinement_layer(nn.Module):
                     dropout=dropout,
                     pos_emb_type=pos_emb_type,
                     pos_embedder=pos_embedder,
-                    pos_emb_dim=pos_emb_dim)
+                    pos_emb_dim=pos_emb_dim,
+                    qkv_bias=False)
         
 
 
@@ -574,11 +581,11 @@ class refinement_layer(nn.Module):
                                             indices_nh.squeeze())
         
 
-        x_refined = x.unsqueeze(dim=-2).repeat_interleave(n_refine, dim=-2)
+        #x_refined = x.unsqueeze(dim=-2).repeat_interleave(n_refine, dim=-2)
 
         x_nh = gather_nh_data(x, indices_nh, sample_dict['sample'], sample_dict['sample_level'], int(self.global_level))
 
-        x = self.nha_layer(x_nh, xq=x_refined, pos=pos_nh)
+        x = self.nha_layer(x_nh, pos=pos_nh)
 
         if reshape:
             x = x.view(x.shape[0],-1, x.shape[-1])
@@ -1304,7 +1311,7 @@ class ICON_Transformer(nn.Module):
                 
                     output_layers_level[key] = layer
 
-            output_layers[global_level] = output_layers_level
+        output_layers[global_level] = output_layers_level
 
         return output_layers
     
@@ -1359,7 +1366,7 @@ class ICON_Transformer(nn.Module):
 
 
 
-    def check_pretrained(self, log_dir_check=''):
+    def check_pretrained(self, log_dir_check='', strict=False):
 
         if len(log_dir_check)>0:
             ckpt_dir = os.path.join(log_dir_check, 'ckpts')
@@ -1371,12 +1378,12 @@ class ICON_Transformer(nn.Module):
                     weights_path = os.path.join(ckpt_dir, weights_paths[-1])
             
             if os.path.isfile(weights_path):
-                self.load_pretrained(weights_path)
+                self.load_pretrained(weights_path, strict=strict)
 
-    def load_pretrained(self, ckpt_path:str):
+    def load_pretrained(self, ckpt_path:str, strict=False):
         device = 'cpu' if 'device' not in self.model_settings.keys() else self.model_settings['device']
         ckpt_dict = torch.load(ckpt_path, map_location=torch.device(device))
-        load_model(ckpt_dict, self)
+        load_model(ckpt_dict, self, strict=False)
 
 
 

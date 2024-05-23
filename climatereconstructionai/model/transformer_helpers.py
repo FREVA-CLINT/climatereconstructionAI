@@ -40,33 +40,39 @@ class ConvSelfAttention(nn.Module):
 
        
 
-def scaled_dot_product_rpe(q, k, v, aq=None, ak=None, av=None, bias=None, mask=None, logit_scale=None):
+def scaled_dot_product_rpe(q=None, k=None, v=None, aq=None, ak=None, av=None, bias=None, mask=None, logit_scale=None):
     # with relative position embeddings by shaw et al. (2018)
-    b, n_heads, t, head_dim = q.shape
-    s = k.shape[2]
-
-    # q is the size of (t, dk)
-    d_z = q.size()[-1] # embedding dimension
-
-    attn_logits = torch.matmul(q, k.transpose(-2, -1))
     
-    if ak is not None:
-        attn_logits_ak = torch.matmul(q.unsqueeze(dim=-2), ak.unsqueeze(dim=1).transpose(-2, -1)).view(b, n_heads, t, s)
-        attn_logits = (attn_logits + attn_logits_ak)
+    if q is not None and k is not None and v is not None:
 
-    if aq is not None:
-        attn_logits_aq = torch.matmul(k.unsqueeze(dim=-2), aq.unsqueeze(dim=1).transpose(-2, -1)).view(b, n_heads, t, s)
-        attn_logits = (attn_logits + attn_logits_aq)    
+        b, n_heads, t, head_dim = q.shape
+        s = k.shape[2]
+
+        # q is the size of (t, dk)
+        d_z = q.size()[-1] # embedding dimension
+
+        attn_logits = torch.matmul(q, k.transpose(-2, -1))
+        
+        if ak is not None:
+            attn_logits_ak = torch.matmul(q.unsqueeze(dim=-2), ak.unsqueeze(dim=1).transpose(-2, -1)).view(b, n_heads, t, s)
+            attn_logits = (attn_logits + attn_logits_ak)
+
+        if aq is not None:
+            attn_logits_aq = torch.matmul(k.unsqueeze(dim=-2), aq.unsqueeze(dim=1).transpose(-2, -1)).view(b, n_heads, t, s)
+            attn_logits = (attn_logits + attn_logits_aq)    
+        
+        
+        if logit_scale is not None:
+            logit_scale = torch.clamp(logit_scale, max=math.log(100.0)).exp()
+            attn_logits = attn_logits * logit_scale
+        else:
+            attn_logits = attn_logits/torch.sqrt(torch.tensor(d_z))
+
+        if bias is not None:
+            attn_logits = attn_logits + bias
     
-    
-    if logit_scale is not None:
-        logit_scale = torch.clamp(logit_scale, max=math.log(100.0)).exp()
-        attn_logits = attn_logits * logit_scale
     else:
-        attn_logits = attn_logits/torch.sqrt(torch.tensor(d_z))
-
-    if bias is not None:
-        attn_logits = attn_logits + bias
+        attn_logits = bias
 
     if mask is not None:
         mask = mask.reshape(attn_logits.shape[0],1,mask.shape[-2],mask.shape[-1]).repeat(1,attn_logits.shape[1],1,1)
@@ -324,9 +330,10 @@ class SelfAttentionRPPEBlock(nn.Module):
         return x 
 
 class MultiHeadAttentionBlock(nn.Module):
-    def __init__(self,  model_dim, output_dim, n_heads, input_dim= None, qkv_proj=False, dropout=0, use_bias=True):
+    def __init__(self,  model_dim, output_dim, n_heads, input_dim= None, qkv_proj=False, dropout=0, use_bias=True, qkv_bias=True):
         super().__init__()
 
+        self.qkv_bias = qkv_bias
         self.n_heads = n_heads
         self.head_dim = model_dim // n_heads
         if input_dim is None:
@@ -334,42 +341,56 @@ class MultiHeadAttentionBlock(nn.Module):
         
         self.output_projection = nn.Linear(model_dim, output_dim, bias=False)
                 
-        if qkv_proj:
+        if qkv_proj and qkv_bias:
             self.qkv_projection = nn.ModuleList([nn.Linear(input_dim, model_dim, bias=False)]*3)
-        else:
+        elif qkv_proj:
+            self.v_projection = nn.Linear(input_dim, model_dim, bias=False)
+        else:    
             self.qkv_projection = nn.ModuleList([nn.Identity()]*3)
         
         self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
 
-        if use_bias:
+        if use_bias and qkv_bias:
             self.logit_scale = nn.Parameter(torch.log(0.1 * torch.ones((n_heads, 1, 1))))
         else:
             self.logit_scale = None
 
-    def forward(self, q, k, v, ak=None, av=None, aq=None, bias=None, return_debug=False, mask=None):
+    def forward(self, v, q=None, k=None, ak=None, av=None, aq=None, bias=None, return_debug=False, mask=None):
         # batch, sequence length, embedding dimension
-        bq, t = q.shape[0], q.shape[1] 
-        bk, s = k.shape[0], k.shape[1] 
-        bv, s = v.shape[0], v.shape[1] 
 
-        q = self.qkv_projection[0](q)
-        k = self.qkv_projection[1](k)
-        v = self.qkv_projection[2](v)
+        if self.qkv_bias:
+            bq, t = q.shape[0], q.shape[1] 
+            bk, s = k.shape[0], k.shape[1] 
+            bv, s = v.shape[0], v.shape[1] 
 
-        q = q.reshape(bq, t, self.n_heads, self.head_dim).permute(0,2,1,3)
-        k = k.reshape(bk, s, self.n_heads, self.head_dim).permute(0,2,1,3)
-        v = v.reshape(bv, s, self.n_heads, self.head_dim).permute(0,2,1,3)
+            q = self.qkv_projection[0](q)
+            k = self.qkv_projection[1](k)
+            v = self.qkv_projection[2](v)
 
-        if ak is not None:
-            ak = ak.reshape(bk, t, s, self.head_dim)
-        if av is not None:
-            av = av.reshape(bk, t, s, self.head_dim)
-        if aq is not None:
-            aq = aq.reshape(bk, t, s, self.head_dim).transpose(1,2)
-        if bias is not None:
-            bias = bias.reshape(bk, t, s, self.n_heads).permute(0,-1,1,2)
+            q = q.reshape(bq, t, self.n_heads, self.head_dim).permute(0,2,1,3)
+            k = k.reshape(bk, s, self.n_heads, self.head_dim).permute(0,2,1,3)
+            v = v.reshape(bv, s, self.n_heads, self.head_dim).permute(0,2,1,3)
 
-        values, att = scaled_dot_product_rpe(q, k, v, ak=ak, av=av, aq=aq, bias=bias, mask=mask, logit_scale=self.logit_scale)
+            if ak is not None:
+                ak = ak.reshape(bk, t, s, self.head_dim)
+            if av is not None:
+                av = av.reshape(bk, t, s, self.head_dim)
+            if aq is not None:
+                aq = aq.reshape(bk, t, s, self.head_dim).transpose(1,2)
+            
+            if bias is not None:
+                bias = bias.reshape(bk, t, s, self.n_heads).permute(0,-1,1,2)
+
+            values, att = scaled_dot_product_rpe(q=q, k=k, v=v, ak=ak, av=av, aq=aq, bias=bias, mask=mask, logit_scale=self.logit_scale)
+        else:
+            b, k, t, s, nheads = bias.shape
+            bv = bk = b*k
+
+            v = self.v_projection(v).reshape(bk, s, self.n_heads, self.head_dim).permute(0,2,1,3)
+            if bias is not None:
+                bias = bias.reshape(bk, t, s, self.n_heads).permute(0,-1,1,2)
+
+            values, att = scaled_dot_product_rpe(v=v, bias=bias, mask=mask, logit_scale=self.logit_scale)
 
         values = values.permute(0,2,1,3)
         values = values.reshape(bv, t, self.head_dim*self.n_heads)
