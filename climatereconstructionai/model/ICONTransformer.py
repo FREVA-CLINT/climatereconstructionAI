@@ -49,12 +49,13 @@ def append_debug_dict(debug_dict_all, debug_dict):
 
 
 class nha_layer(nn.Module):
-    def __init__(self, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, input_mlp=False, output_dim=None, activation=nn.SiLU(), q_res=True, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None) -> None: 
+    def __init__(self, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, input_mlp=False, output_dim=None, activation=nn.SiLU(), q_res=True, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, kv_dropout=0) -> None: 
         super().__init__()
 
         self.model_dim = model_dim
         self.n_heads = n_heads
         self.pos_emb_type = pos_emb_type
+        self.kv_dropout = kv_dropout
 
         if input_mlp:
             self.input_mlp = nn.Sequential(
@@ -119,6 +120,16 @@ class nha_layer(nn.Module):
             xv = self.input_mlp(xv)
             b, nv = xv.shape[:2]
             v = xv.reshape(b*nv,-1,xv.shape[-1])
+
+        if self.kv_dropout > 0:
+            n_keep = int((1-self.kv_dropout) * nh)
+            indices_keep = torch.arange(nh, device=xq.device)
+
+            indices_keep = indices_keep[torch.randperm(len(indices_keep-1))[:n_keep]]
+            k = k[:,indices_keep]
+            v = v[:,indices_keep]
+            pos = (pos[0][:,:,:,indices_keep], pos[1][:,:,:,indices_keep])
+
             
 
         if self.pos_emb_type =='context' and pos is not None:
@@ -325,9 +336,8 @@ class processing_layers(nn.Module):
         return x   
 
 
-
 class input_layer(nn.Module):
-    def __init__(self, input_mapping, input_coordinates, input_dim, model_dim, ff_dim, seq_level=1, n_heads=4, dropout=0, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, polar=True, pretraining=False) -> None: 
+    def __init__(self, input_mapping, input_coordinates, input_dim, model_dim, ff_dim, seq_level=1, n_heads=4, dropout=0, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, polar=True, force_nha=False, kv_dropout=0) -> None: 
         super().__init__()
 
         self.register_buffer("input_mapping", input_mapping)
@@ -336,19 +346,22 @@ class input_layer(nn.Module):
         self.pos_embedder = pos_embedder
         self.pos_calculation = "polar" if polar else "cartesian"
 
-        self.pretraining = pretraining
-
-        self.nha_layer = nha_layer(
-                    input_dim = model_dim,
-                    model_dim = model_dim,
-                    ff_dim = ff_dim,
-                    n_heads = n_heads,
-                    input_mlp = False,
-                    dropout=dropout,
-                    q_res=False,
-                    pos_emb_type=pos_emb_type,
-                    pos_embedder=pos_embedder,
-                    pos_emb_dim=pos_emb_dim)
+        if input_mapping.shape[-1]>1 or force_nha:
+            self.nha_layer = nha_layer(
+                        input_dim = model_dim,
+                        model_dim = model_dim,
+                        ff_dim = ff_dim,
+                        n_heads = n_heads,
+                        input_mlp = False,
+                        dropout=dropout,
+                        q_res=False,
+                        pos_emb_type=pos_emb_type,
+                        pos_embedder=pos_embedder,
+                        pos_emb_dim=pos_emb_dim,
+                        kv_dropout=kv_dropout)
+        
+        else:
+            self.nha_layer = nn.Identity()
         '''
         if pos_emb_dim != input_dim:
             self.proj_q = nn.Linear(pos_emb_dim, model_dim, bias=False)
@@ -366,6 +379,7 @@ class input_layer(nn.Module):
 
     def get_relative_positions(self, grid_level_indices, grid_level_coords):
         
+        
         indices = self.input_mapping[grid_level_indices]
 
         coords1 = grid_level_coords[:, grid_level_indices].unsqueeze(dim=-1)
@@ -380,39 +394,43 @@ class input_layer(nn.Module):
 
         return pos1_grid.float(), pos2_grid.float()
 
+
     def forward(self, x, grid_level_indices, grid_level_coords):
         b,n,nh,f = x.shape
 
-        grid_level_indices = sequenize(grid_level_indices, self.seq_level)
-
-        pos = self.get_relative_positions(grid_level_indices,
-                                            grid_level_coords)
-        
         x = self.input_mlp(x)
 
-        # tale nearest for q
-        xq = x[:,:,[0],:]
-        xq = sequenize(xq, self.seq_level)
-        xq = xq.reshape(b, xq.shape[1],-1, x.shape[-1])
+        if not isinstance(self.nha_layer, nn.Identity):
 
-        x = sequenize(x, self.seq_level)
-        x = x.reshape(b, x.shape[1],-1, x.shape[-1])
+            grid_level_indices = sequenize(grid_level_indices, self.seq_level)
 
+            pos = self.get_relative_positions(grid_level_indices,
+                                                grid_level_coords)
+            
+        
 
-       # xk = self.proj_k(self.pos_embedder(pos_source[0], pos_source[1]))
-       # xk = xk.view(x.shape)
+            # tale nearest for q
+            xq = x[:,:,[0],:]
+            xq = sequenize(xq, self.seq_level)
+            xq = xq.reshape(b, xq.shape[1],-1, x.shape[-1])
 
-        #xq = self.proj_q(self.pos_embedder(pos_grid[0], pos_grid[1]))
-        x = self.nha_layer(x, xq=xq, pos=pos)
+            x = sequenize(x, self.seq_level)
+            x = x.reshape(b, x.shape[1],-1, x.shape[-1])
+
+            # xk = self.proj_k(self.pos_embedder(pos_source[0], pos_source[1]))
+            # xk = xk.view(x.shape)
+
+            #xq = self.proj_q(self.pos_embedder(pos_grid[0], pos_grid[1]))
+            x = self.nha_layer(x, xq=xq, pos=pos)
 
         x = x.view(b, n, -1)
-
+    
         return x
 
 
 class output_layer(nn.Module):
     # change to dynamic output sequences
-    def __init__(self, global_level, adjc, coordinates, output_mapping_0, output_coordinates, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, output_dim=None, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, seq_level=1, polar=True) -> None: 
+    def __init__(self, global_level, adjc, coordinates, output_mapping_0, output_coordinates, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, output_dim=None, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, seq_level=1, polar=True, force_nha=False) -> None: 
         super().__init__()    
 
         self.n_output = output_mapping_0.shape[-1]
@@ -425,32 +443,36 @@ class output_layer(nn.Module):
         self.global_level = global_level
         self.output_dim = model_dim
 
-        self.layer = refinement_layer(
-                global_level,
-                adjc,
-                coordinates_refined=output_coordinates,
-                coordinates=coordinates,
-                input_dim=input_dim,
-                model_dim = model_dim,
-                output_dim = model_dim,
-                pos_emb_type = pos_emb_type,
-                ff_dim = ff_dim,
-                n_heads = n_heads,
-                pos_embedder= pos_embedder,
-                pos_emb_dim=pos_emb_dim,
-                seq_level=seq_level,
-                polar=polar)
+        if output_mapping.shape[-1]>1 or force_nha:
+            self.layer = refinement_layer(
+                    global_level,
+                    adjc,
+                    coordinates_refined=output_coordinates,
+                    coordinates=coordinates,
+                    input_dim=input_dim,
+                    model_dim = model_dim,
+                    output_dim = model_dim,
+                    pos_emb_type = pos_emb_type,
+                    ff_dim = ff_dim,
+                    n_heads = n_heads,
+                    pos_embedder= pos_embedder,
+                    pos_emb_dim=pos_emb_dim,
+                    seq_level=seq_level,
+                    polar=polar)
+        else:
+            self.layer = nn.Identity()
 
         self.output_mlp = nn.Sequential(nn.Linear(model_dim, output_dim, bias=False))
 
     def forward(self, x, local_indices, sample_dict):
         
-        local_indices = local_indices // 4**int(self.global_level)
+        if not isinstance(self.layer, nn.Identity):
+            local_indices = local_indices // 4**int(self.global_level)
 
-        local_indices_refined = self.output_mapping[local_indices].view(local_indices.shape[0],-1)
-        
-        x = self.layer(x, local_indices, local_indices_refined, sample_dict, reshape=False)
-        
+            local_indices_refined = self.output_mapping[local_indices].view(local_indices.shape[0],-1)
+            
+            x = self.layer(x, local_indices, local_indices_refined, sample_dict, reshape=False)
+            
         x = x.view(x.shape[0], -1, self.n_output, self.output_dim)
 
         return self.output_mlp(x)
@@ -788,10 +810,10 @@ class ICON_Transformer(nn.Module):
 
         self.input_layers = self.init_input_layers(input_mapping, input_coordinates)
         
+        out_dim_input = self.model_settings["encoder_dims"][self.global_level_start]
 
-        self.input_projection = nn.Sequential(nn.Linear(self.model_settings["encoder_dims"][0] * n_input_grids,
-                                          self.model_settings["encoder_dims"][self.global_level_start], bias=False))
-
+        self.input_projection = nn.Sequential(nn.Linear(self.model_settings["encoder_dims"][0] * n_input_grids, out_dim_input, bias=False))
+  
         self.coarsen_layers = nn.ModuleDict()
         self.processing_layers_enc = nn.ModuleDict()
 
@@ -799,113 +821,115 @@ class ICON_Transformer(nn.Module):
         self.processing_layers_dec = nn.ModuleDict()
         self.skip_layers = nn.ModuleDict()
 
-                
-        #self.mid_layers = nn.ModuleList()        
+        self.decoder_dims_level = {}
         self.encoder_dims_level = {}
 
-        for k in range(1 + self.global_level_start, len(self.model_settings["encoder_dims"])):
+        if not self.pretrain:     
+        #self.mid_layers = nn.ModuleList()        
+
+            for k in range(1 + self.global_level_start, len(self.model_settings["encoder_dims"])):
+                
+                global_level = str(k - 1)
+
+                dim_in  = self.model_settings["encoder_dims"][k-1]
+                dim_out = self.model_settings["encoder_dims"][k]
+
+                self.encoder_dims_level[global_level] = {'in': dim_in, 'out': dim_out}           
             
-            global_level = str(k - 1)
+                adjc = self.get_adjacent_global_cell_indices(int(global_level))    
+                coordinates = self.get_coordinates_level(global_level)
 
-            dim_in  = self.model_settings["encoder_dims"][k-1]
-            dim_out = self.model_settings["encoder_dims"][k]
+                self.processing_layers_enc[global_level] = processing_layers(
+                                            global_level,
+                                            adjc,
+                                            coordinates,
+                                            n_layers = self.model_settings['n_processing_layers'],
+                                            input_dim = dim_in,
+                                            model_dim = dim_in,
+                                            ff_dim = dim_in,
+                                            n_heads =  self.model_settings["n_heads"][k],
+                                            dropout=self.dropout,
+                                            pos_emb_type= self.pos_emb_type,
+                                            pos_embedder=self.global_pos_embedder,
+                                            pos_emb_dim=self.model_settings["emb_table_dim"],
+                                            seq_level=self.max_seq_level,
+                                            polar = self.polar)   
+                
+                self.coarsen_layers[global_level] = coarsen_layer(
+                                                        input_dim= dim_in,
+                                                        model_dim = dim_out,
+                                                        ff_dim = dim_out,
+                                                        n_heads = self.model_settings["n_heads"][k],
+                                                        pos_emb_type= self.pos_emb_type,
+                                                        dropout=self.dropout,
+                                                        pos_embedder=self.global_pos_embedder,
+                                                        pos_emb_dim=self.model_settings["emb_table_dim"])
 
-            self.encoder_dims_level[global_level] = {'in': dim_in, 'out': dim_out}           
-         
-            adjc = self.get_adjacent_global_cell_indices(int(global_level))    
-            coordinates = self.get_coordinates_level(global_level)
+            for k in range(self.n_decoder_layers):
 
-            self.processing_layers_enc[global_level] = processing_layers(
+                global_level = str(len(self.model_settings["encoder_dims"]) - 1 - k)
+
+                dim_in  = self.model_settings["encoder_dims"][::-1][k]
+                dim_out = self.model_settings["encoder_dims"][::-1][k+1] if k < self.n_decoder_layers - 1 else dim_in
+
+                if self.use_skip_channels:
+                    if global_level in self.encoder_dims_level.keys():
+                        dim_in += self.encoder_dims_level[global_level]["in"]
+
+                self.decoder_dims_level[global_level] = dim_in
+
+                adjc = self.get_adjacent_global_cell_indices(int(global_level))
+                coordinates = self.get_coordinates_level(global_level)
+
+                self.processing_layers_dec[global_level] = processing_layers(
                                         global_level,
                                         adjc,
                                         coordinates,
                                         n_layers = self.model_settings['n_processing_layers'],
                                         input_dim = dim_in,
                                         model_dim = dim_in,
-                                        ff_dim = dim_in,
-                                        n_heads =  self.model_settings["n_heads"][k],
+                                        ff_dim = dim_out,
+                                        n_heads = self.model_settings["n_heads"][k],
                                         dropout=self.dropout,
                                         pos_emb_type= self.pos_emb_type,
                                         pos_embedder=self.global_pos_embedder,
                                         pos_emb_dim=self.model_settings["emb_table_dim"],
                                         seq_level=self.max_seq_level,
-                                        polar = self.polar)   
-            
-            self.coarsen_layers[global_level] = coarsen_layer(
-                                                    input_dim= dim_in,
-                                                    model_dim = dim_out,
-                                                    ff_dim = dim_out,
-                                                    n_heads = self.model_settings["n_heads"][k],
-                                                    pos_emb_type= self.pos_emb_type,
-                                                    dropout=self.dropout,
-                                                    pos_embedder=self.global_pos_embedder,
-                                                    pos_emb_dim=self.model_settings["emb_table_dim"])
+                                        polar = self.polar)
+                            
+                    
+                if k < self.n_decoder_layers - 1:
+                    self.refinement_layers[global_level] = refinement_layer(
+                            global_level,
+                            adjc,
+                            coordinates_refined = self.get_coordinates_level(int(global_level)-1),
+                            coordinates = coordinates,
+                            input_dim = dim_in,
+                            model_dim = dim_out,
+                            ff_dim = dim_out,
+                            dropout=self.dropout,
+                            n_heads = self.model_settings["n_heads"][k],
+                            pos_emb_type= self.pos_emb_type_IO,
+                            pos_embedder=self.global_pos_embedder_refine,
+                            pos_emb_dim=self.model_settings["emb_table_dim"],
+                            seq_level=self.max_seq_level,
+                            polar = self.polar)
+                    
+                    global_level = str(int(global_level)-1)
+                    if self.use_skip_layers and global_level in self.encoder_dims_level.keys():
+                        self.skip_layers[global_level] = skip_layer(
+                                                input_dim = dim_out,
+                                                model_dim = dim_out,
+                                                ff_dim = dim_out,
+                                                n_heads = self.model_settings["n_heads"][k],
+                                                dropout= self.dropout,
+                                                pos_emb_type= self.pos_emb_type,
+                                                pos_embedder=self.global_pos_embedder,
+                                                pos_emb_dim=self.model_settings["emb_table_dim"],
+                                                seq_level=self.max_seq_level)
+        else:    
+            self.decoder_dims_level['0'] = self.model_settings["encoder_dims"][self.global_level_start] 
 
-        self.decoder_dims_level = {}
-        for k in range(self.n_decoder_layers):
-
-            global_level = str(len(self.model_settings["encoder_dims"]) - 1 - k)
-
-            dim_in  = self.model_settings["encoder_dims"][::-1][k]
-            dim_out = self.model_settings["encoder_dims"][::-1][k+1] if k < self.n_decoder_layers - 1 else dim_in
-
-            if self.use_skip_channels:
-                if global_level in self.encoder_dims_level.keys():
-                    dim_in += self.encoder_dims_level[global_level]["in"]
-
-            self.decoder_dims_level[global_level] = dim_in
-
-            adjc = self.get_adjacent_global_cell_indices(int(global_level))
-            coordinates = self.get_coordinates_level(global_level)
-
-            self.processing_layers_dec[global_level] = processing_layers(
-                                    global_level,
-                                    adjc,
-                                    coordinates,
-                                    n_layers = self.model_settings['n_processing_layers'],
-                                    input_dim = dim_in,
-                                    model_dim = dim_in,
-                                    ff_dim = dim_out,
-                                    n_heads = self.model_settings["n_heads"][k],
-                                    dropout=self.dropout,
-                                    pos_emb_type= self.pos_emb_type,
-                                    pos_embedder=self.global_pos_embedder,
-                                    pos_emb_dim=self.model_settings["emb_table_dim"],
-                                    seq_level=self.max_seq_level,
-                                    polar = self.polar)
-                         
-                
-            if k < self.n_decoder_layers - 1:
-                self.refinement_layers[global_level] = refinement_layer(
-                        global_level,
-                        adjc,
-                        coordinates_refined = self.get_coordinates_level(int(global_level)-1),
-                        coordinates = coordinates,
-                        input_dim = dim_in,
-                        model_dim = dim_out,
-                        ff_dim = dim_out,
-                        dropout=self.dropout,
-                        n_heads = self.model_settings["n_heads"][k],
-                        pos_emb_type= self.pos_emb_type_IO,
-                        pos_embedder=self.global_pos_embedder_refine,
-                        pos_emb_dim=self.model_settings["emb_table_dim"],
-                        seq_level=self.max_seq_level,
-                        polar = self.polar)
-                
-                global_level = str(int(global_level)-1)
-                if self.use_skip_layers and global_level in self.encoder_dims_level.keys():
-                    self.skip_layers[global_level] = skip_layer(
-                                            input_dim = dim_out,
-                                            model_dim = dim_out,
-                                            ff_dim = dim_out,
-                                            n_heads = self.model_settings["n_heads"][k],
-                                            dropout= self.dropout,
-                                            pos_emb_type= self.pos_emb_type,
-                                            pos_embedder=self.global_pos_embedder,
-                                            pos_emb_dim=self.model_settings["emb_table_dim"],
-                                            seq_level=self.max_seq_level)
-        
-        
         self.output_layers = self.init_output_layers(output_mapping, output_coordinates)
 
         if "pretrained_path" in self.model_settings.keys():
@@ -960,6 +984,9 @@ class ICON_Transformer(nn.Module):
         #continue here
         
         x_output = {}
+        if self.pretrain:
+            x_output['0'] = x
+
         for global_level, processing_layers in self.processing_layers_dec.items():
             
             if self.use_skip_channels and global_level in x_skip.keys():
@@ -1214,7 +1241,9 @@ class ICON_Transformer(nn.Module):
                     pos_embedder=pos_embedder,
                     pos_emb_type = self.pos_emb_type_IO,
                     pos_emb_dim=emb_dim,
-                    polar=self.polar)
+                    polar=self.polar,
+                    force_nha=self.pretrain,
+                    kv_dropout=0 if not self.pretrain else self.pretrain_droprate)
             
             input_layers[key] = layer
 
@@ -1230,7 +1259,7 @@ class ICON_Transformer(nn.Module):
             if int(global_level) <= self.global_level_output_start:
 
                 input_dim = self.decoder_dims_level[global_level]
-              
+            
                 if 'share_emb_w_output' in self.model_settings.keys() and not self.model_settings['share_emb_w_output']:
                     pos_embedder = self.init_position_embedder(input_dim, min_coarsen_level=int(global_level), max_coarsen_level=int(global_level), embed_dim=self.model_settings["emb_table_bins"])
                     emb_dim = input_dim
@@ -1268,7 +1297,7 @@ class ICON_Transformer(nn.Module):
                 
                     output_layers_level[key] = layer
 
-                output_layers[global_level] = output_layers_level
+            output_layers[global_level] = output_layers_level
 
         return output_layers
     
