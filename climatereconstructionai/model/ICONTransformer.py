@@ -122,8 +122,8 @@ class nha_layer(nn.Module):
             v = xv.reshape(b*nv,-1,xv.shape[-1])
 
         if self.kv_dropout > 0:
-            pos1 = pos[0].view(b*n,nh,-1)
-            pos2 = pos[1].view(b*n,nh,-1)
+            pos1 = pos[0].view(b*n, q.shape[-2], nh)
+            pos2 = pos[1].view(b*n, q.shape[-2], nh)           
 
             indices_keep = (torch.randperm((nh)*(x.shape[0]), device=x.device) % (nh-1)).view(x.shape[0], nh)[:, :int(1- self.kv_dropout*nh)]
        
@@ -131,7 +131,13 @@ class nha_layer(nn.Module):
             v = torch.gather(v, dim=1, index=indices_keep.unsqueeze(dim=-1).repeat(1,1,k.shape[-1]))
             pos1 = torch.gather(pos1, dim=-1, index=indices_keep.view(b*n,1,-1).repeat(1, pos1.shape[1],1))
             pos2 = torch.gather(pos2, dim=-1, index=indices_keep.view(b*n,1,-1).repeat(1, pos2.shape[1],1))
-            pos = (pos1.view(b,n,nh,-1), pos2.view(b,n,nh,-1))
+
+            pos = (pos1.view(b, n, q.shape[-2],-1), pos2.view(b, n, q.shape[-2],-1))
+
+            if mask is not None:
+                mask = mask.view(b*n, q.shape[-2], nh)
+                mask = torch.gather(mask, dim=-1, index=indices_keep.view(b*n,1,-1).repeat(1, pos2.shape[1],1))
+                mask = mask.view(b, n, q.shape[-2],-1)
 
         if self.qkv_bias:
 
@@ -172,7 +178,7 @@ class nha_layer(nn.Module):
         return self.output_layer(x)
 
 class n_nha_layers(nn.Module):
-    def __init__(self, n_layers, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, input_mlp=False, output_dim=None, activation=nn.SiLU(), pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None) -> None: 
+    def __init__(self, n_layers, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, input_mlp=False, output_dim=None, activation=nn.SiLU(), pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, kv_dropout=0) -> None: 
         super().__init__()
 
         self.layer_list = nn.ModuleList()
@@ -192,7 +198,8 @@ class n_nha_layers(nn.Module):
                                         activation=activation, 
                                         pos_emb_type=pos_emb_type, 
                                         pos_embedder=pos_embedder, 
-                                        pos_emb_dim=pos_emb_dim))
+                                        pos_emb_dim=pos_emb_dim,
+                                        kv_dropout=kv_dropout))
 
     def forward(self, x: torch.tensor, xq=None, mask=None, pos=None):
         for layer in self.layer_list:
@@ -201,7 +208,7 @@ class n_nha_layers(nn.Module):
 
     
 class nha_reduction_layer(nn.Module):
-    def __init__(self, input_dim, model_dim, ff_dim, nh_reduction, input_mlp=True, n_heads=4, dropout=0, activation=nn.SiLU(), pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None) -> None: 
+    def __init__(self, input_dim, model_dim, ff_dim, nh_reduction, input_mlp=True, n_heads=4, dropout=0, activation=nn.SiLU(), pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, kv_dropout=0) -> None: 
         super().__init__()
 
         self.nha_layer = nha_layer(
@@ -213,7 +220,8 @@ class nha_reduction_layer(nn.Module):
                 dropout=dropout,
                 pos_emb_type=pos_emb_type,
                 pos_embedder=pos_embedder,
-                pos_emb_dim=pos_emb_dim)
+                pos_emb_dim=pos_emb_dim,
+                kv_dropout=kv_dropout)
         
         
         self.reduction_mlp = reduction_mlp(model_dim, nh_reduction=nh_reduction)
@@ -228,7 +236,7 @@ class nha_reduction_layer(nn.Module):
 
 
 class coarsen_layer(nn.Module):
-    def __init__(self, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, activation=nn.SiLU(), pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None) -> None: 
+    def __init__(self, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, activation=nn.SiLU(), pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, kv_dropout=0) -> None: 
         super().__init__()
 
         self.nha_reduction_layer = nha_reduction_layer(
@@ -241,7 +249,8 @@ class coarsen_layer(nn.Module):
                 dropout=dropout,
                 pos_emb_type=pos_emb_type,
                 pos_embedder=pos_embedder,
-                pos_emb_dim=pos_emb_dim)
+                pos_emb_dim=pos_emb_dim,
+                kv_dropout=kv_dropout)
         
     def forward(self, x, pos=None):
         
@@ -253,7 +262,7 @@ class coarsen_layer(nn.Module):
     
 
 class processing_layers(nn.Module):
-    def __init__(self, global_level, adjc, coordinates, n_layers, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, activation=nn.SiLU(), pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, seq_level=1, nh_att=True, seq_att=True, polar=True) -> None: 
+    def __init__(self, global_level, adjc, coordinates, n_layers, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, activation=nn.SiLU(), pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, seq_level=1, nh_att=True, seq_att=True, polar=True, kv_dropout=0) -> None: 
         super().__init__()
         self.nh_att = nh_att
         self.seq_att = seq_att
@@ -277,7 +286,8 @@ class processing_layers(nn.Module):
                         pos_emb_type=pos_emb_type,
                         pos_embedder=pos_embedder,
                         pos_emb_dim=pos_emb_dim,
-                        activation=activation) for k in range(n_layers)])
+                        activation=activation,
+                        kv_dropout=kv_dropout) for _ in range(n_layers)])
 
         if seq_att:
             self.seq_layers = nn.ModuleList([nha_layer(input_dim= model_dim,
@@ -289,7 +299,8 @@ class processing_layers(nn.Module):
                         pos_emb_type=pos_emb_type,
                         pos_embedder=pos_embedder,
                         pos_emb_dim=pos_emb_dim,
-                        activation=activation) for k in range(n_layers)])
+                        activation=activation,
+                        kv_dropout=kv_dropout) for _ in range(n_layers)])
             
         self.seq_level = seq_level
 
@@ -445,7 +456,7 @@ class input_layer(nn.Module):
 
 class output_layer(nn.Module):
     # change to dynamic output sequences
-    def __init__(self, global_level, adjc, coordinates, output_mapping_0, output_coordinates, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, output_dim=None, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, seq_level=1, polar=True, force_nha=False) -> None: 
+    def __init__(self, global_level, adjc, coordinates, output_mapping_0, output_coordinates, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, output_dim=None, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, seq_level=1, polar=True, force_nha=False, kv_dropout=0) -> None: 
         super().__init__()    
 
         self.n_output = output_mapping_0.shape[-1]
@@ -493,7 +504,7 @@ class output_layer(nn.Module):
         return self.output_mlp(x)
 
 class skip_layer(nn.Module):
-    def __init__(self, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, seq_level=1) -> None: 
+    def __init__(self, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, seq_level=1, kv_dropout=0) -> None: 
         super().__init__()
         
         self.seq_level = seq_level
@@ -507,7 +518,8 @@ class skip_layer(nn.Module):
                     dropout=dropout,
                     pos_emb_type=pos_emb_type,
                     pos_embedder=pos_embedder,
-                    pos_emb_dim=pos_emb_dim)
+                    pos_emb_dim=pos_emb_dim,
+                    kv_dropout=kv_dropout)
         
 
     def forward(self, x, x_skip, reshape=True, mask=None, pos=None):
@@ -524,7 +536,7 @@ class skip_layer(nn.Module):
         return x
 
 class refinement_layer(nn.Module):
-    def __init__(self, global_level, adjc, coordinates_refined, coordinates, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, output_dim=None, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, seq_level=1, polar=True) -> None: 
+    def __init__(self, global_level, adjc, coordinates_refined, coordinates, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, output_dim=None, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, seq_level=1, polar=True, kv_dropout=0) -> None: 
         super().__init__()
 
         self.global_level = global_level
@@ -548,7 +560,8 @@ class refinement_layer(nn.Module):
                     pos_emb_type=pos_emb_type,
                     pos_embedder=pos_embedder,
                     pos_emb_dim=pos_emb_dim,
-                    qkv_bias=False)
+                    qkv_bias=False,
+                    kv_dropout=kv_dropout)
         
 
 
@@ -599,7 +612,7 @@ class refinement_layer(nn.Module):
 
 
 class pos_refinement_layer(nn.Module):
-    def __init__(self, global_level, adjc, coordinates_refined, coordinates, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, output_dim=None, pos_embedder=None, pos_emb_dim=None, seq_level=1, polar=True) -> None: 
+    def __init__(self, global_level, adjc, coordinates_refined, coordinates, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, output_dim=None, pos_embedder=None, pos_emb_dim=None, seq_level=1, polar=True, kv_dropout=0) -> None: 
         super().__init__()
 
         self.global_level = global_level
@@ -629,7 +642,8 @@ class pos_refinement_layer(nn.Module):
                     dropout=dropout,
                     pos_emb_type=None,
                     pos_embedder=None,
-                    pos_emb_dim=pos_emb_dim)
+                    pos_emb_dim=pos_emb_dim,
+                    kv_dropout=kv_dropout)
 
 
     def get_relative_positions(self, indices_refined, indices_nh):
@@ -790,7 +804,8 @@ class ICON_Transformer(nn.Module):
         self.register_buffer('acoe', acoe, persistent=False)
 
         self.pretrain_bias = self.model_settings['pretrain'] if 'pretrain' in self.model_settings.keys() else False
-        self.pretrain_droprate = self.model_settings['pretrain_droprate'] if 'pretrain' in self.model_settings.keys() else False
+        self.kv_dropout = self.model_settings['kv_dropout'] if 'kv_dropout' in self.model_settings.keys() else 0
+        self.kv_dropout_input = self.model_settings['kv_dropout_input'] if 'kv_dropout_input' in self.model_settings.keys() else 0
 
         self.global_level_start = self.model_settings['global_level_start']
         self.global_level_end = self.model_settings['global_level_end']
@@ -869,7 +884,8 @@ class ICON_Transformer(nn.Module):
                                             pos_embedder=self.global_pos_embedder,
                                             pos_emb_dim=self.model_settings["emb_table_dim"],
                                             seq_level=self.max_seq_level,
-                                            polar = self.polar)   
+                                            polar = self.polar,
+                                            kv_dropout=self.kv_dropout)   
                 
                 self.coarsen_layers[global_level] = coarsen_layer(
                                                         input_dim= dim_in,
@@ -879,7 +895,8 @@ class ICON_Transformer(nn.Module):
                                                         pos_emb_type= self.pos_emb_type,
                                                         dropout=self.dropout,
                                                         pos_embedder=self.global_pos_embedder,
-                                                        pos_emb_dim=self.model_settings["emb_table_dim"])
+                                                        pos_emb_dim=self.model_settings["emb_table_dim"],
+                                                        kv_dropout=self.kv_dropout)
 
             for k in range(self.n_decoder_layers):
 
@@ -911,7 +928,8 @@ class ICON_Transformer(nn.Module):
                                         pos_embedder=self.global_pos_embedder,
                                         pos_emb_dim=self.model_settings["emb_table_dim"],
                                         seq_level=self.max_seq_level,
-                                        polar = self.polar)
+                                        polar = self.polar,
+                                        kv_dropout=self.kv_dropout)
                             
                     
                 if k < self.n_decoder_layers - 1:
@@ -929,7 +947,8 @@ class ICON_Transformer(nn.Module):
                             pos_embedder=self.global_pos_embedder_refine,
                             pos_emb_dim=self.model_settings["emb_table_dim"],
                             seq_level=self.max_seq_level,
-                            polar = self.polar)
+                            polar = self.polar,
+                            kv_dropout=self.kv_dropout)
                     
                     global_level = str(int(global_level)-1)
                     if self.use_skip_layers and global_level in self.encoder_dims_level.keys():
@@ -942,7 +961,8 @@ class ICON_Transformer(nn.Module):
                                                 pos_emb_type= self.pos_emb_type,
                                                 pos_embedder=self.global_pos_embedder,
                                                 pos_emb_dim=self.model_settings["emb_table_dim"],
-                                                seq_level=self.max_seq_level)
+                                                seq_level=self.max_seq_level,
+                                                kv_dropout=self.kv_dropout)
         else:    
             self.decoder_dims_level['0'] = self.model_settings["encoder_dims"][self.global_level_start] 
 
@@ -1265,7 +1285,7 @@ class ICON_Transformer(nn.Module):
                     polar=self.polar,
                     input_mlp = False if self.pretrain_bias else True,
                     force_nha = self.pretrain_bias,
-                    kv_dropout=0 if not self.pretrain_bias else self.pretrain_droprate)
+                    kv_dropout=self.kv_dropout_input)
             
             input_layers[key] = layer
 
@@ -1315,7 +1335,8 @@ class ICON_Transformer(nn.Module):
                         pos_embedder = pos_embedder,
                         pos_emb_dim = emb_dim,
                         seq_level = self.max_seq_level,
-                        polar= self.polar)
+                        polar= self.polar,
+                        kv_dropout=self.kv_dropout)
                 
                     output_layers_level[key] = layer
 
