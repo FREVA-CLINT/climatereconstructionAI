@@ -12,6 +12,7 @@ from torch.utils.data import Dataset, Sampler
 from .grid_utils import generate_region, get_coord_dict_from_var, get_coords_as_tensor, invert_dict, get_ids_in_patches, get_patches, rotate_ds, get_mapping_to_icon_grid, get_nh_variable_mapping_icon
 from climatereconstructionai.model.transformer_helpers import coarsen_global_cells
 from .normalizer import grid_normalizer
+import pickle
 
 class InfiniteSampler(Sampler):
     def __init__(self, num_samples, data_source=None):
@@ -54,6 +55,17 @@ def get_moments(data, type, level=0.9):
     
     return tuple(moments)
 
+def mapping_to_(dic, to='numpy'):
+    out_dic = {}
+    for key, subdic in dic.items():
+        out_sub_dic = {}
+        for subkey, subsub_dic in subdic.items():
+            if to =='numpy':
+                out_sub_dic[subkey] = np.array(subsub_dic, dtype=np.int32)
+            else:
+                out_sub_dic[subkey] = torch.as_tensor(subsub_dic, dtype=torch.int32)
+        out_dic[key] = out_sub_dic
+    return out_dic
 
 
 class FiniteSampler(Sampler):
@@ -138,6 +150,9 @@ class NetCDFLoader_lazy(Dataset):
                                                      search_raadius=model_settings['search_raadius'], 
                                                      max_nh=model_settings['nh_input'], 
                                                      level_start=model_settings['level_start_input'])
+        
+        input_mapping = mapping_to_(input_mapping, to='numpy')
+        output_mapping = mapping_to_(output_mapping, to='numpy')
 
         ds_source = xr.open_dataset(files_source[0])
 
@@ -145,20 +160,24 @@ class NetCDFLoader_lazy(Dataset):
         eoc =  torch.tensor(grid_processing.edge_of_cell.values-1)
         adjc =  torch.tensor(grid_processing.adjacent_cell_of_edge.values-1)
 
-        global_cells = coarsen_global_cells(global_indices, eoc, adjc, global_level=coarsen_sample_level)[0]
-        global_cells_input = global_cells.reshape(global_cells.shape[0],-1,4**model_settings['global_level_start'])[:,:,0]
+        global_cells = np.array(coarsen_global_cells(global_indices, eoc, adjc, global_level=coarsen_sample_level)[0])
+        global_cells_input = np.array(global_cells.reshape(global_cells.shape[0],-1,4**model_settings['global_level_start'])[:,:,0])
 
-        self.global_cells_path = os.path.join(model_settings["model_dir"],"global_cells.pt")
-        self.global_cells_input_path = os.path.join(model_settings["model_dir"],"global_cells_input.pt")
+        #self.global_cells_path = os.path.join(model_settings["model_dir"],"global_cells.pt")
+        #self.global_cells_input_path = os.path.join(model_settings["model_dir"],"global_cells_input.pt")
 
-        self.input_mapping_path = os.path.join(model_settings["model_dir"],"input_mapping.pt")
-        self.output_mapping_path = os.path.join(model_settings["model_dir"],"output_mapping.pt")
+       # self.input_mapping_path = os.path.join(model_settings["model_dir"],"input_mapping.pt")
+       # self.output_mapping_path = os.path.join(model_settings["model_dir"],"output_mapping.pt")
 
-        torch.save(global_cells, self.global_cells_path)
-        torch.save(global_cells_input, self.global_cells_input_path)
+        self.indices_path = os.path.join(model_settings["model_dir"],"indices_data.pickle")
 
-        torch.save(input_mapping, self.input_mapping_path)
-        torch.save(output_mapping, self.output_mapping_path)
+        indices_data = {'input_mapping': input_mapping,
+                        'output_mapping': output_mapping,
+                        'global_cells_input':global_cells_input,
+                        'global_cells': global_cells}
+
+        with open(self.indices_path, 'wb') as handle:
+            pickle.dump(indices_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
         self.num_datapoints_time = ds_source[list(self.variables_source.values())[0][0]].shape[0]
 
@@ -188,6 +207,8 @@ class NetCDFLoader_lazy(Dataset):
         self.norm_dict = normalization
         self.normalizer = grid_normalizer(self.norm_dict)
 
+        del eoc
+        del adjc
     
 
     def get_files(self, file_path_source, file_path_target=None, file_path_target_past=None):
@@ -268,14 +289,19 @@ class NetCDFLoader_lazy(Dataset):
                 if (index < self.index_range_source[0]) or (index > self.index_range_source[1]):
                     index = int(torch.randint(self.index_range_source[0], self.index_range_source[1]+1, (1,1)))
 
-        global_cells = torch.load(self.global_cells_path)
+
+        with open(self.indices_path, 'rb') as handle:
+            indices_data = pickle.load(handle)
+
+        global_cells_input = torch.as_tensor(indices_data['global_cells_input'])
+        input_mapping = mapping_to_(indices_data['input_mapping'], to='pytorch')
+        global_cells = torch.as_tensor(indices_data['global_cells'])
+        output_mapping = mapping_to_(indices_data['output_mapping'], to='pytorch')
+
         sample_index = torch.randint(global_cells.shape[0],(1,))[0]
 
-        global_cells_sample_input = torch.load(self.global_cells_input_path)[sample_index]
-        global_cells_sample_target = global_cells[sample_index]
-        
-        output_mapping = torch.load(self.output_mapping_path)
-        input_mapping = torch.load(self.input_mapping_path)
+        global_cells_sample_input = global_cells_input[sample_index]
+        global_cells_sample_target = global_cells[sample_index] 
 
         data_source = self.get_data(ds_source, index, global_cells_sample_input, self.variables_source, self.model_settings['global_level_start'], input_mapping['cell'])
         
