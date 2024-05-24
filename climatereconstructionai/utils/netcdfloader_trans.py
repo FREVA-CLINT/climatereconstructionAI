@@ -124,7 +124,6 @@ class NetCDFLoader_lazy(Dataset):
                
         grid_processing = xr.open_dataset(model_settings['processing_grid'])
 
-        self.coords_processing = get_coords_as_tensor(grid_processing, lon='clon', lat='clat')
 
         input_mapping = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
                                                      model_settings['input_grid'], self.variables_source.keys(), 
@@ -203,8 +202,8 @@ class NetCDFLoader_lazy(Dataset):
             ds_target = copy.deepcopy(ds_source)
 
         elif file_path_target==file_path_source:
-            ds_target = ds_source
-            
+            ds_target = None
+
         else:
             if self.lazy_load:
                 ds_target = xr.open_dataset(file_path_target)
@@ -226,13 +225,6 @@ class NetCDFLoader_lazy(Dataset):
         
         sampled_data = {}
         for key, variables in variables_dict.items():
-            data_g = []
-            for variable in variables:
-                data = torch.tensor(ds[variable][ts].values)
-                data = data[0] if data.dim() > 1  else data
-                data_g.append(data)
-
-            data_g = torch.stack(data_g, dim=-1)
 
             if index_mapping_dict is not None:
                 indices = index_mapping_dict[key][global_indices // 4**global_level_start]
@@ -240,7 +232,13 @@ class NetCDFLoader_lazy(Dataset):
             else:
                 indices = global_indices.reshape(-1,1)
 
-            data_g = data_g[indices]
+            data_g = []
+            for variable in variables:
+                data = torch.tensor(ds[variable][ts].values)
+                data = data[0] if data.dim() > 1  else data
+                data_g.append(data[indices])
+
+            data_g = torch.stack(data_g, dim=-1)
             data_g = data_g.view(indices.shape[0], -1, len(variables))
 
             sampled_data[key] = data_g
@@ -278,7 +276,11 @@ class NetCDFLoader_lazy(Dataset):
         input_mapping = torch.load(self.input_mapping_path)
 
         data_source = self.get_data(ds_source, index, global_cells_sample_input, self.variables_source, self.model_settings['global_level_start'], input_mapping['cell'])
-        data_target = self.get_data(ds_target, index, global_cells_sample_target, self.variables_target, 0, output_mapping['cell'])
+        
+        if ds_target is None:
+            data_target = data_source
+        else:
+            data_target = self.get_data(ds_target, index, global_cells_sample_target, self.variables_target, 0, output_mapping['cell'])
         '''
         condition_not_met = True
         while condition_not_met:
