@@ -281,6 +281,8 @@ class NetCDFLoader_lazy(Dataset):
             data_target = data_source
         else:
             data_target = self.get_data(ds_target, index, global_cells_sample_target, self.variables_target, 0, output_mapping['cell'])
+        
+        ds_target = ds_source = output_mapping = input_mapping = global_cells = global_cells = []
         '''
         condition_not_met = True
         while condition_not_met:
