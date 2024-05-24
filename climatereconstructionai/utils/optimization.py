@@ -267,13 +267,10 @@ class NHTVLoss(nn.Module):
 
     def forward(self, output, target, sample_dict):
         output = self.phys_calc.get_nh(output, sample_dict)
-        target = self.phys_calc.get_nh(target, sample_dict)
 
         loss = 0
         for key, data in output.items():
-            output_nh = (data - data[:,:,[0],:])
-            target_nh = (target[key] - target[key][:,:,[0],:])
-            loss += ((output_nh - target_nh)**2).mean()
+            loss += ((data - data[:,:,[0],:])**2).mean()
         return loss
 
 class GaussLoss(nn.Module):
