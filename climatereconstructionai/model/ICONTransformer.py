@@ -228,12 +228,12 @@ class coarsen_layer(nn.Module):
                 kv_dropout=kv_dropout)
         
 
-        self.reduction_mlp = nn.Sequential(
-            nn.Linear(model_dim*nh_reduction, model_dim*nh_reduction, bias=False),
-            nn.Dropout(dropout),
-            activation,
-            nn.Linear(model_dim*nh_reduction, model_dim, bias=False)
-        )
+    #    self.reduction_mlp = nn.Sequential(
+    #        nn.Linear(model_dim*nh_reduction, model_dim*nh_reduction, bias=False),
+    #        nn.Dropout(dropout),
+    #        activation,
+    #        nn.Linear(model_dim*nh_reduction, model_dim, bias=False)
+    #    )
         
     def forward(self, x, pos=None):
         
@@ -242,9 +242,9 @@ class coarsen_layer(nn.Module):
 
         x = self.nha_layer(x, pos=pos)
 
-        x = x.view(x.shape[0], x.shape[1], -1)
+        x = x.mean(dim=-2)
 
-        x = self.reduction_mlp(x)
+        #x = self.reduction_mlp(x)
 
         return x
     
