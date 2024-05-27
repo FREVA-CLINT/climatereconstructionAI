@@ -341,7 +341,7 @@ class ResUNet(nn.Module):
         x = self.decoder(x, layer_outputs)
         x = self.out_net(x, x_res)
 
-        return x
+        return {'x': x}
 
 
 class core_ResUNet(psm.pyramid_step_model): 
