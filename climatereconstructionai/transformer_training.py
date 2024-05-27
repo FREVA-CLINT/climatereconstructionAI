@@ -350,8 +350,8 @@ def train(model, training_settings, model_settings={}):
             else:
                 train_total_loss.backward() 
 
-        if training_settings["clip_grad"]:
-            nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        if "clip_grad_norm" in training_settings.keys() and training_settings["clip_grad_norm"]>0:
+            nn.utils.clip_grad_norm_(model.parameters(), training_settings["clip_grad_norm"])
 
         if training_settings['mixed_precision']:
             scaler.step(optimizer)
