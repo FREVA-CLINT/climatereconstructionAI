@@ -23,6 +23,7 @@ class shuffle_upscaling(nn.Module):
     def __init__(self, in_channels, upscale_factor, k_size=3, bias=False, global_padding=False):
         super().__init__()
 
+        k_size=3
         out_channels = in_channels * upscale_factor**2
         self.global_padding = global_padding
         self.padding = k_size // 2
@@ -131,7 +132,7 @@ class res_blocks(nn.Module):
         return self.pool(x), x
 
 class encoder(nn.Module): 
-    def __init__(self, hw_in, factor, n_levels, n_blocks, u_net_channels, in_channels, k_size=3, k_size_in=7, batch_norm=True, n_groups=1, dropout=0, bias=True, global_padding=False, initial_res=False,down_method='max'):
+    def __init__(self, hw_in, factor, n_levels, n_blocks, u_net_channels, in_channels, k_size=3, k_size_in=7, min_att_dim=0, batch_norm=True, n_groups=1, dropout=0, bias=True, global_padding=False, initial_res=False, down_method='max'):
         super().__init__()
 
         hw_in = torch.tensor(hw_in)
@@ -142,26 +143,31 @@ class encoder(nn.Module):
         for n in range(n_levels):
             if n==0:
                 in_channels_block = in_channels
-                out_channels_block = u_net_channels * n_groups 
+                out_channels_block = n_groups * (u_net_channels // n_groups + u_net_channels % n_groups)
                 with_res = initial_res
                 groups = n_groups
-                k_size = k_size_in
+                k_size_layer = k_size_in
             else:
                 in_channels_block = out_channels_block
                 out_channels_block = u_net_channels*(2**(n))
                 groups=1
                 with_res = True
-                k_size = k_size
+                k_size_layer = k_size
 
             factor_level = 1 if n == n_levels-1 else factor
             hw = hw_in/(factor**(n))
+
+            if hw[0] <= min_att_dim:
+                with_att = True
+            else:
+                with_att = False
 
             self.layer_configs.append({'in_channels': in_channels_block,
                                  'out_channels': out_channels_block,
                                  'hw': hw})
             
 
-            self.layers.append(res_blocks(hw, n_blocks, in_channels_block, out_channels_block, k_size=k_size, batch_norm=batch_norm, groups=groups, with_res=with_res, factor=factor_level, dropout=dropout, bias=bias, global_padding=global_padding, down_method=down_method))
+            self.layers.append(res_blocks(list(hw.long()), n_blocks, in_channels_block, out_channels_block, k_size=k_size_layer, batch_norm=batch_norm, groups=groups, with_att=with_att, with_res=with_res, factor=factor_level, dropout=dropout, bias=bias, global_padding=global_padding, down_method=down_method))
 
     
     def forward(self, x):
@@ -194,14 +200,31 @@ class decoder_block_shuffle(nn.Module):
 
         return x
 
+class center_crop(nn.Module):
+    def __init__(self, phys_size_factor):
+        super().__init__()
+        
+        self.phys_size_factor = phys_size_factor
+
+    def forward(self,x):
+        w = x.shape[-1]
+        crop_size = w/self.phys_size_factor
+        crop_size = round((w-crop_size)/2)
+        
+
+        return x[:,:,crop_size:w-crop_size,crop_size:w-crop_size]
+
 class decoder(nn.Module):
-    def __init__(self, layer_configs, factor, n_blocks, out_channels, global_upscale_factor=1, k_size=3, dropout=0, n_groups=1, bias=True, global_padding=False):
+    def __init__(self, layer_configs, phys_size_factor, factor, n_blocks, out_channels, channels_upscaling=None, global_upscale_factor=1, k_size=3, dropout=0, n_groups=1, bias=True, global_padding=False, skip_channels=True):
         super().__init__()
         # define total number of layers, first n_levels-1 with skip, others not
         #watch out for n_groups in last layer before last
 
         #check dims!
         n_out_blocks = int(torch.max(torch.tensor([math.log2(global_upscale_factor), torch.tensor(1)])))
+
+        self.center_crop = center_crop(phys_size_factor) if phys_size_factor > 1 else nn.Identity()
+
         self.skip_blocks = len(layer_configs)-1
         n_layers = n_out_blocks + self.skip_blocks
 
@@ -215,7 +238,10 @@ class decoder(nn.Module):
             if n < self.skip_blocks:
                 in_channels_block = layer_configs[self.skip_blocks-n]['out_channels']
                 out_channels_block = layer_configs[self.skip_blocks-n]['in_channels']
-                skip_channels = layer_configs[self.skip_blocks-(n+1)]['out_channels']
+                skip_channels = layer_configs[self.skip_blocks-(n+1)]['out_channels'] if skip_channels else 0
+
+                if n == self.skip_blocks-1:
+                    out_channels_block = channels_upscaling if channels_upscaling is not None else out_channels_block
 
                 if n == n_layers-2:
                     out_channels_block = n_groups * (out_channels_block // n_groups + out_channels_block % n_groups)
@@ -224,32 +250,35 @@ class decoder(nn.Module):
       
             else:
                 skip_channels = 0
+                in_channels_block = out_channels_block
+                out_channels_block = channels_upscaling if channels_upscaling is not None else out_channels_block
+                upscale_factor = 2
 
                 if n == n_layers-2:
-                    in_channels_block = out_channels_block
                     out_channels_block = n_groups * (out_channels_block // n_groups + out_channels_block % n_groups)
 
                 elif n == n_layers-1:
-                    in_channels_block = out_channels_block
                     out_channels_block = out_channels
                     out_activation = False
                     groups=n_groups
                     if global_upscale_factor==1:
                         upscale_factor=1
-                
-                else:
-                    in_channels_block = out_channels_block
 
             hw = hw_in/(factor**(n-1))
             self.decoder_blocks.append(decoder_block_shuffle(hw, n_blocks, in_channels_block, out_channels_block, skip_channels, k_size=k_size, dropout=dropout, bias=bias, global_padding=global_padding, upscale_factor=upscale_factor, groups=groups, out_activation=out_activation))      
         
-    def forward(self, x, skip_channels):
+    def forward(self, x, skip_channels=None):
 
         for k, layer in enumerate(self.decoder_blocks):
             if k < self.skip_blocks:
-                x_skip = skip_channels[-(k+2)]  
-                x = layer(x, x_skip)
+                if skip_channels is not None:
+                    x_skip = skip_channels[-(k+2)]  
+                    x = layer(x, x_skip)
+                else:
+                    x = layer(x)
             else:
+                if k==self.skip_blocks:
+                    x = self.center_crop(x)
                 x = layer(x)
         return x
 
@@ -320,13 +349,13 @@ class out_net(nn.Module):
 
 
 class ResUNet(nn.Module): 
-    def __init__(self, hw_in, hw_out, n_levels, factor, n_res_blocks, model_dim_unet, in_channels, out_channels, res_mode, res_indices, batch_norm=True, k_size=3, in_groups=1, out_groups=1, dropout=0, bias=True, global_padding=False, mid_att=False, initial_res=True, down_method="max"):
+    def __init__(self, hw_in, hw_out, phys_size_factor, n_levels, factor, n_res_blocks, model_dim_unet, in_channels, out_channels, res_mode, res_indices, channels_upscaling=None, batch_norm=True, k_size=3, k_size_in=7, min_att_dim=0, in_groups=1, out_groups=1, dropout=0, bias=True, global_padding=False, mid_att=False, initial_res=True, down_method="max"):
         super().__init__()
 
         global_upscale_factor = int(torch.tensor([(hw_out[0]) // hw_in[0], 1]).max())
 
-        self.encoder = encoder(hw_in, factor, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, 7, batch_norm=batch_norm, n_groups=in_groups, dropout=dropout, bias=bias, global_padding=global_padding, initial_res=initial_res, down_method=down_method)
-        self.decoder = decoder(self.encoder.layer_configs, factor, n_res_blocks, out_channels, global_upscale_factor=global_upscale_factor, k_size=k_size, dropout=dropout, n_groups=out_groups, bias=bias, global_padding=global_padding)
+        self.encoder = encoder(hw_in, factor, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, k_size_in, min_att_dim=min_att_dim, batch_norm=batch_norm, n_groups=in_groups, dropout=dropout, bias=bias, global_padding=global_padding, initial_res=initial_res, down_method=down_method)
+        self.decoder = decoder(self.encoder.layer_configs, phys_size_factor, factor, n_res_blocks, out_channels, global_upscale_factor=global_upscale_factor, k_size=k_size, dropout=dropout, n_groups=out_groups, bias=bias, global_padding=global_padding, channels_upscaling=channels_upscaling)
 
         self.out_net = out_net(res_indices, hw_in, hw_out, res_mode=res_mode, global_padding=global_padding)
   
@@ -341,7 +370,7 @@ class ResUNet(nn.Module):
         x = self.decoder(x, layer_outputs)
         x = self.out_net(x, x_res)
 
-        return x
+        return {'x':x}
 
 
 class core_ResUNet(psm.pyramid_step_model): 
@@ -396,8 +425,14 @@ class core_ResUNet(psm.pyramid_step_model):
         factor = model_settings['factor'] if "factor" in model_settings.keys() else 2
         initial_res = model_settings['initial_res'] if "initial_res" in model_settings.keys() else False
         down_method = model_settings['down_method'] if "down_method" in model_settings.keys() else "max"
+        channels_upscaling = model_settings['channels_upscaling'] if "channels_upscaling" in model_settings.keys() else None
+        min_att_dim = model_settings['min_att_dim'] if "min_att_dim" in model_settings.keys() else 0
+        k_size = model_settings['k_size'] if "k_size" in model_settings.keys() else 3
+        k_size_in = model_settings['k_size_in'] if "k_size_in" in model_settings.keys() else 7
 
-        self.core_model = ResUNet(hw_in, hw_out, depth, factor, n_blocks, model_dim_core, input_dim, output_dim, model_settings['res_mode'], res_indices, batch_norm=batch_norm, in_groups=in_groups, out_groups=out_groups, dropout=dropout, bias=bias, global_padding=global_padding, mid_att=mid_att, initial_res=initial_res, down_method=down_method)
+        phys_size_factor = (1+2*model_settings["patches_overlap_source"])/(1+2*model_settings["patches_overlap_target"]) 
+
+        self.core_model = ResUNet(hw_in, hw_out, phys_size_factor, depth, factor, n_blocks, model_dim_core, input_dim, output_dim, model_settings['res_mode'], res_indices, k_size=k_size, k_size_in=k_size_in,min_att_dim=min_att_dim, batch_norm=batch_norm, in_groups=in_groups, out_groups=out_groups, dropout=dropout, bias=bias, global_padding=global_padding, mid_att=mid_att, initial_res=initial_res, down_method=down_method, channels_upscaling=channels_upscaling)
 
         if "pretrained_path" in self.model_settings.keys():
             self.check_pretrained(log_dir_check=self.model_settings['pretrained_path'])

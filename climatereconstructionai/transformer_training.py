@@ -118,7 +118,17 @@ def train(model, training_settings, model_settings={}):
                                              train_or_val='val')
     target_files_val = check_get_data_files(training_settings['val_data']['data_names_target'], 
                                             root_path = training_settings['root_dir'], 
-                                            train_or_val='val')      
+                                            train_or_val='val')
+    
+    if 'data_names_target_past' in training_settings['train_data'].keys():
+        target_files_past_train = check_get_data_files(training_settings['train_data']['data_names_target_past'], 
+                                                root_path = training_settings['root_dir'], 
+                                                train_or_val='train')
+        target_files_past_val = check_get_data_files(training_settings['val_data']['data_names_target_past'], 
+                                                root_path = training_settings['root_dir'], 
+                                                train_or_val='val')
+    else:
+        target_files_past_train = target_files_past_val = None
 
 
     if 'save_tensor_samples_path' in training_settings and len(training_settings['save_tensor_samples_path'])>0:
@@ -160,6 +170,7 @@ def train(model, training_settings, model_settings={}):
                                     model_settings["pix_size_patch"],
                                     model_settings["patches_overlap_source"],
                                     model_settings["patches_overlap_target"],
+                                    files_target_past=target_files_past_train,
                                     p_dropout_source=training_settings['p_dropout_source'],
                                     p_dropout_target=training_settings['p_dropout_target'],
                                     n_pts_min = training_settings["n_pts_min"] if 'n_pts_min' in training_settings else True,
@@ -184,6 +195,7 @@ def train(model, training_settings, model_settings={}):
                                     model_settings["pix_size_patch"],
                                     model_settings["patches_overlap_source"],
                                     model_settings["patches_overlap_target"],
+                                    files_target_past=target_files_past_val,
                                     p_dropout_source=training_settings['p_dropout_source'],
                                     p_dropout_target=training_settings['p_dropout_target'],
                                     n_pts_min = training_settings["n_pts_min"] if 'n_pts_min' in training_settings else True,
@@ -336,14 +348,14 @@ def train(model, training_settings, model_settings={}):
             if training_settings['save_debug']:
                 torch.save(debug_dict, os.path.join(log_dir,'debug_dict.pt'))
                 torch.save(coords_source,os.path.join(log_dir,'coords_source.pt'))
+                torch.save(target_indices,os.path.join(log_dir,'target_indices.pt'))
                 torch.save(coords_target,os.path.join(log_dir,'coords_target.pt'))
                 torch.save(output, os.path.join(log_dir,'output.pt'))
                 torch.save(output_reg_hr, os.path.join(log_dir,'output_reg_hr.pt'))
                 torch.save(output_reg_lr, os.path.join(log_dir,'output_reg_lr.pt'))
                 torch.save(target, os.path.join(log_dir,'target.pt'))
                 torch.save(source, os.path.join(log_dir,'source.pt'))
-                if "vort" in non_valid_mask.keys():
-                    torch.save(non_valid_mask["vort"], os.path.join(log_dir,'non_valid_mask_vort.pt'))
+                torch.save(non_valid_mask, os.path.join(log_dir,'non_valid_mask.pt'))
                 np.savetxt(os.path.join(log_dir,'losses_val.txt'),np.array(val_losses_hist))
                 np.savetxt(os.path.join(log_dir,'losses_train.txt'),np.array(train_losses_hist))
                 np.savetxt(os.path.join(log_dir,'lrs.txt'),np.array(lrs))

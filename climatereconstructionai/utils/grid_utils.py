@@ -629,7 +629,13 @@ class random_region_generator_multi():
 
         return {'regions':regions, 'seeds': [seeds_lon, seeds_lat]}
     
+def rotate_ds(ds, angle_rad):
+    
+    for var_name in ds.variables:
+        if 'lon' in var_name:
+            ds[var_name].values = np.mod((ds[var_name].values + angle_rad)+np.pi, 2*np.pi)-np.pi
 
+    return ds
 
 def generate_region(coords, range_lon=None, range_lat=None, n_points=None, radius=None, locations=[], batch_size=1, rect=False, return_rotated_coords=False):
 
@@ -755,6 +761,11 @@ class grid_interpolator(nn.Module):
         data = data.cpu()
         x,y = coords.cpu()
 
-        grid_z = griddata((x, y), data, (self.x_grid, self.y_grid), method=self.method)
+        if self.method=='nearest':
+            grid_z = griddata((x, y), data, (self.x_grid, self.y_grid), method=self.method)
+        else:
+            grid_z = griddata((x, y), data, (self.x_grid, self.y_grid), method=self.method)
+            grid_z_nn = griddata((x, y), data, (self.x_grid, self.y_grid), method='nearest')
+            grid_z[np.isnan(grid_z)] = grid_z_nn[np.isnan(grid_z)]
 
         return torch.tensor(grid_z, device=device).float()
