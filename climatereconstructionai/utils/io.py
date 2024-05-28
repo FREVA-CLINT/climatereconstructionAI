@@ -10,13 +10,14 @@ def get_state_dict_on_cpu(obj):
     return state_dict
 
 
-def save_ckpt(ckpt_name, train_stats, savelist):
-    ckpt_dict = {'labels': [], 'train_stats': train_stats}
+def save_ckpt(ckpt_name, train_stats, savelist, model_settings={}):
+    ckpt_dict = {'labels': [], 'train_stats': train_stats, 'model_settings':model_settings}
     for label, iter, model, optimizer in savelist:
         if model is not None:
             ckpt_dict["labels"].append(label)
             ckpt_dict[label] = {"n_iter": iter, "model": get_state_dict_on_cpu(model),
                                 "optimizer": optimizer.state_dict()}
+     
     if ckpt_dict["labels"]:
         torch.save(ckpt_dict, ckpt_name)
 

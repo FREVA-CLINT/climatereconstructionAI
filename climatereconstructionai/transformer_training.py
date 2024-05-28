@@ -27,7 +27,8 @@ def arclen(p1,p2):
 
 def set_device_and_init_torch_dist():
     
-    torch.distributed.init_process_group(backend='nccl')
+    # check out https://gist.github.com/TengdaHan/1dd10d335c7ca6f13810fff41e809904
+    torch.distributed.init_process_group(backend='nccl', init_method='env://')
        
     local_rank = dist.get_rank() % torch.cuda.device_count()
     torch.cuda.set_device(local_rank)
@@ -48,9 +49,10 @@ def make_ascent(loss):
 
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
 
-    def __init__(self, optimizer, warmup, max_iters):
+    def __init__(self, optimizer, warmup, max_iters, iter_start=0):
         self.warmup = warmup
         self.max_num_iters = max_iters
+        self.iter_start = iter_start
         super().__init__(optimizer)
 
     def get_lr(self):
@@ -58,6 +60,7 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
         return [base_lr * lr_factor for base_lr in self.base_lrs]
 
     def get_lr_factor(self, epoch):
+        epoch += self.iter_start
         lr_factor = 0.5 * (1 + np.cos(np.pi * epoch / self.max_num_iters))
         if epoch <= self.warmup:
             lr_factor *= epoch * 1.0 / self.warmup
@@ -264,6 +267,12 @@ def train(model, training_settings, model_settings={}):
         lambdas_optim['k_l1_relv'] = torch.nn.Parameter(torch.tensor(inital_k, dtype=float), requires_grad=dw_train)
 
 
+    if "continue_training" in training_settings.keys() and training_settings["continue_training"]:
+        iter_start = model.trained_iterations
+    else:
+        iter_start = 0
+
+
     if dw_train:
         optimizer2 = torch.optim.Adam(filter(lambda p: p.requires_grad, lambdas_optim.values()), lr=training_settings['lr_w'])
         lr_scheduler2 = CosineWarmupScheduler(optimizer2, training_settings["T_warmup"], training_settings['max_iter'])
@@ -271,12 +280,10 @@ def train(model, training_settings, model_settings={}):
 
     
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=training_settings['lr'])
-    lr_scheduler = CosineWarmupScheduler(optimizer, training_settings["T_warmup"], training_settings['max_iter'])
+    lr_scheduler = CosineWarmupScheduler(optimizer, training_settings["T_warmup"], training_settings['max_iter'], iter_start=iter_start)
     
     if training_settings['mixed_precision']:
-        scaler = GradScaler()
-
-    
+        scaler = GradScaler()   
 
     pbar = tqdm(range(0, training_settings['max_iter']))
 
@@ -286,7 +293,7 @@ def train(model, training_settings, model_settings={}):
     lrs = []
     for i in pbar:
      
-        n_iter = i + 1
+        n_iter = i + 1 + iter_start
         lr_val = optimizer.param_groups[0]['lr']
         pbar.set_description("lr = {:.1e}".format(lr_val))
 
@@ -431,13 +438,13 @@ def train(model, training_settings, model_settings={}):
 
         if n_iter % training_settings['save_model_interval'] == 0:
             save_ckpt('{:s}/{:d}.pth'.format(ckpt_dir, n_iter), norm_dict,
-                      [(str(n_iter), n_iter, model, optimizer)])
+                      [(str(n_iter), n_iter, model, optimizer)], model_settings=model_settings)
 
         if training_settings['early_stopping'] and early_stop.terminate:
             model = early_stop.best_model
             break
 
     save_ckpt('{:s}/best.pth'.format(ckpt_dir), norm_dict,
-              [(str(n_iter), n_iter, early_stop.best_model, optimizer)])
+              [(str(n_iter), n_iter, early_stop.best_model, optimizer)], model_settings=model_settings)
 
     writer.close()

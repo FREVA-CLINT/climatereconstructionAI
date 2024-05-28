@@ -944,11 +944,14 @@ class ICON_Transformer(nn.Module):
 
         strict = self.model_settings['load_strict'] if 'load_strict' in self.model_settings.keys() else True
 
+        trained_iterations = None
         if "pretrained_path" in self.model_settings.keys():
-            self.check_pretrained(log_dir_check=self.model_settings['pretrained_path'], strict=strict)
+            trained_iterations = self.check_pretrained(log_dir_check=self.model_settings['pretrained_path'], strict=strict)
 
         if "pretrained_pos_embeddings_path" in self.model_settings.keys():
             self.check_pretrained(log_dir_check=self.model_settings['pretrained_pos_embeddings_path'], strict=False, match_list='pos_embedder')
+
+        self.trained_iterations = trained_iterations
 
     def forward(self, x, indices_batch_dict=None, debug=False):
         # if global_indices are provided, batches in x are treated as independent
@@ -1355,8 +1358,8 @@ class ICON_Transformer(nn.Module):
             self.check_model_dir()
             self.set_training_configuration(self.train_settings)
 
-        if pretrain_subdir is not None:
-            self.check_pretrained(os.path.join(self.model_dir, pretrain_subdir, 'logs'))
+        if 'continue_training' in self.train_settings.keys() and self.train_settings['continue_training']:
+            self.trained_iterations = self.check_pretrained(self.log_dir)
 
         train_settings = self.train_settings
 
@@ -1370,6 +1373,7 @@ class ICON_Transformer(nn.Module):
 
 
     def check_pretrained(self, log_dir_check='', strict=True, match_list=None):
+        iteration = None
 
         if len(log_dir_check)>0:
             ckpt_dir = os.path.join(log_dir_check, 'ckpts')
@@ -1381,12 +1385,14 @@ class ICON_Transformer(nn.Module):
                     weights_path = os.path.join(ckpt_dir, weights_paths[-1])
             
             if os.path.isfile(weights_path):
-                self.load_pretrained(weights_path, strict=strict, match_list=match_list)
+                iteration = self.load_pretrained(weights_path, strict=strict, match_list=match_list)
+        return iteration
 
     def load_pretrained(self, ckpt_path:str, strict=True, match_list=None):
         device = 'cpu' if 'device' not in self.model_settings.keys() else self.model_settings['device']
         ckpt_dict = torch.load(ckpt_path, map_location=torch.device(device))
-        load_model(ckpt_dict, self, strict=strict, match_list=match_list)
+        iteration = load_model(ckpt_dict, self, strict=strict, match_list=match_list)
+        return iteration
 
 
 
