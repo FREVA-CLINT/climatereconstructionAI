@@ -11,6 +11,8 @@ from ..utils.io import load_ckpt, load_model
 import climatereconstructionai.model.transformer_helpers as helpers
 from climatereconstructionai.utils.grid_utils import get_distance_angle, get_coords_as_tensor, get_mapping_to_icon_grid, get_nh_variable_mapping_icon
 from .. import transformer_training as trainer
+from ..utils.normalizer import grid_normalizer
+from ..utils.optimization import grid_dict_to_var_dict
 
 def dict_to_device(d, device):
     for key, value in d.items():
@@ -410,6 +412,7 @@ class input_layer(nn.Module):
 
 
     def forward(self, x, grid_level_indices, grid_level_coords):
+
         b,n,nh,f = x.shape
 
         x = self.input_mlp(x)
@@ -958,7 +961,8 @@ class ICON_Transformer(nn.Module):
         debug_list = []
 
         if indices_batch_dict is None:
-            indices_batch_dict = {'global_cell': None,
+            indices_batch_dict = {'global_cell': self.global_indices,
+                                  'local_cell': self.global_indices,
                        'sample': None,
                        'sample_level': None}
 
@@ -1067,6 +1071,55 @@ class ICON_Transformer(nn.Module):
         else:
             return output_data
     
+    
+    def apply_on_nc(self, ds, ts, sample_lvl=6):
+    
+        normalizer = grid_normalizer(self.model_settings['normalization'])
+
+        if isinstance(ds, str):
+            ds = xr.open_dataset(ds)
+        
+        indices = self.global_indices.reshape(-1, 4**sample_lvl)
+        data = self.get_data_from_ds(ds, ts, self.model_settings["variables_source"], 0, indices)
+
+
+        indices_batch_dict = {'global_cell': indices,
+                   'local_cell': indices // 4**self.model_settings['global_level_start'],
+                    'sample': torch.arange(indices.shape[0]),
+                    'sample_level': sample_lvl* torch.ones((indices.shape[0]), dtype=torch.int)}
+        
+        data = normalizer(data, self.model_settings["variables_source"])
+
+        output = self(data, indices_batch_dict=indices_batch_dict)
+
+        output = normalizer(output, self.model_settings["variables_target"], denorm=True)
+
+        output = grid_dict_to_var_dict(output, self.model_settings["variables_target"])
+        
+        return output
+
+
+    def get_data_from_ds(self, ds, ts, variables_dict, global_level_start, global_indices):
+        
+        sampled_data = {}
+        for key, variables in variables_dict.items():
+            data_g = []
+            for variable in variables:
+                data = torch.tensor(ds[variable][ts].values)
+                data = data[0] if data.dim() > 1  else data
+                data_g.append(data)
+
+            data_g = torch.stack(data_g, dim=-1)
+
+            indices = self.input_layers[key].input_mapping[global_indices // 4**global_level_start]
+
+            data_g = data_g[indices]
+            data_g = data_g.view(indices.shape[0], indices.shape[1], -1, len(variables))
+
+            sampled_data[key] = data_g
+
+        return sampled_data        
+
 
     def get_input_grid_mapping(self):
         
