@@ -33,7 +33,7 @@ def load_ckpt(ckpt_name, device):
     return ckpt_dict
 
 
-def load_model(ckpt_dict, model, optimizer=None, label=None, strict=False, match_list=None):
+def load_model(ckpt_dict, model, optimizer=None, label=None, strict=False, match_list=None, not_match=None):
     assert isinstance(model, nn.Module)
     if label is None:
         label = ckpt_dict["labels"][-1]
@@ -44,7 +44,7 @@ def load_model(ckpt_dict, model, optimizer=None, label=None, strict=False, match
     if match_list is not None:
         ckpt_dict_match = {}
         for key, value in ckpt_dict[label]["model"].items():
-            if match_list in key:
+            if ((not_match is not None) and (not_match not in key)) or match_list in key:
                 ckpt_dict_match[key]=value
     else:
         ckpt_dict_match = ckpt_dict[label]["model"]

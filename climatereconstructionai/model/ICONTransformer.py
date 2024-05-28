@@ -954,6 +954,9 @@ class ICON_Transformer(nn.Module):
         if "pretrained_pos_embeddings_path" in self.model_settings.keys():
             self.check_pretrained(log_dir_check=self.model_settings['pretrained_pos_embeddings_path'], strict=False, match_list='pos_embedder')
 
+        if "pretrained_model_wo_input" in self.model_settings.keys():
+            self.check_pretrained(log_dir_check=self.model_settings['pretrained_model_wo_input'], strict=False, match_list='pos_embedder', not_match='input')
+
         self.trained_iterations = trained_iterations
 
     def forward(self, x, indices_batch_dict=None, debug=False):
@@ -1425,7 +1428,7 @@ class ICON_Transformer(nn.Module):
 
 
 
-    def check_pretrained(self, log_dir_check='', strict=True, match_list=None):
+    def check_pretrained(self, log_dir_check='', strict=True, match_list=None, not_match=None):
         iteration = None
 
         if len(log_dir_check)>0:
@@ -1438,13 +1441,13 @@ class ICON_Transformer(nn.Module):
                     weights_path = os.path.join(ckpt_dir, weights_paths[-1])
             
             if os.path.isfile(weights_path):
-                iteration = self.load_pretrained(weights_path, strict=strict, match_list=match_list)
+                iteration = self.load_pretrained(weights_path, strict=strict, match_list=match_list, not_match=not_match)
         return iteration
 
-    def load_pretrained(self, ckpt_path:str, strict=True, match_list=None):
+    def load_pretrained(self, ckpt_path:str, strict=True, match_list=None, not_match=None):
         device = 'cpu' if 'device' not in self.model_settings.keys() else self.model_settings['device']
         ckpt_dict = torch.load(ckpt_path, map_location=torch.device(device))
-        iteration = load_model(ckpt_dict, self, strict=strict, match_list=match_list)
+        iteration = load_model(ckpt_dict, self, strict=strict, match_list=match_list, not_match=not_match)
         return iteration
 
 
