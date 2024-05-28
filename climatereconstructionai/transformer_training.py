@@ -237,20 +237,6 @@ def train(model, training_settings, model_settings={}):
     if 'dw_train' in training_settings.keys() and training_settings['dw_train']:
         dw_train = True
 
-    
-    
-
-    if training_settings['distributed']:
-        model = model.to(torch.cuda.current_device())
-        model = DDP(model, device_ids=[torch.cuda.current_device()])
-
-    elif training_settings['multi_gpus']:
-        model = model.to(device)
-        model = torch.nn.DataParallel(model)      
-    
-    else:
-        model = model.to(device)
-
     early_stop = early_stopping.early_stopping(training_settings['early_stopping_delta'], training_settings['early_stopping_patience'])
 
     loss_calculator = optimization.loss_calculator(training_settings, model_settings['variables_target'], model_settings)    
@@ -272,6 +258,16 @@ def train(model, training_settings, model_settings={}):
     else:
         iter_start = 0
 
+    if training_settings['distributed']:
+        model = model.to(torch.cuda.current_device())
+        model = DDP(model, device_ids=[torch.cuda.current_device()])
+
+    elif training_settings['multi_gpus']:
+        model = model.to(device)
+        model = torch.nn.DataParallel(model)      
+    
+    else:
+        model = model.to(device)
 
     if dw_train:
         optimizer2 = torch.optim.Adam(filter(lambda p: p.requires_grad, lambdas_optim.values()), lr=training_settings['lr_w'])
