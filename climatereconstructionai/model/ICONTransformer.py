@@ -1075,7 +1075,7 @@ class ICON_Transformer(nn.Module):
             return output_data
     
     
-    def apply_on_nc(self, ds, ts, sample_lvl=6, batch_size=2):
+    def apply_on_nc(self, ds, ts, sample_lvl=6, batch_size=8):
     
         normalizer = grid_normalizer(self.model_settings['normalization'])
 
@@ -1089,11 +1089,11 @@ class ICON_Transformer(nn.Module):
         sample_id = 0
         outputs = []
         for indices_batch in indices_batches:
-            sample_idx_max = (sample_id + 1 ) * (len(indices_batch))
+            sample_idx_min = (sample_id) * (batch_size)
 
             data = self.get_data_from_ds(ds, ts, self.model_settings["variables_source"], 0, indices_batch)
 
-            sample_indices = torch.arange(sample_idx_max - (len(indices_batch)), sample_idx_max)
+            sample_indices = torch.arange(sample_idx_min, sample_idx_min + (len(indices_batch)))
 
             indices_batch_dict = {'global_cell': indices_batch,
                     'local_cell': indices_batch // 4**self.model_settings['global_level_start'],
