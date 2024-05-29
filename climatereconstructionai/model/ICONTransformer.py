@@ -1075,7 +1075,7 @@ class ICON_Transformer(nn.Module):
             return output_data
     
     
-    def apply_on_nc(self, ds, ts, sample_lvl=6):
+    def apply_on_nc(self, ds, ts, sample_lvl=6, batch_size=2):
     
         normalizer = grid_normalizer(self.model_settings['normalization'])
 
@@ -1083,21 +1083,45 @@ class ICON_Transformer(nn.Module):
             ds = xr.open_dataset(ds)
         
         indices = self.global_indices.reshape(-1, 4**sample_lvl)
-        data = self.get_data_from_ds(ds, ts, self.model_settings["variables_source"], 0, indices)
 
+        indices_batches = indices.split(batch_size, dim=0)
 
-        indices_batch_dict = {'global_cell': indices,
-                   'local_cell': indices // 4**self.model_settings['global_level_start'],
-                    'sample': torch.arange(indices.shape[0]),
-                    'sample_level': sample_lvl* torch.ones((indices.shape[0]), dtype=torch.int)}
+        sample_id = 0
+        outputs = []
+        for indices_batch in indices_batches:
+            sample_idx_max = (sample_id + 1 ) * (len(indices_batch))
+
+            data = self.get_data_from_ds(ds, ts, self.model_settings["variables_source"], 0, indices_batch)
+
+            sample_indices = torch.arange(sample_idx_max - (len(indices_batch)), sample_idx_max)
+
+            indices_batch_dict = {'global_cell': indices_batch,
+                    'local_cell': indices_batch // 4**self.model_settings['global_level_start'],
+                        'sample': sample_indices,
+                        'sample_level': sample_lvl* torch.ones((sample_indices.shape[0]), dtype=torch.int)}
+            
+            data = normalizer(data, self.model_settings["variables_source"])
+
+            output = self(data, indices_batch_dict=indices_batch_dict)
+
+            output = normalizer(output, self.model_settings["variables_target"], denorm=True)
+            outputs.append(output)
+            sample_id+=1
         
-        data = normalizer(data, self.model_settings["variables_source"])
+        outputs_all = {}
+        for output in  outputs:
+            for key, output_batch in output.items():
+                if key in outputs_all.keys():
+                    outputs_all[key].append(output_batch)
+                else:
+                    outputs_all[key]= [output_batch]
 
-        output = self(data, indices_batch_dict=indices_batch_dict)
+        outputs = outputs_all
 
-        output = normalizer(output, self.model_settings["variables_target"], denorm=True)
+        for key, outputs in  outputs.items():
+            outputs_all[key] = torch.concat(outputs, dim=0)
 
-        output = grid_dict_to_var_dict(output, self.model_settings["variables_target"])
+        output = grid_dict_to_var_dict(outputs_all, self.model_settings["variables_target"])
         
         return output
 
