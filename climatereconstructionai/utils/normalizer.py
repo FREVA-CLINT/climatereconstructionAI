@@ -96,16 +96,24 @@ class grid_normalizer(torch.nn.Module):
         for grid_type, vars in grid_vars.items():
             
             for k, var in enumerate(vars):
-                data_var = data[grid_type]
-                data_var = data_var[:,:,k]
-                
+
                 if self.uniform_norm_uv and (var=='u' or var=='v'):
                     var_lookup = 'uv'
                 else:
                     var_lookup= var
+
                 moments = self.norm_dict[var_lookup]['moments']
                 norm_fcn = self.norm_fcn_dict[self.norm_dict[var_lookup]['type']]
-                data[grid_type][:,:,k] = norm_fcn(data_var, moments, denorm)
+
+                data_var = data[grid_type]
+                
+                if data_var.dim()==4:
+                    data_var = data_var[:,:,:,k]
+                    data[grid_type][:,:,:,k] = norm_fcn(data_var, moments, denorm)
+                else:
+                    data_var = data_var[:,:,k]
+
+                    data[grid_type][:,:,k] = norm_fcn(data_var, moments, denorm)
         return data
 
 def identity(data, moments, denorm=False):
