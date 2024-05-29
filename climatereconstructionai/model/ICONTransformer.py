@@ -1102,7 +1102,8 @@ class ICON_Transformer(nn.Module):
             
             data = normalizer(data, self.model_settings["variables_source"])
 
-            output = self(data, indices_batch_dict=indices_batch_dict)
+            with torch.no_grad():
+                output = self(data, indices_batch_dict=indices_batch_dict)
 
             output = normalizer(output, self.model_settings["variables_target"], denorm=True)
             outputs.append(output)
