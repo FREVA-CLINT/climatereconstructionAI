@@ -55,15 +55,23 @@ def get_moments(data, type, level=0.9):
     
     return tuple(moments)
 
-def mapping_to_(dic, to='numpy'):
+def mapping_to_(dic, to='numpy', dtype='int'):
     out_dic = {}
     for key, subdic in dic.items():
         out_sub_dic = {}
         for subkey, subsub_dic in subdic.items():
             if to =='numpy':
-                out_sub_dic[subkey] = np.array(subsub_dic, dtype=np.int32)
+                if dtype == "int":
+                    dtype=np.int32
+                elif dtype == "bool":
+                    dtype=bool
+                out_sub_dic[subkey] = np.array(subsub_dic, dtype=dtype)
             else:
-                out_sub_dic[subkey] = torch.as_tensor(subsub_dic, dtype=torch.int32)
+                if dtype == "int":
+                    dtype=torch.int32
+                elif dtype == "bool":
+                    dtype=torch.bool
+                out_sub_dic[subkey] = torch.as_tensor(subsub_dic, dtype=dtype)
         out_dic[key] = out_sub_dic
     return out_dic
 
@@ -114,7 +122,8 @@ class NetCDFLoader_lazy(Dataset):
                  lazy_load=False,
                  sample_condition_dict={},
                  model_settings={},
-                 random_time_idx=True):
+                 random_time_idx=True,
+                 p_dropout=0):
         
         super(NetCDFLoader_lazy, self).__init__()
         
@@ -129,6 +138,7 @@ class NetCDFLoader_lazy(Dataset):
         self.lazy_load=lazy_load
         self.sample_condition_dict = sample_condition_dict
         self.random_time_idx = random_time_idx
+        self.p_dropout = p_dropout
 
         self.files_source = files_source
         self.files_target = files_target
@@ -138,14 +148,14 @@ class NetCDFLoader_lazy(Dataset):
 
         self.coords_processing = get_coords_as_tensor(grid_processing, lon='clon', lat='clat')
 
-        input_mapping = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
+        input_mapping, input_in_range = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
                                                      model_settings['input_grid'], self.variables_source.keys(), 
                                                      search_raadius=model_settings['search_raadius'], 
                                                      max_nh=model_settings['nh_input'], 
                                                      level_start=model_settings['level_start_input'],
                                                      lowest_level=model_settings['global_level_start'])
 
-        output_mapping = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
+        output_mapping, output_in_range = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
                                                      model_settings['processing_grid'], self.variables_target.keys(), 
                                                      search_raadius=model_settings['search_raadius'], 
                                                      max_nh=model_settings['nh_input'], 
@@ -153,6 +163,9 @@ class NetCDFLoader_lazy(Dataset):
         
         input_mapping = mapping_to_(input_mapping, to='numpy')
         output_mapping = mapping_to_(output_mapping, to='numpy')
+
+        input_in_range = mapping_to_(input_in_range, to='numpy', dtype="bool")
+        output_in_range = mapping_to_(output_in_range, to='numpy', dtype="bool")
 
         ds_source = xr.open_dataset(files_source[0])
 
@@ -173,6 +186,8 @@ class NetCDFLoader_lazy(Dataset):
 
         indices_data = {'input_mapping': input_mapping,
                         'output_mapping': output_mapping,
+                        'input_in_range': input_in_range,
+                        'output_in_range': output_in_range,
                         'global_cells_input':global_cells_input,
                         'global_cells': global_cells}
 
@@ -297,6 +312,8 @@ class NetCDFLoader_lazy(Dataset):
         input_mapping = mapping_to_(indices_data['input_mapping'], to='pytorch')
         global_cells = torch.as_tensor(indices_data['global_cells'])
         output_mapping = mapping_to_(indices_data['output_mapping'], to='pytorch')
+        #input_in_range = mapping_to_(indices_data['input_in_range'], to='pytorch', dtype="bool")
+        #output_in_range = mapping_to_(indices_data['output_in_range'], to='pytorch', dtype="bool")
 
         sample_index = torch.randint(global_cells.shape[0],(1,))[0]
 
@@ -333,13 +350,16 @@ class NetCDFLoader_lazy(Dataset):
                     condition_not_met = False
         '''
 
+      
+        drop_mask = torch.rand_like(data_source[list(data_source.keys())[0]]) <= self.p_dropout
         
             
 
         indices = {'global_cell': global_cells_sample_input,
                    'local_cell': global_cells_sample_input // 4**self.model_settings['global_level_start'],
                     'sample': sample_index,
-                    'sample_level': self.coarsen_sample_level}
+                    'sample_level': self.coarsen_sample_level,
+                    'drop_mask': drop_mask}
 
         return data_source, data_target, indices
 

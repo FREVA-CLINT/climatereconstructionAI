@@ -59,6 +59,7 @@ class nha_layer(nn.Module):
         self.pos_emb_type = pos_emb_type
         self.kv_dropout = kv_dropout
         self.qkv_bias= qkv_bias
+
         if input_mlp:
             self.input_mlp = nn.Sequential(
                 nn.Linear(input_dim, model_dim, bias=False),
@@ -346,10 +347,11 @@ class processing_layers(nn.Module):
 
 
 class input_layer(nn.Module):
-    def __init__(self, input_mapping, input_coordinates, input_dim, model_dim, ff_dim, seq_level=1, n_heads=4, dropout=0, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, polar=True, force_nha=False, kv_dropout=0, input_mlp=True) -> None: 
+    def __init__(self, input_mapping, input_in_range, input_coordinates, input_dim, model_dim, ff_dim, seq_level=1, n_heads=4, dropout=0, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, polar=True, force_nha=False, kv_dropout=0, input_mlp=True) -> None: 
         super().__init__()
 
         self.register_buffer("input_mapping", input_mapping, persistent=False)
+        self.register_buffer("grid_out_of_range_mask", ~input_in_range, persistent=False)
         self.register_buffer("input_coordinates", input_coordinates, persistent=False)
         self.seq_level = seq_level
         self.pos_embedder = pos_embedder
@@ -364,23 +366,23 @@ class input_layer(nn.Module):
 
         input_dim = model_dim if input_mlp else input_dim
 
-        if input_mapping.shape[-1]>1 or force_nha:
-            self.nha_layer = nha_layer(
-                        input_dim = model_dim,
-                        model_dim = model_dim,
-                        ff_dim = ff_dim,
-                        n_heads = n_heads,
-                        input_mlp = False,
-                        dropout=dropout,
-                        q_res=False,
-                        pos_emb_type=pos_emb_type,
-                        pos_embedder=pos_embedder,
-                        pos_emb_dim=pos_emb_dim,
-                        kv_dropout=kv_dropout,
-                        qkv_bias=False)
+        #if input_mapping.shape[-1]>1 or force_nha:
+        self.nha_layer = nha_layer(
+                    input_dim = model_dim,
+                    model_dim = model_dim,
+                    ff_dim = ff_dim,
+                    n_heads = n_heads,
+                    input_mlp = False,
+                    dropout=dropout,
+                    q_res=False,
+                    pos_emb_type=pos_emb_type,
+                    pos_embedder=pos_embedder,
+                    pos_emb_dim=pos_emb_dim,
+                    kv_dropout=kv_dropout,
+                    qkv_bias=False)
         
-        else:
-            self.nha_layer = nn.Identity()
+        #else:
+        #    self.nha_layer = nn.Identity()
         '''
         if pos_emb_dim != input_dim:
             self.proj_q = nn.Linear(pos_emb_dim, model_dim, bias=False)
@@ -404,41 +406,54 @@ class input_layer(nn.Module):
 
         # use mid point of sequence for "absolute-relative" coordinates
         #coords_ref = coords1[:,:,:,[0]]
-        coords2 = coords2.view(coords2.shape[0], coords2.shape[1],coords2.shape[2],1, -1)
+        #coords2 = coords2.view(coords2.shape[0], coords2.shape[1],coords2.shape[2], 1, -1)
 
-        pos1_grid, pos2_grid = get_distance_angle(coords1[0], coords1[1], coords2[0], coords2[1], base=self.pos_calculation)
+        pos1_grid, pos2_grid = get_distance_angle(coords1[0].unsqueeze(dim=-1), coords1[1].unsqueeze(dim=-1), coords2[0].unsqueeze(dim=-3), coords2[1].unsqueeze(dim=-3), base=self.pos_calculation)
+
+        b,n,nh1,nh2,ng = pos1_grid.shape
+
+        pos1_grid = pos1_grid.view(b,n,nh1,-1)
+        pos2_grid = pos2_grid.view(b,n,nh1,-1)
 
         return pos1_grid.float(), pos2_grid.float()
 
 
-    def forward(self, x, grid_level_indices, grid_level_coords):
+    def forward(self, x, grid_level_indices, grid_level_coords, drop_mask=None):
 
         b,n,nh,f = x.shape
 
         x = self.input_mlp(x)
 
         if not isinstance(self.nha_layer, nn.Identity):
+            
+            grid_out_of_range_mask = self.grid_out_of_range_mask[grid_level_indices]
 
             grid_level_indices = sequenize(grid_level_indices, self.seq_level)
 
             pos = self.get_relative_positions(grid_level_indices,
                                                 grid_level_coords)
             
-        
+            mask = torch.logical_or(grid_out_of_range_mask, drop_mask.view(grid_out_of_range_mask.shape))
 
+            mask = sequenize(mask, self.seq_level)
+
+            mask = mask.unsqueeze(dim=2).repeat(1,1,mask.shape[2],1,1)
+            mask = mask.view(mask.shape[0], mask.shape[1], mask.shape[2], -1)         
+        
             # tale nearest for q
            # xq = x[:,:,[0],:]
            # xq = sequenize(xq, self.seq_level)
            # xq = xq.reshape(b, xq.shape[1],-1, x.shape[-1])
 
             x = sequenize(x, self.seq_level)
+
             x = x.reshape(b, x.shape[1],-1, x.shape[-1])
 
             # xk = self.proj_k(self.pos_embedder(pos_source[0], pos_source[1]))
             # xk = xk.view(x.shape)
 
             #xq = self.proj_q(self.pos_embedder(pos_grid[0], pos_grid[1]))
-            x = self.nha_layer(x, pos=pos)
+            x = self.nha_layer(x, pos=pos, mask=mask)
 
         x = x.view(b, n, -1)
     
@@ -812,10 +827,10 @@ class ICON_Transformer(nn.Module):
         
         self.global_pos_embedder_refine = self.init_position_embedder(self.model_settings["emb_table_dim"], min_coarsen_level=0, max_coarsen_level=len(self.model_settings["encoder_dims"]), embed_dim=self.model_settings["emb_table_bins"])
 
-        input_mapping, input_coordinates = self.get_input_grid_mapping()
-        output_mapping, output_coordinates = self.get_output_grid_mapping()
+        input_mapping, input_in_range, input_coordinates = self.get_input_grid_mapping()
+        output_mapping, _, output_coordinates = self.get_output_grid_mapping()
 
-        self.input_layers = self.init_input_layers(input_mapping, input_coordinates)
+        self.input_layers = self.init_input_layers(input_mapping, input_in_range, input_coordinates)
         
         out_dim_input = self.model_settings["encoder_dims"][self.global_level_start]
 
@@ -972,7 +987,7 @@ class ICON_Transformer(nn.Module):
         input_data = []
         for key, values in x.items():
             
-            input = self.input_layers[key](values, indices_batch_dict["local_cell"], self.cell_coords_input)
+            input = self.input_layers[key](values, indices_batch_dict["local_cell"], self.cell_coords_input, drop_mask=indices_batch_dict['drop_mask'])
             input_data.append(input) 
         
         x = torch.concat(input_data, dim=-1)
@@ -1158,7 +1173,7 @@ class ICON_Transformer(nn.Module):
            # input_coordinates[grid_type] = input_coordinates[grid_type][:,global_indices[0,:,0]]
        
 
-        input_mapping = get_nh_variable_mapping_icon(self.model_settings['processing_grid'], ['cell'], 
+        input_mapping, in_range = get_nh_variable_mapping_icon(self.model_settings['processing_grid'], ['cell'], 
                                     self.model_settings['input_grid'], self.input_data, 
                                     search_raadius=self.model_settings['search_raadius'], 
                                     max_nh=self.model_settings['nh_input'], 
@@ -1166,11 +1181,11 @@ class ICON_Transformer(nn.Module):
                                     lowest_level=self.model_settings['global_level_start'])
 
         
-        return input_mapping, input_coordinates
+        return input_mapping, in_range, input_coordinates
 
     def get_output_grid_mapping(self):
         
-        output_mapping = get_nh_variable_mapping_icon(self.model_settings['processing_grid'], ['cell'], 
+        output_mapping, in_range = get_nh_variable_mapping_icon(self.model_settings['processing_grid'], ['cell'], 
                                     self.model_settings['processing_grid'], self.output_data, 
                                     search_raadius=self.model_settings['search_raadius'], max_nh=self.model_settings['nh_input'], level_start=self.model_settings['level_start_input'])
 
@@ -1178,7 +1193,7 @@ class ICON_Transformer(nn.Module):
         for grid_type in self.output_data.keys():
             output_coordinates[grid_type] = get_coords_as_tensor(xr.open_dataset(self.model_settings['processing_grid']),grid_type=grid_type)
 
-        return output_mapping, output_coordinates
+        return output_mapping, in_range, output_coordinates
 
 
     def init_processing_layer(self, global_level, proc_layer, x, x_att=[]):
@@ -1311,7 +1326,7 @@ class ICON_Transformer(nn.Module):
         return  position_embedder(min_dist, max_dist, embed_dim=embed_dim, n_out=n_out, pos_emb_calc=self.pos_emb_calc)
     
 
-    def init_input_layers(self, input_mapping, input_coordinates):
+    def init_input_layers(self, input_mapping, input_in_range, input_coordinates):
 
         model_dim = ff_dim =  self.model_settings['encoder_dims'][0]
         n_heads = self.model_settings['n_heads'][0]
@@ -1330,6 +1345,7 @@ class ICON_Transformer(nn.Module):
 
             layer = input_layer(
                     input_mapping["cell"][key],
+                    input_in_range["cell"][key],
                     input_coordinates[key],
                     seq_level=self.model_settings['input_seq_level'],
                     input_dim = n_input,

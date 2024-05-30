@@ -902,12 +902,14 @@ def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, gri
                         'vertex': 'vertex_index'}}
 
     mapping_icon = {}
-
+    in_range = {}
     for grid_type_icon in grid_types_icon:
         
         coords_icon = get_coords_as_tensor(grid_icon, grid_type=grid_type_icon)
 
         mapping_grid_type = {}
+        in_range_grid_type = {}
+
         for grid_type in grid_types:
             coords_input = get_coords_as_tensor(grid, grid_type=grid_type)
 
@@ -919,6 +921,8 @@ def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, gri
                     indices = indices.transpose(-2,-1).reshape(-1, 4**lowest_level, indices.shape[0])
                 indices = indices.reshape(indices.shape[0],-1)
 
+                in_rng_mask = torch.ones_like(indices, dtype=torch.bool)
+
             else:
                 mapping = get_mapping_to_icon_grid(
                     coords_icon,
@@ -927,13 +931,18 @@ def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, gri
                     max_nh=max_nh,
                     level_start=level_start,
                     lowest_level = lowest_level)
+                
                 if return_last:
                     mapping = mapping[-1]
                 
                 indices = mapping['indices']
+                in_rng_mask = mapping['in_rng_mask']
 
             mapping_grid_type[grid_type] = indices
-        mapping_icon[grid_type_icon] = mapping_grid_type
+            in_range_grid_type[grid_type] = in_rng_mask
 
-    return mapping_icon
+        mapping_icon[grid_type_icon] = mapping_grid_type
+        in_range[grid_type_icon] = in_range_grid_type
+
+    return mapping_icon, in_range
 
