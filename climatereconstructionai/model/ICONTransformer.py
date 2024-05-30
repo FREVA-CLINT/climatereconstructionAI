@@ -433,7 +433,7 @@ class input_layer(nn.Module):
             pos = self.get_relative_positions(grid_level_indices,
                                                 grid_level_coords)
             
-            mask = torch.logical_or(grid_out_of_range_mask, drop_mask.view(grid_out_of_range_mask.shape))
+            mask = torch.logical_or(grid_out_of_range_mask, drop_mask.view(b,n,1).repeat(1,1,nh))
 
             mask = sequenize(mask, self.seq_level)
 

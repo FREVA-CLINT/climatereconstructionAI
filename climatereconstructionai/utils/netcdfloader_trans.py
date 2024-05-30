@@ -351,7 +351,7 @@ class NetCDFLoader_lazy(Dataset):
         '''
 
       
-        drop_mask = torch.rand_like(data_source[list(data_source.keys())[0]][:,:]) <= self.p_dropout
+        drop_mask = torch.rand(len(global_cells_sample_input)) <= self.p_dropout
         
             
 
