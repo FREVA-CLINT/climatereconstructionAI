@@ -128,7 +128,7 @@ class nha_layer(nn.Module):
             pos1 = pos[0].view(b*n, pos[0].shape[-2], nh)
             pos2 = pos[1].view(b*n, pos[1].shape[-2], nh)           
 
-            indices_keep = (torch.randperm((nh)*(x.shape[0]), device=x.device) % (nh-1)).view(x.shape[0], nh)[:, :int((1- self.kv_dropout)*nh)]
+            indices_keep = (torch.randperm((nh)*(x.shape[0]), device=x.device) % (nh-1)).view(x.shape[0], nh)[:, :int(math.ceil((1- self.kv_dropout)*nh))]
        
             k = torch.gather(k, dim=1, index=indices_keep.unsqueeze(dim=-1).repeat(1,1,k.shape[-1]))
             v = torch.gather(v, dim=1, index=indices_keep.unsqueeze(dim=-1).repeat(1,1,k.shape[-1]))
