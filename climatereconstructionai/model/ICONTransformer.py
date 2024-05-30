@@ -125,22 +125,22 @@ class nha_layer(nn.Module):
             v = xv.reshape(b*nv,-1,xv.shape[-1])
 
         if self.kv_dropout > 0:
-            pos1 = pos[0].view(b*n, q.shape[-2], nh)
-            pos2 = pos[1].view(b*n, q.shape[-2], nh)           
+            pos1 = pos[0].view(b*n, pos[0].shape[-2], nh)
+            pos2 = pos[1].view(b*n, pos[1].shape[-2], nh)           
 
-            indices_keep = (torch.randperm((nh)*(x.shape[0]), device=x.device) % (nh-1)).view(x.shape[0], nh)[:, :int(1- self.kv_dropout*nh)]
+            indices_keep = (torch.randperm((nh)*(x.shape[0]), device=x.device) % (nh-1)).view(x.shape[0], nh)[:, :int((1- self.kv_dropout)*nh)]
        
             k = torch.gather(k, dim=1, index=indices_keep.unsqueeze(dim=-1).repeat(1,1,k.shape[-1]))
             v = torch.gather(v, dim=1, index=indices_keep.unsqueeze(dim=-1).repeat(1,1,k.shape[-1]))
             pos1 = torch.gather(pos1, dim=-1, index=indices_keep.view(b*n,1,-1).repeat(1, pos1.shape[1],1))
             pos2 = torch.gather(pos2, dim=-1, index=indices_keep.view(b*n,1,-1).repeat(1, pos2.shape[1],1))
 
-            pos = (pos1.view(b, n, q.shape[-2],-1), pos2.view(b, n, q.shape[-2],-1))
+            pos = (pos1.view(b, n, pos1.shape[-2],-1), pos2.view(b, n, pos1.shape[-2],-1))
 
             if mask is not None:
-                mask = mask.view(b*n, q.shape[-2], nh)
+                mask = mask.view(b*n, mask.shape[-2], nh)
                 mask = torch.gather(mask, dim=-1, index=indices_keep.view(b*n,1,-1).repeat(1, pos2.shape[1],1))
-                mask = mask.view(b, n, q.shape[-2],-1)
+                mask = mask.view(b, n, mask.shape[-2],-1)
 
         if self.qkv_bias:
 
@@ -409,7 +409,7 @@ class input_layer(nn.Module):
         #coords2 = coords2.view(coords2.shape[0], coords2.shape[1],coords2.shape[2], 1, -1)
 
         pos1_grid, pos2_grid = get_distance_angle(coords1[0].unsqueeze(dim=-1), coords1[1].unsqueeze(dim=-1), coords2[0].unsqueeze(dim=-3), coords2[1].unsqueeze(dim=-3), base=self.pos_calculation)
-
+        #pos1_grid, pos2_grid = get_distance_angle(coords1[0], coords1[1], coords2[0], coords2[1], base=self.pos_calculation)
         b,n,nh1,nh2,ng = pos1_grid.shape
 
         pos1_grid = pos1_grid.view(b,n,nh1,-1)
