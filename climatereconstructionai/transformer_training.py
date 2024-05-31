@@ -28,11 +28,22 @@ def arclen(p1,p2):
 def set_device_and_init_torch_dist():
     
     # check out https://gist.github.com/TengdaHan/1dd10d335c7ca6f13810fff41e809904
-    torch.distributed.init_process_group(backend='nccl', init_method='env://')
+
+    world_size = int(os.environ.get('WORLD_SIZE'))
+
+    #rank = int(os.environ.get('RANK', os.environ.get('SLURM_PROCID')))
+    rank = int(os.environ.get('SLURM_PROCID'))
+
+    dist_url = 'env://'
+    backend = 'nccl'
+
+    dist.init_process_group(backend=backend, init_method=dist_url,
+                                world_size=world_size, rank=rank)
        
-    local_rank = dist.get_rank() % torch.cuda.device_count()
+    local_rank = rank % torch.cuda.device_count()
     torch.cuda.set_device(local_rank)
 
+    return local_rank
 
 
 class AscentFunction(torch.autograd.Function):
@@ -103,7 +114,7 @@ def train(model, training_settings, model_settings={}):
     torch.multiprocessing.set_sharing_strategy('file_system')
     
     if training_settings['distributed']:
-        set_device_and_init_torch_dist()
+        local_rank = set_device_and_init_torch_dist()
     else:
         print("* Number of GPUs: ", torch.cuda.device_count())
 
@@ -209,13 +220,11 @@ def train(model, training_settings, model_settings={}):
     if training_settings['distributed']:
         train_sampler = torch.utils.data.distributed.DistributedSampler(
                 dataset_train,
-                num_replicas=dist.get_world_size(),
-                rank=dist.get_rank(),
+                shuffle=True
             )
         val_sampler = torch.utils.data.distributed.DistributedSampler(
                 dataset_val,
-                num_replicas=dist.get_world_size(),
-                rank=dist.get_rank(),
+                shuffle=False
             )
     else:
         train_sampler = InfiniteSampler(len(dataset_train))
@@ -225,15 +234,13 @@ def train(model, training_settings, model_settings={}):
                                     batch_size=batch_size,
                                     sampler=train_sampler,
                                     num_workers=training_settings['n_workers'], 
-                                    pin_memory=True if device == 'cuda' else False,
-                                    pin_memory_device=device))
+                                    pin_memory=True if device == 'cuda' or training_settings['distributed'] else False))
 
     iterator_val = iter(DataLoader(dataset_val,
                                     batch_size=batch_size,
                                     sampler=val_sampler,
                                     num_workers=training_settings['n_workers'] if 'n_workers_val' not in training_settings.keys() else training_settings['n_workers_val'], 
-                                    pin_memory=True if device == 'cuda' else False,
-                                    pin_memory_device=device))
+                                    pin_memory=True if device == 'cuda' or training_settings['distributed'] else False))
 
     dw_train = False
     if 'dw_train' in training_settings.keys() and training_settings['dw_train']:
@@ -261,8 +268,8 @@ def train(model, training_settings, model_settings={}):
         iter_start = 0
 
     if training_settings['distributed']:
-        model = model.to(torch.cuda.current_device())
-        model = DDP(model, device_ids=[torch.cuda.current_device()])
+        model = model.cuda(local_rank)
+        model = DDP(model, device_ids=[local_rank])
 
     elif training_settings['multi_gpus']:
         model = model.to(device)
