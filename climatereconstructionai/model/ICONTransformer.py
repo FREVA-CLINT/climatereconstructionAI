@@ -212,7 +212,7 @@ class n_nha_layers(nn.Module):
     
 
 class coarsen_layer(nn.Module):
-    def __init__(self, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, activation=nn.SiLU(), pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, kv_dropout=0, q_res=False) -> None: 
+    def __init__(self, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, activation=nn.SiLU(), pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None,  q_res=False) -> None: 
         super().__init__()
 
         nh_reduction=4
@@ -228,7 +228,7 @@ class coarsen_layer(nn.Module):
                 pos_emb_type=pos_emb_type,
                 pos_embedder=pos_embedder,
                 pos_emb_dim=pos_emb_dim,
-                kv_dropout=kv_dropout)
+                kv_dropout=0)
         
 
     #    self.reduction_mlp = nn.Sequential(
@@ -246,8 +246,6 @@ class coarsen_layer(nn.Module):
         x = self.nha_layer(x, pos=pos)
 
         x = x.mean(dim=-2)
-
-        #x = self.reduction_mlp(x)
 
         return x
     
@@ -278,7 +276,7 @@ class processing_layers(nn.Module):
                         pos_embedder=pos_embedder,
                         pos_emb_dim=pos_emb_dim,
                         activation=activation,
-                        kv_dropout=kv_dropout) for _ in range(n_layers)])
+                        kv_dropout=0) for _ in range(n_layers)])
 
         if seq_att:
             self.seq_layers = nn.ModuleList([nha_layer(input_dim= model_dim,
@@ -490,7 +488,8 @@ class output_layer(nn.Module):
                     pos_embedder= pos_embedder,
                     pos_emb_dim=pos_emb_dim,
                     seq_level=seq_level,
-                    polar=polar)
+                    polar=polar,
+                    kv_dropout=0)
         else:
             self.layer = nn.Identity()
 
@@ -887,7 +886,7 @@ class ICON_Transformer(nn.Module):
                                                         dropout=self.dropout,
                                                         pos_embedder=self.global_pos_embedder,
                                                         pos_emb_dim=self.model_settings["emb_table_dim"],
-                                                        kv_dropout=self.kv_dropout,
+                                                        kv_dropout=0,
                                                         q_res=self.q_res_coarsen)
 
             for k in range(self.n_decoder_layers):
@@ -940,7 +939,7 @@ class ICON_Transformer(nn.Module):
                             pos_emb_dim=self.model_settings["emb_table_dim"],
                             seq_level=self.max_seq_level,
                             polar = self.polar,
-                            kv_dropout=self.kv_dropout)
+                            kv_dropout=0)
                     
                     global_level = str(int(global_level)-1)
                     if self.use_skip_layers and global_level in self.encoder_dims_level.keys():
