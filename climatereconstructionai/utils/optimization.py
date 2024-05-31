@@ -804,7 +804,7 @@ class loss_calculator(nn.Module):
         
         if val:
             with torch.no_grad():
-                if model_type=='transformer':
+                if 'transformer' in model_type:
                     output, debug_dict = model(source, source_indices, debug=True)
                     output = grid_dict_to_var_dict(output, self.grid_variables_dict)
                     target = grid_dict_to_var_dict(target, self.grid_variables_dict)
@@ -812,7 +812,7 @@ class loss_calculator(nn.Module):
                 else:
                     output, _, output_core, non_valid_mask = model(source, coords_target, coords_source=coords_source)
         else:
-            if model_type=='transformer':
+            if 'transformer' in model_type:
                 output= model(source, source_indices)
                 output = grid_dict_to_var_dict(output, self.grid_variables_dict)
                 target = grid_dict_to_var_dict(target, self.grid_variables_dict)
