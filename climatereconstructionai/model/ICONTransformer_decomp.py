@@ -472,7 +472,7 @@ class processing_layers(nn.Module):
 
         for global_level in grid_layers.keys(): 
             
-            self.global_levels.append(global_level)
+            self.global_levels.append(int(global_level))
             if global_level != self.max_level:
                 cross_layers = nn.ModuleList([nha_layer(input_dim= model_dim,
                             model_dim = model_dim,
@@ -542,7 +542,7 @@ class processing_layers(nn.Module):
 
                     x_lf_nh, mask_lf, coords_lf_nh = self.grid_layers[global_level_lf].get_nh(x_lf, indices_layers[global_level_lf], sample_dict)
 
-                    x, coords_sections = self.grid_layers[global_level].get_sections(x, indices_layers[global_level], section_level=1)
+                    x, coords_sections = self.grid_layers[str(global_level)].get_sections(x, indices_layers[global_level], section_level=1)
 
                     relative_positions = get_relative_positions(coords_sections, coords_lf_nh, polar=self.polar)
 
@@ -552,15 +552,15 @@ class processing_layers(nn.Module):
 
 
                 if layers['seq_layers'][layer_idx] is not None:
-                    x, coords_sections = self.grid_layers[global_level].get_sections(x, indices_layers[global_level], section_level=self.max_seq_level)
+                    x, coords_sections = self.grid_layers[str(global_level)].get_sections(x, indices_layers[global_level], section_level=self.max_seq_level)
 
                     relative_positions = get_relative_positions(coords_sections, coords_sections, polar=self.polar)
                     x = layers['seq_layers'][layer_idx](x, pos=relative_positions)
                     x = x.view(b, n, -1)
 
 
-                x_nh, mask, coords_nh = self.grid_layers[global_level].get_nh(x, indices_layers[global_level], sample_dict)
-                coords = self.grid_layers[global_level].get_coordinates_from_grid_indices(indices_layers[global_level]).unsqueeze(dim=-1)
+                x_nh, mask, coords_nh = self.grid_layers[str(global_level)].get_nh(x, indices_layers[global_level], sample_dict)
+                coords = self.grid_layers[str(global_level)].get_coordinates_from_grid_indices(indices_layers[global_level]).unsqueeze(dim=-1)
 
                 relative_positions = get_relative_positions(coords, coords_nh, polar=self.polar)
 
@@ -612,7 +612,7 @@ class decomp_layer(nn.Module):
                                 kv_dropout=0,
                                 v_proj=False)
                 
-                self.global_levels.append(global_level)
+                self.global_levels.append(int(global_level))
             
     def forward(self, x, indices_layers):
         
@@ -622,7 +622,7 @@ class decomp_layer(nn.Module):
             b,n,e = x.shape
             layer = self.layers[str(global_level)]
 
-            x_sections, coords_sections = self.grid_layers[global_level].get_sections(x, indices_layers[global_level], section_level=1)
+            x_sections, coords_sections = self.grid_layers[str(global_level)].get_sections(x, indices_layers[global_level], section_level=1)
 
             relative_positions = get_relative_positions(coords_sections, coords_sections, polar=self.polar)
             x_sections_f = layer(x_sections, pos=relative_positions).mean(dim=-2, keepdim=True)
@@ -678,17 +678,17 @@ class projection_layer(nn.Module):
                             pos_emb_dim=pos_emb_dim,
                             kv_dropout=0)
                 
-            self.global_levels.append(global_level)
+            self.global_levels.append(int(global_level))
             
     def forward(self, x_levels, indices_layers, sample_dict):
         
         if self.output_mappings is None:
-            output_coords = self.grid_layers[0].get_coordinates_from_grid_indices(indices_layers[0])
+            output_coords = self.grid_layers["0"].get_coordinates_from_grid_indices(indices_layers[0])
 
         x_output = None
         for global_level in self.global_levels:
 
-            x_nh, mask, coords_nh = self.grid_layers[global_level].get_nh(x_levels[global_level], indices_layers[global_level], sample_dict)
+            x_nh, mask, coords_nh = self.grid_layers[str(global_level)].get_nh(x_levels[global_level], indices_layers[global_level], sample_dict)
 
             output_coords = output_coords.reshape(output_coords.shape[0],output_coords.shape[1], -1, 4**global_level)
 
@@ -769,14 +769,14 @@ class ICON_Transformer(nn.Module):
             adjc = self.get_adjacent_global_cell_indices(global_level) 
             coordinates = self.get_coordinates_level(global_level) 
 
-            grid_layers[global_level] = grid_layer(global_level, adjc, coordinates)
+            grid_layers[str(global_level)] = grid_layer(global_level, adjc, coordinates)
 
 
         input_mapping, input_in_range, input_coordinates = self.get_input_grid_mapping()
         #output_mapping, _, output_coordinates = self.get_output_grid_mapping()
 
         #tbd: use input projection layer as input layer with input_mapping and output_layer with output_mapping
-        self.input_layers = self.init_input_layers(grid_layers[0], self.model_dim, input_mapping, input_in_range, input_coordinates, pos_embedder)
+        self.input_layers = self.init_input_layers(grid_layers["0"], self.model_dim, input_mapping, input_in_range, input_coordinates, pos_embedder)
 
         self.decomp_layer = decomp_layer(grid_layers, self.model_settings, pos_embedder, residual_decomp=self.model_settings['residual_decomp'])
 
