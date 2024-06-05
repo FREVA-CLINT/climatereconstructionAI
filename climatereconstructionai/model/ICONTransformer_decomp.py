@@ -145,13 +145,13 @@ class nha_layer(nn.Module):
         if self.qkv_bias:
 
             if self.pos_emb_type =='context' and pos is not None:
-            # aq = self.emb_proj_q(pos[0], pos[1], self.pos_embedder)
                 pos_embedding = self.pos_embedder(pos[0], pos[1])
 
+                aq = self.emb_proj_q(pos_embedding)
                 ak = self.emb_proj_k(pos_embedding)
                 av = self.emb_proj_v(pos_embedding)
 
-                att_out, att = self.MHA(q=q, k=k, v=v, aq=None, ak=ak, av=av, return_debug=True, mask=mask) 
+                att_out, att = self.MHA(q=q, k=k, v=v, aq=aq, ak=ak, av=av, return_debug=True, mask=mask) 
 
             elif self.pos_emb_type =='bias' and pos is not None:
                 pos_embedding = self.pos_embedder(pos[0], pos[1])
@@ -487,7 +487,7 @@ class processing_layers(nn.Module):
                             kv_dropout=kv_dropout) for _ in range(n_layers)])
             else:
                 cross_layers = nn.ModuleList([None for _ in range(n_layers)])
-                
+            """   
             seq_layers = nn.ModuleList([nha_layer(input_dim= model_dim,
                         model_dim = model_dim,
                         ff_dim = model_dim,
@@ -499,6 +499,9 @@ class processing_layers(nn.Module):
                         pos_emb_dim=pos_emb_dim,
                         activation=nn.SiLU(),
                         kv_dropout=kv_dropout) for _ in range(n_layers)])
+            """ 
+            
+            seq_layers = nn.ModuleList([None for _ in range(n_layers)])
             
             nh_layers = nn.ModuleList([nha_layer(input_dim= model_dim,
                         model_dim = model_dim,
@@ -548,18 +551,20 @@ class processing_layers(nn.Module):
                     x = x.view(b, n, -1)
 
 
-                x, coords_sections = self.grid_layers[global_level].get_sections(x, indices_layers[global_level], section_level=self.max_seq_level)
+                if layers['seq_layers'][layer_idx] is not None:
+                    x, coords_sections = self.grid_layers[global_level].get_sections(x, indices_layers[global_level], section_level=self.max_seq_level)
 
-                relative_positions = get_relative_positions(coords_sections, coords_sections, polar=self.polar)
-                x = layers['seq_layers'][layer_idx](x, pos=relative_positions)
-                x = x.view(b, n, -1)
+                    relative_positions = get_relative_positions(coords_sections, coords_sections, polar=self.polar)
+                    x = layers['seq_layers'][layer_idx](x, pos=relative_positions)
+                    x = x.view(b, n, -1)
+
 
                 x_nh, mask, coords_nh = self.grid_layers[global_level].get_nh(x, indices_layers[global_level], sample_dict)
                 coords = self.grid_layers[global_level].get_coordinates_from_grid_indices(indices_layers[global_level]).unsqueeze(dim=-1)
 
                 relative_positions = get_relative_positions(coords, coords_nh, polar=self.polar)
 
-                x = layers['seq_layers'][layer_idx](x_nh, xq=x, mask=mask.unsqueeze(dim=-2), pos=relative_positions)
+                x = layers['nh_layers'][layer_idx](x_nh, xq=x, mask=mask.unsqueeze(dim=-2), pos=relative_positions)
 
                 x = x.view(b, n, -1)
 

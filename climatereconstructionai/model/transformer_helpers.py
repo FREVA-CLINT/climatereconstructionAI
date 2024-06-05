@@ -343,7 +343,7 @@ class MultiHeadAttentionBlock(nn.Module):
                 
         if qkv_proj and qkv_bias and v_proj:
             self.qkv_projection = nn.ModuleList([nn.Linear(input_dim, model_dim, bias=False)]*3)
-            
+
         elif qkv_proj and qkv_bias:
             self.qkv_projection = nn.ModuleList([nn.Linear(input_dim, model_dim, bias=False)]*2 + [nn.Identity()])
 
