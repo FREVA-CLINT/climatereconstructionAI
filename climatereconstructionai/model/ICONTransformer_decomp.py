@@ -759,7 +759,7 @@ class ICON_Transformer(nn.Module):
         pos_embedder['polar'] = self.polar
         pos_embedder['pos_embedder_handle'] = pos_embedder_handle
     
-        grid_layers = {}
+        grid_layers = nn.ModuleDict()
         self.global_levels = []
         for grid_level_idx in range(n_grid_levels):
 
