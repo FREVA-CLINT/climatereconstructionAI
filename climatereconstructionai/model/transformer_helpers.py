@@ -330,7 +330,7 @@ class SelfAttentionRPPEBlock(nn.Module):
         return x 
 
 class MultiHeadAttentionBlock(nn.Module):
-    def __init__(self,  model_dim, output_dim, n_heads, input_dim= None, qkv_proj=False, dropout=0, use_bias=True, qkv_bias=True):
+    def __init__(self,  model_dim, output_dim, n_heads, input_dim= None, qkv_proj=False, dropout=0, use_bias=True, qkv_bias=True, v_proj=True):
         super().__init__()
 
         self.qkv_bias = qkv_bias
@@ -341,9 +341,13 @@ class MultiHeadAttentionBlock(nn.Module):
         
         self.output_projection = nn.Linear(model_dim, output_dim, bias=False)
                 
-        if qkv_proj and qkv_bias:
+        if qkv_proj and qkv_bias and v_proj:
             self.qkv_projection = nn.ModuleList([nn.Linear(input_dim, model_dim, bias=False)]*3)
-        elif qkv_proj:
+            
+        elif qkv_proj and qkv_bias:
+            self.qkv_projection = nn.ModuleList([nn.Linear(input_dim, model_dim, bias=False)]*2 + [nn.Identity()])
+
+        elif qkv_proj and v_proj:
             self.v_projection = nn.Linear(input_dim, model_dim, bias=False)
         else:    
             self.qkv_projection = nn.ModuleList([nn.Identity()]*3)
