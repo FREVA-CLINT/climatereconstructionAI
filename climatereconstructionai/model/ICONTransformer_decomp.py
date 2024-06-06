@@ -9,7 +9,7 @@ import xarray as xr
 
 from ..utils.io import load_ckpt, load_model
 import climatereconstructionai.model.transformer_helpers as helpers
-from climatereconstructionai.utils.grid_utils import get_distance_angle, get_coords_as_tensor, get_mapping_to_icon_grid, get_nh_variable_mapping_icon
+from climatereconstructionai.utils.grid_utils import get_distance_angle, get_coords_as_tensor, get_mapping_to_icon_grid, get_nh_variable_mapping_icon, get_adjacent_indices
 from .. import transformer_training as trainer
 from ..utils.normalizer import grid_normalizer
 from ..utils.optimization import grid_dict_to_var_dict
@@ -378,8 +378,11 @@ class position_embedder(nn.Module):
         if 'log' in pos_emb_calc:
             self.transform = helpers.conv_coordinates_log
                     
-        if 'sine' in pos_emb_calc:
-            self.operation = 'sine'
+        if 'sig_sum' in pos_emb_calc:
+            self.operation = 'sig_sum'
+
+        elif 'sig_prod' in pos_emb_calc:
+            self.operation = 'sig_prod'    
 
         elif 'sum' in pos_emb_calc:
             self.operation = 'sum'
@@ -403,32 +406,39 @@ class position_embedder(nn.Module):
             if isinstance(self.pos1_emb, nn.Linear):
                 pos1 = pos1.unsqueeze(dim=-1)
 
-            pos1 = self.pos1_emb(pos1)
-            pos2 = self.pos2_emb(pos2)
+            pos1_emb = self.pos1_emb(pos1)
+            pos2_emb = self.pos2_emb(pos2)
 
             if self.proj_layer is not None:
-                return self.proj_layer(torch.concat((pos1, pos2), dim=-1))
+                return self.proj_layer(torch.concat((pos1_emb, pos2_emb), dim=-1))
             
-            if self.operation == 'sine':
-                return pos1 * torch.sin(pos2)
+            if self.operation == 'sig_prod':
+                return pos2_emb * torch.sigmoid(pos1_emb)
+            
+            elif self.operation == 'sig_sum':
+                return pos2_emb + torch.sigmoid(pos1_emb)
             
             elif self.operation == 'sum':
-                return pos1 + pos2
+                return pos1_emb + pos2_emb
             
             elif self.operation == 'product':
-                return pos1 * pos2
+                return pos1_emb * pos2_emb
 
 
 class grid_layer(nn.Module):
-    def __init__(self, global_level, adjc, coordinates) -> None: 
+    def __init__(self, global_level, adjc, adjc_mask, coordinates) -> None: 
         super().__init__()
 
         self.global_level = global_level
         self.register_buffer("coordinates", coordinates, persistent=False)
         self.register_buffer("adjc", adjc, persistent=False)
+        self.register_buffer("adjc_mask", adjc_mask, persistent=False)
 
     def get_nh(self, x, local_indices, sample_dict):
         indices_nh, mask = get_nh_indices(self.adjc, local_cell_indices=local_indices, global_level=int(self.global_level))
+        adjc_mask = self.adjc_mask[local_indices]
+
+        mask = torch.logical_and(mask, adjc_mask)
         x = gather_nh_data(x, indices_nh, sample_dict['sample'], sample_dict['sample_level'], int(self.global_level))
         coords = self.get_coordinates_from_grid_indices(indices_nh)
         return x, mask, coords
@@ -540,7 +550,7 @@ class processing_layers(nn.Module):
 
                     x_lf = x_levels[global_level_lf]
 
-                    x_lf_nh, mask_lf, coords_lf_nh = self.grid_layers[global_level_lf].get_nh(x_lf, indices_layers[global_level_lf], sample_dict)
+                    x_lf_nh, mask_lf, coords_lf_nh = self.grid_layers[str(global_level_lf)].get_nh(x_lf, indices_layers[global_level_lf], sample_dict)
 
                     x, coords_sections = self.grid_layers[str(global_level)].get_sections(x, indices_layers[global_level], section_level=1)
 
@@ -769,10 +779,10 @@ class ICON_Transformer(nn.Module):
             global_level = grid_level_idx*grid_levels_steps
             self.global_levels.append(global_level)
 
-            adjc = self.get_adjacent_global_cell_indices(global_level) 
+            adjc, adjc_mask = self.get_adjacent_global_cell_indices(global_level, nh=self.model_settings['nh']) 
             coordinates = self.get_coordinates_level(global_level) 
 
-            grid_layers[str(global_level)] = grid_layer(global_level, adjc, coordinates)
+            grid_layers[str(global_level)] = grid_layer(global_level, adjc, adjc_mask, coordinates)
 
 
         input_mapping, input_in_range, input_coordinates = self.get_input_grid_mapping()
@@ -1028,23 +1038,12 @@ class ICON_Transformer(nn.Module):
 
         return global_cells, local_cells, cells_nh, out_of_fov_mask 
     
-    def get_adjacent_global_cell_indices(self, global_level):
-        adjc_indices = self.acoe.T[self.eoc.T].reshape(-1,4**global_level,6)
-        self_indices = self.global_indices.view(-1,4**global_level)[:,0]
 
-        adjc_indices = adjc_indices.view(self_indices.shape[0],-1) // 4**global_level
-        self_indices = self_indices // 4**global_level
+    def get_adjacent_global_cell_indices(self, global_level, nh=2):
+        adjc, mask = get_adjacent_indices(self.acoe, self.eoc, nh=nh, global_level=global_level)
 
-        adjc_unique = (adjc_indices).long().unique(dim=-1)
-        
-        is_self = adjc_unique - self_indices.view(-1,1) == 0
+        return adjc, mask
 
-        adjc = adjc_unique[~is_self]
-
-        adjc = adjc.reshape(self_indices.shape[0], -1)
-
-        return adjc
-    
     def get_coordinates_level(self, global_level):
         indices = self.global_indices.reshape(-1,4**int(global_level))[:,0]
         coords = self.cell_coords_global[:,indices]

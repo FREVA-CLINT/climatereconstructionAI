@@ -807,6 +807,84 @@ def get_distance_angle(lon1, lat1, lon2, lat2, base="polar"):
     
 
 
+def get_adjacent_indices(acoe, eoc, nh=5, global_level=1):
+    b = eoc.shape[-1]
+    global_indices = torch.arange(b)
+
+    nh1 = acoe.T[eoc.T].reshape(-1,4**global_level,6**1)
+    self_indices = global_indices.view(-1,4**global_level)[:,0]
+    self_indices = self_indices // 4**global_level
+
+    adjc_indices = nh1.view(nh1.shape[0],-1) // 4**global_level
+
+    adjc_unique = (adjc_indices).long().unique(dim=-1)
+
+    is_self = adjc_unique - self_indices.view(-1,1) == 0
+
+    adjc = adjc_unique[~is_self]
+
+    adjc = adjc.reshape(self_indices.shape[0], -1)
+
+    adjcs = [self_indices.view(-1,1), adjc]
+
+    duplicates = [torch.zeros_like(adjcs[0], dtype=torch.bool), torch.zeros_like(adjcs[1], dtype=torch.bool)]
+    
+    b = adjc.shape[0]
+    for k in range(2, nh):
+        adjc_prev = adjcs[-1]
+
+        adjc = adjcs[1][adjc_prev,:].view(b,-1)
+
+        check_indices = torch.concat(adjcs, dim=-1).unsqueeze(dim=-2)
+
+        # identify entities from previous nhs
+        is_prev = adjc.unsqueeze(dim=-1) - check_indices == 0
+        is_prev = is_prev.sum(dim=-1) > 0
+
+        # remove duplicates from previous nhs
+        
+        is_removed = is_prev
+
+        is_removed_count = is_removed.sum(dim=-1)
+        
+        unique, counts = is_removed_count.unique(return_counts=True)
+        majority = unique[counts.argmax()]
+        
+        for minority in unique[unique!=majority]:
+
+            where_minority = torch.where(is_removed_count==minority)[0]
+
+            ind0, ind1 = torch.where(is_removed[where_minority])
+
+            ind0 = ind0.reshape(len(where_minority),-1)[:,:minority-majority].reshape(-1)
+            ind1 = ind1.reshape(len(where_minority),-1)[:,:minority-majority].reshape(-1)
+
+            is_removed[where_minority[ind0], ind1] = False
+
+        adjc = adjc[~is_removed]
+
+        adjc = adjc.reshape(b, -1)
+        
+        if k > 0:
+            counts = [] 
+            uniques=[]
+            for row in adjc:
+                unique, count = row.unique(return_counts=True)
+                uniques.append(unique)
+                counts.append(len(unique))
+        
+            adjc = torch.nn.utils.rnn.pad_sequence(uniques, batch_first=True, padding_value=-1)
+            duplicates_mask = adjc==-1
+            
+        adjcs.append(adjc)
+        duplicates.append(duplicates_mask)
+
+    adjc = torch.concat(adjcs, dim=-1)
+    duplicates = torch.concat(duplicates, dim=-1)
+
+    return adjc, duplicates
+
+
 
 def get_nearest_to_icon_rec(c_t_global, c_i, level=7, global_indices_i=None, nh=5, search_radius=5):
 

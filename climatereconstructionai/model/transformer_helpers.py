@@ -75,7 +75,7 @@ def scaled_dot_product_rpe(q=None, k=None, v=None, aq=None, ak=None, av=None, bi
 
     if mask is not None:
         mask = mask.reshape(attn_logits.shape[0],1,mask.shape[-2],mask.shape[-1]).repeat(1,attn_logits.shape[1],1,1)
-        mask_value = -1e10 if attn_logits.dtype == torch.float32 else -1e4
+        mask_value = float("-inf")#-1e10 if attn_logits.dtype == torch.float32 else -1e4
         attn_logits = attn_logits.masked_fill(mask, mask_value)
 
     #softmax and scale
