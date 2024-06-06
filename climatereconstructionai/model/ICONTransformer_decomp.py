@@ -634,7 +634,10 @@ class decomp_layer(nn.Module):
             
             x = x_sections_f.squeeze(dim=-2)
 
-        x_levels[global_level + 1] = x
+        if len(self.global_levels) == 0:
+            x_levels[0] = x
+        else:
+            x_levels[global_level + 1] = x
 
         return x_levels
 
@@ -780,20 +783,14 @@ class ICON_Transformer(nn.Module):
 
         self.decomp_layer = decomp_layer(grid_layers, self.model_settings, pos_embedder, residual_decomp=self.model_settings['residual_decomp'])
 
-        self.processing_projection_layers = nn.ModuleList()
+        self.processing_layers = nn.ModuleList()
         for k in range(self.model_settings['n_proccesing_decomp_layers']):
-            proc_layer = processing_layers(grid_layers, self.model_settings, pos_embedder)
+            self.processing_layers.append(processing_layers(grid_layers, self.model_settings, pos_embedder))
             
-            if k < self.model_settings['n_proccesing_decomp_layers']-1:
-                output_dim = None
-            else:
-                output_dim = len(self.model_settings['variables_target']['cell'])
+        self.proj_layer = projection_layer(grid_layers, self.model_settings, pos_embedder, output_dim=None)
 
-            if k == 0 or k == self.model_settings['n_proccesing_decomp_layers']-1:
-                proj_layer = projection_layer(grid_layers, self.model_settings, pos_embedder, output_dim=output_dim)
-
-            self.processing_projection_layers.append(nn.ModuleDict(zip(['processing', 'projection'], [proc_layer, proj_layer])))
-
+        self.output_mlp = nn.Sequential(nn.Linear(self.model_dim, self.model_dim, bias=False), 
+                                        nn.Linear(self.model_dim, len(self.model_settings['variables_target']['cell']), bias=False))
         
         out_dim_input = self.model_dim
         self.input_projection = nn.Sequential(nn.Linear(self.model_dim * len(self.input_data), out_dim_input, bias=False))
@@ -836,12 +833,14 @@ class ICON_Transformer(nn.Module):
 
         x = self.input_projection(x)
 
-        for layers in self.processing_projection_layers:
+        x_levels = self.decomp_layer(x, indices_layers)
 
-            x_levels = self.decomp_layer(x, indices_layers)
-            x_levels = layers['processing'](x_levels, indices_layers, indices_batch_dict)
-            x = layers['projection'](x_levels, indices_layers, indices_batch_dict)
+        for layers in self.processing_layers:
+            x_levels = layers(x_levels, indices_layers, indices_batch_dict)
+
+        x = self.proj_layer(x_levels, indices_layers, indices_batch_dict)
         
+        x = self.output_mlp(x)
         if debug:
             return {'cell': x.unsqueeze(dim=-2)}, debug_list
         else:
