@@ -830,7 +830,7 @@ def get_adjacent_indices(acoe, eoc, nh=5, global_level=1):
     duplicates = [torch.zeros_like(adjcs[0], dtype=torch.bool), torch.zeros_like(adjcs[1], dtype=torch.bool)]
     
     b = adjc.shape[0]
-    for k in range(2, nh):
+    for k in range(1, nh):
         adjc_prev = adjcs[-1]
 
         adjc = adjcs[1][adjc_prev,:].view(b,-1)
@@ -865,7 +865,7 @@ def get_adjacent_indices(acoe, eoc, nh=5, global_level=1):
 
         adjc = adjc.reshape(b, -1)
         
-        if k > 0:
+        if k > 1:
             counts = [] 
             uniques=[]
             for row in adjc:
@@ -875,12 +875,14 @@ def get_adjacent_indices(acoe, eoc, nh=5, global_level=1):
         
             adjc = torch.nn.utils.rnn.pad_sequence(uniques, batch_first=True, padding_value=-1)
             duplicates_mask = adjc==-1
+        else:
+            duplicates_mask = torch.zeros_like(adjc)
             
         adjcs.append(adjc)
         duplicates.append(duplicates_mask)
 
-    adjc = torch.concat(adjcs, dim=-1)
-    duplicates = torch.concat(duplicates, dim=-1)
+    adjc = torch.concat(adjcs[1:], dim=-1)
+    duplicates = torch.concat(duplicates[1:], dim=-1)
 
     return adjc, duplicates
 
