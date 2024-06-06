@@ -61,16 +61,15 @@ def scaled_dot_product_rpe(q=None, k=None, v=None, aq=None, ak=None, av=None, bi
             attn_logits_aq = torch.matmul(k.unsqueeze(dim=-2), aq.unsqueeze(dim=1).transpose(-2, -1)).view(b, n_heads, t, s)
             attn_logits = (attn_logits + attn_logits_aq)    
         
-        
         if logit_scale is not None:
             logit_scale = torch.clamp(logit_scale, max=math.log(100.0)).exp()
-            attn_logits = attn_logits * logit_scale
-        else:
-            attn_logits = attn_logits/torch.sqrt(torch.tensor(d_z))
+            attn_logits = attn_logits * logit_scale           
 
         if bias is not None:
             attn_logits = attn_logits + bias
-    
+
+        attn_logits = attn_logits/torch.sqrt(torch.tensor(d_z))
+
     else:
         attn_logits = bias
 
@@ -278,10 +277,9 @@ class RelativePositionEmbedder_mlp(nn.Module):
         return rpe
   
 def conv_coordinates_log(coords):
-    sign = torch.sign(coords)
-    coords_log_m = torch.log10(1000.*6371.*(coords.abs()))
-    coords_log_m = torch.clamp(coords_log_m, min=0)
-    return sign * coords_log_m
+    sgn = coords.sign()
+    coords = sgn * ((1+coords.abs()).log())
+    return coords
 
 def conv_coordinates_inv(coords, epsilon=1e-5):
     sign = torch.sign(coords)
