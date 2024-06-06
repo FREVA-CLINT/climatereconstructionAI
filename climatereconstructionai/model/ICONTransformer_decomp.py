@@ -375,22 +375,16 @@ class position_embedder(nn.Module):
         if 'inverse' in pos_emb_calc:
             self.transform = helpers.conv_coordinates_inv
 
-        if 'log' in pos_emb_calc:
+        elif 'sig_log' in pos_emb_calc:
+            self.transform = helpers.conv_coordinates_sig_log
+
+        elif 'sig_inv_log' in pos_emb_calc:
+            self.transform = helpers.conv_coordinates_inv_sig_log  
+
+        elif 'log' in pos_emb_calc:
             self.transform = helpers.conv_coordinates_log
-                    
-        if 'sig_sum' in pos_emb_calc:
-            self.operation = 'sig_sum'
-
-        elif 'sig_prod' in pos_emb_calc:
-            self.operation = 'sig_prod'
-        
-        elif 'sig_inv_prod' in pos_emb_calc:
-            self.operation = 'sig_inv_prod' 
-
-        elif 'sig_inv_sum' in pos_emb_calc:
-            self.operation = 'sig_inv_sum'
-
-        elif 'sum' in pos_emb_calc:
+       
+        if 'sum' in pos_emb_calc:
             self.operation = 'sum'
 
         elif 'product' in pos_emb_calc:
@@ -417,20 +411,8 @@ class position_embedder(nn.Module):
 
             if self.proj_layer is not None:
                 return self.proj_layer(torch.concat((pos1_emb, pos2_emb), dim=-1))
-            
-            if self.operation == 'sig_prod':
-                return pos2_emb * torch.sigmoid(pos1_emb)
-            
-            elif self.operation == 'sig_sum':
-                return pos2_emb + torch.sigmoid(pos1_emb)
-            
-            elif self.operation == 'sig_inv_sum':
-                return pos2_emb + (1-torch.sigmoid(pos1_emb))
-            
-            elif self.operation == 'sig_inv_prod':
-                return pos2_emb * (1-torch.sigmoid(pos1_emb))
                         
-            elif self.operation == 'sum':
+            if self.operation == 'sum':
                 return pos1_emb + pos2_emb
             
             elif self.operation == 'product':

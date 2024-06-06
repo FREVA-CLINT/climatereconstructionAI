@@ -281,6 +281,17 @@ def conv_coordinates_log(coords):
     coords = sgn * ((1+coords.abs()).log())
     return coords
 
+def conv_coordinates_inv_sig_log(coords):
+    sgn = coords.sign()
+    coords = sgn * (1 - torch.sigmoid((coords.abs()).log()))
+    return coords
+
+def conv_coordinates_sig_log(coords):
+    sgn = coords.sign()
+    coords = sgn * (torch.sigmoid((coords.abs()).log()))
+    return coords
+
+
 def conv_coordinates_inv(coords, epsilon=1e-5):
     sign = torch.sign(coords)
     sign[sign==0]=1
