@@ -382,7 +382,13 @@ class position_embedder(nn.Module):
             self.operation = 'sig_sum'
 
         elif 'sig_prod' in pos_emb_calc:
-            self.operation = 'sig_prod'    
+            self.operation = 'sig_prod'
+        
+        elif 'sig_inv_prod' in pos_emb_calc:
+            self.operation = 'sig_inv_prod' 
+
+        elif 'sig_inv_sum' in pos_emb_calc:
+            self.operation = 'sig_inv_sum'
 
         elif 'sum' in pos_emb_calc:
             self.operation = 'sum'
@@ -418,6 +424,12 @@ class position_embedder(nn.Module):
             elif self.operation == 'sig_sum':
                 return pos2_emb + torch.sigmoid(pos1_emb)
             
+            elif self.operation == 'sig_inv_sum':
+                return pos2_emb + (1-torch.sigmoid(pos1_emb))
+            
+            elif self.operation == 'sig_inv_prod':
+                return pos2_emb * (1-torch.sigmoid(pos1_emb))
+                        
             elif self.operation == 'sum':
                 return pos1_emb + pos2_emb
             
