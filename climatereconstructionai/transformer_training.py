@@ -193,20 +193,7 @@ def train(model, training_settings, model_settings={}):
                                 model_settings=model_settings,
                                 p_dropout = training_settings['p_dropout'] if 'p_dropout' in training_settings else 0)
     
-    dataset_val = NetCDFLoader_lazy(source_files_val, 
-                                target_files_val,
-                                training_settings['variables_source'],
-                                training_settings['variables_target'],
-                                model_settings['normalization'],
-                                training_settings['coarsen_sample_level'],
-                                files_target_past=target_files_past_val,
-                                index_range_source=training_settings['index_range_source'] if 'index_range_source' in training_settings else None,
-                                index_offset_target=training_settings['index_offset_target'] if 'index_offset_target' in training_settings else 0,
-                                sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
-                                lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
-                                sample_condition_dict=training_settings['sample_condition_dict'],
-                                model_settings=model_settings,
-                                p_dropout = training_settings['p_dropout'] if 'p_dropout' in training_settings else 0)
+  
 
     model_settings['normalization'] = norm_dict = dataset_train.norm_dict
 
@@ -229,7 +216,23 @@ def train(model, training_settings, model_settings={}):
                                     pin_memory=True if device == 'cuda' and not training_settings['distributed'] else False,
                                     persistent_workers= True if training_settings['distributed'] else False))
     if rank==0:
+        dataset_val = NetCDFLoader_lazy(source_files_val, 
+                                target_files_val,
+                                training_settings['variables_source'],
+                                training_settings['variables_target'],
+                                model_settings['normalization'],
+                                training_settings['coarsen_sample_level'],
+                                files_target_past=target_files_past_val,
+                                index_range_source=training_settings['index_range_source'] if 'index_range_source' in training_settings else None,
+                                index_offset_target=training_settings['index_offset_target'] if 'index_offset_target' in training_settings else 0,
+                                sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
+                                lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
+                                sample_condition_dict=training_settings['sample_condition_dict'],
+                                model_settings=model_settings,
+                                p_dropout = training_settings['p_dropout'] if 'p_dropout' in training_settings else 0)
+          
         val_sampler = InfiniteSampler(len(dataset_val))   
+
         iterator_val = iter(DataLoader(dataset_val,
                                         batch_size=batch_size,
                                         sampler=val_sampler,
@@ -265,6 +268,7 @@ def train(model, training_settings, model_settings={}):
     if training_settings['distributed']:
         model = model.to(local_rank)
         model = DDP(model, device_ids=[local_rank])
+        device = local_rank
 
     elif training_settings['multi_gpus']:
         model = model.to(device)
@@ -441,20 +445,15 @@ def train(model, training_settings, model_settings={}):
 
             if training_settings['early_stopping']:
                 writer.update_scalar('val', 'loss_gradient', early_stop.criterion_diff, n_iter)
+        
 
-        if n_iter % training_settings['log_interval'] == 0 and training_settings['distributed']:
-            dist.barrier()
-
-        if n_iter % training_settings['save_model_interval'] == 0 and rank==0:
-            
-            if training_settings['distributed']:
-                dist.barrier()
-                
+        if n_iter % training_settings['save_model_interval'] == 0 and rank==0:   
             save_ckpt('{:s}/{:d}.pth'.format(ckpt_dir, n_iter), norm_dict,
                       [(str(n_iter), n_iter, model, optimizer)], model_settings=model_settings)
             
-            if training_settings['distributed']:
-                dist.barrier()
+  
+        if n_iter % training_settings['log_interval'] == 0 and training_settings['distributed']:
+            dist.barrier()
 
         if training_settings['early_stopping'] and early_stop.terminate:
             model = early_stop.best_model
