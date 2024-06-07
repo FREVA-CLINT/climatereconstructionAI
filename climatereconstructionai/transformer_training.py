@@ -177,23 +177,42 @@ def train(model, training_settings, model_settings={}):
         sample_dir_train=''
         sample_dir_val=''
 
-
-    dataset_train = NetCDFLoader_lazy(source_files_train, 
-                                target_files_train,
-                                training_settings['variables_source'],
-                                training_settings['variables_target'],
-                                model_settings['normalization'],
-                                training_settings['coarsen_sample_level'],
-                                files_target_past=target_files_past_train,
-                                index_range_source=training_settings['index_range_source'] if 'index_range_source' in training_settings else None,
-                                index_offset_target=training_settings['index_offset_target'] if 'index_offset_target' in training_settings else 0,
-                                sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
-                                lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
-                                sample_condition_dict=training_settings['sample_condition_dict'],
-                                model_settings=model_settings,
-                                p_dropout = training_settings['p_dropout'] if 'p_dropout' in training_settings else 0)
+    if rank==0:
+        dataset_train = NetCDFLoader_lazy(source_files_train, 
+                                    target_files_train,
+                                    training_settings['variables_source'],
+                                    training_settings['variables_target'],
+                                    model_settings['normalization'],
+                                    training_settings['coarsen_sample_level'],
+                                    files_target_past=target_files_past_train,
+                                    index_range_source=training_settings['index_range_source'] if 'index_range_source' in training_settings else None,
+                                    index_offset_target=training_settings['index_offset_target'] if 'index_offset_target' in training_settings else 0,
+                                    sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
+                                    lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
+                                    sample_condition_dict=training_settings['sample_condition_dict'],
+                                    model_settings=model_settings,
+                                    p_dropout = training_settings['p_dropout'] if 'p_dropout' in training_settings else 0)
+    if training_settings['dsitributed']:
+        dist.barrier()
     
-  
+    if rank !=0:
+        dataset_train = NetCDFLoader_lazy(source_files_train, 
+                                    target_files_train,
+                                    training_settings['variables_source'],
+                                    training_settings['variables_target'],
+                                    model_settings['normalization'],
+                                    training_settings['coarsen_sample_level'],
+                                    files_target_past=target_files_past_train,
+                                    index_range_source=training_settings['index_range_source'] if 'index_range_source' in training_settings else None,
+                                    index_offset_target=training_settings['index_offset_target'] if 'index_offset_target' in training_settings else 0,
+                                    sample_for_norm=training_settings['sample_for_norm'] if 'sample_for_norm' in training_settings else None,
+                                    lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
+                                    sample_condition_dict=training_settings['sample_condition_dict'],
+                                    model_settings=model_settings,
+                                    p_dropout = training_settings['p_dropout'] if 'p_dropout' in training_settings else 0)
+    
+    if training_settings['dsitributed']:
+        dist.barrier()
 
     model_settings['normalization'] = norm_dict = dataset_train.norm_dict
 

@@ -191,8 +191,9 @@ class NetCDFLoader_lazy(Dataset):
                         'global_cells_input':global_cells_input,
                         'global_cells': global_cells}
 
-        with open(self.indices_path, 'wb') as handle:
-            pickle.dump(indices_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        if not os.path.isfile(self.indices_path):
+            with open(self.indices_path, 'wb') as handle:
+                pickle.dump(indices_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
         self.num_datapoints_time = ds_source[list(self.variables_source.values())[0][0]].shape[0]
 
