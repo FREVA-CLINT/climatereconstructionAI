@@ -43,7 +43,7 @@ def set_device_and_init_torch_dist():
 
     torch.cuda.set_device(local_rank)
 
-    return local_rank
+    return rank, local_rank
 
 
 class AscentFunction(torch.autograd.Function):
@@ -114,8 +114,9 @@ def train(model, training_settings, model_settings={}):
     torch.multiprocessing.set_sharing_strategy('file_system')
     
     if training_settings['distributed']:
-        local_rank = set_device_and_init_torch_dist()
+        rank, local_rank = set_device_and_init_torch_dist()
     else:
+        rank=0
         print("* Number of GPUs: ", torch.cuda.device_count())
 
     log_dir = training_settings['log_dir']
@@ -217,30 +218,24 @@ def train(model, training_settings, model_settings={}):
     with open(model_settings_path, 'w') as f:
         json.dump(model_settings, f, indent=4)
     
-    if training_settings['distributed']:
-        train_sampler = torch.utils.data.distributed.DistributedSampler(
-                dataset_train,
-                shuffle=True
-            )
-        val_sampler = torch.utils.data.distributed.DistributedSampler(
-                dataset_val,
-                shuffle=False
-            )
-    else:
-        train_sampler = InfiniteSampler(len(dataset_train))
-        val_sampler = InfiniteSampler(len(dataset_val))    
+
+    train_sampler = InfiniteSampler(len(dataset_train))
+     
 
     iterator_train = iter(DataLoader(dataset_train,
                                     batch_size=batch_size,
                                     sampler=train_sampler,
                                     num_workers=training_settings['n_workers'], 
-                                    pin_memory=True if device == 'cuda' or training_settings['distributed'] else False))
-
-    iterator_val = iter(DataLoader(dataset_val,
-                                    batch_size=batch_size,
-                                    sampler=val_sampler,
-                                    num_workers=training_settings['n_workers'] if 'n_workers_val' not in training_settings.keys() else training_settings['n_workers_val'], 
-                                    pin_memory=True if device == 'cuda' or training_settings['distributed'] else False))
+                                    pin_memory=True if device == 'cuda' and not training_settings['distributed'] else False,
+                                    persistent_workers= True if training_settings['distributed'] else False))
+    if rank==0:
+        val_sampler = InfiniteSampler(len(dataset_val))   
+        iterator_val = iter(DataLoader(dataset_val,
+                                        batch_size=batch_size,
+                                        sampler=val_sampler,
+                                        num_workers=training_settings['n_workers'] if 'n_workers_val' not in training_settings.keys() else training_settings['n_workers_val'], 
+                                        pin_memory=True if device == 'cuda' and not training_settings['distributed'] else False,
+                                        persistent_workers= True if training_settings['distributed'] else False))
 
     dw_train = False
     if 'dw_train' in training_settings.keys() and training_settings['dw_train']:
@@ -290,7 +285,10 @@ def train(model, training_settings, model_settings={}):
     if training_settings['mixed_precision']:
         scaler = GradScaler()   
 
-    pbar = tqdm(range(0, training_settings['max_iter']))
+    if rank==0:
+        pbar = tqdm(range(0, training_settings['max_iter']))
+    else:
+        pbar = range(training_settings['max_iter'])
 
     train_losses_hist = []
     val_losses_hist = []
@@ -300,7 +298,9 @@ def train(model, training_settings, model_settings={}):
      
         n_iter = i + 1 + iter_start
         lr_val = optimizer.param_groups[0]['lr']
-        pbar.set_description("lr = {:.1e}".format(lr_val))
+
+        if rank ==0:
+            pbar.set_description("lr = {:.1e}".format(lr_val))
 
         lrs.append(lr_val)
 
@@ -373,8 +373,10 @@ def train(model, training_settings, model_settings={}):
 
         lr_scheduler.step()
 
+        if n_iter % training_settings['log_interval'] == 0 and training_settings['distributed']:
+            dist.barrier()
 
-        if n_iter % training_settings['log_interval'] == 0:
+        if n_iter % training_settings['log_interval'] == 0 and rank==0:
             writer.update_scalars(train_loss_dict, n_iter, 'train')
 
             model.eval()
@@ -440,10 +442,19 @@ def train(model, training_settings, model_settings={}):
             if training_settings['early_stopping']:
                 writer.update_scalar('val', 'loss_gradient', early_stop.criterion_diff, n_iter)
 
+        if n_iter % training_settings['log_interval'] == 0 and training_settings['distributed']:
+            dist.barrier()
 
-        if n_iter % training_settings['save_model_interval'] == 0:
+        if n_iter % training_settings['save_model_interval'] == 0 and rank==0:
+            
+            if training_settings['distributed']:
+                dist.barrier()
+                
             save_ckpt('{:s}/{:d}.pth'.format(ckpt_dir, n_iter), norm_dict,
                       [(str(n_iter), n_iter, model, optimizer)], model_settings=model_settings)
+            
+            if training_settings['distributed']:
+                dist.barrier()
 
         if training_settings['early_stopping'] and early_stop.terminate:
             model = early_stop.best_model
