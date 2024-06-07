@@ -29,10 +29,9 @@ def set_device_and_init_torch_dist():
     
     # check out https://gist.github.com/TengdaHan/1dd10d335c7ca6f13810fff41e809904
 
-    world_size = int(os.environ.get('WORLD_SIZE'))
+    world_size = int(os.environ.get('WORLD_SIZE', os.environ.get('SLURM_NTASKS')))
 
-    #rank = int(os.environ.get('RANK', os.environ.get('SLURM_PROCID')))
-    rank = int(os.environ.get('SLURM_PROCID'))
+    rank = int(os.environ.get('RANK', os.environ.get('SLURM_PROCID')))
 
     dist_url = 'env://'
     backend = 'nccl'
@@ -40,7 +39,8 @@ def set_device_and_init_torch_dist():
     dist.init_process_group(backend=backend, init_method=dist_url,
                                 world_size=world_size, rank=rank)
        
-    local_rank = rank % torch.cuda.device_count()
+    local_rank = int(os.environ.get('LOCAL_RANK', os.environ.get('SLURM_LOCALID')))
+
     torch.cuda.set_device(local_rank)
 
     return local_rank
@@ -268,7 +268,7 @@ def train(model, training_settings, model_settings={}):
         iter_start = 0
 
     if training_settings['distributed']:
-        model = model.cuda(local_rank)
+        model = model.to(local_rank)
         model = DDP(model, device_ids=[local_rank])
 
     elif training_settings['multi_gpus']:
