@@ -313,7 +313,10 @@ class input_layer(nn.Module):
 
             pos = self.get_relative_positions(grid_level_indices)
             
-            mask = torch.logical_or(grid_out_of_range_mask, drop_mask.view(b,n,1).repeat(1,1,nh))
+            if drop_mask is not None:
+                mask = torch.logical_or(grid_out_of_range_mask, drop_mask.view(b,n,1).repeat(1,1,nh))
+            else:
+                mask = grid_out_of_range_mask
 
             mask = sequenize(mask, self.seq_level)
 
@@ -830,7 +833,7 @@ class ICON_Transformer(nn.Module):
         input_data = []
         for key, values in x.items():
             
-            input = self.input_layers[key](values, indices_batch_dict["local_cell"], drop_mask=indices_batch_dict['drop_mask'])
+            input = self.input_layers[key](values, indices_batch_dict["local_cell"], drop_mask=None)
             input_data.append(input) 
         
         x = torch.concat(input_data, dim=-1)

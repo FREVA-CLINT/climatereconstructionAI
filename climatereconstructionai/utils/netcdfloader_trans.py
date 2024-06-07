@@ -351,15 +351,15 @@ class NetCDFLoader_lazy(Dataset):
         '''
 
       
-        drop_mask = torch.rand(len(global_cells_sample_input)) <= self.p_dropout
+        #drop_mask = torch.rand(len(global_cells_sample_input)) <= self.p_dropout
         
             
 
         indices = {'global_cell': global_cells_sample_input,
                    'local_cell': global_cells_sample_input // 4**self.model_settings['global_level_start'],
                     'sample': sample_index,
-                    'sample_level': self.coarsen_sample_level,
-                    'drop_mask': drop_mask}
+                    'sample_level': self.coarsen_sample_level}
+                    #'drop_mask': drop_mask}
 
         return data_source, data_target, indices
 
