@@ -192,7 +192,7 @@ def train(model, training_settings, model_settings={}):
                                     sample_condition_dict=training_settings['sample_condition_dict'],
                                     model_settings=model_settings,
                                     p_dropout = training_settings['p_dropout'] if 'p_dropout' in training_settings else 0)
-    if training_settings['dsitributed']:
+    if training_settings['distributed']:
         dist.barrier()
     
     if rank !=0:
@@ -211,7 +211,7 @@ def train(model, training_settings, model_settings={}):
                                     model_settings=model_settings,
                                     p_dropout = training_settings['p_dropout'] if 'p_dropout' in training_settings else 0)
     
-    if training_settings['dsitributed']:
+    if training_settings['distributed']:
         dist.barrier()
 
     model_settings['normalization'] = norm_dict = dataset_train.norm_dict
