@@ -356,11 +356,11 @@ class position_embedder(nn.Module):
 
         if "descrete" in pos_emb_calc and "polar" in pos_emb_calc:
             self.pos1_emb = helpers.PositionEmbedder_phys_log(min_dist, max_dist, embed_dim, n_heads=n_out)
-            self.pos2_emb = helpers.PositionEmbedder_phys(-torch.pi, torch.pi, embed_dim, n_heads=n_out)
+            self.pos2_emb = helpers.PositionEmbedder_phys(-torch.pi, torch.pi, embed_dim, n_heads=n_out, special_token=True)
 
         if "semi" in pos_emb_calc and "polar" in pos_emb_calc:
             self.pos1_emb = nn.Linear(1, n_out)
-            self.pos2_emb = helpers.PositionEmbedder_phys(-torch.pi, torch.pi, embed_dim, n_heads=n_out)
+            self.pos2_emb = helpers.PositionEmbedder_phys(-torch.pi, torch.pi, embed_dim, n_heads=n_out, special_token=True)
 
         if "cartesian" in pos_emb_calc:
             self.proj_layer = nn.Sequential(nn.Linear(2, embed_dim, bias=True),
@@ -403,6 +403,7 @@ class position_embedder(nn.Module):
             return self.proj_layer(torch.stack((pos1, pos2), dim=-1))    
 
         else:
+            dist_0 = pos1 < 1e-10
             if self.transform is not None:
                 pos1 = self.transform(pos1)
             
@@ -410,7 +411,7 @@ class position_embedder(nn.Module):
                 pos1 = pos1.unsqueeze(dim=-1)
 
             pos1_emb = self.pos1_emb(pos1)
-            pos2_emb = self.pos2_emb(pos2)
+            pos2_emb = self.pos2_emb(pos2, special_token_mask=dist_0)
 
             if self.proj_layer is not None:
                 return self.proj_layer(torch.concat((pos1_emb, pos2_emb), dim=-1))
@@ -796,7 +797,8 @@ class ICON_Transformer(nn.Module):
             
         self.proj_layer = projection_layer(grid_layers, self.model_settings, pos_embedder, output_dim=None)
 
-        self.output_mlp = nn.Sequential(nn.Linear(self.model_dim, self.model_dim, bias=False), 
+        self.output_mlp = nn.Sequential(nn.Linear(self.model_dim, self.model_dim, bias=False),
+                                        nn.SiLU(),
                                         nn.Linear(self.model_dim, len(self.model_settings['variables_target']['cell']), bias=False))
         
         out_dim_input = self.model_dim

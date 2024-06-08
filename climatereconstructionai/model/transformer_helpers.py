@@ -121,23 +121,33 @@ def scaled_dot_product_rpe_swin(q, k, v, b=None, logit_scale=None, mask=None):
 
 class PositionEmbedder_phys(nn.Module):
 
-    def __init__(self, min_pos_phys, max_pos_phys, n_pos_emb, n_heads=10,device='cpu'):
+    def __init__(self, min_pos_phys, max_pos_phys, n_pos_emb, n_heads=10,device='cpu', special_token=True):
         super().__init__()
         self.max_pos_phys = max_pos_phys
         self.min_pos_phys = min_pos_phys
         self.n_pos_emb = n_pos_emb
         
         self.embeddings_table = nn.Parameter(torch.Tensor(n_pos_emb + 1, n_heads))
+        if special_token:
+            self.special_token = nn.Parameter(torch.Tensor(1, n_heads))
+        else:
+            self.special_token = None
+        nn.init.xavier_uniform_(self.special_token)
         nn.init.xavier_uniform_(self.embeddings_table)
 
 
-    def forward(self, coord):
-
+    def forward(self, coord, special_token_mask=None):
+        
         coord_pos = self.n_pos_emb * (coord -self.min_pos_phys) / (self.max_pos_phys - self.min_pos_phys)
+
+       # if special_token_mask is not None:
 
         coord_pos_clipped = torch.clamp(coord_pos, 0, self.n_pos_emb)
         
         embeddings = self.embeddings_table[coord_pos_clipped.long()]
+
+        if special_token_mask is not None:
+            embeddings[special_token_mask,:] = self.special_token
 
         return embeddings
 

@@ -881,8 +881,8 @@ def get_adjacent_indices(acoe, eoc, nh=5, global_level=1):
         adjcs.append(adjc)
         duplicates.append(duplicates_mask)
 
-    adjc = torch.concat(adjcs[1:], dim=-1)
-    duplicates = torch.concat(duplicates[1:], dim=-1)
+    adjc = torch.concat(adjcs, dim=-1)
+    duplicates = torch.concat(duplicates, dim=-1)
 
     return adjc, duplicates
 
