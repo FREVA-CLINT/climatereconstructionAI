@@ -787,7 +787,7 @@ class ICON_Transformer(nn.Module):
         #output_mapping, _, output_coordinates = self.get_output_grid_mapping()
 
         #tbd: use input projection layer as input layer with input_mapping and output_layer with output_mapping
-        self.input_layers = self.init_input_layers(grid_layers["0"], self.model_dim, input_mapping, input_in_range, input_coordinates, pos_embedder)
+        self.input_layers = self.init_input_layers(grid_layers["0"], self.model_settings['input_dim_var'], input_mapping, input_in_range, input_coordinates, pos_embedder)
 
         self.decomp_layer = decomp_layer(grid_layers, self.model_settings, pos_embedder, residual_decomp=self.model_settings['residual_decomp'])
 
@@ -801,8 +801,8 @@ class ICON_Transformer(nn.Module):
                                         nn.SiLU(),
                                         nn.Linear(self.model_dim, len(self.model_settings['variables_target']['cell']), bias=False))
         
-        out_dim_input = self.model_dim
-        self.input_projection = nn.Sequential(nn.Linear(self.model_dim * len(self.input_data), out_dim_input, bias=False))
+        self.input_projection = nn.Sequential(nn.Linear(self.model_settings['input_dim_var'] * len(self.input_data), self.model_dim, bias=False),
+                                              nn.LayerNorm(self.model_dim))
   
 
         strict = self.model_settings['load_strict'] if 'load_strict' in self.model_settings.keys() else True
