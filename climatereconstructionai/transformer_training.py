@@ -257,7 +257,7 @@ def train(model, training_settings, model_settings={}):
                                         sampler=val_sampler,
                                         num_workers=training_settings['n_workers'] if 'n_workers_val' not in training_settings.keys() else training_settings['n_workers_val'], 
                                         pin_memory=True if device == 'cuda' and not training_settings['distributed'] else False,
-                                        persistent_workers= True if training_settings['distributed'] else False))
+                                        persistent_workers= True if (training_settings['distributed'] and training_settings['n_workers_val']>0) else False))
 
     dw_train = False
     if 'dw_train' in training_settings.keys() and training_settings['dw_train']:
@@ -414,7 +414,7 @@ def train(model, training_settings, model_settings={}):
                     with torch.autocast(device_type=training_settings['device'], dtype=torch.bfloat16):
                         val_total_loss, val_loss_dict, output, target, _, debug_dict = loss_calculator(lambdas_optim, 
                                                                                                 target, 
-                                                                                                model, 
+                                                                                                model, #model.module for multi_gpus?
                                                                                                 source, 
                                                                                                 source_indices=indices, 
                                                                                                 k=lambdas_optim['k_l1_relv'] if 'k_l1_relv' in lambdas_optim.keys() else None, 
@@ -423,7 +423,7 @@ def train(model, training_settings, model_settings={}):
                 else:
                     val_total_loss, val_loss_dict, output, target, _, debug_dict = loss_calculator(lambdas_optim, 
                                                                                                 target, 
-                                                                                                model, 
+                                                                                                model, #model.module for multi_gpus?
                                                                                                 source, 
                                                                                                 source_indices=indices, 
                                                                                                 k=lambdas_optim['k_l1_relv'] if 'k_l1_relv' in lambdas_optim.keys() else None, 
