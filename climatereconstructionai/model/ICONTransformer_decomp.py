@@ -801,8 +801,10 @@ class ICON_Transformer(nn.Module):
                                         nn.SiLU(),
                                         nn.Linear(self.model_dim, len(self.model_settings['variables_target']['cell']), bias=False))
         
-        self.input_projection = nn.Sequential(nn.Linear(self.model_settings['input_dim_var'] * len(self.input_data), self.model_dim, bias=False),
-                                              nn.LayerNorm(self.model_dim))
+        if self.model_settings['input_dim_var'] * len(self.input_data) != self.model_settings['model_dim']:
+            self.input_projection = nn.Sequential(nn.Linear(self.model_settings['input_dim_var'] * len(self.input_data), self.model_dim, bias=False))
+        else:
+            self.input_projection = nn.Identity()
   
 
         strict = self.model_settings['load_strict'] if 'load_strict' in self.model_settings.keys() else True
