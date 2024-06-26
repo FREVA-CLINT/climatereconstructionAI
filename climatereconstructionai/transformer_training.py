@@ -232,7 +232,7 @@ def train(model, training_settings, model_settings={}):
                                     batch_size=batch_size,
                                     sampler=train_sampler,
                                     num_workers=training_settings['n_workers'], 
-                                    pin_memory=True if device == 'cuda' and not training_settings['distributed'] else False,
+                                    pin_memory=False if device == 'cuda' and not training_settings['distributed'] else False,
                                     persistent_workers= True if training_settings['distributed'] else False))
     if rank==0:
         dataset_val = NetCDFLoader_lazy(source_files_val, 
@@ -256,7 +256,7 @@ def train(model, training_settings, model_settings={}):
                                         batch_size=batch_size,
                                         sampler=val_sampler,
                                         num_workers=training_settings['n_workers'] if 'n_workers_val' not in training_settings.keys() else training_settings['n_workers_val'], 
-                                        pin_memory=True if device == 'cuda' and not training_settings['distributed'] else False,
+                                        pin_memory=False if device == 'cuda' and not training_settings['distributed'] else False,
                                         persistent_workers= True if (training_settings['distributed'] and training_settings['n_workers_val']>0) else False))
 
     dw_train = False

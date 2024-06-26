@@ -278,10 +278,8 @@ class GaussLoss(nn.Module):
         super().__init__()
         self.Gauss = torch.nn.GaussianNLLLoss()
 
-    def forward(self, output, target, non_valid_mask, k=None):
-        output_valid = output[:,0].transpose(-2,-1)[~non_valid_mask]
-        target_valid = target[~non_valid_mask].squeeze()
-        loss =  self.Gauss(output_valid[:,0],target_valid,output_valid[:,1])
+    def forward(self, output, target, non_valid_mask=None, k=None):
+        loss =  self.Gauss(output[:,:,[0]], target, output[:,:,[1]])
         return loss
 
 class StdLoss(nn.Module):

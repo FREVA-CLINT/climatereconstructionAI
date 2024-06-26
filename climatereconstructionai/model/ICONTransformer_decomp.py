@@ -652,12 +652,13 @@ class decomp_layer(nn.Module):
 
 
 class projection_layer(nn.Module):
-    def __init__(self, grid_layers: dict, model_hparams: dict, pos_embedder, output_dim, output_mappings=None, input_mappings=None) -> None: 
+    def __init__(self, grid_layers: dict, model_hparams: dict, pos_embedder, output_dim, output_mappings=None, input_mappings=None, var_projection=False) -> None: 
         super().__init__()
 
         self.output_mappings = output_mappings
         self.input_mappings = input_mappings
 
+        self.var_projection = var_projection
         model_dim = model_hparams['model_dim']
         n_heads = model_hparams['n_heads']
         dropout = model_hparams['dropout']
@@ -696,7 +697,9 @@ class projection_layer(nn.Module):
         if self.output_mappings is None:
             output_coords = self.grid_layers["0"].get_coordinates_from_grid_indices(indices_layers[0])
 
-        x_output = None
+        x_output_mean = []
+        x_output_var = []
+
         for global_level in self.global_levels:
 
             x_nh, mask, coords_nh = self.grid_layers[str(global_level)].get_nh(x_levels[global_level], indices_layers[global_level], sample_dict)
@@ -708,12 +711,15 @@ class projection_layer(nn.Module):
             x = self.layers[str(global_level)](x_nh, pos=relative_positions, mask=mask.unsqueeze(dim=-2))
 
             x = x.view(x.shape[0], -1, x.shape[-1])
-            if x_output is None:
-                x_output = x
+            
+            if self.var_projection:
+                x, x_var = x.split(x.shape[-1] // 2, dim=-1)
+                x_output_mean.append(x)
+                x_output_var.append(nn.functional.softplus(x_var))
             else:
-                x_output += x
+                x_output_mean.append(x)
  
-        return x_output
+        return x_output_mean, x_output_var
 
 def get_relative_positions(coords1, coords2, polar=False):
     
@@ -740,6 +746,7 @@ class ICON_Transformer(nn.Module):
 
         self.check_model_dir()
 
+        self.var_model = self.model_settings["var_model"] if "var_model" in self.model_settings.keys() else False
         self.pos_emb_calc = self.model_settings["pos_emb_calc"]
         self.polar = True if "polar" in  self.pos_emb_calc else False
 
@@ -794,13 +801,18 @@ class ICON_Transformer(nn.Module):
         self.processing_layers = nn.ModuleList()
         for k in range(self.model_settings['n_proccesing_decomp_layers']):
             self.processing_layers.append(processing_layers(grid_layers, self.model_settings, pos_embedder))
-            
-        self.proj_layer = projection_layer(grid_layers, self.model_settings, pos_embedder, output_dim=None)
 
-        self.output_mlp = nn.Sequential(nn.Linear(self.model_dim, self.model_dim, bias=False),
-                                        nn.SiLU(),
-                                        nn.Linear(self.model_dim, len(self.model_settings['variables_target']['cell']), bias=False))
-        
+
+        if self.var_model:
+            self.proj_layer = projection_layer(grid_layers, self.model_settings, pos_embedder, output_dim=len(self.model_settings['variables_target']['cell'])*2, var_projection=True)
+            self.output_mlp = nn.Identity()
+
+        else:
+            self.proj_layer = projection_layer(grid_layers, self.model_settings, pos_embedder, output_dim=None)
+            self.output_mlp = nn.Sequential(nn.Linear(self.model_dim, self.model_dim, bias=False),
+                                            nn.SiLU(),
+                                            nn.Linear(self.model_dim, len(self.model_settings['variables_target']['cell']), bias=False))
+            
         if self.model_settings['input_dim_var'] * len(self.input_data) != self.model_settings['model_dim']:
             self.input_projection = nn.Sequential(nn.Linear(self.model_settings['input_dim_var'] * len(self.input_data), self.model_dim, bias=False))
         else:
@@ -849,13 +861,21 @@ class ICON_Transformer(nn.Module):
         for layers in self.processing_layers:
             x_levels = layers(x_levels, indices_layers, indices_batch_dict)
 
-        x = self.proj_layer(x_levels, indices_layers, indices_batch_dict)
-        
-        x = self.output_mlp(x)
-        if debug:
-            return {'cell': x.unsqueeze(dim=-2)}, debug_list
+        x, x_var = self.proj_layer(x_levels, indices_layers, indices_batch_dict)
+
+        if self.var_model:
+            x = torch.sum(torch.stack(x, dim=-1), dim=-1)
+            x_var = torch.sum(torch.stack(x_var, dim=-1), dim=-1)
+            output = {'cell': torch.stack([x, x_var],dim=-2)}
         else:
-            return {'cell': x.unsqueeze(dim=-2)}
+            x = torch.sum(torch.stack(x, dim=-1), dim=-1)
+            x = self.output_mlp(x)
+            output = {'cell': x.unsqueeze(dim=-2)}
+
+        if debug:
+            return output, debug_list
+        else:
+            return output
 
         
     
