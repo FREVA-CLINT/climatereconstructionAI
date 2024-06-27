@@ -838,7 +838,7 @@ class ICON_Transformer(nn.Module):
 
     def forward(self, x, indices_batch_dict=None, debug=False):
         # if global_indices are provided, batches in x are treated as independent
-        debug_list = []
+        debug_dict = {}
 
         if indices_batch_dict is None:
             indices_batch_dict = {'global_cell': self.global_indices,
@@ -865,6 +865,9 @@ class ICON_Transformer(nn.Module):
 
         x, x_var = self.proj_layer(x_levels, indices_layers, indices_batch_dict)
 
+        if debug:
+            debug_dict['var_list'] =  x_var
+
         if self.var_model:
             x = torch.sum(torch.stack(x, dim=-1), dim=-1)
             x_var = torch.sum(torch.stack(x_var, dim=-1), dim=-1)
@@ -874,8 +877,9 @@ class ICON_Transformer(nn.Module):
             x = self.output_mlp(x)
             output = {'cell': x.unsqueeze(dim=-2)}
 
+        
         if debug:
-            return output, debug_list
+            return output, debug_dict
         else:
             return output
 
