@@ -190,7 +190,7 @@ class NetCDFLoader_lazy(Dataset):
         in_sampled_areas_input = input_in_range['cell']['cell'].reshape(global_cells.shape[0],-1)
         in_sampled_area_fraction_input = in_sampled_areas_input.sum(axis=-1)/np.array(in_sampled_areas_input.shape[1])[np.newaxis]
 
-        self.covered_samples = np.logical_and(in_sampled_area_fraction_output < min_coverage, in_sampled_area_fraction_input < min_coverage)
+        self.covered_samples = np.logical_and(in_sampled_area_fraction_output >= min_coverage, in_sampled_area_fraction_input >= min_coverage)
         self.covered_samples = torch.tensor(np.where(self.covered_samples)[0])
 
         self.indices_path = os.path.join(model_settings["model_dir"],"indices_data.pickle")
