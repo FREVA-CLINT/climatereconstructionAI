@@ -51,7 +51,7 @@ def append_debug_dict(debug_dict_all, debug_dict):
 
 
 class nha_layer(nn.Module):
-    def __init__(self, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, input_mlp=False, output_dim=None, activation=nn.SiLU(), q_res=True, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, kv_dropout=0, qkv_bias=True, v_proj=True) -> None: 
+    def __init__(self, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, input_mlp=False, output_dim=None, activation=nn.SiLU(), q_res=True, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, kv_dropout=0, qkv_bias=True, v_proj=True, res_net=True) -> None: 
         super().__init__()
 
         self.model_dim = model_dim
@@ -86,23 +86,26 @@ class nha_layer(nn.Module):
         elif self.pos_emb_type=='context':
             self.emb_proj_q = nn.Linear(pos_emb_dim, model_dim // n_heads, bias=False)
             self.emb_proj_k = nn.Linear(pos_emb_dim, model_dim // n_heads, bias=False)
-            self.emb_proj_v = nn.Linear(pos_emb_dim, model_dim // n_heads, bias=False)
+            #self.emb_proj_v = nn.Linear(pos_emb_dim, model_dim // n_heads, bias=False)
 
         self.MHA = helpers.MultiHeadAttentionBlock(
             model_dim, model_dim, n_heads, input_dim=input_dim, qkv_proj=True, qkv_bias=qkv_bias, v_proj=v_proj
             )           
 
-        self.mlp_layer = nn.Sequential(
-            nn.Linear(model_dim, ff_dim, bias=False),
-            activation,
-            nn.Linear(ff_dim, model_dim, bias=False)
-        )
-             
-        self.dropout1 = nn.Dropout(dropout)
-        self.dropout2 = nn.Dropout(dropout)
+        if res_net:
+            self.mlp_layer = nn.Sequential(
+                nn.Linear(model_dim, ff_dim, bias=False),
+                activation,
+                nn.Linear(ff_dim, model_dim, bias=False)
+            )
+                
+            self.dropout1 = nn.Dropout(dropout)
+            self.dropout2 = nn.Dropout(dropout)
 
-        self.norm1 = nn.LayerNorm(model_dim) if model_dim > 1 else nn.Identity()
-        self.norm2 = nn.LayerNorm(model_dim)
+            self.norm1 = nn.LayerNorm(model_dim)
+            self.norm2 = nn.LayerNorm(model_dim)
+        else:
+            self.mlp_layer = self.dropout1 = self.dropout2 = self.norm1 = self.norm2 = nn.Identity()
 
         self.q_res = q_res
 
@@ -149,9 +152,9 @@ class nha_layer(nn.Module):
 
                 aq = self.emb_proj_q(pos_embedding)
                 ak = self.emb_proj_k(pos_embedding)
-                av = self.emb_proj_v(pos_embedding)
+                #av = self.emb_proj_v(pos_embedding)
 
-                att_out, att = self.MHA(q=q, k=k, v=v, aq=aq, ak=ak, av=av, return_debug=True, mask=mask) 
+                att_out, att = self.MHA(q=q, k=k, v=v, aq=aq, ak=ak, av=None, return_debug=True, mask=mask) 
 
             elif self.pos_emb_type =='bias' and pos is not None:
                 pos_embedding = self.pos_embedder(pos[0], pos[1])
@@ -256,12 +259,12 @@ class input_layer(nn.Module):
         self.pos_embedder = pos_embedder
         self.pos_calculation = "polar" if polar else "cartesian"
         
-       # if input_mlp:
-        self.input_mlp = nn.Sequential(
-                        nn.Linear(input_dim, model_dim, bias=True),
-                        nn.SiLU())
-      #  else:
-      #      self.input_mlp= nn.Identity()
+        if input_mlp:
+            self.input_mlp = nn.Sequential(
+                            nn.Linear(input_dim, model_dim, bias=True),
+                            nn.SiLU())
+        else:
+            self.input_mlp= nn.Identity()
 
         input_dim = model_dim if input_mlp else input_dim
 
@@ -620,7 +623,8 @@ class decomp_layer(nn.Module):
                                 pos_embedder=pos_embedder_handle,
                                 pos_emb_dim=pos_emb_dim,
                                 kv_dropout=0,
-                                v_proj=False)
+                                v_proj=False,
+                                res_net=~residual_decomp)
                 
                 self.global_levels.append(int(global_level))
             
@@ -654,7 +658,7 @@ class decomp_layer(nn.Module):
 
 
 class projection_layer(nn.Module):
-    def __init__(self, grid_layers: dict, model_hparams: dict, pos_embedder, output_dim, output_mappings=None, input_mappings=None, var_projection=False) -> None: 
+    def __init__(self, grid_layers: dict, model_hparams: dict, pos_embedder, output_dim, output_mappings=None, input_mappings=None, var_projection=False, v_proj=True) -> None: 
         super().__init__()
 
         self.output_mappings = output_mappings
@@ -688,15 +692,16 @@ class projection_layer(nn.Module):
                             dropout=dropout,
                             pos_emb_type='bias',
                             qkv_bias=False,
+                            v_proj=v_proj,
                             pos_embedder=pos_embedder_handle,
                             pos_emb_dim=pos_emb_dim,
                             kv_dropout=0)
                 
             self.global_levels.append(int(global_level))
             
-    def forward(self, x_levels, indices_layers, sample_dict):
+    def forward(self, x_levels, indices_layers, sample_dict, output_coords=None):
         
-        if self.output_mappings is None:
+        if output_coords is None:
             output_coords = self.grid_layers["0"].get_coordinates_from_grid_indices(indices_layers[0])
 
         x_output_mean = []
@@ -706,7 +711,7 @@ class projection_layer(nn.Module):
 
             x_nh, mask, coords_nh = self.grid_layers[str(global_level)].get_nh(x_levels[global_level], indices_layers[global_level], sample_dict)
 
-            output_coords = output_coords.reshape(output_coords.shape[0],output_coords.shape[1], -1, 4**global_level)
+            output_coords = output_coords.reshape(output_coords.shape[0], output_coords.shape[1], -1, 4**global_level)
 
             relative_positions = get_relative_positions(output_coords, coords_nh, polar=self.polar)
 
@@ -791,19 +796,15 @@ class ICON_Transformer(nn.Module):
 
             grid_layers[str(global_level)] = grid_layer(global_level, adjc, adjc_mask, coordinates)
 
-
         input_mapping, input_in_range, input_coordinates = self.get_input_grid_mapping()
-        #output_mapping, _, output_coordinates = self.get_output_grid_mapping()
 
-        #tbd: use input projection layer as input layer with input_mapping and output_layer with output_mapping
         self.input_layers = self.init_input_layers(grid_layers["0"], self.model_settings['input_dim_var'], input_mapping, input_in_range, input_coordinates, pos_embedder)
 
         self.decomp_layer = decomp_layer(grid_layers, self.model_settings, pos_embedder, residual_decomp=self.model_settings['residual_decomp'])
 
         self.processing_layers = nn.ModuleList()
-        for k in range(self.model_settings['n_proccesing_decomp_layers']):
+        for _ in range(self.model_settings['n_proccesing_decomp_layers']):
             self.processing_layers.append(processing_layers(grid_layers, self.model_settings, pos_embedder))
-
 
         if self.var_model:
             self.proj_layer = projection_layer(grid_layers, self.model_settings, pos_embedder, output_dim=len(self.model_settings['variables_target']['cell'])*2, var_projection=True)
@@ -820,6 +821,11 @@ class ICON_Transformer(nn.Module):
         else:
             self.input_projection = nn.Identity()
   
+          # if output mapping is not same as processing:
+        if self.model_settings['processing_grid'] != self.model_settings['output_grid']:
+            output_mapping, _, output_coordinates = self.get_output_grid_mapping()
+            self.register_buffer('output_mapping', output_mapping['cell']['cell'], persistent=False)  
+            self.register_buffer('output_coords', output_coordinates['cell'], persistent=False)  
 
         strict = self.model_settings['load_strict'] if 'load_strict' in self.model_settings.keys() else True
 
@@ -843,8 +849,9 @@ class ICON_Transformer(nn.Module):
         if indices_batch_dict is None:
             indices_batch_dict = {'global_cell': self.global_indices,
                                   'local_cell': self.global_indices,
-                       'sample': None,
-                       'sample_level': None}
+                                   'sample': None,
+                                   'sample_level': None,
+                                   'output_indices': None}
         else:
             indices_layers = dict(zip(self.global_levels,[self.get_global_indices_local(indices_batch_dict['sample'], indices_batch_dict['sample_level'], global_level) for global_level in self.global_levels]))
         
@@ -863,7 +870,12 @@ class ICON_Transformer(nn.Module):
         for layers in self.processing_layers:
             x_levels = layers(x_levels, indices_layers, indices_batch_dict)
 
-        x, x_var = self.proj_layer(x_levels, indices_layers, indices_batch_dict)
+        if 'output_mapping' in self.__dict__['_buffers']:
+            output_coords = self.output_coords[:,self.output_mapping[indices_layers[0]]]
+        else:
+            output_coords = None
+
+        x, x_var = self.proj_layer(x_levels, indices_layers, indices_batch_dict, output_coords=output_coords)
 
         if debug:
             debug_dict['var_list'] =  x_var
@@ -872,12 +884,13 @@ class ICON_Transformer(nn.Module):
             x = torch.sum(torch.stack(x, dim=-1), dim=-1)
             x_var = torch.sum(torch.stack(x_var, dim=-1), dim=-1)
             output = {'cell': torch.stack([x, x_var],dim=-2)}
+    
         else:
             x = torch.sum(torch.stack(x, dim=-1), dim=-1)
             x = self.output_mlp(x)
+
             output = {'cell': x.unsqueeze(dim=-2)}
 
-        
         if debug:
             return output, debug_dict
         else:
@@ -983,12 +996,16 @@ class ICON_Transformer(nn.Module):
     def get_output_grid_mapping(self):
         
         output_mapping, in_range = get_nh_variable_mapping_icon(self.model_settings['processing_grid'], ['cell'], 
-                                    self.model_settings['processing_grid'], self.output_data, 
-                                    search_raadius=self.model_settings['search_raadius'], max_nh=self.model_settings['nh_input'], level_start=self.model_settings['level_start_input'])
+                                    self.model_settings['output_grid'], self.output_data, 
+                                    search_raadius=self.model_settings['search_raadius'], 
+                                    max_nh=1, 
+                                    level_start=self.model_settings['level_start_input'],
+                                    lowest_level=0,
+                                    reverse_last=False)
 
         output_coordinates = {}
         for grid_type in self.output_data.keys():
-            output_coordinates[grid_type] = get_coords_as_tensor(xr.open_dataset(self.model_settings['processing_grid']),grid_type=grid_type)
+            output_coordinates[grid_type] = get_coords_as_tensor(xr.open_dataset(self.model_settings['output_grid']),grid_type=grid_type)
 
         return output_mapping, in_range, output_coordinates
 
@@ -1114,7 +1131,7 @@ class ICON_Transformer(nn.Module):
         max_dist = pos[0].quantile(0.99)
           
         return  position_embedder(min_dist, max_dist, embed_dim=embed_dim, n_out=n_out, pos_emb_calc=self.pos_emb_calc)
-    
+
 
     def init_input_layers(self, grid_layer_0, model_dim_var, input_mapping, input_in_range, input_coordinates, pos_embedder):
 

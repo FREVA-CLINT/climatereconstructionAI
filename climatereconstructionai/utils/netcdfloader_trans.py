@@ -123,7 +123,8 @@ class NetCDFLoader_lazy(Dataset):
                  sample_condition_dict={},
                  model_settings={},
                  random_time_idx=True,
-                 p_dropout=0):
+                 p_dropout=0,
+                 min_coverage=1):
         
         super(NetCDFLoader_lazy, self).__init__()
         
@@ -156,11 +157,12 @@ class NetCDFLoader_lazy(Dataset):
                                                      lowest_level=model_settings['global_level_start'])
 
         output_mapping, output_in_range = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
-                                                     model_settings['processing_grid'], self.variables_target.keys(), 
-                                                     search_raadius=model_settings['search_raadius'], 
-                                                     max_nh=model_settings['nh_input'], 
-                                                     level_start=model_settings['level_start_input'])
-        
+                                                    model_settings['output_grid'], self.variables_target.keys(), 
+                                                    search_raadius=model_settings['search_raadius'], 
+                                                    max_nh=1, 
+                                                    level_start=model_settings['level_start_input'])
+                        
+
         input_mapping = mapping_to_(input_mapping, to='numpy')
         output_mapping = mapping_to_(output_mapping, to='numpy')
 
@@ -181,6 +183,15 @@ class NetCDFLoader_lazy(Dataset):
 
        # self.input_mapping_path = os.path.join(model_settings["model_dir"],"input_mapping.pt")
        # self.output_mapping_path = os.path.join(model_settings["model_dir"],"output_mapping.pt")
+
+        in_sampled_areas_output = output_in_range['cell']['cell'].reshape(global_cells.shape[0],-1)
+        in_sampled_area_fraction_output = in_sampled_areas_output.sum(axis=-1)/np.array(in_sampled_areas_output.shape[1])[np.newaxis]
+
+        in_sampled_areas_input = input_in_range['cell']['cell'].reshape(global_cells.shape[0],-1)
+        in_sampled_area_fraction_input = in_sampled_areas_input.sum(axis=-1)/np.array(in_sampled_areas_input.shape[1])[np.newaxis]
+
+        self.covered_samples = np.logical_and(in_sampled_area_fraction_output < min_coverage, in_sampled_area_fraction_input < min_coverage)
+        self.covered_samples = torch.tensor(np.where(self.covered_samples)[0])
 
         self.indices_path = os.path.join(model_settings["model_dir"],"indices_data.pickle")
 
@@ -316,7 +327,8 @@ class NetCDFLoader_lazy(Dataset):
         #input_in_range = mapping_to_(indices_data['input_in_range'], to='pytorch', dtype="bool")
         #output_in_range = mapping_to_(indices_data['output_in_range'], to='pytorch', dtype="bool")
 
-        sample_index = torch.randint(global_cells.shape[0],(1,))[0]
+        sample_index = torch.randint(self.covered_samples.shape[0],(1,))[0]
+        sample_index = self.covered_samples[sample_index]
 
         global_cells_sample_input = global_cells_input[sample_index]
         global_cells_sample_target = global_cells[sample_index] 

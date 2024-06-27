@@ -888,7 +888,7 @@ def get_adjacent_indices(acoe, eoc, nh=5, global_level=1):
 
 
 
-def get_nearest_to_icon_rec(c_t_global, c_i, level=7, global_indices_i=None, nh=5, search_radius=5):
+def get_nearest_to_icon_rec(c_t_global, c_i, level=7, global_indices_i=None, nh=5, search_radius=5, reverse=False):
 
     n_coords, n_sec_i, n_pts_i = c_i.shape
     n_target = c_t_global.shape[-1]
@@ -943,7 +943,7 @@ def get_nearest_to_icon_rec(c_t_global, c_i, level=7, global_indices_i=None, nh=
     return global_indices, in_rad, (dist_values, phi_values)
 
 
-def get_mapping_to_icon_grid(coords_icon, coords_input, search_raadius=3, max_nh=10, level_start=7, lowest_level=0):
+def get_mapping_to_icon_grid(coords_icon, coords_input, search_raadius=3, max_nh=10, level_start=7, lowest_level=0, reverse_last=False):
 
     grid_mapping = []
     for k in range(level_start + 1 - lowest_level):
@@ -959,12 +959,35 @@ def get_mapping_to_icon_grid(coords_icon, coords_input, search_raadius=3, max_nh
         else:
             indices, in_rng, pos = get_nearest_to_icon_rec(coords_icon, coords_input[:,indices], level=level, global_indices_i=indices, nh=nh, search_radius=search_raadius)
 
+        if k == level_start - lowest_level and reverse_last:
+            indices = np.array(indices.transpose(0,1).reshape(-1))
+            uni, indices_rev = np.unique(indices, return_index=True)
+            indices_rev = indices_rev % coords_icon.shape[-1]
+
+            while len(uni) < coords_input.shape[-1]:
+      
+                indices_g = np.arange(coords_input.shape[-1])
+                indices_g[uni]=-1
+                indices_missing = torch.tensor(indices_g[indices_g!=-1])
+
+                grid_mapping = get_mapping_to_icon_grid(coords_icon, coords_input[:,indices_missing], level_start=level_start, max_nh=max_nh, search_raadius=search_raadius, reverse_last=False)
+
+                indices_new = np.array(grid_mapping[-1]['indices'].transpose(0,1).reshape(-1))
+                uni_new, indices_rev_new = np.unique(indices_new, return_index=True)
+                indices_rev_new = indices_rev_new % coords_icon.shape[-1]
+               
+                uni_new_g = indices_missing[uni_new]
+                uni = np.concatenate((uni, uni_new_g), axis=0)
+                indices_rev = np.concatenate((indices_rev, indices_rev_new), axis=0)
+            
+            indices = torch.tensor(indices_rev).unsqueeze(dim=-1)
+
         grid_mapping.append({'level': level, 'indices': indices, 'pos': pos, 'in_rng_mask': in_rng}) 
 
     return grid_mapping
 
 
-def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, grid_types, search_raadius=3, max_nh=10, level_start=7, lowest_level = 0, return_last=True):
+def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, grid_types, search_raadius=3, max_nh=10, level_start=7, lowest_level = 0, return_last=True, reverse_last=False):
     
     grid_icon = xr.open_dataset(grid_file_icon)
     grid = xr.open_dataset(grid_file)
@@ -1010,7 +1033,8 @@ def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, gri
                     search_raadius=search_raadius,
                     max_nh=max_nh,
                     level_start=level_start,
-                    lowest_level = lowest_level)
+                    lowest_level = lowest_level,
+                    reverse_last=reverse_last)
                 
                 if return_last:
                     mapping = mapping[-1]
