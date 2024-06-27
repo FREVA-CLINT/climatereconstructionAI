@@ -359,13 +359,14 @@ class position_embedder(nn.Module):
             self.pos2_emb = helpers.PositionEmbedder_phys(-torch.pi, torch.pi, embed_dim, n_heads=n_out, special_token=True)
 
         if "semi" in pos_emb_calc and "polar" in pos_emb_calc:
-            self.pos1_emb = nn.Linear(1, n_out)
+            self.pos1_emb = nn.Sequential(nn.Linear(1, n_out), nn.SiLU())
             self.pos2_emb = helpers.PositionEmbedder_phys(-torch.pi, torch.pi, embed_dim, n_heads=n_out, special_token=True)
 
         if "cartesian" in pos_emb_calc:
             self.proj_layer = nn.Sequential(nn.Linear(2, embed_dim, bias=True),
                                         nn.SiLU(),
-                                        nn.Linear(embed_dim, n_out, bias=True))
+                                        nn.Linear(embed_dim, n_out, bias=False),
+                                        nn.Sigmoid())
             
             self.cartesian = True
 
@@ -373,7 +374,8 @@ class position_embedder(nn.Module):
         if "learned" in pos_emb_calc and "polar" in pos_emb_calc:
             self.proj_layer = nn.Sequential(nn.Linear(2*n_out, n_out, bias=True),
                                         nn.SiLU(),
-                                        nn.Linear(n_out, n_out, bias=True))
+                                        nn.Linear(n_out, n_out, bias=False),
+                                        nn.Sigmoid())
         
         if 'inverse' in pos_emb_calc:
             self.transform = helpers.conv_coordinates_inv
