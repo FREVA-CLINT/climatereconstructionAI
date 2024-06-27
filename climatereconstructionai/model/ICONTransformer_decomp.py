@@ -402,21 +402,21 @@ class position_embedder(nn.Module):
                 pos1 = self.transform(pos1)
                 pos2 = self.transform(pos2)
 
-            return self.proj_layer(torch.stack((pos1, pos2), dim=-1))    
+            return 16*self.proj_layer(torch.stack((pos1, pos2), dim=-1))    
 
         else:
             dist_0 = pos1 < 1e-10
             if self.transform is not None:
                 pos1 = self.transform(pos1)
             
-            if isinstance(self.pos1_emb, nn.Linear):
+            if isinstance(self.pos1_emb, nn.Sequential):
                 pos1 = pos1.unsqueeze(dim=-1)
 
             pos1_emb = self.pos1_emb(pos1)
             pos2_emb = self.pos2_emb(pos2, special_token_mask=dist_0)
 
             if self.proj_layer is not None:
-                return self.proj_layer(torch.concat((pos1_emb, pos2_emb), dim=-1))
+                return 16*self.proj_layer(torch.concat((pos1_emb, pos2_emb), dim=-1))
                         
             if self.operation == 'sum':
                 return pos1_emb + pos2_emb
