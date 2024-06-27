@@ -1122,13 +1122,13 @@ class ICON_Transformer(nn.Module):
                                     indices_global_nh)
         
         # quantile very sensitive -> quantile embedding table? or ln fcn? or linear?
-        min_dist = pos[0].quantile(0.01)
+        min_dist = 1e-4#pos[0].quantile(0.01)
 
         _, indices_global , indices_global_nh ,_ = self.coarsen_indices(max_coarsen_level)
         pos = self.get_relative_positions(indices_global, 
                                     indices_global_nh)
         
-        max_dist = pos[0].quantile(0.99)
+        max_dist = 1#pos[0].quantile(0.99)
           
         return  position_embedder(min_dist, max_dist, embed_dim=embed_dim, n_out=n_out, pos_emb_calc=self.pos_emb_calc)
 
