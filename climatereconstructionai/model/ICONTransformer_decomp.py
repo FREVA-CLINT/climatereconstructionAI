@@ -694,10 +694,11 @@ class projection_layer(nn.Module):
                             dropout=dropout,
                             pos_emb_type='bias',
                             qkv_bias=False,
-                            v_proj=v_proj,
+                            v_proj=False,
                             pos_embedder=pos_embedder_handle,
                             pos_emb_dim=pos_emb_dim,
-                            kv_dropout=0)
+                            kv_dropout=0,
+                            res_net=False)
                 
             self.global_levels.append(int(global_level))
             
