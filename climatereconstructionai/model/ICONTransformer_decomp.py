@@ -107,6 +107,7 @@ class nha_layer(nn.Module):
         else:
             self.mlp_layer = self.dropout1 = self.dropout2 = self.norm1 = self.norm2 = nn.Identity()
 
+        self.res_net = res_net
         self.q_res = q_res
 
     def forward(self, x: torch.tensor, xq=None, xv=None, mask=None, pos=None):    
@@ -177,7 +178,8 @@ class nha_layer(nn.Module):
 
         x = self.norm1(x)
 
-        x = self.norm2(x + self.dropout2(self.mlp_layer(x)))
+        if self.res_net:
+            x = self.norm2(x + self.dropout2(self.mlp_layer(x)))
 
         x = x.view(b,n,-1,e)
 
@@ -624,7 +626,7 @@ class decomp_layer(nn.Module):
                                 pos_emb_dim=pos_emb_dim,
                                 kv_dropout=0,
                                 v_proj=False,
-                                res_net=~residual_decomp)
+                                res_net=bool(1-residual_decomp))
                 
                 self.global_levels.append(int(global_level))
             
