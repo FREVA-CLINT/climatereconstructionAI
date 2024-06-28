@@ -878,7 +878,8 @@ class ICON_Transformer(nn.Module):
         x, x_var = self.proj_layer(x_levels, indices_layers, indices_batch_dict, output_coords=output_coords)
 
         if debug:
-            debug_dict['var_list'] =  x_var
+            debug_dict['var_list'] = x_var
+            debug_dict['x_levels'] =  x
 
         if self.var_model:
             x = torch.sum(torch.stack(x, dim=-1), dim=-1)
