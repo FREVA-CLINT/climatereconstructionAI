@@ -867,6 +867,9 @@ class ICON_Transformer(nn.Module):
 
         x_levels = self.decomp_layer(x, indices_layers)
 
+        if debug:
+            debug_dict['x_levels_input'] = x_levels
+
         for layers in self.processing_layers:
             x_levels = layers(x_levels, indices_layers, indices_batch_dict)
 
@@ -879,7 +882,7 @@ class ICON_Transformer(nn.Module):
 
         if debug:
             debug_dict['var_list'] = x_var
-            debug_dict['x_levels'] =  x
+            debug_dict['x_levels_output'] =  x
 
         if self.var_model:
             x = torch.sum(torch.stack(x, dim=-1), dim=-1)
