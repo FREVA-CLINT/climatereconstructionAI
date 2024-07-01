@@ -350,7 +350,7 @@ class input_layer(nn.Module):
       
 
 class position_embedder(nn.Module):
-    def __init__(self, min_dist, max_dist, embed_dim, n_out, pos_emb_calc="polar") -> None: 
+    def __init__(self, min_dist, max_dist, embed_dim, n_out, pos_emb_calc="polar", phi_table=None) -> None: 
         super().__init__()
         self.pos_emb_calc = pos_emb_calc
 
@@ -361,11 +361,17 @@ class position_embedder(nn.Module):
 
         if "descrete" in pos_emb_calc and "polar" in pos_emb_calc:
             self.pos1_emb = helpers.PositionEmbedder_phys_log(min_dist, max_dist, embed_dim, n_heads=n_out)
-            self.pos2_emb = helpers.PositionEmbedder_phys(-torch.pi, torch.pi, embed_dim, n_heads=n_out, special_token=True)
+            if phi_table is not None:
+                self.pos2_emb = phi_table
+            else:
+                self.pos2_emb = helpers.PositionEmbedder_phys(-torch.pi, torch.pi, embed_dim, n_heads=n_out, special_token=True)
 
         if "semi" in pos_emb_calc and "polar" in pos_emb_calc:
             self.pos1_emb = nn.Sequential(nn.Linear(1, n_out), nn.SiLU())
-            self.pos2_emb = helpers.PositionEmbedder_phys(-torch.pi, torch.pi, embed_dim, n_heads=n_out, special_token=True)
+            if phi_table is not None:
+                self.pos2_emb = phi_table
+            else:
+                self.pos2_emb = helpers.PositionEmbedder_phys(-torch.pi, torch.pi, embed_dim, n_heads=n_out, special_token=True)
 
         if "cartesian" in pos_emb_calc:
             self.proj_layer = nn.Sequential(nn.Linear(2, embed_dim, bias=True),
@@ -463,7 +469,7 @@ class grid_layer(nn.Module):
 
 
 class processing_layers(nn.Module):
-    def __init__(self, grid_layers: dict, model_hparams: dict, pos_embedder) -> None: 
+    def __init__(self, grid_layers: dict, model_hparams: dict, pos_embedders:dict) -> None: 
         super().__init__()
 
         model_dim = model_hparams['model_dim']
@@ -476,9 +482,8 @@ class processing_layers(nn.Module):
 
         self.updated_lf_att = model_hparams['updated_lf_att']
 
-        pos_embedder_handle = pos_embedder['pos_embedder_handle']
-        pos_emb_dim = pos_embedder['pos_emb_dim']
-        self.polar = pos_embedder['polar']
+        pos_emb_dim = pos_embedders[0]['pos_emb_dim']
+        self.polar = pos_embedders[0]['polar']
 
         self.grid_layers = grid_layers
         
@@ -498,7 +503,7 @@ class processing_layers(nn.Module):
                             input_mlp = False,
                             dropout=dropout,
                             pos_emb_type=pos_emb_type,
-                            pos_embedder=pos_embedder_handle,
+                            pos_embedder=pos_embedders[int(global_level)]['pos_embedder_handle'],
                             pos_emb_dim=pos_emb_dim,
                             activation=nn.SiLU(),
                             kv_dropout=kv_dropout) for _ in range(n_layers)])
@@ -527,7 +532,7 @@ class processing_layers(nn.Module):
                         input_mlp = False,
                         dropout=dropout,
                         pos_emb_type=pos_emb_type,
-                        pos_embedder=pos_embedder_handle,
+                        pos_embedder=pos_embedders[int(global_level)]['pos_embedder_handle'],
                         pos_emb_dim=pos_emb_dim,
                         activation=nn.SiLU(),
                         kv_dropout=0) for _ in range(n_layers)])
@@ -592,7 +597,7 @@ class processing_layers(nn.Module):
 
 
 class decomp_layer(nn.Module):
-    def __init__(self, grid_layers: dict, model_hparams: dict, pos_embedder, residual_decomp=True) -> None: 
+    def __init__(self, grid_layers: dict, model_hparams: dict, pos_embedders, residual_decomp=True) -> None: 
         super().__init__()
 
         model_dim = model_hparams['model_dim']
@@ -600,9 +605,8 @@ class decomp_layer(nn.Module):
         dropout = model_hparams['dropout']
         pos_emb_type = model_hparams['pos_emb_type']
 
-        pos_embedder_handle = pos_embedder['pos_embedder_handle']
-        pos_emb_dim = pos_embedder['pos_emb_dim']
-        self.polar = pos_embedder['polar']
+        pos_emb_dim = pos_embedders[0]['pos_emb_dim']
+        self.polar = pos_embedders[0]['polar']
 
         self.residual_decomp = residual_decomp
 
@@ -624,9 +628,9 @@ class decomp_layer(nn.Module):
                                 q_res = False,
                                 dropout=dropout,
                                 pos_emb_type=pos_emb_type,
-                                pos_embedder=pos_embedder_handle,
+                                pos_embedder=pos_embedders[int(global_level)]['pos_embedder_handle'],
                                 pos_emb_dim=pos_emb_dim,
-                                kv_dropout=0,
+                                kv_dropout=model_hparams['kv_dropout'],
                                 v_proj=False,
                                 res_net=bool(1-residual_decomp))
                 
@@ -662,7 +666,7 @@ class decomp_layer(nn.Module):
 
 
 class projection_layer(nn.Module):
-    def __init__(self, grid_layers: dict, model_hparams: dict, pos_embedder, output_dim, output_mappings=None, input_mappings=None, var_projection=False, v_proj=True) -> None: 
+    def __init__(self, grid_layers: dict, model_hparams: dict, pos_embedders, output_dim, output_mappings=None, input_mappings=None, var_projection=False, v_proj=True) -> None: 
         super().__init__()
 
         self.output_mappings = output_mappings
@@ -673,9 +677,8 @@ class projection_layer(nn.Module):
         n_heads = model_hparams['n_heads']
         dropout = model_hparams['dropout']
 
-        pos_embedder_handle = pos_embedder['pos_embedder_handle']
-        pos_emb_dim = pos_embedder['pos_emb_dim']
-        self.polar = pos_embedder['polar']
+        pos_emb_dim = pos_embedders[0]['pos_emb_dim']
+        self.polar = pos_embedders[0]['polar']
 
         self.grid_layers = grid_layers
         
@@ -697,9 +700,9 @@ class projection_layer(nn.Module):
                             pos_emb_type='bias',
                             qkv_bias=False,
                             v_proj=False,
-                            pos_embedder=pos_embedder_handle,
+                            pos_embedder=pos_embedders[int(global_level)]['pos_embedder_handle'],
                             pos_emb_dim=pos_emb_dim,
-                            kv_dropout=0,
+                            kv_dropout=model_hparams['kv_dropout'],
                             res_net=False)
                 
             self.global_levels.append(int(global_level))
@@ -777,17 +780,15 @@ class ICON_Transformer(nn.Module):
 
         self.input_data  = self.model_settings['variables_source']
         self.output_data = self.model_settings['variables_target']
-
-        pos_embedder_handle = self.init_position_embedder(self.model_settings["pos_emb_dim"], min_coarsen_level=0, max_coarsen_level=n_grid_levels, embed_dim=self.model_settings["emb_table_bins"])
-
+              
         pos_embedder = {}
-
         pos_embedder['pos_emb_dim'] = self.model_settings["pos_emb_dim"]
         pos_embedder['polar'] = self.polar
-        pos_embedder['pos_embedder_handle'] = pos_embedder_handle
     
         grid_layers = nn.ModuleDict()
         self.global_levels = []
+        pos_embedders = {}
+
         for grid_level_idx in range(n_grid_levels):
 
             global_level = grid_level_idx
@@ -795,22 +796,32 @@ class ICON_Transformer(nn.Module):
 
             grid_layers[str(global_level)] = grid_layer(global_level, mgrids[global_level]['adjc_lvl'], mgrids[global_level]['adjc_mask'], mgrids[global_level]['coords'])
 
+            if grid_level_idx % 2 == 0:
+                if 'pos_embedder_handle' in pos_embedder.keys() and hasattr(pos_embedder['pos_embedder_handle'],'pos2_emb'):
+                    phi_emb_table = pos_embedder['pos_embedder_handle'].pos2_emb
+                else:
+                    phi_emb_table = None
+                pos_embedder_handle = position_embedder(1e-4, 1, embed_dim=self.model_settings["emb_table_bins"], n_out=self.model_settings["pos_emb_dim"], pos_emb_calc=self.pos_emb_calc, phi_table=phi_emb_table)
+
+            pos_embedder['pos_embedder_handle'] = pos_embedder_handle
+            pos_embedders[global_level] = pos_embedder
+
         input_mapping, input_in_range, input_coordinates = self.get_input_grid_mapping(mgrids[0]['coords'])
 
-        self.input_layers = self.init_input_layers(grid_layers["0"], self.model_settings['input_dim_var'], input_mapping, input_in_range, input_coordinates, pos_embedder)
+        self.input_layers = self.init_input_layers(grid_layers["0"], self.model_settings['input_dim_var'], input_mapping, input_in_range, input_coordinates, pos_embedders[0])
 
-        self.decomp_layer = decomp_layer(grid_layers, self.model_settings, pos_embedder, residual_decomp=self.model_settings['residual_decomp'])
+        self.decomp_layer = decomp_layer(grid_layers, self.model_settings, pos_embedders, residual_decomp=self.model_settings['residual_decomp'])
 
         self.processing_layers = nn.ModuleList()
         for _ in range(self.model_settings['n_proccesing_decomp_layers']):
-            self.processing_layers.append(processing_layers(grid_layers, self.model_settings, pos_embedder))
+            self.processing_layers.append(processing_layers(grid_layers, self.model_settings, pos_embedders))
 
         if self.var_model:
-            self.proj_layer = projection_layer(grid_layers, self.model_settings, pos_embedder, output_dim=len(self.model_settings['variables_target']['cell'])*2, var_projection=True)
+            self.proj_layer = projection_layer(grid_layers, self.model_settings, pos_embedders, output_dim=len(self.model_settings['variables_target']['cell'])*2, var_projection=True)
             self.output_mlp = nn.Identity()
 
         else:
-            self.proj_layer = projection_layer(grid_layers, self.model_settings, pos_embedder, output_dim=None)
+            self.proj_layer = projection_layer(grid_layers, self.model_settings, pos_embedders, output_dim=None)
             self.output_mlp = nn.Sequential(nn.Linear(self.model_settings['model_dim'], self.model_settings['model_dim'], bias=False),
                                             nn.SiLU(),
                                             nn.Linear(self.model_settings['model_dim'], len(self.model_settings['variables_target']['cell']), bias=False))
@@ -1116,15 +1127,6 @@ class ICON_Transformer(nn.Module):
         distances, phis = get_distance_angle(coords1[0], coords1[1], coords2[0], coords2[1], base="polar" if self.polar else "cartesian")
 
         return distances.float(), phis.float()
-
-
-    def init_position_embedder(self, n_out, min_coarsen_level=0, max_coarsen_level=0, embed_dim=64):
-
-        min_dist = 1e-4#pos[0].quantile(0.01)
-
-        max_dist = 1#pos[0].quantile(0.99)
-          
-        return  position_embedder(min_dist, max_dist, embed_dim=embed_dim, n_out=n_out, pos_emb_calc=self.pos_emb_calc)
 
 
     def init_input_layers(self, grid_layer_0, model_dim_var, input_mapping, input_in_range, input_coordinates, pos_embedder):
