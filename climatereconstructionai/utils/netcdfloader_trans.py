@@ -9,7 +9,7 @@ import numpy as np
 import torch
 import xarray as xr
 from torch.utils.data import Dataset, Sampler
-from .grid_utils import generate_region, get_coord_dict_from_var, get_coords_as_tensor, invert_dict, get_ids_in_patches, get_patches, rotate_ds, get_mapping_to_icon_grid, get_nh_variable_mapping_icon
+from .grid_utils import generate_region, get_coord_dict_from_var, get_coords_as_tensor, invert_dict, get_ids_in_patches, get_patches, rotate_ds, get_mapping_to_icon_grid, get_nh_variable_mapping_icon, icon_grid_to_mgrid
 from climatereconstructionai.model.transformer_helpers import coarsen_global_cells
 from .normalizer import grid_normalizer
 import pickle
@@ -123,8 +123,7 @@ class NetCDFLoader_lazy(Dataset):
                  sample_condition_dict={},
                  model_settings={},
                  random_time_idx=True,
-                 p_dropout=0,
-                 min_coverage=1):
+                 p_dropout=0):
         
         super(NetCDFLoader_lazy, self).__init__()
         
@@ -147,20 +146,34 @@ class NetCDFLoader_lazy(Dataset):
                
         grid_processing = xr.open_dataset(model_settings['processing_grid'])
 
+        #mgrid = icon_grid_to_mgrid()
+
         self.coords_processing = get_coords_as_tensor(grid_processing, lon='clon', lat='clat')
+
+        clon_fov = self.model_settings['clon_fov'] if 'clon_fov' in self.model_settings.keys() else None
+        clat_fov = self.model_settings['clat_fov'] if 'clat_fov' in self.model_settings.keys() else None
+
+        n_grid_levels_fov = self.model_settings['n_grid_levels_fov'] if 'n_grid_levels_fov' in self.model_settings.keys() else model_settings['level_start_input']
+
+        mgrids = icon_grid_to_mgrid(grid_processing, n_grid_levels_fov, clon_fov=clon_fov, clat_fov=clat_fov)
+
+        level_start = np.min([n_grid_levels_fov-1, model_settings['level_start_input']])
 
         input_mapping, input_in_range = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
                                                      model_settings['input_grid'], self.variables_source.keys(), 
                                                      search_raadius=model_settings['search_raadius'], 
                                                      max_nh=model_settings['nh_input'], 
-                                                     level_start=model_settings['level_start_input'],
-                                                     lowest_level=model_settings['global_level_start'])
+                                                     level_start=level_start,
+                                                     lowest_level=0,
+                                                     coords_icon=mgrids[0]['coords'])
 
         output_mapping, output_in_range = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
                                                     model_settings['output_grid'], self.variables_target.keys(), 
                                                     search_raadius=model_settings['search_raadius'], 
                                                     max_nh=1, 
-                                                    level_start=model_settings['level_start_input'])
+                                                    level_start=level_start,
+                                                    lowest_level=0,
+                                                    coords_icon=mgrids[0]['coords'])
                         
 
         input_mapping = mapping_to_(input_mapping, to='numpy')
@@ -171,27 +184,11 @@ class NetCDFLoader_lazy(Dataset):
 
         ds_source = xr.open_dataset(files_source[0])
 
-        global_indices = torch.arange(len(grid_processing.clon))
-        eoc =  torch.tensor(grid_processing.edge_of_cell.values-1)
-        adjc =  torch.tensor(grid_processing.adjacent_cell_of_edge.values-1)
+        global_indices = torch.arange(mgrids[0]['coords'].shape[1])
 
-        global_cells = np.array(coarsen_global_cells(global_indices, eoc, adjc, global_level=coarsen_sample_level)[0])
-        global_cells_input = np.array(global_cells.reshape(global_cells.shape[0],-1,4**model_settings['global_level_start'])[:,:,0])
+        global_cells = global_indices.reshape(-1,4**coarsen_sample_level)
+        global_cells_input = global_cells[:,0]
 
-        #self.global_cells_path = os.path.join(model_settings["model_dir"],"global_cells.pt")
-        #self.global_cells_input_path = os.path.join(model_settings["model_dir"],"global_cells_input.pt")
-
-       # self.input_mapping_path = os.path.join(model_settings["model_dir"],"input_mapping.pt")
-       # self.output_mapping_path = os.path.join(model_settings["model_dir"],"output_mapping.pt")
-
-        in_sampled_areas_output = output_in_range['cell']['cell'].reshape(global_cells.shape[0],-1)
-        in_sampled_area_fraction_output = in_sampled_areas_output.sum(axis=-1)/np.array(in_sampled_areas_output.shape[1])[np.newaxis]
-
-        in_sampled_areas_input = input_in_range['cell']['cell'].reshape(global_cells.shape[0],-1)
-        in_sampled_area_fraction_input = in_sampled_areas_input.sum(axis=-1)/np.array(in_sampled_areas_input.shape[1])[np.newaxis]
-
-        self.covered_samples = np.logical_and(in_sampled_area_fraction_output >= min_coverage, in_sampled_area_fraction_input >= min_coverage)
-        self.covered_samples = torch.tensor(np.where(self.covered_samples)[0])
 
         self.indices_path = os.path.join(model_settings["model_dir"],"indices_data.pickle")
 
@@ -233,9 +230,6 @@ class NetCDFLoader_lazy(Dataset):
         
         self.norm_dict = normalization
         self.normalizer = grid_normalizer(self.norm_dict)
-
-        del eoc
-        del adjc
     
 
     def get_files(self, file_path_source, file_path_target=None, file_path_target_past=None):
@@ -327,52 +321,28 @@ class NetCDFLoader_lazy(Dataset):
         #input_in_range = mapping_to_(indices_data['input_in_range'], to='pytorch', dtype="bool")
         #output_in_range = mapping_to_(indices_data['output_in_range'], to='pytorch', dtype="bool")
 
-        sample_index = torch.randint(self.covered_samples.shape[0],(1,))[0]
-        sample_index = self.covered_samples[sample_index]
+        sample_index = torch.randint(global_cells_input.shape[0],(1,))[0]
 
-        global_cells_sample_input = global_cells_input[sample_index]
-        global_cells_sample_target = global_cells[sample_index] 
-
-        data_source = self.get_data(ds_source, index, global_cells_sample_input, self.variables_source, self.model_settings['global_level_start'], input_mapping['cell'])
+        data_source = self.get_data(ds_source, index, global_cells[sample_index] , self.variables_source, 0, input_mapping['cell'])
         
         if self.normalization is not None:
             data_source = self.normalizer(data_source, self.variables_source)
 
         if ds_target is not None:
-            data_target = self.get_data(ds_target, index, global_cells_sample_target, self.variables_target, 0, output_mapping['cell'])      
+            data_target = self.get_data(ds_target, index, global_cells[sample_index] , self.variables_target, 0, output_mapping['cell'])      
             if self.normalization is not None:
                 data_target = self.normalizer(data_target, self.variables_target)
 
         else:
             data_target = data_source
 
-        ds_target = ds_source = output_mapping = input_mapping = global_cells = global_cells = []
-
-        '''
-        condition_not_met = True
-        while condition_not_met:
-            
-            sample_index = torch.randint(self.global_cells.shape[0],(1,))[0]
-            global_cells_sample = self.global_cells[sample_index]
-
-            data_source = self.get_data(ds_source, index, global_cells_sample, self.variables_source, self.input_mapping['cell'])
-            data_target = self.get_data(ds_target, index, global_cells_sample, self.variables_target, self.output_mapping['cell'])
-
-            for key, val in self.sample_condition_dict.items():
-                if data_source['cell'][:,:,0].abs().mean() >= val:
-                    condition_not_met = False
-        '''
-
-      
-        #drop_mask = torch.rand(len(global_cells_sample_input)) <= self.p_dropout
-        
-            
-
-        indices = {'global_cell': global_cells_sample_input,
-                   'local_cell': global_cells_sample_input // 4**self.model_settings['global_level_start'],
+        indices = {'global_cell': global_cells[sample_index],
+                   'local_cell': global_cells[sample_index],
                     'sample': sample_index,
                     'sample_level': self.coarsen_sample_level}
                     #'drop_mask': drop_mask}
+
+        ds_target = ds_source = output_mapping = input_mapping = global_cells = global_cells = []
 
         return data_source, data_target, indices
 

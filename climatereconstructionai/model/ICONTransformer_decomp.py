@@ -9,7 +9,7 @@ import xarray as xr
 
 from ..utils.io import load_ckpt, load_model
 import climatereconstructionai.model.transformer_helpers as helpers
-from climatereconstructionai.utils.grid_utils import get_distance_angle, get_coords_as_tensor, get_mapping_to_icon_grid, get_nh_variable_mapping_icon, get_adjacent_indices
+from climatereconstructionai.utils.grid_utils import get_distance_angle, get_coords_as_tensor, get_mapping_to_icon_grid, get_nh_variable_mapping_icon, get_adjacent_indices, icon_grid_to_mgrid
 from .. import transformer_training as trainer
 from ..utils.normalizer import grid_normalizer
 from ..utils.optimization import grid_dict_to_var_dict
@@ -312,12 +312,12 @@ class input_layer(nn.Module):
 
         if not isinstance(self.nha_layer, nn.Identity):
             
-            grid_out_of_range_mask = self.grid_out_of_range_mask[grid_level_indices]
+            #grid_out_of_range_mask = self.grid_out_of_range_mask[grid_level_indices]
 
             grid_level_indices = sequenize(grid_level_indices, self.seq_level)
 
             pos = self.get_relative_positions(grid_level_indices)
-            
+            '''
             if drop_mask is not None:
                 mask = torch.logical_or(grid_out_of_range_mask, drop_mask.view(b,n,1).repeat(1,1,nh))
             else:
@@ -327,7 +327,7 @@ class input_layer(nn.Module):
 
             mask = mask.unsqueeze(dim=2).repeat(1,1,mask.shape[2],1,1)
             mask = mask.view(mask.shape[0], mask.shape[1], mask.shape[2], -1)         
-        
+            '''
             # tale nearest for q
            # xq = x[:,:,[0],:]
            # xq = sequenize(xq, self.seq_level)
@@ -336,12 +336,12 @@ class input_layer(nn.Module):
             x = sequenize(x, self.seq_level)
 
             x = x.reshape(b, x.shape[1],-1, x.shape[-1])
-
+           
             # xk = self.proj_k(self.pos_embedder(pos_source[0], pos_source[1]))
             # xk = xk.view(x.shape)
 
             #xq = self.proj_q(self.pos_embedder(pos_grid[0], pos_grid[1]))
-            x = self.nha_layer(x, pos=pos, mask=mask)
+            x = self.nha_layer(x, pos=pos, mask=None)
 
         x = x.view(b, n, -1)
     
@@ -438,6 +438,7 @@ class grid_layer(nn.Module):
         self.register_buffer("coordinates", coordinates, persistent=False)
         self.register_buffer("adjc", adjc, persistent=False)
         self.register_buffer("adjc_mask", adjc_mask, persistent=False)
+        self.register_buffer("fov_mask", ((adjc_mask==False).sum(dim=-1)==adjc_mask.shape[1]).view(-1,1),persistent=False)
 
     def get_nh(self, x, local_indices, sample_dict):
         indices_nh, mask = get_nh_indices(self.adjc, local_cell_indices=local_indices, global_level=int(self.global_level))
@@ -456,7 +457,8 @@ class grid_layer(nn.Module):
         indices = sequenize(local_indices, max_seq_level=section_level)
         x = sequenize(x, max_seq_level=section_level)
         coords = self.get_coordinates_from_grid_indices(indices)
-        return x, coords
+        mask = self.fov_mask[indices]
+        return x, mask, coords 
 
 
 
@@ -557,7 +559,7 @@ class processing_layers(nn.Module):
 
                     x_lf_nh, mask_lf, coords_lf_nh = self.grid_layers[str(global_level_lf)].get_nh(x_lf, indices_layers[global_level_lf], sample_dict)
 
-                    x, coords_sections = self.grid_layers[str(global_level)].get_sections(x, indices_layers[global_level], section_level=1)
+                    x, mask_fov, coords_sections = self.grid_layers[str(global_level)].get_sections(x, indices_layers[global_level], section_level=1)
 
                     relative_positions = get_relative_positions(coords_sections, coords_lf_nh, polar=self.polar)
 
@@ -567,7 +569,7 @@ class processing_layers(nn.Module):
 
 
                 if layers['seq_layers'][layer_idx] is not None:
-                    x, coords_sections = self.grid_layers[str(global_level)].get_sections(x, indices_layers[global_level], section_level=self.max_seq_level)
+                    x, mask_fov, coords_sections = self.grid_layers[str(global_level)].get_sections(x, indices_layers[global_level], section_level=self.max_seq_level)
 
                     relative_positions = get_relative_positions(coords_sections, coords_sections, polar=self.polar)
                     x = layers['seq_layers'][layer_idx](x, pos=relative_positions)
@@ -638,7 +640,7 @@ class decomp_layer(nn.Module):
             b,n,e = x.shape
             layer = self.layers[str(global_level)]
 
-            x_sections, coords_sections = self.grid_layers[str(global_level)].get_sections(x, indices_layers[global_level], section_level=1)
+            x_sections, mask_fov, coords_sections = self.grid_layers[str(global_level)].get_sections(x, indices_layers[global_level], section_level=1)
 
             relative_positions = get_relative_positions(coords_sections, coords_sections, polar=self.polar)
             x_sections_f = layer(x_sections, pos=relative_positions).mean(dim=-2, keepdim=True)
@@ -763,21 +765,18 @@ class ICON_Transformer(nn.Module):
         self.grid = xr.open_dataset(self.model_settings['processing_grid'])
         self.register_buffer('global_indices', torch.arange(len(self.grid.clon)).unsqueeze(dim=0), persistent=False)
 
-        eoc = torch.tensor(self.grid.edge_of_cell.values - 1)
-        self.register_buffer('eoc', eoc, persistent=False)
+        n_grid_levels = self.model_settings['n_grid_levels']
 
-        acoe = torch.tensor(self.grid.adjacent_cell_of_edge.values - 1)
-        self.register_buffer('acoe', acoe, persistent=False)
+        clon_fov = self.model_settings['clon_fov'] if 'clon_fov' in self.model_settings.keys() else None
+        clat_fov = self.model_settings['clat_fov'] if 'clat_fov' in self.model_settings.keys() else None
+        self.n_grid_levels_fov = self.model_settings['n_grid_levels_fov'] if 'n_grid_levels_fov' in self.model_settings.keys() else n_grid_levels
 
-        cell_coords_global = get_coords_as_tensor(self.grid, lon='clon', lat='clat').double()
-        self.register_buffer('cell_coords_global', cell_coords_global, persistent=False)  
+        mgrids = icon_grid_to_mgrid(self.grid, self.n_grid_levels_fov, clon_fov=clon_fov, clat_fov=clat_fov, nh=self.model_settings['nh'], extension=0.1)
+
+        self.register_buffer('cell_coords_global', mgrids[0]['coords'], persistent=False)  
 
         self.input_data  = self.model_settings['variables_source']
         self.output_data = self.model_settings['variables_target']
-        self.model_dim = self.model_settings['model_dim']
-
-        n_grid_levels = self.model_settings['n_grid_levels']
-        grid_levels_steps = 1
 
         pos_embedder_handle = self.init_position_embedder(self.model_settings["pos_emb_dim"], min_coarsen_level=0, max_coarsen_level=n_grid_levels, embed_dim=self.model_settings["emb_table_bins"])
 
@@ -791,15 +790,12 @@ class ICON_Transformer(nn.Module):
         self.global_levels = []
         for grid_level_idx in range(n_grid_levels):
 
-            global_level = grid_level_idx*grid_levels_steps
+            global_level = grid_level_idx
             self.global_levels.append(global_level)
 
-            adjc, adjc_mask = self.get_adjacent_global_cell_indices(global_level, nh=self.model_settings['nh']) 
-            coordinates = self.get_coordinates_level(global_level) 
+            grid_layers[str(global_level)] = grid_layer(global_level, mgrids[global_level]['adjc_lvl'], mgrids[global_level]['adjc_mask'], mgrids[global_level]['coords'])
 
-            grid_layers[str(global_level)] = grid_layer(global_level, adjc, adjc_mask, coordinates)
-
-        input_mapping, input_in_range, input_coordinates = self.get_input_grid_mapping()
+        input_mapping, input_in_range, input_coordinates = self.get_input_grid_mapping(mgrids[0]['coords'])
 
         self.input_layers = self.init_input_layers(grid_layers["0"], self.model_settings['input_dim_var'], input_mapping, input_in_range, input_coordinates, pos_embedder)
 
@@ -815,18 +811,18 @@ class ICON_Transformer(nn.Module):
 
         else:
             self.proj_layer = projection_layer(grid_layers, self.model_settings, pos_embedder, output_dim=None)
-            self.output_mlp = nn.Sequential(nn.Linear(self.model_dim, self.model_dim, bias=False),
+            self.output_mlp = nn.Sequential(nn.Linear(self.model_settings['model_dim'], self.model_settings['model_dim'], bias=False),
                                             nn.SiLU(),
-                                            nn.Linear(self.model_dim, len(self.model_settings['variables_target']['cell']), bias=False))
+                                            nn.Linear(self.model_settings['model_dim'], len(self.model_settings['variables_target']['cell']), bias=False))
             
         if self.model_settings['input_dim_var'] * len(self.input_data) != self.model_settings['model_dim']:
-            self.input_projection = nn.Sequential(nn.Linear(self.model_settings['input_dim_var'] * len(self.input_data), self.model_dim, bias=False))
+            self.input_projection = nn.Sequential(nn.Linear(self.model_settings['input_dim_var'] * len(self.input_data), self.model_settings['model_dim'], bias=False))
         else:
             self.input_projection = nn.Identity()
   
           # if output mapping is not same as processing:
         if self.model_settings['processing_grid'] != self.model_settings['output_grid']:
-            output_mapping, _, output_coordinates = self.get_output_grid_mapping()
+            output_mapping, _, output_coordinates = self.get_output_grid_mapping(mgrids[0]['coords'])
             self.register_buffer('output_mapping', output_mapping['cell']['cell'], persistent=False)  
             self.register_buffer('output_coords', output_coordinates['cell'], persistent=False)  
 
@@ -981,7 +977,7 @@ class ICON_Transformer(nn.Module):
         return sampled_data        
 
 
-    def get_input_grid_mapping(self):
+    def get_input_grid_mapping(self, mgrid_0_coords):
         
         input_coordinates = {}
         for grid_type in self.input_data.keys():
@@ -994,21 +990,23 @@ class ICON_Transformer(nn.Module):
                                     self.model_settings['input_grid'], self.input_data, 
                                     search_raadius=self.model_settings['search_raadius'], 
                                     max_nh=self.model_settings['nh_input'], 
-                                    level_start=self.model_settings['level_start_input'], 
-                                    lowest_level=0)
+                                    level_start=int(torch.min(torch.tensor([self.model_settings['level_start_input'], self.n_grid_levels_fov -1]))), 
+                                    lowest_level=0,
+                                    coords_icon=mgrid_0_coords)
 
         
         return input_mapping, in_range, input_coordinates
 
-    def get_output_grid_mapping(self):
+    def get_output_grid_mapping(self, mgrid_0_coords):
         
         output_mapping, in_range = get_nh_variable_mapping_icon(self.model_settings['processing_grid'], ['cell'], 
                                     self.model_settings['output_grid'], self.output_data, 
                                     search_raadius=self.model_settings['search_raadius'], 
                                     max_nh=1, 
-                                    level_start=self.model_settings['level_start_input'],
+                                    level_start=int(torch.min(torch.tensor([self.model_settings['level_start_input'], self.n_grid_levels_fov -1]))),
                                     lowest_level=0,
-                                    reverse_last=False)
+                                    reverse_last=False,
+                                    coords_icon=mgrid_0_coords)
 
         output_coordinates = {}
         for grid_type in self.output_data.keys():
@@ -1121,20 +1119,9 @@ class ICON_Transformer(nn.Module):
 
 
     def init_position_embedder(self, n_out, min_coarsen_level=0, max_coarsen_level=0, embed_dim=64):
-        # tbd: sample points for redcution of memory
-        
-    
-        _, indices_global , indices_global_nh ,_ = self.coarsen_indices(min_coarsen_level)
-        pos = self.get_relative_positions(indices_global, 
-                                    indices_global_nh)
-        
-        # quantile very sensitive -> quantile embedding table? or ln fcn? or linear?
+
         min_dist = 1e-4#pos[0].quantile(0.01)
 
-        _, indices_global , indices_global_nh ,_ = self.coarsen_indices(max_coarsen_level)
-        pos = self.get_relative_positions(indices_global, 
-                                    indices_global_nh)
-        
         max_dist = 1#pos[0].quantile(0.99)
           
         return  position_embedder(min_dist, max_dist, embed_dim=embed_dim, n_out=n_out, pos_emb_calc=self.pos_emb_calc)

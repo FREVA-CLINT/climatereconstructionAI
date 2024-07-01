@@ -987,7 +987,7 @@ def get_mapping_to_icon_grid(coords_icon, coords_input, search_raadius=3, max_nh
     return grid_mapping
 
 
-def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, grid_types, search_raadius=3, max_nh=10, level_start=7, lowest_level = 0, return_last=True, reverse_last=False):
+def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, grid_types, search_raadius=3, max_nh=10, level_start=7, lowest_level = 0, return_last=True, reverse_last=False, coords_icon=None):
     
     grid_icon = xr.open_dataset(grid_file_icon)
     grid = xr.open_dataset(grid_file)
@@ -1008,7 +1008,8 @@ def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, gri
     in_range = {}
     for grid_type_icon in grid_types_icon:
         
-        coords_icon = get_coords_as_tensor(grid_icon, grid_type=grid_type_icon)
+        if coords_icon is None:
+            coords_icon = get_coords_as_tensor(grid_icon, grid_type=grid_type_icon)
 
         mapping_grid_type = {}
         in_range_grid_type = {}
@@ -1017,13 +1018,7 @@ def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, gri
             coords_input = get_coords_as_tensor(grid, grid_type=grid_type)
 
             if grid_file_icon == grid_file:
-                indices = torch.tensor(grid_icon[lookup[grid_type_icon][grid_type]].values -1)
-                if indices.dim()<2:
-                    indices = indices.reshape(-1, 4**lowest_level)
-                else:
-                    indices = indices.transpose(-2,-1).reshape(-1, 4**lowest_level, indices.shape[0])
-                indices = indices.reshape(indices.shape[0],-1)
-
+                indices = torch.arange(coords_icon.shape[1]).view(-1,1)
                 in_rng_mask = torch.ones_like(indices, dtype=torch.bool)
 
             else:
@@ -1050,3 +1045,101 @@ def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, gri
 
     return mapping_icon, in_range
 
+
+def icon_grid_to_mgrid(grid, n_grid_levels, clon_fov=None, clat_fov=None, nh=0, extension=0.1):
+
+    clon =  torch.tensor(grid.clon.values)
+    clat =  torch.tensor(grid.clat.values)
+
+    eoc = torch.tensor(grid.edge_of_cell.values - 1)
+    acoe = torch.tensor(grid.adjacent_cell_of_edge.values - 1)
+
+    global_indices = torch.arange(len(grid.clon))
+    cell_coords_global = get_coords_as_tensor(grid, lon='clon', lat='clat').double()
+    #coordinates per level
+
+
+    if clon_fov is not None or clat_fov is not None:
+
+        indices_max_lvl = torch.arange(len(grid.clon)).reshape(-1,4**int(n_grid_levels-1))
+       
+        clon_max_lvl = clon[indices_max_lvl[:,0]]
+        clat_max_lvl = clat[indices_max_lvl[:,0]]
+
+        keep_indices_clon = torch.ones_like(clon_max_lvl, dtype=bool)
+        keep_indices_clat = torch.ones_like(clat_max_lvl, dtype=bool)
+
+        if clon_fov is not None:
+            fov_ext = (clon_fov[1] - clon_fov[0])*extension/2
+            keep_indices_clon = torch.logical_and(clon_max_lvl >= clon_fov[0]-fov_ext, clon_max_lvl <= clon_fov[1]+fov_ext)
+
+        if clat_fov is not None:   
+            fov_ext = (clat_fov[1] - clat_fov[0])*extension/2
+            keep_indices_clat = torch.logical_and(clat_max_lvl >= clat_fov[0]-fov_ext, clat_max_lvl <= clat_fov[1]+fov_ext)
+
+        keep_grid_indices_max_lvl = torch.logical_and(keep_indices_clon, keep_indices_clat)
+
+        keep_grid_indices = keep_grid_indices_max_lvl.view(-1,1).repeat_interleave(indices_max_lvl.shape[-1], dim=1)
+
+    else:
+        keep_grid_indices = torch.ones_like(global_indices, dtype=bool)
+
+
+    global_levels = []
+    grids = []
+    for grid_level_idx in range(n_grid_levels):
+
+        global_level = grid_level_idx
+        global_levels.append(global_level)
+
+        adjc, adjc_mask_duplicates = get_adjacent_indices(acoe, eoc, nh=nh, global_level=global_level)
+        adjc_mask_duplicates = adjc_mask_duplicates==False
+
+        keep_grid_indices_lvl = keep_grid_indices.reshape(-1,4**int(global_level))[:,0]
+
+        indices_lvl = global_indices.reshape(-1,4**int(global_level))[:,0]
+
+        indices_lvl = indices_lvl[keep_grid_indices_lvl]
+
+        adjc_lvl = adjc[keep_grid_indices_lvl]
+        adjc_mask_duplicates = adjc_mask_duplicates[keep_grid_indices_lvl]
+        
+        indices_in_fov = torch.where(keep_grid_indices_lvl)[0]
+        index_shift = torch.concat((torch.tensor(0).view(1),indices_in_fov)).diff()
+        wh = torch.where(index_shift>1)[0]
+
+        for l, k in enumerate(wh):
+            idx_shift = index_shift[k] if k==0 else index_shift[k]-1
+            adjc_lvl[adjc_lvl >= adjc_lvl[k,0]] = adjc_lvl[adjc_lvl >= adjc_lvl[k,0]] - idx_shift
+
+        cell_coords_lvl = cell_coords_global.reshape(2,-1,4**global_level)[:,:,0]
+
+        if clon_fov is not None:
+            fov_ext = (clon_fov[1] - clon_fov[0])*extension/2
+            adjc_mask_lon = torch.logical_and(cell_coords_lvl[0, adjc[keep_grid_indices_lvl]] >= clon_fov[0]-fov_ext, cell_coords_lvl[0, adjc[keep_grid_indices_lvl]] <= clon_fov[1]+fov_ext)
+
+            fov_ext = (clat_fov[1] - clat_fov[0])*extension/2
+            adjc_mask_lat = torch.logical_and(cell_coords_lvl[1, adjc[keep_grid_indices_lvl]] >= clat_fov[0]-fov_ext, cell_coords_lvl[1, adjc[keep_grid_indices_lvl]] <= clat_fov[1]+fov_ext)
+
+            adjc_mask = torch.logical_and(adjc_mask_lon, adjc_mask_lat)
+            adjc_mask = torch.logical_and(adjc_mask, adjc_mask_duplicates)
+        
+        else:
+            adjc_mask = adjc_mask_duplicates
+        
+        adjc_mask[adjc_lvl>(adjc_lvl.shape[0]-1)]=False
+
+        r,c = torch.where(adjc_mask==False)
+        adjc_lvl[r,c] = adjc_lvl[r,0] 
+
+        grid_lvl = {
+            'coords': cell_coords_global[:,indices_lvl],
+            'adjc': adjc,
+            'adjc_lvl': adjc_lvl,
+            'adjc_mask': adjc_mask,
+            "global_level": global_level
+        }
+
+        grids.append(grid_lvl)
+
+    return grids

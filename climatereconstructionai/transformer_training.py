@@ -191,8 +191,7 @@ def train(model, training_settings, model_settings={}):
                                     lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
                                     sample_condition_dict=training_settings['sample_condition_dict'],
                                     model_settings=model_settings,
-                                    p_dropout = training_settings['p_dropout'] if 'p_dropout' in training_settings else 0,
-                                    min_coverage=training_settings['min_coverage'] if 'min_coverage' in training_settings else 1)
+                                    p_dropout = training_settings['p_dropout'] if 'p_dropout' in training_settings else 0)
     if training_settings['distributed']:
         dist.barrier()
     
@@ -210,8 +209,7 @@ def train(model, training_settings, model_settings={}):
                                     lazy_load=training_settings['lazy_load'] if 'lazy_load' in training_settings else False,
                                     sample_condition_dict=training_settings['sample_condition_dict'],
                                     model_settings=model_settings,
-                                    p_dropout = training_settings['p_dropout'] if 'p_dropout' in training_settings else 0,
-                                    min_coverage=training_settings['min_coverage'] if 'min_coverage' in training_settings else 1)
+                                    p_dropout = training_settings['p_dropout'] if 'p_dropout' in training_settings else 0)
     
     if training_settings['distributed']:
         dist.barrier()
