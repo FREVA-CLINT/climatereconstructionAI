@@ -144,6 +144,8 @@ class nha_layer(nn.Module):
             if mask is not None:
                 mask = mask.view(b*n, mask.shape[-2], nh)
                 mask = torch.gather(mask, dim=-1, index=indices_keep.view(b*n,1,-1))
+                full_masked = torch.where(mask.sum(dim=-1)==mask.shape[-1])[0]
+                mask[full_masked,:,0]=False
                 mask = mask.view(b, n, mask.shape[-2],-1)
 
         if self.qkv_bias:
@@ -443,14 +445,13 @@ class grid_layer(nn.Module):
         self.global_level = global_level
         self.register_buffer("coordinates", coordinates, persistent=False)
         self.register_buffer("adjc", adjc, persistent=False)
-        self.register_buffer("adjc_mask", adjc_mask, persistent=False)
+        self.register_buffer("adjc_mask", adjc_mask==False, persistent=False)
         self.register_buffer("fov_mask", ((adjc_mask==False).sum(dim=-1)==adjc_mask.shape[1]).view(-1,1),persistent=False)
 
     def get_nh(self, x, local_indices, sample_dict):
         indices_nh, mask = get_nh_indices(self.adjc, local_cell_indices=local_indices, global_level=int(self.global_level))
         adjc_mask = self.adjc_mask[local_indices]
-
-        mask = torch.logical_and(mask, adjc_mask)
+        mask = torch.logical_or(mask, adjc_mask)
         x = gather_nh_data(x, indices_nh, sample_dict['sample'], sample_dict['sample_level'], int(self.global_level))
         coords = self.get_coordinates_from_grid_indices(indices_nh)
         return x, mask, coords
