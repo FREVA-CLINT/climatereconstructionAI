@@ -822,10 +822,8 @@ class ICON_Transformer(nn.Module):
             self.output_mlp = nn.Identity()
 
         else:
-            self.proj_layer = projection_layer(grid_layers, self.model_settings, pos_embedders, output_dim=None)
-            self.output_mlp = nn.Sequential(nn.Linear(self.model_settings['model_dim'], self.model_settings['model_dim'], bias=False),
-                                            nn.SiLU(),
-                                            nn.Linear(self.model_settings['model_dim'], len(self.model_settings['variables_target']['cell']), bias=False))
+            self.proj_layer = projection_layer(grid_layers, self.model_settings, pos_embedders, output_dim=len(self.model_settings['variables_target']['cell']))
+            self.output_mlp = nn.Identity()
             
         if self.model_settings['input_dim_var'] * len(self.input_data) != self.model_settings['model_dim']:
             self.input_projection = nn.Sequential(nn.Linear(self.model_settings['input_dim_var'] * len(self.input_data), self.model_settings['model_dim'], bias=False))

@@ -103,7 +103,13 @@ def get_stats(files, variable, norm_dict, n_sample=None):
     data = []
     for file_index in np.array(files)[file_indices]:
         ds = xr.load_dataset(file_index)
-        data += [ds[variable].values.flatten() for variable in variables]
+        for variable in variables:
+            d = ds[variable].values
+            if len(d.shape)==3:
+                d = d[0,0]
+            elif len(d.shape)==2: 
+                d = d[0]
+            data.append(d.flatten())
 
     return get_moments(np.concatenate(data), norm_dict["type"], level=norm_dict["level"])
 
