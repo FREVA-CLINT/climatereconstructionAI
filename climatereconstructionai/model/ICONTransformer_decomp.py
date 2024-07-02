@@ -143,9 +143,13 @@ class nha_layer(nn.Module):
             if mask is not None:
                 mask = mask.view(b*n, mask.shape[-2], nh)
                 mask = torch.gather(mask, dim=-1, index=indices_keep.view(b*n,1,-1))
-                full_masked = torch.where(mask.sum(dim=-1)==mask.shape[-1])[0]
-                mask[full_masked,:,0]=False
                 mask = mask.view(b, n, mask.shape[-2],-1)
+
+        if mask is not None:
+            full_seq_mask = mask.sum(dim=-1)==mask.shape[-1]
+            full_seq_mask_b, full_seq_mask_n, full_seq_mask_t = torch.where(full_seq_mask)
+            mask[full_seq_mask_b, full_seq_mask_n, full_seq_mask_t, 0]=False
+            mask = mask.view(b, n, mask.shape[-2],-1)
 
         if self.qkv_bias:
 
