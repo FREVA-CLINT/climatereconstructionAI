@@ -278,598 +278,97 @@ class GaussLoss(nn.Module):
         super().__init__()
         self.Gauss = torch.nn.GaussianNLLLoss()
 
-    def forward(self, output, target, non_valid_mask=None, k=None):
+    def forward(self, output, target):
         loss =  self.Gauss(output[:,:,[0]], target, output[:,:,[1]])
         return loss
 
-class StdLoss(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.loss = torch.nn.MSELoss()
 
-    def forward(self, output, target, non_valid_mask, k=None):
-        output_std = output[:,0,0].squeeze().std(dim=-1)
-        target_std = target.squeeze().std(dim=-1)
-        loss = self.loss(output_std, target_std)
-        return loss
+def get_sum(output_levels, lowest_level, gauss=False):
+    output = output_levels['x'][lowest_level:]
+    if gauss:
+        output_var = output_levels['x_var'][lowest_level:]
+
+        x = torch.sum(torch.stack(output, dim=-1), dim=-1)
+        x_var = torch.sum(torch.stack(output_var, dim=-1), dim=-1)
+        x = torch.stack([x, x_var],dim=-2)
     
-class RelStdLoss(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.loss = torch.nn.MSELoss()
+    else:
+        x = torch.sum(torch.stack(output, dim=-1), dim=-1).unsqueeze(dim=-2)
 
-    def forward(self, output, target, non_valid_mask, k=None):
-        output_rel_std = output.squeeze().std(dim=-1)/output.squeeze().mean(dim=-1)
-        target_rel_std = target.squeeze().std(dim=-1)/target.squeeze().mean(dim=-1)
-        loss = self.loss(output_rel_std, target_rel_std)
-        loss = loss.clamp(max=10)
-        return loss
-
-class L1Loss(nn.Module):
-    def __init__(self, loss='l1'):
-        super().__init__()
-        if loss=='l1':
-            self.loss = torch.nn.L1Loss()
-        else:
-            self.loss = torch.nn.MSELoss()
-
-    def forward(self, output, target, non_valid_mask=None, k=None):
-        if non_valid_mask is not None:
-            output_valid = output[:,0,0][~non_valid_mask]
-            target_valid = target.squeeze()[~non_valid_mask].squeeze()
-        else:
-            output_valid = output
-            target_valid = target
-        loss = self.loss(output_valid,target_valid)
-        return loss
-
-class KLLoss(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, kl):
-        loss = kl.mean()
-        return loss
-
-class L1Loss_rel(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.loss = torch.nn.MSELoss()
-
-    def forward(self, output, target, non_valid_mask, k=None):
-        output_valid = output[:,0,0][~non_valid_mask]
-        target_valid = target.squeeze()[~non_valid_mask].squeeze()
-        abs_loss = ((output_valid - target_valid)/(target_valid+1e-10)).abs()
-        loss = abs_loss.clamp(max=1)
-        loss = loss.mean()
-        return loss
-    
-class L1Loss_relv(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.loss = torch.nn.MSELoss()
-
-    def forward(self, output, target, non_valid_mask, k):
-        output_valid = output[:,0,0][~non_valid_mask]
-        target_valid = target[~non_valid_mask].squeeze()
-        abs_loss = ((output_valid - target_valid)/(target_valid.abs()**k+1e-10)).abs()
-        loss = abs_loss.clamp(max=1)
-        loss = loss.mean()
-        return loss
-    
-class TVLoss(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, output_hr):
-        
-        loss = (output_hr[:,:,1:] - output_hr[:,:,:-1]).abs().mean() + (output_hr[:,:,:,1:] - output_hr[:,:,:,:-1]).abs().mean()
-
-        return loss
-    
-class TVLoss_log(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, output_hr):
-        output_hr = (output_hr.abs()+1e-10).log10()
-
-        loss = (output_hr[:,:,1:] - output_hr[:,:,:-1]).abs().mean() + (output_hr[:,:,:,1:] - output_hr[:,:,:,:-1]).abs().mean()
-
-        return loss
+    return x
 
 
-class LogLoss(nn.Module):
-    def __init__(self, ):
-        super().__init__()
-        self.loss = torch.nn.MSELoss()
-
-    def forward(self, output, target, non_valid_mask, k=None):
-        output_valid = output[:,0,0][~non_valid_mask]
-        target_valid = target.squeeze()[~non_valid_mask].squeeze()
-
-        output_sgn = output_valid.sign()
-        target_sgn = target_valid.sign()
-
-        loss_sgn = self.loss(output_sgn,target_sgn)
-        output_mag = (output_valid.abs()+1e-10).log10()
-        target_mag = (target_valid.abs()+1e-10).log10()
-
-        loss_mag = self.loss(output_mag,target_mag)
-        return loss_sgn + loss_mag
-
-class TVLoss_rel(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, output_hr):
-        
-        rel_diff1 = ((output_hr[:,:,1:] - output_hr[:,:,:-1])/(output_hr[:,:,1:]+1e-10)).abs()
-        rel_diff1 = rel_diff1.clamp(max=1)
-
-        rel_diff2 = ((output_hr[:,:,:,1:] - output_hr[:,:,:,:-1])/(output_hr[:,:,:,1:]+1e-10)).abs()
-        rel_diff2 = rel_diff2.clamp(max=1)
-
-        loss = (rel_diff1.mean() + rel_diff2.mean())
-
-        return loss
-
-class DictLoss(nn.Module):
-    def __init__(self, loss_fcn, lambdas_var):
+class HierLoss(nn.Module):
+    def __init__(self, loss_fcn, lambdas_levels):
         super().__init__()
         self.loss_fcn = loss_fcn
-        self.lambdas_var = lambdas_var
+        self.lambdas_levels = lambdas_levels
 
-    def forward(self, output, target, non_valid_mask=None, k=None):
+        self.gauss=False
+        if isinstance(loss_fcn, GaussLoss):
+            self.gauss=True
+
+
+    def forward(self, output_levels, target):
         loss_dict = {}
         total_loss = 0
+        for level, lambda_ in self.lambdas_levels.items():
+            if lambda_ > 0:
+                output = get_sum(output_levels, level, gauss=self.gauss)
 
-        for var in output.keys():
-            if var in self.lambdas_var.keys() and self.lambdas_var[var]>0:
-                if var != 'vort' and var != 'calc_vort' and var != 'rel_calc_vort' and var != 'rel_vort' and var !='div' and var != 'normalv' and var != 'spatial_div' and var != 'kin_energy'and var != 'rel_normalv'and var != 'gauss_normalv':
-                    non_valid_mask_var = non_valid_mask[var] if non_valid_mask is not None else None
-                    loss = self.loss_fcn(output[var], target[var], non_valid_mask_var, k)
-                    total_loss+=self.lambdas_var[var]*loss
-                    loss_dict[f'{var}_{str(self.loss_fcn._get_name())}'] = loss.item()
+                loss = lambda_ * self.loss_fcn(output, target['cell'])
+                loss_dict[f'level_{level}'] = loss.item()
+                total_loss += loss
 
-        return total_loss
+        return total_loss, loss_dict
 
-class NormalVLoss(nn.Module):
-    def __init__(self, phys_calc):
-        super().__init__()
-        self.phys_calc = phys_calc
-        self.loss_fcn = L1Loss(loss='l2')
-
-    def forward(self, output, target, target_indices, spatial_dim_var_target, val=False):
-
-        spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
-        uv_dim_indices = target_indices[spatial_dim_uv]
-
-        output_normal_v, non_valid_mask = get_normalv(self.phys_calc, output, uv_dim_indices)
-        target_normal_v = get_normalv(self.phys_calc, target, uv_dim_indices)[0]
-
-        loss = self.loss_fcn(output_normal_v, target_normal_v, non_valid_mask)  
-
-        if val:
-            return loss, output_normal_v, target_normal_v, non_valid_mask
-        else:
-            return loss    
-
-class RelNormalVLoss(nn.Module):
-    def __init__(self, phys_calc):
-        super().__init__()
-        self.phys_calc = phys_calc
-        self.loss_fcn = L1Loss_rel()
-
-    def forward(self, output, target, target_indices, spatial_dim_var_target, val=False):
-
-        spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
-        uv_dim_indices = target_indices[spatial_dim_uv]
-
-        output_normal_v, non_valid_mask = get_normalv(self.phys_calc, output, uv_dim_indices)
-        target_normal_v = get_normalv(self.phys_calc, target, uv_dim_indices)[0]
-
-        loss = self.loss_fcn(output_normal_v, target_normal_v.squeeze(), non_valid_mask)  
-
-        if val:
-            return loss, output_normal_v, target_normal_v, non_valid_mask
-        else:
-            return loss   
-
-
-
-
-class GaussNormalVLoss(nn.Module):
-    def __init__(self, phys_calc):
-        super().__init__()
-        self.phys_calc = phys_calc
-        self.loss_fcn = GaussLoss()
-
-    def forward(self, output, target, target_indices, spatial_dim_var_target, val=False):
-
-        spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
-        uv_dim_indices = target_indices[spatial_dim_uv]
-
-        output_normal_v, non_valid_mask = get_normalv(self.phys_calc, output, uv_dim_indices)
-        output_normal_v_var = get_normalv_var(self.phys_calc, output, uv_dim_indices)[0]
-
-        target_normal_v = get_normalv(self.phys_calc, target, uv_dim_indices)[0]
-
-        output_normal_v = torch.concat([output_normal_v,output_normal_v_var], dim=2)
-        loss = self.loss_fcn(output_normal_v, target_normal_v.squeeze(), non_valid_mask)  
-
-        if val:
-            return loss, output_normal_v, target_normal_v, non_valid_mask
-        else:
-            return loss  
-
-class VortLoss(nn.Module):
-    def __init__(self, phys_calc, calc_target=False, rel=False):
-        super().__init__()
-        self.phys_calc = phys_calc
-        self.calc_target=calc_target
-        self.loss_fcn = L1Loss(loss='l1') if not rel else L1Loss_rel()
-        
-    def forward(self, output, target, target_indices, spatial_dim_var_target, val=False):
-
-        if self.calc_target:
-            n_vert=3
-        else:
-            n_vert=6
-        spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
-        uv_dim_indices = target_indices[spatial_dim_uv]
-
-        if 'normalv' in output.keys():
-            normalv_output = output['normalv'].squeeze()
-            normalv_target = target['normalv'].squeeze()
-        else: normalv_output=normalv_target=None
-
-        output_vort, non_valid_mask_vort = get_vorticity(self.phys_calc, output, uv_dim_indices, n_vert=n_vert, normalv=normalv_output)
-        non_valid_mask_vort[output_vort.squeeze().isnan()]=True
-
-        if self.calc_target:
-            target_vort = get_vorticity(self.phys_calc, target, uv_dim_indices, n_vert=n_vert, normalv=normalv_target)[0]
-        else:
-            target_vort = target['vort'].double()
-            output_vort = torch.gather(output_vort, dim=-1, index=target_indices['ncells_2'].unsqueeze(dim=1).unsqueeze(dim=1))
-            non_valid_mask_vort = torch.gather(non_valid_mask_vort, dim=-1, index=target_indices['ncells_2'])
-
-        non_valid_mask_vort[target_vort.squeeze().isnan()]=True
-        vort_loss = self.loss_fcn(output_vort, target_vort, non_valid_mask_vort)  
-
-        if val:
-            return vort_loss, output_vort, target_vort, non_valid_mask_vort
-        else:
-            return vort_loss    
-
-class DivLoss(nn.Module):
-    def __init__(self, phys_calc):
-        super().__init__()
-        self.phys_calc = phys_calc
-        self.loss_fcn = L1Loss()
-
-    def forward(self, output, target_indices, spatial_dim_var_target):
-       
-        u = output['u']
-        v = output['v']
-
-        u = u[:,0,0] if u.dim()==4 else u
-        v = v[:,0,0] if v.dim()==4 else v
-
-        spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
-        uv_dim_indices = target_indices[spatial_dim_uv]
-
-        _, _, div_sum = self.phys_calc.get_divergence_from_edge_indices(uv_dim_indices, u, v)
-
-        loss = div_sum.abs().mean()
-
-        return loss
-
-class KinEnergyLoss(nn.Module):
-    def __init__(self, phys_calc):
-        super().__init__()
-        self.phys_calc = phys_calc
-        self.loss_fcn = nn.MSELoss()
-
-    def forward(self, output, target, target_indices, spatial_dim_var_target, val=False):
-       
-        u = output['u']
-        v = output['v']
-
-        u = u[:,0,0] if u.dim()==4 else u
-        v = v[:,0,0] if v.dim()==4 else v
-
-        spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
-        uv_dim_indices = target_indices[spatial_dim_uv]
-
-        ke_output, non_valid_mask = self.phys_calc.get_kinetic_energy_from_edge_indices(uv_dim_indices, u, v)
-
-        ke_target, _ = self.phys_calc.get_kinetic_energy_from_edge_indices(uv_dim_indices, target['u'].squeeze(), target['v'].squeeze())
-
-        output_valid = ke_output[~non_valid_mask]
-        target_valid = ke_target[~non_valid_mask]
-
-        loss = self.loss_fcn(output_valid,target_valid)
-
-        if val:
-            return loss, ke_output, ke_target, non_valid_mask
-        else:
-            return loss    
-
-
-class SummedKinEnergyLoss(nn.Module):
-    def __init__(self, phys_calc):
-        super().__init__()
-        self.phys_calc = phys_calc
-        self.loss_fcn = nn.MSELoss()
-
-    def forward(self, output, target, target_indices, spatial_dim_var_target, val=False):
-       
-        u = output['u']
-        v = output['v']
-
-        u = u[:,0,0] if u.dim()==4 else u
-        v = v[:,0,0] if v.dim()==4 else v
-
-        spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
-        uv_dim_indices = target_indices[spatial_dim_uv]
-
-        ke_output, non_valid_mask = self.phys_calc.get_kinetic_energy_from_edge_indices(uv_dim_indices, u, v)
-
-        ke_target, _ = self.phys_calc.get_kinetic_energy_from_edge_indices(uv_dim_indices, target['u'].squeeze(), target['v'].squeeze())
-
-        loss = self.loss_fcn(ke_output.sum(dim=-1),ke_target.sum(dim=-1))
-
-        if val:
-            return loss, ke_output, ke_target, non_valid_mask
-        else:
-            return loss   
-
-class SpatialDivLoss(nn.Module):
-    def __init__(self, phys_calc):
-        super().__init__()
-        self.phys_calc = phys_calc
-        self.loss_fcn = nn.MSELoss()
-
-    def forward(self, output, target, target_indices, spatial_dim_var_target, val=False):
-       
-        u = output['u']
-        v = output['v']
-
-        u = u[:,0,0] if u.dim()==4 else u
-        v = v[:,0,0] if v.dim()==4 else v
-
-        spatial_dim_uv = [k for k,v in spatial_dim_var_target.items() if 'u' in v][0]
-        uv_dim_indices = target_indices[spatial_dim_uv]
-
-        if 'normalv' in output.keys():
-            normalv_output = output['normalv'].squeeze()
-            normalv_target = target['normalv'].squeeze()
-        else: normalv_output=normalv_target=None
-
-        div_output, non_valid_mask, _ = self.phys_calc.get_divergence_from_edge_indices(uv_dim_indices, u, v, normalv=normalv_output)
-        div_target, _, _ = self.phys_calc.get_divergence_from_edge_indices(uv_dim_indices, target['u'].squeeze(), target['v'].squeeze(),normalv=normalv_target)
-
-        output_valid = div_output[~non_valid_mask]
-        target_valid = div_target[~non_valid_mask]
-        loss = self.loss_fcn(output_valid,target_valid)
-
-        if val:
-            return loss, div_output, div_target, non_valid_mask
-        else:
-            return loss    
-
-class Trivial_loss(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.loss = torch.nn.MSELoss()
-        self.registered = False
-    
-    def register_samples(self, source, coords_target, target):
-        self.source_0 = torch.zeros_like(source, device=source.device)
-        self.target_0 = {}
-        for var, values in target.items():
-            if var == 'u' or var == 'v': 
-                self.target_0[var] = torch.zeros_like(values, device=source.device)
-            elif var == 'zos':
-                self.target_0[var] = torch.ones_like(values, device=source.device)*0.5
-        self.coords_target = coords_target
-        self.registered = True
-
-    def forward(self, model):
-        output = model(self.source_0, self.coords_target)[0]
-
-        total_loss = 0 
-        for var in output.keys():
-            loss = self.loss(output[var][:,0,0], self.target_0[var][:,:,0])
-            total_loss+=loss
-
-        return total_loss
 
 class loss_calculator(nn.Module):
     def __init__(self, training_settings, grid_variables_dict, model_settings):
         super().__init__()
 
-        self.lambdas_var = training_settings['lambdas_var']
+        #self.lambdas_var = training_settings['lambdas_var']
+        self.lambdas_levels = training_settings['lambdas_levels']
         self.lambdas_static = training_settings['lambdas']
         self.grid_variables_dict = grid_variables_dict
 
         self.loss_fcn_dict = {} 
 
-        phys_calc = None
         for loss_type, value in self.lambdas_static.items():
-        
-            if loss_type == 'tv' and value > 0:
-                self.loss_fcn_dict['tv'] = TVLoss()
-            
-            if loss_type == 'NHtv' and value > 0:
-                if phys_calc is None:
-                    phys_calc = physics_calculator(model_settings['output_grid'], device=training_settings['device'])
-                self.loss_fcn_dict['NHtv'] = NHTVLoss(phys_calc)
+            if value > 0:
+                if loss_type == 'gauss':
+                    loss_fcn = GaussLoss()
+                elif loss_type == 'l1':
+                    loss_fcn = torch.nn.L1Loss() 
+                elif loss_type == 'l2':
+                    loss_fcn = torch.nn.MSELoss() 
+                
+                self.loss_fcn_dict[loss_type] = HierLoss(loss_fcn, self.lambdas_levels)
 
-            elif loss_type == 'tv_log' and value > 0:
-                self.loss_fcn_dict['tv_log'] = TVLoss_log()
 
-            elif loss_type == 'tv_rel' and value > 0:
-                self.loss_fcn_dict['tv_rel'] = TVLoss_rel()
-
-            elif loss_type == 'l2' and value > 0:
-                self.loss_fcn_dict['l2'] = DictLoss(L1Loss(loss='l2'), training_settings['lambdas_var'])
-
-            elif loss_type == 'l1' and value > 0:
-                self.loss_fcn_dict['l1'] = DictLoss(L1Loss(loss='l1'), training_settings['lambdas_var'])
-
-            elif loss_type == 'std' and value > 0:
-                self.loss_fcn_dict['std'] = DictLoss(StdLoss(), training_settings['lambdas_var'])
-
-            elif loss_type == 'rel_std' and value > 0:
-                self.loss_fcn_dict['rel_std'] = DictLoss(RelStdLoss(), training_settings['lambdas_var'])
-            
-            elif loss_type == 'l1_relv' and value > 0:
-                self.loss_fcn_dict['l1_relv'] = DictLoss(L1Loss_relv(), training_settings['lambdas_var'])
-            
-            elif loss_type == 'log' and value > 0:
-                self.loss_fcn_dict['log'] = DictLoss(LogLoss(), training_settings['lambdas_var'])
-
-            elif loss_type == 'rel' and value > 0:
-                self.loss_fcn_dict['rel'] = DictLoss(L1Loss_rel(), training_settings['lambdas_var'])
-
-            elif loss_type == 'kl' and value > 0:
-                self.loss_fcn_dict['kl'] = KLLoss()
-
-            elif loss_type == 'trivial' and value > 0:
-                self.loss_fcn_dict['trivial'] = Trivial_loss()
-            
-            elif loss_type == 'gauss' and value > 0:
-                self.loss_fcn_dict['gauss'] =DictLoss(GaussLoss(), training_settings['lambdas_var'])
-
-            elif loss_type == 'vort' and value > 0:
-                if phys_calc is None:
-                    phys_calc = physics_calculator(model_settings['output_grid'], device=training_settings['device'])
-                self.loss_fcn_dict['vort'] = VortLoss(phys_calc)
-            
-            elif loss_type == 'rel_vort' and value > 0:
-                if phys_calc is None:
-                    phys_calc = physics_calculator(model_settings['output_grid'], device=training_settings['device'])
-                self.loss_fcn_dict['rel_vort'] = VortLoss(phys_calc, rel=True)
-
-            elif loss_type == 'calc_vort' and value > 0:
-                if phys_calc is None:
-                    phys_calc = physics_calculator(model_settings['output_grid'], device=training_settings['device'])
-                self.loss_fcn_dict['calc_vort'] = VortLoss(phys_calc, calc_target=True)
-            
-            elif loss_type == 'rel_calc_vort' and value > 0:
-                if phys_calc is None:
-                    phys_calc = physics_calculator(model_settings['output_grid'], device=training_settings['device'])
-                self.loss_fcn_dict['rel_calc_vort'] = VortLoss(phys_calc, calc_target=True, rel=True)
-
-            elif loss_type == 'div' and value > 0:
-                if phys_calc is None:
-                    phys_calc = physics_calculator(model_settings['output_grid'], device=training_settings['device'])
-                self.loss_fcn_dict['div'] = DivLoss(phys_calc)
-
-            elif loss_type == 'normalv' and value > 0:
-                if phys_calc is None:
-                    phys_calc = physics_calculator(model_settings['output_grid'], device=training_settings['device'])
-                self.loss_fcn_dict['normalv'] = NormalVLoss(phys_calc)
-            
-            elif loss_type == 'rel_normalv' and value > 0:
-                if phys_calc is None:
-                    phys_calc = physics_calculator(model_settings['output_grid'], device=training_settings['device'])
-                self.loss_fcn_dict['rel_normalv'] = RelNormalVLoss(phys_calc)
-
-            elif loss_type == 'gauss_normalv' and value > 0:
-                if phys_calc is None:
-                    phys_calc = physics_calculator(model_settings['output_grid'], device=training_settings['device'])
-                self.loss_fcn_dict['gauss_normalv'] = GaussNormalVLoss(phys_calc)
-
-            elif loss_type == 'spatial_div' and value > 0:
-                if phys_calc is None:
-                    phys_calc = physics_calculator(model_settings['output_grid'], device=training_settings['device'])
-                self.loss_fcn_dict['spatial_div'] = SpatialDivLoss(phys_calc)
-
-            elif loss_type == 'kin_energy' and value > 0:
-                if phys_calc is None:
-                    phys_calc = physics_calculator(model_settings['output_grid'], device=training_settings['device'])
-                self.loss_fcn_dict['kin_energy'] = KinEnergyLoss(phys_calc)
-
-            elif loss_type == 'kin_energy_sum' and value > 0:
-                if phys_calc is None:
-                    phys_calc = physics_calculator(model_settings['output_grid'], device=training_settings['device'])
-                self.loss_fcn_dict['kin_energy_sum'] = SummedKinEnergyLoss(phys_calc)
-
-    def forward(self, lambdas_optim, target, model, source, coords_target=None, target_indices=None, source_indices=None, coords_source=None, val=False, k=None, model_type=None):
+    def forward(self, lambdas_optim, target, model, source, source_indices=None, val=False, k=None):
         
         if val:
             with torch.no_grad():
-                if 'transformer' in model_type:
-                    output, debug_dict = model(source, source_indices, debug=True)
-                    output = grid_dict_to_var_dict(output, self.grid_variables_dict)
-                    target = grid_dict_to_var_dict(target, self.grid_variables_dict)
-                    non_valid_mask = None
-                else:
-                    output, _, output_core, non_valid_mask = model(source, coords_target, coords_source=coords_source)
+                output_levels, debug_dict = model(source, source_indices, debug=True)
         else:
-            if 'transformer' in model_type:
-                output= model(source, source_indices)
-                output = grid_dict_to_var_dict(output, self.grid_variables_dict)
-                target = grid_dict_to_var_dict(target, self.grid_variables_dict)
-                non_valid_mask = None
-            else:
-                output, _, output_core, non_valid_mask = model(source, coords_target, coords_source=coords_source)
-
-        if 'trivial' in self.loss_fcn_dict.keys() and not self.loss_fcn_dict['trivial'].registered:
-            self.loss_fcn_dict['trivial'].register_samples(source, coords_target, target)
+            output_levels = model(source, source_indices)
 
         loss_dict = {}
         total_loss = 0
 
         for loss_type, loss_fcn in self.loss_fcn_dict.items():
-            if loss_type == 'trivial':
-                loss =  loss_fcn(model)
+      
+            loss, loss_levels = loss_fcn(output_levels, target)
+            total_loss += self.lambdas_static[loss_type] * lambdas_optim[loss_type] * loss
 
-            elif loss_type == 'NHtv':
-                loss =  loss_fcn(output, target, source_indices)
-
-            elif loss_type == 'tv' or loss_type == 'tv_rel' or loss_type == 'tv_log':
-                loss =  loss_fcn(output_core['x'])
-
-            elif loss_type == 'l2' or loss_type == 'l1' or loss_type == 'gauss' or loss_type == 'log' or loss_type == 'std' or loss_type == 'rel_std':
-                loss =  loss_fcn(output, target, non_valid_mask)
-            
-            elif loss_type == 'l1_relv':
-                loss =  loss_fcn(output, target, non_valid_mask, k=k)
-
-            elif loss_type == 'kl':
-                loss =  loss_fcn(output_core['kl'])
-
-            elif loss_type == 'rel':
-                loss =  loss_fcn(output, target, non_valid_mask)
-
-            elif loss_type == 'vort' or loss_type == 'calc_vort' or loss_type == 'rel_calc_vort' or loss_type == 'rel_vort' or loss_type == 'spatial_div' or loss_type == 'kin_energy' or loss_type == 'kin_energy_sum' or loss_type == 'normalv' or loss_type == 'gauss_normalv' or loss_type == 'rel_normalv':
-                loss = loss_fcn(output, target, target_indices, model.spatial_dim_var_target, val=val)
-                if val:
-                    output[loss_type], target[loss_type], non_valid_mask[loss_type] = loss[1:]
-                    loss = loss[0]
-
-            elif loss_type == 'div':
-                loss =  loss_fcn(output, target_indices, model.spatial_dim_var_target)
-            
-            total_loss += self.lambdas_static[loss_type]*lambdas_optim[loss_type] * loss
-            loss_dict[loss_type] = loss.item()
+            loss_levels_keys = [f'{loss_type}_{key}' for key in loss_levels.keys()]
+            loss_dict.update(dict(zip(loss_levels_keys, list(loss_levels.values()))))
 
         loss_dict['total_loss'] = total_loss.item()
         
         if val:
-            return total_loss, loss_dict, output, target, non_valid_mask, debug_dict
+            return total_loss, loss_dict, output_levels, target, debug_dict
         else:
             return total_loss, loss_dict
         
-
-def grid_dict_to_var_dict(grid_dict, grid_var_dict):
-    var_dict = {}
-    for grid_type, data in grid_dict.items():
-        variables = grid_var_dict[grid_type]
-        data = data.split([1]*len(variables), dim=-1)
-        var_dict.update(dict(zip(variables, data)))
-    return var_dict

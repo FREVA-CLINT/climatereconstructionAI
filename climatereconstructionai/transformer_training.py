@@ -265,6 +265,16 @@ def train(model, training_settings, model_settings={}):
 
     early_stop = early_stopping.early_stopping(training_settings['early_stopping_delta'], training_settings['early_stopping_patience'])
 
+    if isinstance(training_settings['lambdas_levels'],dict):
+        training_settings['lambdas_levels'] = training_settings['lambdas_levels']
+
+    elif training_settings['lambdas_levels']==1:
+        training_settings['lambdas_levels'] = dict(zip([k for k in range(model_settings['n_grid_levels'])], torch.ones(model_settings['n_grid_levels'])))
+    
+    elif training_settings['lambdas_levels']==0:
+        training_settings['lambdas_levels'] = dict(zip([k for k in range(model_settings['n_grid_levels'])], torch.zeros(model_settings['n_grid_levels'])))
+
+
     loss_calculator = optimization.loss_calculator(training_settings, model_settings['variables_target'], model_settings)    
 
     lambdas_var = training_settings['lambdas_var']
@@ -340,8 +350,7 @@ def train(model, training_settings, model_settings={}):
                                                                         source, 
                                                                         source_indices=indices, 
                                                                         k=lambdas_optim['k_l1_relv'] if 'k_l1_relv' in lambdas_optim.keys() else None, 
-                                                                        val=False, 
-                                                                        model_type='transformer')
+                                                                        val=False)
         else:
             train_total_loss, train_loss_dict = loss_calculator(lambdas_optim, 
                                                                         target, 
@@ -349,8 +358,7 @@ def train(model, training_settings, model_settings={}):
                                                                         source, 
                                                                         source_indices=indices, 
                                                                         k=lambdas_optim['k_l1_relv'] if 'k_l1_relv' in lambdas_optim.keys() else None, 
-                                                                        val=False, 
-                                                                        model_type='transformer')
+                                                                        val=False)
         
         train_losses_hist.append(train_loss_dict['total_loss'])
 
@@ -412,23 +420,21 @@ def train(model, training_settings, model_settings={}):
 
                 if training_settings['mixed_precision']:
                     with torch.autocast(device_type=training_settings['device'], dtype=torch.bfloat16):
-                        val_total_loss, val_loss_dict, output, target, _, debug_dict = loss_calculator(lambdas_optim, 
+                        val_total_loss, val_loss_dict, output, target, debug_dict = loss_calculator(lambdas_optim, 
                                                                                                 target, 
                                                                                                 model, #model.module for multi_gpus?
                                                                                                 source, 
                                                                                                 source_indices=indices, 
                                                                                                 k=lambdas_optim['k_l1_relv'] if 'k_l1_relv' in lambdas_optim.keys() else None, 
-                                                                                                val=True, 
-                                                                                                model_type='transformer')
+                                                                                                val=True)
                 else:
-                    val_total_loss, val_loss_dict, output, target, _, debug_dict = loss_calculator(lambdas_optim, 
+                    val_total_loss, val_loss_dict, output, target, debug_dict = loss_calculator(lambdas_optim, 
                                                                                                 target, 
                                                                                                 model, #model.module for multi_gpus?
                                                                                                 source, 
                                                                                                 source_indices=indices, 
                                                                                                 k=lambdas_optim['k_l1_relv'] if 'k_l1_relv' in lambdas_optim.keys() else None, 
-                                                                                                val=True, 
-                                                                                                model_type='transformer')
+                                                                                                val=True)
 
                 
                 val_losses.append(list(val_loss_dict.values()))

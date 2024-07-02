@@ -12,7 +12,6 @@ import climatereconstructionai.model.transformer_helpers as helpers
 from climatereconstructionai.utils.grid_utils import get_distance_angle, get_coords_as_tensor, get_mapping_to_icon_grid, get_nh_variable_mapping_icon, get_adjacent_indices, icon_grid_to_mgrid
 from .. import transformer_training as trainer
 from ..utils.normalizer import grid_normalizer
-from ..utils.optimization import grid_dict_to_var_dict
 
 def dict_to_device(d, device):
     for key, value in d.items():
@@ -851,7 +850,7 @@ class ICON_Transformer(nn.Module):
         self.trained_iterations = trained_iterations
 
 
-    def forward(self, x, indices_batch_dict=None, debug=False):
+    def forward(self, x, indices_batch_dict=None, debug=False, output_sum=False):
         # if global_indices are provided, batches in x are treated as independent
         debug_dict = {}
 
@@ -889,20 +888,19 @@ class ICON_Transformer(nn.Module):
 
         x, x_var = self.proj_layer(x_levels, indices_layers, indices_batch_dict, output_coords=output_coords)
 
-        if debug:
-            debug_dict['var_list'] = x_var
-            debug_dict['x_levels_output'] =  x
+        if output_sum:
+            if self.var_model:
+                x = torch.sum(torch.stack(x, dim=-1), dim=-1)
+                x_var = torch.sum(torch.stack(x_var, dim=-1), dim=-1)
+                output = {'cell': torch.stack([x, x_var],dim=-2)}
+        
+            else:
+                x = torch.sum(torch.stack(x, dim=-1), dim=-1)
+                x = self.output_mlp(x)
 
-        if self.var_model:
-            x = torch.sum(torch.stack(x, dim=-1), dim=-1)
-            x_var = torch.sum(torch.stack(x_var, dim=-1), dim=-1)
-            output = {'cell': torch.stack([x, x_var],dim=-2)}
-    
+                output = {'cell': x.unsqueeze(dim=-2)}
         else:
-            x = torch.sum(torch.stack(x, dim=-1), dim=-1)
-            x = self.output_mlp(x)
-
-            output = {'cell': x.unsqueeze(dim=-2)}
+            output = {'x': x, 'x_var': x_var}
 
         if debug:
             return output, debug_dict
@@ -960,9 +958,9 @@ class ICON_Transformer(nn.Module):
         for key, outputs in  outputs.items():
             outputs_all[key] = torch.concat(outputs, dim=0)
 
-        output = grid_dict_to_var_dict(outputs_all, self.model_settings["variables_target"])
+        #output = grid_dict_to_var_dict(outputs_all, self.model_settings["variables_target"])
         
-        return output
+        return outputs_all
 
 
     def get_data_from_ds(self, ds, ts, variables_dict, global_level_start, global_indices):
