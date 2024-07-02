@@ -149,66 +149,66 @@ class NetCDFLoader_lazy(Dataset):
         self.files_source = files_source
         self.files_target = files_target
         self.model_settings = model_settings
-               
-        grid_processing = xr.open_dataset(model_settings['processing_grid'])
-
-        #mgrid = icon_grid_to_mgrid()
-
-        self.coords_processing = get_coords_as_tensor(grid_processing, lon='clon', lat='clat')
-
-        clon_fov = self.model_settings['clon_fov'] if 'clon_fov' in self.model_settings.keys() else None
-        clat_fov = self.model_settings['clat_fov'] if 'clat_fov' in self.model_settings.keys() else None
-
-        n_grid_levels_fov = self.model_settings['n_grid_levels_fov'] if 'n_grid_levels_fov' in self.model_settings.keys() else model_settings['level_start_input']
-
-        mgrids = icon_grid_to_mgrid(grid_processing, n_grid_levels_fov, clon_fov=clon_fov, clat_fov=clat_fov)
-
-        level_start = np.min([n_grid_levels_fov-1, model_settings['level_start_input']])
-
-        input_mapping, input_in_range = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
-                                                     model_settings['input_grid'], self.variables_source.keys(), 
-                                                     search_raadius=model_settings['search_raadius'], 
-                                                     max_nh=model_settings['nh_input'], 
-                                                     level_start=level_start,
-                                                     lowest_level=0,
-                                                     coords_icon=mgrids[0]['coords'])
-
-        output_mapping, output_in_range = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
-                                                    model_settings['output_grid'], self.variables_target.keys(), 
-                                                    search_raadius=model_settings['search_raadius'], 
-                                                    max_nh=1, 
-                                                    level_start=level_start,
-                                                    lowest_level=0,
-                                                    coords_icon=mgrids[0]['coords'])
-                        
-
-        input_mapping = mapping_to_(input_mapping, to='numpy')
-        output_mapping = mapping_to_(output_mapping, to='numpy')
-
-        input_in_range = mapping_to_(input_in_range, to='numpy', dtype="bool")
-        output_in_range = mapping_to_(output_in_range, to='numpy', dtype="bool")
-
-        ds_source = xr.open_dataset(files_source[0])
-
-        global_indices = torch.arange(mgrids[0]['coords'].shape[1])
-
-        global_cells = global_indices.reshape(-1,4**coarsen_sample_level)
-        global_cells_input = global_cells[:,0]
-
 
         self.indices_path = os.path.join(model_settings["model_dir"],"indices_data.pickle")
 
-        indices_data = {'input_mapping': input_mapping,
-                        'output_mapping': output_mapping,
-                        'input_in_range': input_in_range,
-                        'output_in_range': output_in_range,
-                        'global_cells_input':global_cells_input,
-                        'global_cells': global_cells}
-
         if not os.path.isfile(self.indices_path):
+            grid_processing = xr.open_dataset(model_settings['processing_grid'])
+
+            self.coords_processing = get_coords_as_tensor(grid_processing, lon='clon', lat='clat')
+
+            clon_fov = self.model_settings['clon_fov'] if 'clon_fov' in self.model_settings.keys() else None
+            clat_fov = self.model_settings['clat_fov'] if 'clat_fov' in self.model_settings.keys() else None
+
+            n_grid_levels_fov = self.model_settings['n_grid_levels_fov'] if 'n_grid_levels_fov' in self.model_settings.keys() else model_settings['level_start_input']
+
+            if 'mgrids_path' not in self.model_settings.keys():
+                mgrids = icon_grid_to_mgrid(grid_processing, n_grid_levels_fov, clon_fov=clon_fov, clat_fov=clat_fov, nh=1, extension=0.1)
+            else:
+                mgrids = torch.load(self.model_settings['mgrids_path'])
+            
+            level_start = np.min([n_grid_levels_fov-1, model_settings['level_start_input']])
+
+            input_mapping, input_in_range = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
+                                                        model_settings['input_grid'], self.variables_source.keys(), 
+                                                        search_raadius=model_settings['search_raadius'], 
+                                                        max_nh=model_settings['nh_input'], 
+                                                        level_start=level_start,
+                                                        lowest_level=0,
+                                                        coords_icon=mgrids[0]['coords'])
+
+            output_mapping, output_in_range = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
+                                                        model_settings['output_grid'], self.variables_target.keys(), 
+                                                        search_raadius=model_settings['search_raadius'], 
+                                                        max_nh=1, 
+                                                        level_start=level_start,
+                                                        lowest_level=0,
+                                                        coords_icon=mgrids[0]['coords'])
+                            
+
+            input_mapping = mapping_to_(input_mapping, to='numpy')
+            output_mapping = mapping_to_(output_mapping, to='numpy')
+
+            input_in_range = mapping_to_(input_in_range, to='numpy', dtype="bool")
+            output_in_range = mapping_to_(output_in_range, to='numpy', dtype="bool")
+
+            global_indices = torch.arange(mgrids[0]['coords'].shape[1])
+
+            global_cells = global_indices.reshape(-1,4**coarsen_sample_level)
+            global_cells_input = global_cells[:,0]
+            
+            indices_data = {'input_mapping': input_mapping,
+                            'output_mapping': output_mapping,
+                            'input_in_range': input_in_range,
+                            'output_in_range': output_in_range,
+                            'global_cells_input':global_cells_input,
+                            'global_cells': global_cells}
+
+       
             with open(self.indices_path, 'wb') as handle:
                 pickle.dump(indices_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
+        ds_source = xr.open_dataset(files_source[0])
         self.num_datapoints_time = ds_source[list(self.variables_source.values())[0][0]].shape[0]
 
         self.ds_dict = {}

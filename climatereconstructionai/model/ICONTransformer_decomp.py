@@ -774,7 +774,12 @@ class ICON_Transformer(nn.Module):
         clat_fov = self.model_settings['clat_fov'] if 'clat_fov' in self.model_settings.keys() else None
         self.n_grid_levels_fov = self.model_settings['n_grid_levels_fov'] if 'n_grid_levels_fov' in self.model_settings.keys() else n_grid_levels
 
-        mgrids = icon_grid_to_mgrid(self.grid, self.n_grid_levels_fov, clon_fov=clon_fov, clat_fov=clat_fov, nh=self.model_settings['nh'], extension=0.1)
+        if 'mgrids_path' not in self.model_settings.keys():
+            mgrids = icon_grid_to_mgrid(self.grid, self.n_grid_levels_fov, clon_fov=clon_fov, clat_fov=clat_fov, nh=self.model_settings['nh'], extension=0.1)
+            self.model_settings['mgrids_path'] = os.path.join(self.model_settings['model_dir'], 'mgrids.pt')
+            torch.save(mgrids, self.model_settings['mgrids_path'])
+        else:
+            mgrids = torch.load(self.model_settings['mgrids_path'])
 
         self.register_buffer('cell_coords_global', mgrids[0]['coords'], persistent=False)  
 
