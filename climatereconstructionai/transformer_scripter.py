@@ -33,7 +33,7 @@ if __name__ == "__main__":
             model = pyramid_model.pyramid_model(model_settings, model_dir=model_dir)
         else:
             if not model_init:
-                from climatereconstructionai.model import pyramid_model
+                from climatereconstructionai.model import pyramid_step_model
                 model_settings = pyramid_step_model.load_settings(model_settings)
                 if 'model' not in model_settings.keys():
                     model_type = 'crai'
