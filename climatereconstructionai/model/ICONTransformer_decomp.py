@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import xarray as xr
 
+import copy
 
 from ..utils.io import load_ckpt, load_model
 import climatereconstructionai.model.transformer_helpers as helpers
@@ -789,31 +790,35 @@ class ICON_Transformer(nn.Module):
 
         self.input_data  = self.model_settings['variables_source']
         self.output_data = self.model_settings['variables_target']
-              
+
+        share_emb_every = self.model_settings['share_emb_every'] if 'share_emb_every' in self.model_settings.keys() else n_grid_levels
         pos_embedder = {}
         pos_embedder['pos_emb_dim'] = self.model_settings["pos_emb_dim"]
         pos_embedder['polar'] = self.polar
+        pos_embedder['pos_embedder_handle'] = None
     
         grid_layers = nn.ModuleDict()
         self.global_levels = []
         pos_embedders = {}
 
+        phi_emb_table = None
         for grid_level_idx in range(n_grid_levels):
 
             global_level = grid_level_idx
+
+            pos_embedders[global_level] = copy.deepcopy(pos_embedder)
             self.global_levels.append(global_level)
 
             grid_layers[str(global_level)] = grid_layer(global_level, mgrids[global_level]['adjc_lvl'], mgrids[global_level]['adjc_mask'], mgrids[global_level]['coords'])
 
-            if grid_level_idx % 2 == 0:
-                if 'pos_embedder_handle' in pos_embedder.keys() and hasattr(pos_embedder['pos_embedder_handle'],'pos2_emb'):
-                    phi_emb_table = pos_embedder['pos_embedder_handle'].pos2_emb
-                else:
+            if grid_level_idx % share_emb_every == 0:
+                if pos_embedders[global_level]['pos_embedder_handle'] is None and phi_emb_table is not None:
                     phi_emb_table = None
-                pos_embedder_handle = position_embedder(1e-4, 1, embed_dim=self.model_settings["emb_table_bins"], n_out=self.model_settings["pos_emb_dim"], pos_emb_calc=self.pos_emb_calc, phi_table=phi_emb_table)
 
-            pos_embedder['pos_embedder_handle'] = pos_embedder_handle
-            pos_embedders[global_level] = pos_embedder
+                pos_embedder_handle = position_embedder(1e-4, 1, embed_dim=self.model_settings["emb_table_bins"], n_out=self.model_settings["pos_emb_dim"], pos_emb_calc=self.pos_emb_calc, phi_table=phi_emb_table)
+                phi_emb_table = pos_embedder_handle.pos2_emb
+
+            pos_embedders[global_level]['pos_embedder_handle'] = pos_embedder_handle
 
         input_mapping, input_in_range, input_coordinates = self.get_input_grid_mapping(mgrids[0]['coords'])
 
