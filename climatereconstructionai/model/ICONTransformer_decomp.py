@@ -812,9 +812,6 @@ class ICON_Transformer(nn.Module):
             grid_layers[str(global_level)] = grid_layer(global_level, mgrids[global_level]['adjc_lvl'], mgrids[global_level]['adjc_mask'], mgrids[global_level]['coords'])
 
             if grid_level_idx % share_emb_every == 0:
-                if pos_embedders[global_level]['pos_embedder_handle'] is None and phi_emb_table is not None:
-                    phi_emb_table = None
-
                 pos_embedder_handle = position_embedder(1e-4, 1, embed_dim=self.model_settings["emb_table_bins"], n_out=self.model_settings["pos_emb_dim"], pos_emb_calc=self.pos_emb_calc, phi_table=phi_emb_table)
                 phi_emb_table = pos_embedder_handle.pos2_emb
 

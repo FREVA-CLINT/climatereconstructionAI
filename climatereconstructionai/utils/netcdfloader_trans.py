@@ -130,7 +130,8 @@ class NetCDFLoader_lazy(Dataset):
                  model_settings={},
                  random_time_idx=True,
                  p_dropout=0,
-                 save_samples_path=None):
+                 save_samples_path=None,
+                 train_on_samples=False):
         
         super(NetCDFLoader_lazy, self).__init__()
         
@@ -150,6 +151,8 @@ class NetCDFLoader_lazy(Dataset):
         self.files_source = files_source
         self.files_target = files_target
         self.model_settings = model_settings
+
+        self.train_on_samples = train_on_samples
 
         self.save_samples_path = save_samples_path
         self.save_samples = False
@@ -172,7 +175,7 @@ class NetCDFLoader_lazy(Dataset):
 
         self.indices_path = os.path.join(model_settings["model_dir"],"indices_data.pickle")
 
-        if not os.path.isfile(self.indices_path):
+        if not os.path.isfile(self.indices_path) and not self.train_on_samples:
             grid_processing = xr.open_dataset(model_settings['processing_grid'])
 
             self.coords_processing = get_coords_as_tensor(grid_processing, lon='clon', lat='clat')
@@ -228,32 +231,39 @@ class NetCDFLoader_lazy(Dataset):
             with open(self.indices_path, 'wb') as handle:
                 pickle.dump(indices_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-        ds_source = xr.open_dataset(files_source[0])
-        self.num_datapoints_time = ds_source[list(self.variables_source.values())[0][0]].shape[0]
-
-        self.ds_dict = {}
-        for var, norm_dict in normalization.items():
-            if len(norm_dict["moments"])==0:
-                var_check = "u" if var == "uv" else var
-                files = []
-                variables = []
-                for grid_vars in self.variables_source.values():
-                    for variable in grid_vars:
-                        variables.append(variable)
-
-                if var_check in variables:
-                    files+=list(files_source)
-
-                variables = []
-                for grid_vars in self.variables_target.values():
-                    for variable in grid_vars:
-                        variables.append(variable)
-
-                if var_check in self.variables_target:
-                    files+=list(files_target)
-
-                norm_dict["moments"] = get_stats(files, var, norm_dict, self.sample_for_norm)
+        if train_on_samples:
+            self.files_source = [os.path.join(save_samples_path, fname) for fname in os.listdir(save_samples_path) if '.pt' in fname]
+            self.files_target = self.files_source
         
+        if not self.train_on_samples:
+            ds_source = xr.open_dataset(files_source[0])
+            self.num_datapoints_time = ds_source[list(self.variables_source.values())[0][0]].shape[0]
+
+            self.ds_dict = {}
+            for var, norm_dict in normalization.items():
+                if len(norm_dict["moments"])==0:
+                    var_check = "u" if var == "uv" else var
+                    files = []
+                    variables = []
+                    for grid_vars in self.variables_source.values():
+                        for variable in grid_vars:
+                            variables.append(variable)
+
+                    if var_check in variables:
+                        files+=list(files_source)
+
+                    variables = []
+                    for grid_vars in self.variables_target.values():
+                        for variable in grid_vars:
+                            variables.append(variable)
+
+                    if var_check in self.variables_target:
+                        files+=list(files_target)
+
+                    norm_dict["moments"] = get_stats(files, var, norm_dict, self.sample_for_norm)
+        else:
+            self.num_datapoints_time = 1
+
         self.norm_dict = normalization
         self.normalizer = grid_normalizer(self.norm_dict)
 
@@ -327,51 +337,53 @@ class NetCDFLoader_lazy(Dataset):
         target_file = self.files_target[source_index]
         target_file_past = self.files_target_past[source_index] if self.files_target_past is not None else None
 
-        ds_source, ds_target = self.get_files(source_file, file_path_target=target_file, file_path_target_past=target_file_past)
+        if not self.train_on_samples:
+            ds_source, ds_target = self.get_files(source_file, file_path_target=target_file, file_path_target_past=target_file_past)
 
-        if self.random_time_idx:
-            index = int(torch.randint(0, len(ds_source.time.values), (1,1)))
-            if self.index_range_source is not None:
-                if (index < self.index_range_source[0]) or (index > self.index_range_source[1]):
-                    index = int(torch.randint(self.index_range_source[0], self.index_range_source[1]+1, (1,1)))
+            if self.random_time_idx:
+                index = int(torch.randint(0, len(ds_source.time.values), (1,1)))
+                if self.index_range_source is not None:
+                    if (index < self.index_range_source[0]) or (index > self.index_range_source[1]):
+                        index = int(torch.randint(self.index_range_source[0], self.index_range_source[1]+1, (1,1)))
 
 
-        with open(self.indices_path, 'rb') as handle:
-            indices_data = pickle.load(handle)
+            with open(self.indices_path, 'rb') as handle:
+                indices_data = pickle.load(handle)
 
-        global_cells_input = torch.as_tensor(indices_data['global_cells_input'])
-        input_mapping = mapping_to_(indices_data['input_mapping'], to='pytorch')
-        global_cells = torch.as_tensor(indices_data['global_cells'])
-        output_mapping = mapping_to_(indices_data['output_mapping'], to='pytorch')
-        #input_in_range = mapping_to_(indices_data['input_in_range'], to='pytorch', dtype="bool")
-        #output_in_range = mapping_to_(indices_data['output_in_range'], to='pytorch', dtype="bool")
+            global_cells_input = torch.as_tensor(indices_data['global_cells_input'])
+            input_mapping = mapping_to_(indices_data['input_mapping'], to='pytorch')
+            global_cells = torch.as_tensor(indices_data['global_cells'])
+            output_mapping = mapping_to_(indices_data['output_mapping'], to='pytorch')
+            #input_in_range = mapping_to_(indices_data['input_in_range'], to='pytorch', dtype="bool")
+            #output_in_range = mapping_to_(indices_data['output_in_range'], to='pytorch', dtype="bool")
 
-        sample_index = torch.randint(global_cells_input.shape[0],(1,))[0]
+            sample_index = torch.randint(global_cells_input.shape[0],(1,))[0]
 
-        data_source = self.get_data(ds_source, index, global_cells[sample_index] , self.variables_source, 0, input_mapping['cell'])
+            data_source = self.get_data(ds_source, index, global_cells[sample_index] , self.variables_source, 0, input_mapping['cell'])
 
-        if ds_target is not None:
-            data_target = self.get_data(ds_target, index, global_cells[sample_index] , self.variables_target, 0, output_mapping['cell'])   
+            if ds_target is not None:
+                data_target = self.get_data(ds_target, index, global_cells[sample_index] , self.variables_target, 0, output_mapping['cell'])
+            else:
+                data_target = data_source
 
-        indices = {'global_cell': global_cells[sample_index],
-                   'local_cell': global_cells[sample_index],
-                    'sample': sample_index,
-                    'sample_level': self.coarsen_sample_level}
-        
-        if self.save_samples:
-            sample_path = os.path.join(self.save_samples_path, f'{os.path.basename(source_file).replace(".nc","")}_R_{self.coarsen_sample_level}_t_{index}_N_{sample_index}_d_{0}.pt')
-            if not os.path.isfile(sample_path):
-                torch.save({'data_source': data_source, 'data_target': data_target, 'indices': indices, 'level': 0}, sample_path)
+            indices = {'global_cell': global_cells[sample_index],
+                    'local_cell': global_cells[sample_index],
+                        'sample': sample_index,
+                        'sample_level': self.coarsen_sample_level}
+            
+            if self.save_samples:
+                sample_path = os.path.join(self.save_samples_path, f'{os.path.basename(source_file).replace(".nc","")}_R_{self.coarsen_sample_level}_t_{index}_N_{sample_index}_d_{0}.pt')
+                if not os.path.isfile(sample_path):
+                    torch.save({'data_source': data_source, 'data_target': data_target, 'indices': indices, 'level': 0}, sample_path)
+        else:
+            sample = torch.load(source_file)
+            indices =  sample['indices']
+            data_source =  sample['data_source']
+            data_target =  sample['data_target']
 
         if self.normalization is not None:
-            data_source = self.normalizer(data_source, self.variables_source)
-            if ds_target is not None:
-                data_target = self.normalizer(data_target, self.variables_target)
-
-        else:
-            data_target = data_source
-
-                    #'drop_mask': drop_mask}
+            data_source = self.normalizer(data_source, self.variables_source)    
+            data_target = self.normalizer(data_target, self.variables_target)
 
         ds_target = ds_source = output_mapping = input_mapping = global_cells = global_cells = []
 

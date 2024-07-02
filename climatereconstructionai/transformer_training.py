@@ -192,7 +192,9 @@ def train(model, training_settings, model_settings={}):
                                     sample_condition_dict=training_settings['sample_condition_dict'],
                                     model_settings=model_settings,
                                     p_dropout = training_settings['p_dropout'] if 'p_dropout' in training_settings else 0,
-                                    save_samples_path = os.path.join(training_settings['save_samples_path'],'train') if 'save_samples_path' in training_settings else None)
+                                    save_samples_path = os.path.join(training_settings['save_samples_path'],'train') if 'save_samples_path' in training_settings else None,
+                                    train_on_samples=training_settings['train_on_samples'] if 'train_on_samples' in training_settings else False)
+        
     if training_settings['distributed']:
         dist.barrier()
     
@@ -211,7 +213,8 @@ def train(model, training_settings, model_settings={}):
                                     sample_condition_dict=training_settings['sample_condition_dict'],
                                     model_settings=model_settings,
                                     p_dropout = training_settings['p_dropout'] if 'p_dropout' in training_settings else 0,
-                                    save_samples_path = os.path.join(training_settings['save_samples_path'],'train') if 'save_samples_path' in training_settings else None)
+                                    save_samples_path = os.path.join(training_settings['save_samples_path'],'train') if 'save_samples_path' in training_settings else None,
+                                    train_on_samples=training_settings['train_on_samples'] if 'train_on_samples' in training_settings else False)
     
     if training_settings['distributed']:
         dist.barrier()
@@ -251,7 +254,8 @@ def train(model, training_settings, model_settings={}):
                                 sample_condition_dict=training_settings['sample_condition_dict'],
                                 model_settings=model_settings,
                                 p_dropout = training_settings['p_dropout'] if 'p_dropout' in training_settings else 0,
-                                save_samples_path = os.path.join(training_settings['save_samples_path'],'val') if 'save_samples_path' in training_settings else None)
+                                save_samples_path = os.path.join(training_settings['save_samples_path'],'val') if 'save_samples_path' in training_settings else None,
+                                train_on_samples=training_settings['train_on_samples'] if 'train_on_samples' in training_settings else False)
           
         val_sampler = InfiniteSampler(len(dataset_val))   
 
