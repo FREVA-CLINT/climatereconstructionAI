@@ -129,7 +129,8 @@ class NetCDFLoader_lazy(Dataset):
                  sample_condition_dict={},
                  model_settings={},
                  random_time_idx=True,
-                 p_dropout=0):
+                 p_dropout=0,
+                 save_samples_path=None):
         
         super(NetCDFLoader_lazy, self).__init__()
         
@@ -149,6 +150,25 @@ class NetCDFLoader_lazy(Dataset):
         self.files_source = files_source
         self.files_target = files_target
         self.model_settings = model_settings
+
+        self.save_samples_path = save_samples_path
+        self.save_samples = False
+        if save_samples_path is not None:
+            self.save_samples = True
+
+            if not os.path.isdir(save_samples_path):
+                os.mkdir(save_samples_path)
+        '''
+        self.train_on_samples = False
+        
+        if os.path.isdir(files_source):
+            self.train_on_samples = True
+            files_source = [os.path.join(files_source, fname) for fname in os.path.listdir(files_source) if '.pt' in fname]
+            files_target = files_source
+        else:
+            files_source = np.genfromtxt(files_source, dtype=str)   
+            files_target = np.genfromtxt(files_target, dtype=str)
+        '''
 
         self.indices_path = os.path.join(model_settings["model_dir"],"indices_data.pickle")
 
@@ -236,7 +256,6 @@ class NetCDFLoader_lazy(Dataset):
         
         self.norm_dict = normalization
         self.normalizer = grid_normalizer(self.norm_dict)
-    
 
     def get_files(self, file_path_source, file_path_target=None, file_path_target_past=None):
       
@@ -330,22 +349,28 @@ class NetCDFLoader_lazy(Dataset):
         sample_index = torch.randint(global_cells_input.shape[0],(1,))[0]
 
         data_source = self.get_data(ds_source, index, global_cells[sample_index] , self.variables_source, 0, input_mapping['cell'])
-        
-        if self.normalization is not None:
-            data_source = self.normalizer(data_source, self.variables_source)
 
         if ds_target is not None:
-            data_target = self.get_data(ds_target, index, global_cells[sample_index] , self.variables_target, 0, output_mapping['cell'])      
-            if self.normalization is not None:
-                data_target = self.normalizer(data_target, self.variables_target)
-
-        else:
-            data_target = data_source
+            data_target = self.get_data(ds_target, index, global_cells[sample_index] , self.variables_target, 0, output_mapping['cell'])   
 
         indices = {'global_cell': global_cells[sample_index],
                    'local_cell': global_cells[sample_index],
                     'sample': sample_index,
                     'sample_level': self.coarsen_sample_level}
+        
+        if self.save_samples:
+            sample_path = os.path.join(self.save_samples_path, f'{os.path.basename(source_file).replace(".nc","")}_R_{self.coarsen_sample_level}_t_{index}_N_{sample_index}_d_{0}.pt')
+            if not os.path.isfile(sample_path):
+                torch.save({'data_source': data_source, 'data_target': data_target, 'indices': indices, 'level': 0}, sample_path)
+
+        if self.normalization is not None:
+            data_source = self.normalizer(data_source, self.variables_source)
+            if ds_target is not None:
+                data_target = self.normalizer(data_target, self.variables_target)
+
+        else:
+            data_target = data_source
+
                     #'drop_mask': drop_mask}
 
         ds_target = ds_source = output_mapping = input_mapping = global_cells = global_cells = []
