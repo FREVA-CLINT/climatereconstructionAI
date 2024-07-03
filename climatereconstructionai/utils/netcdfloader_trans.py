@@ -9,7 +9,7 @@ import numpy as np
 import torch
 import xarray as xr
 from torch.utils.data import Dataset, Sampler
-from .grid_utils import generate_region, get_coord_dict_from_var, get_coords_as_tensor, invert_dict, get_ids_in_patches, get_patches, rotate_ds, get_mapping_to_icon_grid, get_nh_variable_mapping_icon, icon_grid_to_mgrid
+from .grid_utils import generate_region, get_coord_dict_from_var, get_coords_as_tensor, invert_dict, get_ids_in_patches, get_patches, rotate_ds, get_mapping_to_icon_grid, get_nh_variable_mapping_icon, icon_grid_to_mgrid, mapping_to_
 from climatereconstructionai.model.transformer_helpers import coarsen_global_cells
 from .normalizer import grid_normalizer
 import pickle
@@ -55,25 +55,7 @@ def get_moments(data, type, level=0.9):
     
     return tuple(moments)
 
-def mapping_to_(dic, to='numpy', dtype='int'):
-    out_dic = {}
-    for key, subdic in dic.items():
-        out_sub_dic = {}
-        for subkey, subsub_dic in subdic.items():
-            if to =='numpy':
-                if dtype == "int":
-                    dtype=np.int32
-                elif dtype == "bool":
-                    dtype=bool
-                out_sub_dic[subkey] = np.array(subsub_dic, dtype=dtype)
-            else:
-                if dtype == "int":
-                    dtype=torch.int32
-                elif dtype == "bool":
-                    dtype=torch.bool
-                out_sub_dic[subkey] = torch.as_tensor(subsub_dic, dtype=dtype)
-        out_dic[key] = out_sub_dic
-    return out_dic
+
 
 
 class FiniteSampler(Sampler):
@@ -196,14 +178,18 @@ class NetCDFLoader_lazy(Dataset):
                                                         max_nh=model_settings['nh_input'],
                                                         lowest_level=0,
                                                         coords_icon=mgrids[0]['coords'])
-
-            output_mapping, output_in_range = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
-                                                        model_settings['output_grid'], self.variables_target.keys(), 
-                                                        search_raadius=model_settings['search_raadius'], 
-                                                        max_nh=1,
-                                                        lowest_level=0,
-                                                        coords_icon=mgrids[0]['coords'])
-                            
+            if model_settings['output_grid'] != model_settings['input_grid']:
+                output_mapping, output_in_range = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
+                                                            model_settings['output_grid'], self.variables_target.keys(), 
+                                                            search_raadius=model_settings['search_raadius'], 
+                                                            max_nh=1,
+                                                            lowest_level=0,
+                                                            coords_icon=mgrids[0]['coords'])
+            else:
+                output_mapping = copy.deepcopy(input_mapping) 
+                output_in_range = copy.deepcopy(input_in_range)
+                output_mapping['cell']['cell'] = output_mapping['cell']['cell'][:,[0]]
+                input_in_range['cell']['cell'] = input_in_range['cell']['cell'][:,[0]]
 
             input_mapping = mapping_to_(input_mapping, to='numpy')
             output_mapping = mapping_to_(output_mapping, to='numpy')

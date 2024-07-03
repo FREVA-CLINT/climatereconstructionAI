@@ -8,6 +8,26 @@ from scipy.interpolate import griddata
 
 radius_earth= 6371
 
+def mapping_to_(dic, to='numpy', dtype='int'):
+    out_dic = {}
+    for key, subdic in dic.items():
+        out_sub_dic = {}
+        for subkey, subsub_dic in subdic.items():
+            if to =='numpy':
+                if dtype == "int":
+                    dtype=np.int32
+                elif dtype == "bool":
+                    dtype=bool
+                out_sub_dic[subkey] = np.array(subsub_dic, dtype=dtype)
+            else:
+                if dtype == "int":
+                    dtype=torch.int32
+                elif dtype == "bool":
+                    dtype=torch.bool
+                out_sub_dic[subkey] = torch.as_tensor(subsub_dic, dtype=dtype)
+        out_dic[key] = out_sub_dic
+    return out_dic
+
 def distance_on_sphere(lon1,lat1,lon2,lat2):
     d_lat = torch.abs(lat1-lat2)
     d_lon = torch.abs(lon1-lon2)

@@ -1,5 +1,6 @@
 import json,os
 import math
+import pickle
 
 import torch
 import torch.nn as nn
@@ -10,7 +11,7 @@ import copy
 
 from ..utils.io import load_ckpt, load_model
 import climatereconstructionai.model.transformer_helpers as helpers
-from climatereconstructionai.utils.grid_utils import get_distance_angle, get_coords_as_tensor, get_mapping_to_icon_grid, get_nh_variable_mapping_icon, get_adjacent_indices, icon_grid_to_mgrid
+from climatereconstructionai.utils.grid_utils import get_distance_angle, get_coords_as_tensor, get_mapping_to_icon_grid, get_nh_variable_mapping_icon, get_adjacent_indices, icon_grid_to_mgrid, mapping_to_
 from .. import transformer_training as trainer
 from ..utils.normalizer import grid_normalizer
 
@@ -818,7 +819,7 @@ class ICON_Transformer(nn.Module):
 
             pos_embedders[global_level]['pos_embedder_handle'] = pos_embedder_handle
 
-        input_mapping, input_in_range, input_coordinates = self.get_input_grid_mapping(mgrids[0]['coords'])
+        input_mapping, input_in_range, input_coordinates, output_mapping, _, output_coordinates = self.get_grid_mappings(mgrids[0]['coords'])
 
         self.input_layers = self.init_input_layers(grid_layers["0"], self.model_settings['input_dim_var'], input_mapping, input_in_range, input_coordinates, pos_embedders[0])
 
@@ -843,7 +844,6 @@ class ICON_Transformer(nn.Module):
   
           # if output mapping is not same as processing:
         if self.model_settings['processing_grid'] != self.model_settings['output_grid']:
-            output_mapping, _, output_coordinates = self.get_output_grid_mapping(mgrids[0]['coords'])
             self.register_buffer('output_mapping', output_mapping['cell']['cell'], persistent=False)  
             self.register_buffer('output_coords', output_coordinates['cell'], persistent=False)  
 
@@ -996,41 +996,48 @@ class ICON_Transformer(nn.Module):
 
         return sampled_data        
 
-
-    def get_input_grid_mapping(self, mgrid_0_coords):
+    def get_grid_mappings(self, mgrid_0_coords):
         
+        indices_path = os.path.join(self.model_settings["model_dir"],"indices_data.pickle")
+
+        if not os.path.isfile(indices_path):
+
+            input_mapping, input_in_range = get_nh_variable_mapping_icon(self.model_settings['processing_grid'], ['cell'], 
+                                        self.model_settings['input_grid'], self.input_data, 
+                                        search_raadius=self.model_settings['search_raadius'], 
+                                        max_nh=self.model_settings['nh_input'], 
+                                        lowest_level=0,
+                                        coords_icon=mgrid_0_coords)
+
+            output_mapping, output_in_range = get_nh_variable_mapping_icon(self.model_settings['processing_grid'], ['cell'], 
+                                        self.model_settings['output_grid'], self.output_data, 
+                                        search_raadius=self.model_settings['search_raadius'], 
+                                        max_nh=1, 
+                                        lowest_level=0,
+                                        reverse_last=False,
+                                        coords_icon=mgrid_0_coords)
+            
+        else:
+            with open(indices_path, 'rb') as handle:
+                indices_data = pickle.load(handle)
+            
+            input_mapping = mapping_to_(indices_data['input_mapping'], to='pytorch')
+            input_in_range = mapping_to_(indices_data['input_in_range'], to='pytorch')
+
+            output_mapping = mapping_to_(indices_data['output_mapping'], to='pytorch')
+            output_in_range = mapping_to_(indices_data['output_in_range'], to='pytorch')
+
         input_coordinates = {}
         for grid_type in self.input_data.keys():
             input_coordinates[grid_type] = get_coords_as_tensor(xr.open_dataset(self.model_settings['input_grid']),grid_type=grid_type)
-           #global_indices = self.coarsen_indices(self.global_level_start)[0]
-           # input_coordinates[grid_type] = input_coordinates[grid_type][:,global_indices[0,:,0]]
-       
-
-        input_mapping, in_range = get_nh_variable_mapping_icon(self.model_settings['processing_grid'], ['cell'], 
-                                    self.model_settings['input_grid'], self.input_data, 
-                                    search_raadius=self.model_settings['search_raadius'], 
-                                    max_nh=self.model_settings['nh_input'], 
-                                    lowest_level=0,
-                                    coords_icon=mgrid_0_coords)
-
-        
-        return input_mapping, in_range, input_coordinates
-
-    def get_output_grid_mapping(self, mgrid_0_coords):
-        
-        output_mapping, in_range = get_nh_variable_mapping_icon(self.model_settings['processing_grid'], ['cell'], 
-                                    self.model_settings['output_grid'], self.output_data, 
-                                    search_raadius=self.model_settings['search_raadius'], 
-                                    max_nh=1, 
-                                    lowest_level=0,
-                                    reverse_last=False,
-                                    coords_icon=mgrid_0_coords)
 
         output_coordinates = {}
         for grid_type in self.output_data.keys():
             output_coordinates[grid_type] = get_coords_as_tensor(xr.open_dataset(self.model_settings['output_grid']),grid_type=grid_type)
 
-        return output_mapping, in_range, output_coordinates
+        
+        return input_mapping, input_in_range, input_coordinates, output_mapping, output_in_range, output_coordinates
+
 
 
     def init_processing_layer(self, global_level, proc_layer, x, x_att=[]):
