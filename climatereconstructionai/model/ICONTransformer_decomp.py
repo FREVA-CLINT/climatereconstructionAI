@@ -771,7 +771,7 @@ class ICON_Transformer(nn.Module):
         self.polar = True if "polar" in  self.pos_emb_calc else False
 
         self.grid = xr.open_dataset(self.model_settings['processing_grid'])
-        self.register_buffer('global_indices', torch.arange(len(self.grid.clon)).unsqueeze(dim=0), persistent=False)
+        
 
         n_grid_levels = self.model_settings['n_grid_levels']
 
@@ -786,6 +786,7 @@ class ICON_Transformer(nn.Module):
         else:
             mgrids = torch.load(self.model_settings['mgrids_path'])
 
+        self.register_buffer('global_indices', torch.arange(mgrids[0]['coords'].shape[1]).unsqueeze(dim=0), persistent=False)
         self.register_buffer('cell_coords_global', mgrids[0]['coords'], persistent=False)  
 
         self.input_data  = self.model_settings['variables_source']
@@ -1009,7 +1010,6 @@ class ICON_Transformer(nn.Module):
                                     self.model_settings['input_grid'], self.input_data, 
                                     search_raadius=self.model_settings['search_raadius'], 
                                     max_nh=self.model_settings['nh_input'], 
-                                    level_start=int(torch.min(torch.tensor([self.model_settings['level_start_input'], self.n_grid_levels_fov -1]))), 
                                     lowest_level=0,
                                     coords_icon=mgrid_0_coords)
 
@@ -1022,7 +1022,6 @@ class ICON_Transformer(nn.Module):
                                     self.model_settings['output_grid'], self.output_data, 
                                     search_raadius=self.model_settings['search_raadius'], 
                                     max_nh=1, 
-                                    level_start=int(torch.min(torch.tensor([self.model_settings['level_start_input'], self.n_grid_levels_fov -1]))),
                                     lowest_level=0,
                                     reverse_last=False,
                                     coords_icon=mgrid_0_coords)

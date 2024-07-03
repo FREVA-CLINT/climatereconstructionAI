@@ -915,7 +915,7 @@ def get_nearest_to_icon_rec(c_t_global, c_i, level=7, global_indices_i=None, nh=
 
     c_t_m = c_t_m.reshape(2, n_sec_i, -1)
 
-    dist, phi = get_distance_angle(c_t_m[0].unsqueeze(dim=-1),c_t_m[1].unsqueeze(dim=-1), c_i_[0].unsqueeze(dim=-2),c_i_[1].unsqueeze(dim=-2))
+    dist, phi = get_distance_angle(c_t_m[0].unsqueeze(dim=-1),c_t_m[1].unsqueeze(dim=-1), c_i_[0].unsqueeze(dim=-2), c_i_[1].unsqueeze(dim=-2))
     dist = dist.reshape(n_level, -1)
     phi = phi.reshape(n_level, -1)
 
@@ -930,7 +930,10 @@ def get_nearest_to_icon_rec(c_t_global, c_i, level=7, global_indices_i=None, nh=
         global_indices = torch.gather(global_indices_i, index=indices_rel.reshape(global_indices_i.shape[0],-1), dim=-1)
         global_indices = global_indices.reshape(n_level,-1)
     
-    n_keep = torch.tensor([nh, dist_values.shape[1]]).min()
+    if nh is not None:
+        n_keep = nh
+    else:
+        n_keep = dist_values.shape[1]
 
     indices_keep = dist_values.topk(int(n_keep), dim=-1, largest=False, sorted=True)[1]
 
@@ -943,7 +946,9 @@ def get_nearest_to_icon_rec(c_t_global, c_i, level=7, global_indices_i=None, nh=
     return global_indices, in_rad, (dist_values, phi_values)
 
 
-def get_mapping_to_icon_grid(coords_icon, coords_input, search_raadius=3, max_nh=10, level_start=7, lowest_level=0, reverse_last=False):
+def get_mapping_to_icon_grid(coords_icon, coords_input, search_raadius=3, max_nh=10, lowest_level=0, reverse_last=False):
+
+    level_start = int(math.log(coords_icon.shape[-1])/math.log(4))
 
     grid_mapping = []
     for k in range(level_start + 1 - lowest_level):
@@ -951,8 +956,10 @@ def get_mapping_to_icon_grid(coords_icon, coords_input, search_raadius=3, max_nh
 
         nh = max_nh*4**level
 
-        if k == level_start-lowest_level:
+        if level == lowest_level:
             nh = max_nh
+        else:
+            nh = None
 
         if k == 0:
             indices, in_rng, pos = get_nearest_to_icon_rec(coords_icon, coords_input.unsqueeze(dim=1), level=level, nh=nh, search_radius=search_raadius)
@@ -987,7 +994,7 @@ def get_mapping_to_icon_grid(coords_icon, coords_input, search_raadius=3, max_nh
     return grid_mapping
 
 
-def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, grid_types, search_raadius=3, max_nh=10, level_start=7, lowest_level = 0, return_last=True, reverse_last=False, coords_icon=None):
+def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, grid_types, search_raadius=3, max_nh=10, lowest_level = 0, return_last=True, reverse_last=False, coords_icon=None):
     
     grid_icon = xr.open_dataset(grid_file_icon)
     grid = xr.open_dataset(grid_file)
@@ -1027,7 +1034,6 @@ def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, gri
                     coords_input,
                     search_raadius=search_raadius,
                     max_nh=max_nh,
-                    level_start=level_start,
                     lowest_level = lowest_level,
                     reverse_last=reverse_last)
                 
@@ -1061,7 +1067,7 @@ def icon_grid_to_mgrid(grid, n_grid_levels, clon_fov=None, clat_fov=None, nh=0, 
 
     if clon_fov is not None or clat_fov is not None:
 
-        indices_max_lvl = torch.arange(len(grid.clon)).reshape(-1,4**int(n_grid_levels-1))
+        indices_max_lvl = torch.arange(len(grid.clon)).reshape(-1,4**int(n_grid_levels))
        
         clon_max_lvl = clon[indices_max_lvl[:,0]]
         clat_max_lvl = clat[indices_max_lvl[:,0]]

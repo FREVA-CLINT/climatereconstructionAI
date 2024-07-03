@@ -189,22 +189,18 @@ class NetCDFLoader_lazy(Dataset):
                 mgrids = icon_grid_to_mgrid(grid_processing, n_grid_levels_fov, clon_fov=clon_fov, clat_fov=clat_fov, nh=1, extension=0.1)
             else:
                 mgrids = torch.load(self.model_settings['mgrids_path'])
-            
-            level_start = np.min([n_grid_levels_fov-1, model_settings['level_start_input']])
 
             input_mapping, input_in_range = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
                                                         model_settings['input_grid'], self.variables_source.keys(), 
                                                         search_raadius=model_settings['search_raadius'], 
-                                                        max_nh=model_settings['nh_input'], 
-                                                        level_start=level_start,
+                                                        max_nh=model_settings['nh_input'],
                                                         lowest_level=0,
                                                         coords_icon=mgrids[0]['coords'])
 
             output_mapping, output_in_range = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
                                                         model_settings['output_grid'], self.variables_target.keys(), 
                                                         search_raadius=model_settings['search_raadius'], 
-                                                        max_nh=1, 
-                                                        level_start=level_start,
+                                                        max_nh=1,
                                                         lowest_level=0,
                                                         coords_icon=mgrids[0]['coords'])
                             
