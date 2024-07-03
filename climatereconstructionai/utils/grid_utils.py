@@ -949,6 +949,12 @@ def get_nearest_to_icon_rec(c_t_global, c_i, level=7, global_indices_i=None, nh=
 def get_mapping_to_icon_grid(coords_icon, coords_input, search_raadius=3, max_nh=10, lowest_level=0, reverse_last=False):
 
     level_start = int(math.log(coords_icon.shape[-1])/math.log(4))
+    
+    r = coords_icon.shape[-1]/4**level_start
+
+    while math.floor(r)!=math.ceil(r):
+        level_start -= 1
+        r = coords_icon.shape[-1]/4**level_start
 
     grid_mapping = []
     for k in range(level_start + 1 - lowest_level):
