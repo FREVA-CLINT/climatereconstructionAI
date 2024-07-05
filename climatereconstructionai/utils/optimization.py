@@ -309,14 +309,17 @@ class HierLoss(nn.Module):
             self.gauss=True
 
 
-    def forward(self, output_levels, target):
+    def forward(self, output_levels, target, in_range_mask=None):
         loss_dict = {}
         total_loss = 0
         for level, lambda_ in self.lambdas_levels.items():
             if lambda_ > 0:
                 output = get_sum(output_levels, level, gauss=self.gauss)
 
-                loss = lambda_ * self.loss_fcn(output, target['cell'])
+                if in_range_mask is not None:
+                    loss = lambda_ * self.loss_fcn(output[in_range_mask==True,:], target['cell'][in_range_mask==True,:])
+                else:
+                    loss = lambda_ * self.loss_fcn(output, target['cell'])
                 loss_dict[f'level_{level}'] = loss.item()
                 total_loss += loss
 
@@ -330,6 +333,7 @@ class loss_calculator(nn.Module):
         #self.lambdas_var = training_settings['lambdas_var']
         self.lambdas_levels = training_settings['lambdas_levels']
         self.lambdas_static = training_settings['lambdas']
+        self.mask_out_of_range = training_settings['mask_out_of_range'] if 'mask_out_of_range' in training_settings.keys() else False
         self.grid_variables_dict = grid_variables_dict
 
         self.loss_fcn_dict = {} 
@@ -358,9 +362,13 @@ class loss_calculator(nn.Module):
         loss_dict = {}
         total_loss = 0
 
+        if self.mask_out_of_range:
+            in_range_mask = model.output_in_range[source_indices['global_cell']]
+        else:
+            in_range_mask = None
         for loss_type, loss_fcn in self.loss_fcn_dict.items():
       
-            loss, loss_levels = loss_fcn(output_levels, target)
+            loss, loss_levels = loss_fcn(output_levels, target, in_range_mask)
             total_loss += self.lambdas_static[loss_type] * lambdas_optim[loss_type] * loss
 
             loss_levels_keys = [f'{loss_type}_{key}' for key in loss_levels.keys()]

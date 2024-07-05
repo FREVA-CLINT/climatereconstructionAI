@@ -819,7 +819,7 @@ class ICON_Transformer(nn.Module):
 
             pos_embedders[global_level]['pos_embedder_handle'] = pos_embedder_handle
 
-        input_mapping, input_in_range, input_coordinates, output_mapping, _, output_coordinates = self.get_grid_mappings(mgrids[0]['coords'])
+        input_mapping, input_in_range, input_coordinates, output_mapping, output_in_range, output_coordinates = self.get_grid_mappings(mgrids[0]['coords'])
 
         self.input_layers = self.init_input_layers(grid_layers["0"], self.model_settings['input_dim_var'], input_mapping, input_in_range, input_coordinates, pos_embedders[0])
 
@@ -846,6 +846,7 @@ class ICON_Transformer(nn.Module):
         if self.model_settings['processing_grid'] != self.model_settings['output_grid']:
             self.register_buffer('output_mapping', output_mapping['cell']['cell'], persistent=False)  
             self.register_buffer('output_coords', output_coordinates['cell'], persistent=False)  
+            self.register_buffer('output_in_range', output_in_range['cell']['cell'], persistent=False)  
 
         strict = self.model_settings['load_strict'] if 'load_strict' in self.model_settings.keys() else True
 
