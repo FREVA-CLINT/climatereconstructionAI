@@ -113,7 +113,8 @@ class NetCDFLoader_lazy(Dataset):
                  random_time_idx=True,
                  p_dropout=0,
                  save_samples_path=None,
-                 train_on_samples=False):
+                 train_on_samples=False,
+                 min_coverage=0):
         
         super(NetCDFLoader_lazy, self).__init__()
         
@@ -129,6 +130,7 @@ class NetCDFLoader_lazy(Dataset):
         self.sample_condition_dict = sample_condition_dict
         self.random_time_idx = random_time_idx
         self.p_dropout = p_dropout
+        self.min_coverage = min_coverage
 
         self.files_source = files_source
         self.files_target = files_target
@@ -178,6 +180,7 @@ class NetCDFLoader_lazy(Dataset):
                                                         max_nh=model_settings['nh_input'],
                                                         lowest_level=0,
                                                         coords_icon=mgrids[0]['coords'])
+            
             if model_settings['output_grid'] != model_settings['input_grid']:
                 output_mapping, output_in_range = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
                                                             model_settings['output_grid'], self.variables_target.keys(), 
@@ -189,7 +192,7 @@ class NetCDFLoader_lazy(Dataset):
                 output_mapping = copy.deepcopy(input_mapping) 
                 output_in_range = copy.deepcopy(input_in_range)
                 output_mapping['cell']['cell'] = output_mapping['cell']['cell'][:,[0]]
-                input_in_range['cell']['cell'] = input_in_range['cell']['cell'][:,[0]]
+                output_in_range['cell']['cell'] = output_in_range['cell']['cell'][:,[0]]
 
             input_mapping = mapping_to_(input_mapping, to='numpy')
             output_mapping = mapping_to_(output_mapping, to='numpy')
@@ -336,10 +339,19 @@ class NetCDFLoader_lazy(Dataset):
             input_mapping = mapping_to_(indices_data['input_mapping'], to='pytorch')
             global_cells = torch.as_tensor(indices_data['global_cells'])
             output_mapping = mapping_to_(indices_data['output_mapping'], to='pytorch')
-            #input_in_range = mapping_to_(indices_data['input_in_range'], to='pytorch', dtype="bool")
-            #output_in_range = mapping_to_(indices_data['output_in_range'], to='pytorch', dtype="bool")
+            input_in_range = mapping_to_(indices_data['input_in_range'], to='pytorch', dtype="bool")
+            output_in_range = mapping_to_(indices_data['output_in_range'], to='pytorch', dtype="bool")
 
             sample_index = torch.randint(global_cells_input.shape[0],(1,))[0]
+
+            covered = True
+            while not covered and self.min_coverage>0:
+                f_input = input_in_range['cell']['cell'][global_cells[sample_index]]
+                f_input = f_input.sum()/f_input.numel()
+                f_output = output_in_range['cell']['cell'][global_cells[sample_index]]
+                f_output = f_output.sum()/f_output.numel()
+                covered = (f_input + f_output)/2 >= self.min_coverage
+                sample_index = torch.randint(global_cells_input.shape[0],(1,))[0]
 
             data_source = self.get_data(ds_source, index, global_cells[sample_index] , self.variables_source, 0, input_mapping['cell'])
 

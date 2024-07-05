@@ -193,7 +193,8 @@ def train(model, training_settings, model_settings={}):
                                     model_settings=model_settings,
                                     p_dropout = training_settings['p_dropout'] if 'p_dropout' in training_settings else 0,
                                     save_samples_path = os.path.join(training_settings['save_samples_path'],'train') if 'save_samples_path' in training_settings else None,
-                                    train_on_samples=training_settings['train_on_samples'] if 'train_on_samples' in training_settings else False)
+                                    train_on_samples=training_settings['train_on_samples'] if 'train_on_samples' in training_settings else False,
+                                    min_coverage=training_settings['min_coverage'] if 'min_coverage' in training_settings else 0)
         
     if training_settings['distributed']:
         dist.barrier()
@@ -214,7 +215,8 @@ def train(model, training_settings, model_settings={}):
                                     model_settings=model_settings,
                                     p_dropout = training_settings['p_dropout'] if 'p_dropout' in training_settings else 0,
                                     save_samples_path = os.path.join(training_settings['save_samples_path'],'train') if 'save_samples_path' in training_settings else None,
-                                    train_on_samples=training_settings['train_on_samples'] if 'train_on_samples' in training_settings else False)
+                                    train_on_samples=training_settings['train_on_samples'] if 'train_on_samples' in training_settings else False,
+                                    min_coverage=training_settings['min_coverage'] if 'min_coverage' in training_settings else 0)
     
     if training_settings['distributed']:
         dist.barrier()
@@ -255,7 +257,8 @@ def train(model, training_settings, model_settings={}):
                                 model_settings=model_settings,
                                 p_dropout = training_settings['p_dropout'] if 'p_dropout' in training_settings else 0,
                                 save_samples_path = os.path.join(training_settings['save_samples_path'],'val') if 'save_samples_path' in training_settings else None,
-                                train_on_samples=training_settings['train_on_samples'] if 'train_on_samples' in training_settings else False)
+                                train_on_samples=training_settings['train_on_samples'] if 'train_on_samples' in training_settings else False,
+                                min_coverage=training_settings['min_coverage'] if 'min_coverage' in training_settings else 0)
           
         val_sampler = InfiniteSampler(len(dataset_val))   
 
