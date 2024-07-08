@@ -256,7 +256,7 @@ class coarsen_layer(nn.Module):
 
 
 class input_layer(nn.Module):
-    def __init__(self, grid_level_0, input_mapping, input_in_range, input_coordinates, input_dim, model_dim, ff_dim, seq_level=1, n_heads=4, dropout=0, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, polar=True, force_nha=False, kv_dropout=0, input_mlp=True) -> None: 
+    def __init__(self, grid_level_0, input_mapping, input_in_range, input_coordinates, input_dim, model_dim, ff_dim, seq_level=1, n_heads=4, dropout=0, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, polar=True, force_nha=False, kv_dropout=0, input_mlp=True, periodic_fov=None) -> None: 
         super().__init__()
 
         self.register_buffer("input_mapping", input_mapping, persistent=False)
@@ -264,6 +264,7 @@ class input_layer(nn.Module):
         self.register_buffer("input_coordinates", input_coordinates, persistent=False)
         self.grid_level_0 = grid_level_0
 
+        self.periodic_fov = periodic_fov
         self.seq_level = seq_level
         self.pos_embedder = pos_embedder
         self.pos_calculation = "polar" if polar else "cartesian"
@@ -301,7 +302,7 @@ class input_layer(nn.Module):
 
         coords2 = self.input_coordinates[:, indices]
 
-        pos1_grid, pos2_grid = get_distance_angle(coords1[0].unsqueeze(dim=-1), coords1[1].unsqueeze(dim=-1), coords2[0].unsqueeze(dim=-3), coords2[1].unsqueeze(dim=-3), base=self.pos_calculation)
+        pos1_grid, pos2_grid = get_distance_angle(coords1[0].unsqueeze(dim=-1), coords1[1].unsqueeze(dim=-1), coords2[0].unsqueeze(dim=-3), coords2[1].unsqueeze(dim=-3), base=self.pos_calculation, periodic_fov=self.periodic_fov)
         #pos1_grid, pos2_grid = get_distance_angle(coords1[0], coords1[1], coords2[0], coords2[1], base=self.pos_calculation)
         b,n,nh1,nh2,ng = pos1_grid.shape
 
@@ -672,7 +673,7 @@ class decomp_layer(nn.Module):
 
 
 class projection_layer(nn.Module):
-    def __init__(self, grid_layers: dict, model_hparams: dict, pos_embedders, output_dim, output_mappings=None, input_mappings=None, var_projection=False, v_proj=True) -> None: 
+    def __init__(self, grid_layers: dict, model_hparams: dict, pos_embedders, output_dim, output_mappings=None, input_mappings=None, var_projection=False, v_proj=True, periodic_fov=None) -> None: 
         super().__init__()
 
         self.output_mappings = output_mappings
@@ -685,6 +686,8 @@ class projection_layer(nn.Module):
 
         pos_emb_dim = pos_embedders[0]['pos_emb_dim']
         self.polar = pos_embedders[0]['polar']
+
+        self.periodic_fov = periodic_fov
 
         self.grid_layers = grid_layers
         
@@ -742,7 +745,7 @@ class projection_layer(nn.Module):
  
         return x_output_mean, x_output_var
 
-def get_relative_positions(coords1, coords2, polar=False):
+def get_relative_positions(coords1, coords2, polar=False, periodic_fov=None):
     
     if coords2.dim() > coords1.dim():
         coords1 = coords1.unsqueeze(dim=-1)
@@ -754,7 +757,7 @@ def get_relative_positions(coords1, coords2, polar=False):
         coords1 = coords1.unsqueeze(dim=-1)
         coords2 = coords2.unsqueeze(dim=-2)
 
-    distances, phis = get_distance_angle(coords1[0], coords1[1], coords2[0], coords2[1], base="polar" if polar else "cartesian")
+    distances, phis = get_distance_angle(coords1[0], coords1[1], coords2[0], coords2[1], base="polar" if polar else "cartesian", periodic_fov=periodic_fov)
 
     return distances.float(), phis.float()
 
@@ -782,6 +785,8 @@ class ICON_Transformer(nn.Module):
 
         self.scale_input = self.model_settings['scale_input'] if 'scale_input' in self.model_settings.keys() else 1
         self.scale_output = self.model_settings['scale_output'] if 'scale_output' in self.model_settings.keys() else 1
+        self.periodic_fov = clon_fov if ('input_periodicty' in self.model_settings.keys() and self.model_settings['input_periodicty']) else None
+
         if 'mgrids_path' not in self.model_settings.keys():
             mgrids = icon_grid_to_mgrid(self.grid, self.n_grid_levels_fov, clon_fov=clon_fov, clat_fov=clat_fov, nh=self.model_settings['nh'], extension=0.1)
             self.model_settings['mgrids_path'] = os.path.join(self.model_settings['model_dir'], 'mgrids.pt')
@@ -1011,7 +1016,9 @@ class ICON_Transformer(nn.Module):
                                         max_nh=self.model_settings['nh_input'], 
                                         lowest_level=0,
                                         coords_icon=mgrid_0_coords,
-                                        scale_input = self.scale_input)
+                                        scale_input = self.scale_input,
+                                        periodic_fov= self.model_settings['clon_fov'] if ('input_periodicty' in self.model_settings.keys() and self.model_settings['input_periodicty']) else None
+                                        )
 
             output_mapping, output_in_range = get_nh_variable_mapping_icon(self.model_settings['processing_grid'], ['cell'], 
                                         self.model_settings['output_grid'], self.output_data, 
@@ -1020,7 +1027,9 @@ class ICON_Transformer(nn.Module):
                                         lowest_level=0,
                                         reverse_last=False,
                                         coords_icon=mgrid_0_coords,
-                                        scale_input = self.scale_output)
+                                        scale_input = self.scale_output,
+                                        periodic_fov= self.model_settings['clon_fov'] if ('input_periodicty' in self.model_settings.keys() and self.model_settings['input_periodicty']) else None
+                                        )
             
         else:
             with open(indices_path, 'rb') as handle:
@@ -1129,26 +1138,6 @@ class ICON_Transformer(nn.Module):
         coords = self.cell_coords_global[:,indices]
         return coords
 
-    def get_relative_positions(self, cell_indices1, cell_indices2):
-      
-        coords1 = self.cell_coords_global[:,cell_indices1]
-        coords2 = self.cell_coords_global[:,cell_indices2]
-  
-        if coords2.dim() > coords1.dim():
-            coords1 = coords1.unsqueeze(dim=-1)
-
-        if coords1.dim() > coords2.dim():
-            coords2 = coords2.unsqueeze(dim=-2)
-
-        if coords1.dim() == coords2.dim():
-            coords1 = coords1.unsqueeze(dim=-1)
-            coords2 = coords2.unsqueeze(dim=-2)
-
-        distances, phis = get_distance_angle(coords1[0], coords1[1], coords2[0], coords2[1], base="polar" if self.polar else "cartesian")
-
-        return distances.float(), phis.float()
-
-
     def init_input_layers(self, grid_layer_0, model_dim_var, input_mapping, input_in_range, input_coordinates, pos_embedder):
 
         n_heads = self.model_settings['n_heads']
@@ -1173,7 +1162,8 @@ class ICON_Transformer(nn.Module):
                     pos_emb_type = "bias",
                     pos_emb_dim=pos_embedder['pos_emb_dim'],
                     polar=pos_embedder['polar'],
-                    kv_dropout=self.model_settings['kv_dropout_input'])
+                    kv_dropout=self.model_settings['kv_dropout_input'],
+                    periodic_fov=self.periodic_fov)
             
             input_layers[key] = layer
 

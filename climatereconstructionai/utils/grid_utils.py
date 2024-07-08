@@ -802,23 +802,31 @@ class grid_interpolator(nn.Module):
     
 
 
-def get_distance_angle(lon1, lat1, lon2, lat2, base="polar"):
+def get_distance_angle(lon1, lat1, lon2, lat2, base="polar", periodic_fov=None):
 
     d_lats = distance_on_sphere(lon1, lat1, lon2, lat1)
     d_lons = distance_on_sphere(lon1, lat1, lon1, lat2)
+    
+
+    sgn = torch.sign(lat2-lat1)
+    sgn[(d_lats ).abs()/torch.pi>1] = sgn[(d_lats).abs()/torch.pi>1]*-1
+    d_lats = d_lats*sgn
+
+    sgn = torch.sign(lon2-lon1)
+    sgn[(d_lons).abs()/torch.pi>1] = sgn[(d_lons).abs()/torch.pi>1]*-1
+    d_lons = d_lons*sgn
+
+
+    if periodic_fov is not None:
+        rng_lon = (periodic_fov[1] - periodic_fov[0])
+
+        d_lons[d_lons > rng_lon] = d_lons[d_lons > rng_lon] - rng_lon
+        d_lons[d_lons < -rng_lon] = d_lons[d_lons < -rng_lon] + rng_lon
+
 
     if base == "polar":
-        sgn = torch.sign(lat2-lat1)
-        sgn[(d_lats ).abs()/torch.pi>1] = sgn[(d_lats).abs()/torch.pi>1]*-1
-        d_lats_s = d_lats*sgn
-
-        sgn = torch.sign(lon2-lon1)
-        sgn[(d_lons).abs()/torch.pi>1] = sgn[(d_lons).abs()/torch.pi>1]*-1
-        d_lons_s = d_lons*sgn
-
-
         distance = torch.sqrt(d_lats**2 + d_lons**2)
-        phi = torch.atan2(d_lats_s, d_lons_s)
+        phi = torch.atan2(d_lats, d_lons)
 
         return distance, phi
 
@@ -908,7 +916,7 @@ def get_adjacent_indices(acoe, eoc, nh=5, global_level=1):
 
 
 
-def get_nearest_to_icon_rec(c_t_global, c_i, level=7, global_indices_i=None, nh=5, search_radius=5, reverse=False):
+def get_nearest_to_icon_rec(c_t_global, c_i, level=7, global_indices_i=None, nh=5, search_radius=5, reverse=False, periodic_fov=None):
 
     n_coords, n_sec_i, n_pts_i = c_i.shape
     n_target = c_t_global.shape[-1]
@@ -935,7 +943,7 @@ def get_nearest_to_icon_rec(c_t_global, c_i, level=7, global_indices_i=None, nh=
 
     c_t_m = c_t_m.reshape(2, n_sec_i, -1)
 
-    dist, phi = get_distance_angle(c_t_m[0].unsqueeze(dim=-1),c_t_m[1].unsqueeze(dim=-1), c_i_[0].unsqueeze(dim=-2), c_i_[1].unsqueeze(dim=-2))
+    dist, phi = get_distance_angle(c_t_m[0].unsqueeze(dim=-1),c_t_m[1].unsqueeze(dim=-1), c_i_[0].unsqueeze(dim=-2), c_i_[1].unsqueeze(dim=-2), periodic_fov=periodic_fov)
     dist = dist.reshape(n_level, -1)
     phi = phi.reshape(n_level, -1)
 
@@ -966,7 +974,7 @@ def get_nearest_to_icon_rec(c_t_global, c_i, level=7, global_indices_i=None, nh=
     return global_indices, in_rad, (dist_values, phi_values)
 
 
-def get_mapping_to_icon_grid(coords_icon, coords_input, search_raadius=3, max_nh=10, lowest_level=0, reverse_last=False):
+def get_mapping_to_icon_grid(coords_icon, coords_input, search_raadius=3, max_nh=10, lowest_level=0, reverse_last=False, periodic_fov=None):
 
     level_start = int(math.log(coords_icon.shape[-1])/math.log(4))
     
@@ -988,9 +996,9 @@ def get_mapping_to_icon_grid(coords_icon, coords_input, search_raadius=3, max_nh
             nh = None
 
         if k == 0:
-            indices, in_rng, pos = get_nearest_to_icon_rec(coords_icon, coords_input.unsqueeze(dim=1), level=level, nh=nh, search_radius=search_raadius)
+            indices, in_rng, pos = get_nearest_to_icon_rec(coords_icon, coords_input.unsqueeze(dim=1), level=level, nh=nh, search_radius=search_raadius, periodic_fov=periodic_fov)
         else:
-            indices, in_rng, pos = get_nearest_to_icon_rec(coords_icon, coords_input[:,indices], level=level, global_indices_i=indices, nh=nh, search_radius=search_raadius)
+            indices, in_rng, pos = get_nearest_to_icon_rec(coords_icon, coords_input[:,indices], level=level, global_indices_i=indices, nh=nh, search_radius=search_raadius, periodic_fov=periodic_fov)
 
         if k == level_start - lowest_level and reverse_last:
             indices = np.array(indices.transpose(0,1).reshape(-1))
@@ -1003,7 +1011,7 @@ def get_mapping_to_icon_grid(coords_icon, coords_input, search_raadius=3, max_nh
                 indices_g[uni]=-1
                 indices_missing = torch.tensor(indices_g[indices_g!=-1])
 
-                grid_mapping = get_mapping_to_icon_grid(coords_icon, coords_input[:,indices_missing], level_start=level_start, max_nh=max_nh, search_raadius=search_raadius, reverse_last=False)
+                grid_mapping = get_mapping_to_icon_grid(coords_icon, coords_input[:,indices_missing], level_start=level_start, max_nh=max_nh, search_raadius=search_raadius, reverse_last=False, periodic_fov=periodic_fov)
 
                 indices_new = np.array(grid_mapping[-1]['indices'].transpose(0,1).reshape(-1))
                 uni_new, indices_rev_new = np.unique(indices_new, return_index=True)
@@ -1020,7 +1028,7 @@ def get_mapping_to_icon_grid(coords_icon, coords_input, search_raadius=3, max_nh
     return grid_mapping
 
 
-def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, grid_types, search_raadius=3, max_nh=10, lowest_level = 0, return_last=True, reverse_last=False, coords_icon=None, scale_input=1.):
+def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, grid_types, search_raadius=3, max_nh=10, lowest_level = 0, return_last=True, reverse_last=False, coords_icon=None, scale_input=1., periodic_fov=None):
     
     grid_icon = xr.open_dataset(grid_file_icon)
     grid = xr.open_dataset(grid_file)
@@ -1063,7 +1071,8 @@ def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, gri
                     search_raadius=search_raadius,
                     max_nh=max_nh,
                     lowest_level=lowest_level,
-                    reverse_last=reverse_last)
+                    reverse_last=reverse_last,
+                    periodic_fov=periodic_fov)
                 
                 if return_last:
                     mapping = mapping[-1]
