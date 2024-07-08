@@ -1020,7 +1020,7 @@ def get_mapping_to_icon_grid(coords_icon, coords_input, search_raadius=3, max_nh
     return grid_mapping
 
 
-def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, grid_types, search_raadius=3, max_nh=10, lowest_level = 0, return_last=True, reverse_last=False, coords_icon=None):
+def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, grid_types, search_raadius=3, max_nh=10, lowest_level = 0, return_last=True, reverse_last=False, coords_icon=None, scale_input=1.):
     
     grid_icon = xr.open_dataset(grid_file_icon)
     grid = xr.open_dataset(grid_file)
@@ -1036,7 +1036,7 @@ def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, gri
                'vertex': {'edge': 'edges_of_vertex',
                        'cell': 'cells_of_vertex',
                         'vertex': 'vertex_index'}}
-
+    
     mapping_icon = {}
     in_range = {}
     for grid_type_icon in grid_types_icon:
@@ -1049,6 +1049,8 @@ def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, gri
 
         for grid_type in grid_types:
             coords_input = get_coords_as_tensor(grid, grid_type=grid_type)
+            if scale_input > 1:
+                coords_input = scale_coordinates(coords_input, scale_input)
 
             if grid_file_icon == grid_file:
                 indices = torch.arange(coords_icon.shape[1]).view(-1,1)
@@ -1060,7 +1062,7 @@ def get_nh_variable_mapping_icon(grid_file_icon, grid_types_icon, grid_file, gri
                     coords_input,
                     search_raadius=search_raadius,
                     max_nh=max_nh,
-                    lowest_level = lowest_level,
+                    lowest_level=lowest_level,
                     reverse_last=reverse_last)
                 
                 if return_last:
@@ -1175,3 +1177,7 @@ def icon_grid_to_mgrid(grid, n_grid_levels, clon_fov=None, clat_fov=None, nh=0, 
         grids.append(grid_lvl)
 
     return grids
+
+def scale_coordinates(coords, scale_factor):
+    m = coords.mean(dim=1, keepdim=True)
+    return (coords - m) * scale_factor + m

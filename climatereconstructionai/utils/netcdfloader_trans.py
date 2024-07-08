@@ -179,7 +179,8 @@ class NetCDFLoader_lazy(Dataset):
                                                         search_raadius=model_settings['search_raadius'], 
                                                         max_nh=model_settings['nh_input'],
                                                         lowest_level=0,
-                                                        coords_icon=mgrids[0]['coords'])
+                                                        coords_icon=mgrids[0]['coords'],
+                                                        scale_input=model_settings['scale_input'] if 'scale_input' in model_settings.keys() else 1)
             
             if model_settings['output_grid'] != model_settings['input_grid']:
                 output_mapping, output_in_range = get_nh_variable_mapping_icon(model_settings['processing_grid'], ['cell'], 
@@ -187,7 +188,8 @@ class NetCDFLoader_lazy(Dataset):
                                                             search_raadius=model_settings['search_raadius'], 
                                                             max_nh=1,
                                                             lowest_level=0,
-                                                            coords_icon=mgrids[0]['coords'])
+                                                            coords_icon=mgrids[0]['coords'],
+                                                            scale_output=model_settings['scale_output'] if 'scale_output' in model_settings.keys() else 1)
             else:
                 output_mapping = copy.deepcopy(input_mapping) 
                 output_in_range = copy.deepcopy(input_in_range)

@@ -11,7 +11,7 @@ import copy
 
 from ..utils.io import load_ckpt, load_model
 import climatereconstructionai.model.transformer_helpers as helpers
-from climatereconstructionai.utils.grid_utils import get_distance_angle, get_coords_as_tensor, get_mapping_to_icon_grid, get_nh_variable_mapping_icon, get_adjacent_indices, icon_grid_to_mgrid, mapping_to_
+from climatereconstructionai.utils.grid_utils import get_distance_angle, get_coords_as_tensor, get_mapping_to_icon_grid, get_nh_variable_mapping_icon, get_adjacent_indices, icon_grid_to_mgrid, mapping_to_, scale_coordinates
 from .. import transformer_training as trainer
 from ..utils.normalizer import grid_normalizer
 
@@ -780,6 +780,8 @@ class ICON_Transformer(nn.Module):
         clat_fov = self.model_settings['clat_fov'] if 'clat_fov' in self.model_settings.keys() else None
         self.n_grid_levels_fov = self.model_settings['n_grid_levels_fov'] if 'n_grid_levels_fov' in self.model_settings.keys() else n_grid_levels
 
+        self.scale_input = self.model_settings['scale_input'] if 'scale_input' in self.model_settings.keys() else 1
+        self.scale_output = self.model_settings['scale_output'] if 'scale_output' in self.model_settings.keys() else 1
         if 'mgrids_path' not in self.model_settings.keys():
             mgrids = icon_grid_to_mgrid(self.grid, self.n_grid_levels_fov, clon_fov=clon_fov, clat_fov=clat_fov, nh=self.model_settings['nh'], extension=0.1)
             self.model_settings['mgrids_path'] = os.path.join(self.model_settings['model_dir'], 'mgrids.pt')
@@ -1008,7 +1010,8 @@ class ICON_Transformer(nn.Module):
                                         search_raadius=self.model_settings['search_raadius'], 
                                         max_nh=self.model_settings['nh_input'], 
                                         lowest_level=0,
-                                        coords_icon=mgrid_0_coords)
+                                        coords_icon=mgrid_0_coords,
+                                        scale_input = self.scale_input)
 
             output_mapping, output_in_range = get_nh_variable_mapping_icon(self.model_settings['processing_grid'], ['cell'], 
                                         self.model_settings['output_grid'], self.output_data, 
@@ -1016,7 +1019,8 @@ class ICON_Transformer(nn.Module):
                                         max_nh=1, 
                                         lowest_level=0,
                                         reverse_last=False,
-                                        coords_icon=mgrid_0_coords)
+                                        coords_icon=mgrid_0_coords,
+                                        scale_input = self.scale_output)
             
         else:
             with open(indices_path, 'rb') as handle:
@@ -1030,11 +1034,12 @@ class ICON_Transformer(nn.Module):
 
         input_coordinates = {}
         for grid_type in self.input_data.keys():
-            input_coordinates[grid_type] = get_coords_as_tensor(xr.open_dataset(self.model_settings['input_grid']),grid_type=grid_type)
+            input_coordinates[grid_type] = scale_coordinates(get_coords_as_tensor(xr.open_dataset(self.model_settings['input_grid']), grid_type=grid_type), self.scale_input)
+            
 
         output_coordinates = {}
         for grid_type in self.output_data.keys():
-            output_coordinates[grid_type] = get_coords_as_tensor(xr.open_dataset(self.model_settings['output_grid']),grid_type=grid_type)
+            output_coordinates[grid_type] = scale_coordinates(get_coords_as_tensor(xr.open_dataset(self.model_settings['output_grid']), grid_type=grid_type), self.scale_output)
 
         
         return input_mapping, input_in_range, input_coordinates, output_mapping, output_in_range, output_coordinates
