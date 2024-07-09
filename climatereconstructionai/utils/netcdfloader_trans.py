@@ -194,7 +194,7 @@ class NetCDFLoader_lazy(Dataset):
                                                             max_nh=1,
                                                             lowest_level=0,
                                                             coords_icon=mgrids[0]['coords'],
-                                                            scale_output=scale_output,
+                                                            scale_input=scale_output,
                                                             periodic_fov= clon_fov if ('input_periodicty' in self.model_settings.keys() and self.model_settings['input_periodicty']) else None)
             else:
                 output_mapping = copy.deepcopy(input_mapping) 
