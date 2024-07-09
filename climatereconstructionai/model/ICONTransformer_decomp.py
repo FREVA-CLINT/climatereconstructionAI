@@ -823,7 +823,7 @@ class ICON_Transformer(nn.Module):
 
             if grid_level_idx % share_emb_every == 0:
                 pos_embedder_handle = position_embedder(1e-4, 1, embed_dim=self.model_settings["emb_table_bins"], n_out=self.model_settings["pos_emb_dim"], pos_emb_calc=self.pos_emb_calc, phi_table=phi_emb_table)
-                phi_emb_table = pos_embedder_handle.pos2_emb
+                phi_emb_table = pos_embedder_handle.pos2_emb if self.polar else None
 
             pos_embedders[global_level]['pos_embedder_handle'] = pos_embedder_handle
 
