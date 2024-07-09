@@ -169,6 +169,9 @@ class NetCDFLoader_lazy(Dataset):
 
             n_grid_levels_fov = self.model_settings['n_grid_levels_fov'] if 'n_grid_levels_fov' in self.model_settings.keys() else model_settings['level_start_input']
 
+            scale_input=model_settings['scale_input'] if 'scale_input' in model_settings.keys() else 1
+            scale_output=model_settings['scale_output'] if 'scale_output' in model_settings.keys() else 1
+
             if 'mgrids_path' not in self.model_settings.keys():
                 mgrids = icon_grid_to_mgrid(grid_processing, n_grid_levels_fov, clon_fov=clon_fov, clat_fov=clat_fov, nh=1, extension=0.1)
             else:
@@ -180,7 +183,7 @@ class NetCDFLoader_lazy(Dataset):
                                                         max_nh=model_settings['nh_input'],
                                                         lowest_level=0,
                                                         coords_icon=mgrids[0]['coords'],
-                                                        scale_input=model_settings['scale_input'] if 'scale_input' in model_settings.keys() else 1,
+                                                        scale_input=scale_input,
                                                         periodic_fov= clon_fov if ('input_periodicty' in self.model_settings.keys() and self.model_settings['input_periodicty']) else None)
             
             if model_settings['output_grid'] != model_settings['input_grid']:
@@ -190,7 +193,7 @@ class NetCDFLoader_lazy(Dataset):
                                                             max_nh=1,
                                                             lowest_level=0,
                                                             coords_icon=mgrids[0]['coords'],
-                                                            scale_output=model_settings['scale_output'] if 'scale_output' in model_settings.keys() else 1,
+                                                            scale_output=scale_output,
                                                             periodic_fov= clon_fov if ('input_periodicty' in self.model_settings.keys() and self.model_settings['input_periodicty']) else None)
             else:
                 output_mapping = copy.deepcopy(input_mapping) 
