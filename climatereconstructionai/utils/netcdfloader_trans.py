@@ -173,7 +173,8 @@ class NetCDFLoader_lazy(Dataset):
             scale_output=model_settings['scale_output'] if 'scale_output' in model_settings.keys() else 1
 
             if 'mgrids_path' not in self.model_settings.keys():
-                mgrids = icon_grid_to_mgrid(grid_processing, n_grid_levels_fov, clon_fov=clon_fov, clat_fov=clat_fov, nh=1, extension=0.1)
+                fov_extension = self.model_settings['fov_extension'] if 'fov_extension' in self.model_settings.keys() else 0.1
+                mgrids = icon_grid_to_mgrid(grid_processing, n_grid_levels_fov, clon_fov=clon_fov, clat_fov=clat_fov, nh=1, extension=fov_extension)
             else:
                 mgrids = torch.load(self.model_settings['mgrids_path'])
 

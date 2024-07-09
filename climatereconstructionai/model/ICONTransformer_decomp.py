@@ -788,7 +788,8 @@ class ICON_Transformer(nn.Module):
         self.periodic_fov = clon_fov if ('input_periodicty' in self.model_settings.keys() and self.model_settings['input_periodicty']) else None
 
         if 'mgrids_path' not in self.model_settings.keys():
-            mgrids = icon_grid_to_mgrid(self.grid, self.n_grid_levels_fov, clon_fov=clon_fov, clat_fov=clat_fov, nh=self.model_settings['nh'], extension=0.1)
+            fov_extension = self.model_settings['fov_extension'] if 'fov_extension' in self.model_settings.keys() else 0.1
+            mgrids = icon_grid_to_mgrid(self.grid, self.n_grid_levels_fov, clon_fov=clon_fov, clat_fov=clat_fov, nh=self.model_settings['nh'], extension=fov_extension)
             self.model_settings['mgrids_path'] = os.path.join(self.model_settings['model_dir'], 'mgrids.pt')
             torch.save(mgrids, self.model_settings['mgrids_path'])
         else:
