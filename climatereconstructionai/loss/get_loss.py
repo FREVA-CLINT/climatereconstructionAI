@@ -5,6 +5,7 @@ from .hole_loss import HoleLoss
 from .total_variation_loss import TotalVariationLoss
 from .valid_loss import ValidLoss
 from .kldiv_loss import KLDivLoss
+from .extreme_loss import ExtremeLoss
 from .. import config as cfg
 from ..utils.featurizer import VGG16FeatureExtractor
 
@@ -54,6 +55,8 @@ class loss_criterion(torch.nn.Module):
                 elif loss == 'kldiv':
                     self.criterions.append(KLDivLoss().to(cfg.device))
 
+                elif loss == '-extreme' or loss == '+extreme':
+                    self.criterions.append(ExtremeLoss().to(cfg.device))
 
     def forward(self, mask, output, latent_dist, gt):
 
