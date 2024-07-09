@@ -350,16 +350,14 @@ class NetCDFLoader_lazy(Dataset):
             input_in_range = mapping_to_(indices_data['input_in_range'], to='pytorch', dtype="bool")
             output_in_range = mapping_to_(indices_data['output_in_range'], to='pytorch', dtype="bool")
 
-            sample_index = torch.randint(global_cells_input.shape[0],(1,))[0]
-
-            covered = True
-            while not covered and self.min_coverage>0:
+            covered = False
+            while not covered:
+                sample_index = torch.randint(global_cells_input.shape[0],(1,))[0]
                 f_input = input_in_range['cell']['cell'][global_cells[sample_index]]
                 f_input = f_input.sum()/f_input.numel()
                 f_output = output_in_range['cell']['cell'][global_cells[sample_index]]
                 f_output = f_output.sum()/f_output.numel()
                 covered = (f_input + f_output)/2 >= self.min_coverage
-                sample_index = torch.randint(global_cells_input.shape[0],(1,))[0]
 
             data_source = self.get_data(ds_source, index, global_cells[sample_index] , self.variables_source, 0, input_mapping['cell'])
 
