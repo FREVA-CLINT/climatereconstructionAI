@@ -74,6 +74,10 @@ def set_lambdas():
     elif loss_criterion == 3:
         lambda_dict['valid'] = 1.
 
+    elif loss_criterion == 4:
+        lambda_dict['-extreme'] = 1.
+        lambda_dict['+extreme'] = 1.
+
     if vae_zdim != 0:
         lambda_dict['kldiv'] = 1.
 

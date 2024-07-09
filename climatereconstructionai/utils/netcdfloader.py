@@ -164,7 +164,7 @@ class NetCDFLoader(Dataset):
         else:
             mask = torch.from_numpy(np.array(self.mask_data[ind_data][mask_indices]))
         image = np.array(self.img_data[ind_data][img_indices])
-        image = torch.from_numpy(image)#np.nan_to_num(image))
+        image = torch.from_numpy(np.nan_to_num(image))
 
         if cfg.normalize_data:
             image = self.img_znorm[ind_data](image)
@@ -226,7 +226,7 @@ class NetCDFLoader(Dataset):
                     images.append(image[cfg.out_steps])
                     out_masks.append(self.create_out_mask(mask, i))
                 in_masks.append(mask[cfg.in_steps])
-                masked.append(image[cfg.in_steps].nan_to_num() * mask[cfg.in_steps])
+                masked.append(image[cfg.in_steps] * mask[cfg.in_steps])
 
         if cfg.channel_steps:
             return torch.cat(masked, dim=0).transpose(0, 1), torch.cat(in_masks, dim=0).transpose(0, 1), \
