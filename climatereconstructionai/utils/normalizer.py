@@ -8,12 +8,18 @@ def img_normalization(img_data, train_stats):
     if cfg.normalize_data:
         for i in range(len(img_data)):
             if train_stats is None:
-                if cfg.lazy_load:
-                    img_mean.append(img_data[i].chunk('auto').mean(skipna=True).compute().item())
-                    img_std.append(img_data[i].chunk('auto').std(skipna=True).compute().item())
-                else:
-                    img_mean.append(np.nanmean(img_data[i]))
-                    img_std.append(np.nanstd(img_data[i]))
+                sums, ssum, size = 0., 0., 0.
+                for data in img_data[i]:
+                    if cfg.lazy_load:
+                        sums += data.chunk('auto').sum(skipna=True).compute().item()
+                        ssum += (data.chunk('auto')*data.chunk('auto')).sum(skipna=True).compute().item()
+                        size += data.chunk('auto').count().compute().item()
+                    else:
+                        sums += np.nansum(data)
+                        ssum += np.nansum(data * data)
+                        size += np.sum(~np.isnan(data))
+                img_mean.append(sums / size)
+                img_std.append(np.sqrt(ssum / size - img_mean[-1] * img_mean[-1]))
             else:
                 img_mean.append(train_stats["mean"][i])
                 img_std.append(train_stats["std"][i])
