@@ -278,20 +278,22 @@ class input_layer(nn.Module):
 
         input_dim = model_dim if input_mlp else input_dim
 
-        #if input_mapping.shape[-1]>1 or force_nha:
-        self.nha_layer = nha_layer(
-                    input_dim = model_dim,
-                    model_dim = model_dim,
-                    ff_dim = ff_dim,
-                    n_heads = n_heads,
-                    input_mlp = False,
-                    dropout=dropout,
-                    q_res=False,
-                    pos_emb_type=pos_emb_type,
-                    pos_embedder=pos_embedder,
-                    pos_emb_dim=pos_emb_dim,
-                    kv_dropout=kv_dropout,
-                    qkv_bias=False)
+        if input_mapping.shape[-1]>1 or force_nha:
+            self.nha_layer = nha_layer(
+                        input_dim = model_dim,
+                        model_dim = model_dim,
+                        ff_dim = ff_dim,
+                        n_heads = n_heads,
+                        input_mlp = False,
+                        dropout=dropout,
+                        q_res=False,
+                        pos_emb_type=pos_emb_type,
+                        pos_embedder=pos_embedder,
+                        pos_emb_dim=pos_emb_dim,
+                        kv_dropout=kv_dropout,
+                        qkv_bias=False)
+        else:
+            self.nha_layer = nn.Identity()
 
     def get_relative_positions(self, grid_level_indices):
         
@@ -349,7 +351,9 @@ class input_layer(nn.Module):
             # xk = xk.view(x.shape)
 
             #xq = self.proj_q(self.pos_embedder(pos_grid[0], pos_grid[1]))
+            
             x = self.nha_layer(x, pos=pos, mask=None)
+       
 
         x = x.view(b, n, -1)
     
@@ -1182,7 +1186,8 @@ class ICON_Transformer(nn.Module):
                     pos_emb_dim=pos_embedder['pos_emb_dim'],
                     polar=pos_embedder['polar'],
                     kv_dropout=self.model_settings['kv_dropout_input'],
-                    periodic_fov=self.periodic_fov)
+                    periodic_fov=self.periodic_fov,
+                    force_nha=self.model_settings['force_nha'] if 'force_nha' in self.model_settings.keys() else False)
             
             input_layers[key] = layer
 
