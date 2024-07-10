@@ -219,9 +219,8 @@ def create_outputs(data_dict, eval_path, output_names, data_stats, xr_dss, i_mod
         for time_step in cfg.plot_results:
             if time_step in index:
                 output_name = '{}_{}{}_{}.png'.format(eval_path[j], "combined", m_label, time_step)
-
                 plot_data(xr_dss[i_data][ds_index]["ds1"].coords,
                           [data_dict[p][time_step - index[0], i_plot[p], :, :].squeeze() for p in pnames],
                           ["Original", "Reconstructed"], output_name, data_type,
-                          str(xr_dss[i_data]["ds"][ds_index]["time"][time_step].values),
+                          str(xr_dss[i_data][ds_index]["ds"]["time"][time_step].values),
                           *cfg.dataset_format["scale"])
