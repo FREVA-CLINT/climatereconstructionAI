@@ -12,7 +12,7 @@ def img_normalization(img_data, train_stats):
                 for data in img_data[i]:
                     if cfg.lazy_load:
                         sums += data.chunk('auto').sum(skipna=True).compute().item()
-                        ssum += (data.chunk('auto')*data.chunk('auto')).sum(skipna=True).compute().item()
+                        ssum += (data.chunk('auto') * data.chunk('auto')).sum(skipna=True).compute().item()
                         size += data.chunk('auto').count().compute().item()
                     else:
                         sums += np.nansum(data)

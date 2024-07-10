@@ -84,6 +84,7 @@ def set_lambdas():
     if lambda_loss is not None:
         lambda_dict.update(lambda_loss)
 
+
 def set_steps(evaluate=False):
 
     assert sum(bool(x) for x in [lstm_steps, gru_steps, channel_steps]) < 2, \
@@ -133,6 +134,7 @@ def set_steps(evaluate=False):
         out_channels = n_output_data * len(out_steps)
 
     assert len(time_steps) == 2
+
 
 def global_args(parser, arg_file=None, prog_func=None):
     import torch
@@ -213,7 +215,7 @@ def set_common_args():
                             help="Comma separated number of considered sequences for lstm: past_steps,future_steps")
     arg_parser.add_argument('--gru-steps', type=int_list, default=None,
                             help="Comma separated number of considered sequences for gru: past_steps,future_steps")
-    arg_parser.add_argument('--pred-steps', type=int_list, default=[0,0],
+    arg_parser.add_argument('--pred-steps', type=int_list, default=[0, 0],
                             help="Comma separated number of considered sequences for pred: past_steps,future_steps")
     arg_parser.add_argument('--encoding-layers', type=int_list, default='3',
                             help="Number of encoding layers in the CNN")

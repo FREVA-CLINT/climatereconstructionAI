@@ -1,10 +1,11 @@
 from .. import config as cfg
 
+
 def ceildiv(size, i):
     return -(size // -2**i)
 
-# define configurations for convolutions
 
+# define configurations for convolutions
 def init_enc_conv_configs(conv_factor, img_size, enc_dec_layers, pool_layers, start_channels):
     conv_configs = []
     for i in range(enc_dec_layers):

@@ -11,7 +11,7 @@ from ..utils.featurizer import VGG16FeatureExtractor
 
 
 def prepare_data_dict(mask, output, latent_dist, gt, tensor_keys):
-    data_dict = dict(zip(list(tensor_keys),[None]*len(tensor_keys)))
+    data_dict = dict(zip(list(tensor_keys), [None] * len(tensor_keys)))
 
     data_dict['mask'] = mask[:, 0]
     data_dict['output'] = output[:, cfg.recurrent_steps]

@@ -190,9 +190,9 @@ class NetCDFLoader(Dataset):
         # get index of dataset
         ds_index = 0
         current_index = 0
-        for l in range(len(self.img_length)):
-            if index > current_index + self.img_length[l]:
-                current_index += self.img_length[l]
+        for ilength in range(len(self.img_length)):
+            if index > current_index + self.img_length[ilength]:
+                current_index += self.img_length[ilength]
                 ds_index += 1
         index -= current_index
 
@@ -204,9 +204,9 @@ class NetCDFLoader(Dataset):
             mask_index = self.random.randint(0, sum(self.mask_length) - 1)
             mask_ds_index = 0
             current_index = 0
-            for l in range(len(self.mask_length)):
-                if mask_index > current_index + self.mask_length[l]:
-                    current_index += self.mask_length[l]
+            for ilength in range(len(self.mask_length)):
+                if mask_index > current_index + self.mask_length[ilength]:
+                    current_index += self.mask_length[ilength]
                     mask_ds_index += 1
             mask_index -= current_index
 
@@ -263,11 +263,16 @@ class NetCDFLoader(Dataset):
                 masked.append(image[cfg.in_steps] * mask[cfg.in_steps])
 
         if cfg.channel_steps:
-            return torch.cat(masked, dim=0).transpose(0, 1), torch.cat(in_masks, dim=0).transpose(0, 1), \
-                   torch.cat(out_masks, dim=0).transpose(0, 1), torch.cat(images, dim=0).transpose(0, 1), index
+            return (torch.cat(masked, dim=0).transpose(0, 1),
+                    torch.cat(in_masks, dim=0).transpose(0, 1),
+                    torch.cat(out_masks, dim=0).transpose(0, 1),
+                    torch.cat(images, dim=0).transpose(0, 1),
+                    index)
         else:
-            return torch.cat(masked, dim=1), torch.cat(in_masks, dim=1), \
-                   torch.cat(out_masks, dim=0).transpose(0, 1), torch.cat(images, dim=0).transpose(0, 1), index
+            return (torch.cat(masked, dim=1), torch.cat(in_masks, dim=1),
+                    torch.cat(out_masks, dim=0).transpose(0, 1),
+                    torch.cat(images, dim=0).transpose(0, 1),
+                    index)
 
     def __len__(self):
         return sum(self.img_length)

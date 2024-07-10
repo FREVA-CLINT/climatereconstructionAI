@@ -19,7 +19,8 @@ plt.rcParams.update({'font.size': 16})
 
 def create_snapshot_image(model, dataset, filename):
     data_dict = {}
-    data_dict["image"], data_dict["in_mask"], data_dict["out_mask"], data_dict["gt"], index = zip(*[dataset[int(i)] for i in cfg.eval_timesteps])
+    data_dict["image"], data_dict["in_mask"], data_dict["out_mask"], data_dict["gt"], index \
+        = zip(*[dataset[int(i)] for i in cfg.eval_timesteps])
 
     for key in data_dict.keys():
         data_dict[key] = torch.stack(data_dict[key]).to(cfg.device)

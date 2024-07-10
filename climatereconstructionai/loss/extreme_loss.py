@@ -22,7 +22,7 @@ class ExtremeLoss(nn.Module):
 
             gt_ch = torch.unsqueeze(gt[:, channel, :, :], dim=1)
             output_ch = torch.unsqueeze(output[:, channel, :, :], dim=1)
-            loss_dict['-extreme'] += self.l2(self.sm(-output_ch), self.sm(-gt_ch))              
-            loss_dict['+extreme'] += self.l2(self.sm(output_ch), self.sm(gt_ch))            
+            loss_dict['-extreme'] += self.l2(self.sm(-output_ch), self.sm(-gt_ch))
+            loss_dict['+extreme'] += self.l2(self.sm(output_ch), self.sm(gt_ch))
 
         return loss_dict

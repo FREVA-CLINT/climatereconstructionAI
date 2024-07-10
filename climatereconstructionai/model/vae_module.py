@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class VAEBlock(nn.Module):
     def __init__(self, conv_config, n_steps, z_dim):
         super().__init__()
@@ -11,7 +12,6 @@ class VAEBlock(nn.Module):
         self.efc1 = nn.Linear(self.h_dim, z_dim)
         self.efc2 = nn.Linear(self.h_dim, z_dim)
         self.dfc1 = nn.Linear(z_dim, self.h_dim)
-
 
     def forward(self, input):
 
