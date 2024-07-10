@@ -23,8 +23,9 @@ def load_steadymask(path, mask_names, data_types):
             assert len(mask_names) == cfg.n_target_data
             steady_mask = load_netcdf(path, mask_names, data_types[-cfg.n_target_data:])[0]
 
-        steady_mask = torch.stack([torch.from_numpy(np.array(mask)) for mask in steady_mask])
+        steady_mask = torch.stack([torch.from_numpy(np.array(mask[0])) for mask in steady_mask])
         # squeeze time dimension if any
+
         if steady_mask.ndim == 4:
             steady_mask = steady_mask.squeeze(axis=1)
         return steady_mask
