@@ -395,6 +395,10 @@ class position_embedder(nn.Module):
                                         nn.SiLU(),
                                         nn.Linear(n_out, n_out, bias=False),
                                         nn.Sigmoid())
+        self.km_transform = False
+        if 'km' in pos_emb_calc:
+            self.km_transform = True
+        
         
         if 'inverse' in pos_emb_calc:
             self.transform = helpers.conv_coordinates_inv
@@ -417,14 +421,28 @@ class position_embedder(nn.Module):
 
     def forward(self, pos1, pos2):
         if self.cartesian:
+            if self.km_transform:
+                pos1 = pos1*6371.
+                pos2 = pos2*6371.
+                pos1[pos1.abs()<0.01]=0
+                pos2[pos2.abs()<0.01]=0
+            else:
+                pos1[pos1.abs()<1e-6]=0
+                pos2[pos2.abs()<1e-6]=0
+
             if self.transform is not None:
                 pos1 = self.transform(pos1)
                 pos2 = self.transform(pos2)
-
+            
             return 16*self.proj_layer(torch.stack((pos1, pos2), dim=-1))    
 
         else:
-            dist_0 = pos1 < 1e-10
+            if self.km_transform:
+                pos1 = pos1*6371.
+                dist_0 = pos1 < 0.01
+            else:
+                dist_0 = pos1 < 1e-6
+
             if self.transform is not None:
                 pos1 = self.transform(pos1)
             
