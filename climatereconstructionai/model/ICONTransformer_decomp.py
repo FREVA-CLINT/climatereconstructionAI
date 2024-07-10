@@ -502,7 +502,7 @@ class processing_layers(nn.Module):
         dropout = model_hparams['dropout']
         self.max_seq_level = model_hparams['max_seq_level']
         n_layers = model_hparams['n_processing_layers']
-        kv_dropout = model_hparams['kv_dropout']
+        kv_dropout = model_hparams['kv_dropout_processing']
         pos_emb_type = model_hparams['pos_emb_type']
 
         self.updated_lf_att = model_hparams['updated_lf_att']
@@ -655,7 +655,7 @@ class decomp_layer(nn.Module):
                                 pos_emb_type=pos_emb_type,
                                 pos_embedder=pos_embedders[int(global_level)]['pos_embedder_handle'],
                                 pos_emb_dim=pos_emb_dim,
-                                kv_dropout=model_hparams['kv_dropout'],
+                                kv_dropout=model_hparams['kv_dropout_decomp'],
                                 v_proj=False,
                                 res_net=bool(1-residual_decomp))
                 
@@ -729,7 +729,7 @@ class projection_layer(nn.Module):
                             v_proj=False,
                             pos_embedder=pos_embedders[int(global_level)]['pos_embedder_handle'],
                             pos_emb_dim=pos_emb_dim,
-                            kv_dropout=model_hparams['kv_dropout'],
+                            kv_dropout=model_hparams['kv_dropout_projection'],
                             res_net=False)
                 
             self.global_levels.append(int(global_level))
@@ -872,7 +872,7 @@ class ICON_Transformer(nn.Module):
         if self.model_settings['processing_grid'] != self.model_settings['output_grid']:
             self.register_buffer('output_mapping', output_mapping['cell']['cell'], persistent=False)  
             self.register_buffer('output_coords', output_coordinates['cell'], persistent=False)  
-            self.register_buffer('output_in_range', output_in_range['cell']['cell'], persistent=False)  
+            self.register_buffer('output_in_range', output_in_range['cell']['cell'], persistent=False) 
 
         strict = self.model_settings['load_strict'] if 'load_strict' in self.model_settings.keys() else True
 
