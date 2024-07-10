@@ -1,5 +1,7 @@
 from .. import config as cfg
 
+def ceildiv(size, i):
+    return -(size // -2**i)
 
 # define configurations for convolutions
 
@@ -21,9 +23,8 @@ def init_enc_conv_configs(conv_factor, img_size, enc_dec_layers, pool_layers, st
                 conv_config['kernel'] = (3, 3)
         conv_config['out_channels'] = conv_factor // (2 ** (enc_dec_layers - i - 1))
         conv_config['skip_channels'] = 0
-        conv_config['img_size'] = [size // (2 ** i) if size % (2 ** i) == 0 else
-                                   size // (2 ** i) + 1 for size in img_size]
-        conv_config['rec_size'] = [size // 2 if size % 2 == 0 else size // 2 + 1 for size in conv_config['img_size']]
+        conv_config['img_size'] = [ceildiv(size, i) for size in img_size]
+        conv_config['rec_size'] = [ceildiv(size, 1) for size in conv_config['img_size']]
 
         conv_configs.append(conv_config)
     for i in range(pool_layers):
@@ -33,9 +34,8 @@ def init_enc_conv_configs(conv_factor, img_size, enc_dec_layers, pool_layers, st
         conv_config['kernel'] = (3, 3)
         conv_config['out_channels'] = conv_factor
         conv_config['skip_channels'] = 0
-        conv_config['img_size'] = [size // (2 ** (enc_dec_layers + i)) if size % (2 ** (enc_dec_layers + i)) == 0
-                                   else size // (2 ** (enc_dec_layers + i)) + 1 for size in img_size]
-        conv_config['rec_size'] = [size // 2 if size % 2 == 0 else size // 2 + 1 for size in conv_config['img_size']]
+        conv_config['img_size'] = [ceildiv(size, enc_dec_layers + i) for size in img_size]
+        conv_config['rec_size'] = [ceildiv(size, 1) for size in conv_config['img_size']]
         conv_configs.append(conv_config)
 
     return conv_configs
@@ -50,10 +50,8 @@ def init_dec_conv_configs(conv_factor, img_size, enc_dec_layers, pool_layers, st
         conv_config['kernel'] = (3, 3)
         conv_config['out_channels'] = conv_factor
         conv_config['skip_channels'] = cfg.skip_layers * conv_factor
-        conv_config['img_size'] = [size // (2 ** (enc_dec_layers + pool_layers - i - 1))
-                                   if size % (2 ** (enc_dec_layers + pool_layers - i - 1)) == 0
-                                   else size // (2 ** (enc_dec_layers + pool_layers - i - 1)) + 1 for size in img_size]
-        conv_config['rec_size'] = [size // 2 if size % 2 == 0 else size // 2 + 1 for size in conv_config['img_size']]
+        conv_config['img_size'] = [ceildiv(size, enc_dec_layers + pool_layers - i - 1) for size in img_size]
+        conv_config['rec_size'] = [ceildiv(size, 1) for size in conv_config['img_size']]
         conv_configs.append(conv_config)
     for i in range(1, enc_dec_layers + 1):
         conv_config = {}
@@ -67,9 +65,8 @@ def init_dec_conv_configs(conv_factor, img_size, enc_dec_layers, pool_layers, st
         else:
             conv_config['out_channels'] = conv_factor // (2 ** i)
             conv_config['skip_channels'] = cfg.skip_layers * conv_factor // (2 ** i)
-        conv_config['img_size'] = [size // (2 ** (enc_dec_layers - i)) if size % (2 ** (enc_dec_layers - i)) == 0
-                                   else size // (2 ** (enc_dec_layers - i)) + 1 for size in img_size]
-        conv_config['rec_size'] = [size // 2 if size % 2 == 0 else size // 2 + 1 for size in conv_config['img_size']]
+        conv_config['img_size'] = [ceildiv(size, enc_dec_layers - i) for size in img_size]
+        conv_config['rec_size'] = [ceildiv(size, 1) for size in conv_config['img_size']]
         conv_configs.append(conv_config)
     return conv_configs
 
