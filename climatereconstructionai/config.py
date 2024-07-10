@@ -54,27 +54,27 @@ def set_lambdas():
 
     lambda_dict = {}
 
-    if loss_criterion == 0:
+    if loss_criterion in ("0", "inpainting"):
         lambda_dict['valid'] = 1.
         lambda_dict['hole'] = 6.
         lambda_dict['tv'] = .1
         lambda_dict['prc'] = .05
         lambda_dict['style'] = 120.
 
-    elif loss_criterion == 1:
+    elif loss_criterion in ("1", "l1-hole"):
         lambda_dict['hole'] = 1.
 
-    elif loss_criterion == 2:
+    elif loss_criterion in ("2", "downscaling"):
         lambda_dict['valid'] = 7.
         lambda_dict['hole'] = 0.
         lambda_dict['tv'] = .1
         lambda_dict['prc'] = .05
         lambda_dict['style'] = 120.
 
-    elif loss_criterion == 3:
+    elif loss_criterion in ("3", "l1-valid"):
         lambda_dict['valid'] = 1.
 
-    elif loss_criterion == 4:
+    elif loss_criterion in ("4", "extreme"):
         lambda_dict['-extreme'] = 1.
         lambda_dict['+extreme'] = 1.
 
@@ -276,9 +276,8 @@ def set_train_args(arg_file=None):
                             help="Number of final models to be saved")
     arg_parser.add_argument('--final-models-interval', type=int, default=1000,
                             help="Iteration step interval at which the final models should be saved")
-    arg_parser.add_argument('--loss-criterion', type=int, default=0,
-                            help="Index defining the loss function "
-                                 "(0=original from Liu et al., 1=MAE of the hole region)")
+    arg_parser.add_argument('--loss-criterion', type=str, default="l1-hole",
+                            help="Index/string defining the loss function (inpainting/l1-hole/l1-valid/etc.)")
     arg_parser.add_argument('--eval-timesteps', type=int_list, default=None,
                             help="Sample indices for which a snapshot is created at each iter defined by log-interval")
     arg_parser.add_argument('-f', '--load-from-file', type=str, action=LoadFromFile,
