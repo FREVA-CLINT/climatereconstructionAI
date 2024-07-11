@@ -63,8 +63,7 @@ class nha_layer(nn.Module):
 
         if input_mlp:
             self.input_mlp = nn.Sequential(
-                nn.Linear(input_dim, model_dim, bias=False),
-                nn.LayerNorm(model_dim)
+                nn.Linear(input_dim, model_dim, bias=False)
             )
             input_dim = model_dim
         else:
@@ -271,8 +270,7 @@ class input_layer(nn.Module):
         
         if input_mlp:
             self.input_mlp = nn.Sequential(
-                            nn.Linear(input_dim, model_dim, bias=True),
-                            nn.SiLU())
+                            nn.Linear(input_dim, model_dim, bias=False))
         else:
             self.input_mlp= nn.Identity()
 
@@ -660,7 +658,7 @@ class decomp_layer(nn.Module):
                                 pos_embedder=pos_embedders[int(global_level)]['pos_embedder_handle'],
                                 pos_emb_dim=pos_emb_dim,
                                 kv_dropout=model_hparams['kv_dropout_decomp'],
-                                v_proj=False,
+                                v_proj=bool(1-residual_decomp),
                                 res_net=bool(1-residual_decomp))
                 
                 self.global_levels.append(int(global_level))
