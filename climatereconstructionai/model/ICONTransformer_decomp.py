@@ -61,7 +61,7 @@ class nha_layer(nn.Module):
         self.kv_dropout = kv_dropout
         self.qkv_bias = qkv_bias
         
-        self.norm = nn.LayerNorm(model_dim, elementwise_affine=True) if qkv_bias else nn.Identity()
+        self.norm = nn.LayerNorm(model_dim, elementwise_affine=True) if v_proj else nn.Identity()
         self.normkv = nn.LayerNorm(model_dim, elementwise_affine=True) if cross else self.norm
 
         if output_dim is not None:
@@ -92,7 +92,7 @@ class nha_layer(nn.Module):
                 nn.Linear(ff_dim, model_dim, bias=False)
             )
             self.dropout2 = nn.Dropout(dropout)
-            self.norm2 = nn.LayerNorm(model_dim)
+            self.norm2 = nn.LayerNorm(model_dim, elementwise_affine=True)
 
         self.dropout1 = nn.Dropout(dropout)
         self.res_net = res_net
