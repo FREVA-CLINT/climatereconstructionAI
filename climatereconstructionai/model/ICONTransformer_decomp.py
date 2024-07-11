@@ -52,7 +52,7 @@ def append_debug_dict(debug_dict_all, debug_dict):
 
 
 class nha_layer(nn.Module):
-    def __init__(self, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, input_mlp=False, output_dim=None, activation=nn.SiLU(), q_res=True, pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, kv_dropout=0, qkv_bias=True, v_proj=True, res_net=True) -> None: 
+    def __init__(self, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, output_dim=None, activation=nn.SiLU(), pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, kv_dropout=0, qkv_bias=True, v_proj=True, res_net=True, cross=False) -> None: 
         super().__init__()
 
         self.model_dim = model_dim
@@ -60,20 +60,13 @@ class nha_layer(nn.Module):
         self.pos_emb_type = pos_emb_type
         self.kv_dropout = kv_dropout
         self.qkv_bias = qkv_bias
-
-        if input_mlp:
-            self.input_mlp = nn.Sequential(
-                nn.Linear(input_dim, model_dim, bias=False)
-            )
-            input_dim = model_dim
-        else:
-            self.input_mlp = nn.Identity()
         
+        self.norm = nn.LayerNorm(model_dim, elementwise_affine=True) if qkv_bias else nn.Identity()
+        self.normkv = nn.LayerNorm(model_dim, elementwise_affine=True) if cross else self.norm
+
         if output_dim is not None:
-            self.output_layer = nn.Sequential(
-                    nn.Linear(model_dim, ff_dim, bias=False),
-                    activation,
-                    nn.Linear(ff_dim, output_dim, bias=False)
+            self.output_layer = nn.Sequential(nn.LayerNorm(model_dim),
+                    nn.Linear(model_dim, output_dim, bias=True),
                 )
         else:
             self.output_layer = nn.Identity()
@@ -98,33 +91,27 @@ class nha_layer(nn.Module):
                 activation,
                 nn.Linear(ff_dim, model_dim, bias=False)
             )
-                
-            self.dropout1 = nn.Dropout(dropout)
             self.dropout2 = nn.Dropout(dropout)
-
-            self.norm1 = nn.LayerNorm(model_dim)
             self.norm2 = nn.LayerNorm(model_dim)
-        else:
-            self.mlp_layer = self.dropout1 = self.dropout2 = self.norm1 = self.norm2 = nn.Identity()
 
+        self.dropout1 = nn.Dropout(dropout)
         self.res_net = res_net
-        self.q_res = q_res
 
     def forward(self, x: torch.tensor, xq=None, xv=None, mask=None, pos=None):    
             
-        x = self.input_mlp(x)
+        x = self.normkv(x)
 
         b, n, nh, e = x.shape
         x = x.reshape(b*n,nh,e)
         q = k = v = x
 
         if xq is not None:
-            xq = self.input_mlp(xq)
+            xq = self.norm(xq)
             b, nq = xq.shape[:2]
             q = xq.reshape(b*nq,-1,xq.shape[-1])
 
         if xv is not None:
-            xv = self.input_mlp(xv)
+            xv = self.normkv(xv)
             b, nv = xv.shape[:2]
             v = xv.reshape(b*nv,-1,xv.shape[-1])
 
@@ -177,81 +164,18 @@ class nha_layer(nn.Module):
             bias = self.emb_proj_bias(pos_embedding)
             att_out, att = self.MHA(v=v, bias=bias, return_debug=True, mask=mask) 
 
-        if self.q_res:
+        if self.res_net:
             x = q + self.dropout1(att_out)
+            x = self.norm2(x)
+            x = x + self.dropout2(self.mlp_layer(x))
+
         else:
             x = self.dropout1(att_out)
-
-        x = self.norm1(x)
-
-        if self.res_net:
-            x = self.norm2(x + self.dropout2(self.mlp_layer(x)))
 
         x = x.view(b,n,-1,e)
 
         return self.output_layer(x)
-
-class n_nha_layers(nn.Module):
-    def __init__(self, n_layers, input_dim, model_dim, ff_dim, n_heads=4, dropout=0, input_mlp=False, output_dim=None, activation=nn.SiLU(), pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, kv_dropout=0) -> None: 
-        super().__init__()
-
-        self.layer_list = nn.ModuleList()
-        for k in range(n_layers):
-            if k == 0:
-                dim_in = input_dim
-            else:
-                dim_in = model_dim
-
-            self.layer_list.append(nha_layer(dim_in, 
-                                        model_dim, 
-                                        ff_dim, 
-                                        n_heads=n_heads, 
-                                        dropout=dropout, 
-                                        input_mlp=False,
-                                        output_dim=output_dim, 
-                                        activation=activation, 
-                                        pos_emb_type=pos_emb_type, 
-                                        pos_embedder=pos_embedder, 
-                                        pos_emb_dim=pos_emb_dim,
-                                        kv_dropout=kv_dropout))
-
-    def forward(self, x: torch.tensor, xq=None, mask=None, pos=None):
-        for layer in self.layer_list:
-            x = layer(x, xq=xq, mask=mask, pos=pos)
-        return x
-
-    
-
-class coarsen_layer(nn.Module):
-    def __init__(self, n_reduce, model_dim, ff_dim, n_heads=4, dropout=0, activation=nn.SiLU(), pos_emb_type='bias', pos_embedder=None, pos_emb_dim=None, q_res=False) -> None: 
-        super().__init__()
-
-        self.n_reduce = n_reduce
-        
-        self.nha_layer = nha_layer(
-                input_dim = model_dim,
-                model_dim = model_dim,
-                ff_dim = ff_dim,
-                n_heads = n_heads,
-                input_mlp = False,
-                q_res = q_res,
-                dropout=dropout,
-                pos_emb_type=pos_emb_type,
-                pos_embedder=pos_embedder,
-                pos_emb_dim=pos_emb_dim,
-                kv_dropout=0)
-        
-        
-    def forward(self, x, pos=None):
-       
-        x = x.reshape(x.shape[0],-1,self.n_reduce,x.shape[-1])
-
-        x = self.nha_layer(x, pos=pos)
-
-        x = x.mean(dim=-2)
-
-        return x
-
+   
 
 
 class input_layer(nn.Module):
@@ -282,14 +206,13 @@ class input_layer(nn.Module):
                         model_dim = model_dim,
                         ff_dim = ff_dim,
                         n_heads = n_heads,
-                        input_mlp = False,
                         dropout=dropout,
-                        q_res=False,
                         pos_emb_type=pos_emb_type,
                         pos_embedder=pos_embedder,
                         pos_emb_dim=pos_emb_dim,
                         kv_dropout=kv_dropout,
-                        qkv_bias=False)
+                        qkv_bias=False,
+                        res_net=False)
         else:
             self.nha_layer = nn.Identity()
 
@@ -527,13 +450,13 @@ class processing_layers(nn.Module):
                             model_dim = model_dim,
                             ff_dim = model_dim,
                             n_heads =  n_heads,
-                            input_mlp = False,
                             dropout=dropout,
                             pos_emb_type=pos_emb_type,
                             pos_embedder=pos_embedders[int(global_level)]['pos_embedder_handle'],
                             pos_emb_dim=pos_emb_dim,
                             activation=nn.SiLU(),
-                            kv_dropout=kv_dropout) for _ in range(n_layers)])
+                            kv_dropout=kv_dropout,
+                            cross=True) for _ in range(n_layers)])
             else:
                 cross_layers = nn.ModuleList([None for _ in range(n_layers)])
             """   
@@ -556,7 +479,6 @@ class processing_layers(nn.Module):
                         model_dim = model_dim,
                         ff_dim = model_dim,
                         n_heads =  n_heads,
-                        input_mlp = False,
                         dropout=dropout,
                         pos_emb_type=pos_emb_type,
                         pos_embedder=pos_embedders[int(global_level)]['pos_embedder_handle'],
@@ -651,8 +573,6 @@ class decomp_layer(nn.Module):
                                 model_dim = model_dim,
                                 ff_dim = model_dim,
                                 n_heads = n_heads,
-                                input_mlp = False,
-                                q_res = False,
                                 dropout=dropout,
                                 pos_emb_type=pos_emb_type,
                                 pos_embedder=pos_embedders[int(global_level)]['pos_embedder_handle'],
@@ -693,7 +613,7 @@ class decomp_layer(nn.Module):
 
 
 class projection_layer(nn.Module):
-    def __init__(self, grid_layers: dict, model_hparams: dict, pos_embedders, output_dim, output_mappings=None, input_mappings=None, var_projection=False, v_proj=True, periodic_fov=None) -> None: 
+    def __init__(self, grid_layers: dict, model_hparams: dict, pos_embedders, output_dim, output_mappings=None, input_mappings=None, var_projection=False, periodic_fov=None) -> None: 
         super().__init__()
 
         self.output_mappings = output_mappings
@@ -723,8 +643,6 @@ class projection_layer(nn.Module):
                             output_dim = output_dim,
                             ff_dim = model_dim,
                             n_heads = n_heads,
-                            input_mlp = False,
-                            q_res = False, 
                             dropout=dropout,
                             pos_emb_type='bias',
                             qkv_bias=False,
