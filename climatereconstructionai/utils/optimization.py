@@ -314,7 +314,7 @@ class HierLoss(nn.Module):
         total_loss = 0
         for level, lambda_ in self.lambdas_levels.items():
             if lambda_ > 0:
-                output = get_sum(output_levels, level, gauss=self.gauss)
+                output = get_sum(output_levels, int(level), gauss=self.gauss)
 
                 if in_range_mask is not None:
                     loss = lambda_ * self.loss_fcn(output[in_range_mask==True,:], target['cell'][in_range_mask==True,:])
@@ -325,6 +325,30 @@ class HierLoss(nn.Module):
 
         return total_loss, loss_dict
 
+class TVLoss(nn.Module):
+    def __init__(self, lambdas_levels):
+        super().__init__()
+        self.lambdas_levels = lambdas_levels
+
+    def forward(self, model, output_levels, source_indices, in_range_mask):
+
+        loss_dict = {}
+        total_loss = 0
+        for level, lambda_ in self.lambdas_levels.items():
+            if lambda_ > 0:
+
+                nh_values, _ ,nh_mask  = model.decomp_layer.grid_layers[str(0)].get_nh(output_levels["x"][int(level)], source_indices["global_cell"], source_indices)
+
+                nh_values_error = ((nh_values[:,:,[0]] - nh_values[:,:,1:])**2).sum(dim=[-2])
+
+                if in_range_mask is not None:
+                    loss = lambda_ * nh_values_error[in_range_mask==True,:].mean()
+                else:
+                    loss = lambda_ * nh_values_error.mean()
+                loss_dict[f'level_{level}'] = loss.item()
+                total_loss += loss
+
+        return total_loss, loss_dict
 
 class loss_calculator(nn.Module):
     def __init__(self, training_settings, grid_variables_dict, model_settings):
@@ -334,6 +358,7 @@ class loss_calculator(nn.Module):
         self.lambdas_levels = training_settings['lambdas_levels']
         self.lambdas_static = training_settings['lambdas']
         self.mask_out_of_range = training_settings['mask_out_of_range'] if 'mask_out_of_range' in training_settings.keys() else False
+        self.multi_gpus = training_settings['multi_gpus']
         self.grid_variables_dict = grid_variables_dict
 
         self.loss_fcn_dict = {} 
@@ -349,6 +374,8 @@ class loss_calculator(nn.Module):
                 elif loss_type == 'l2':
                     loss_fcn = torch.nn.MSELoss()
                     self.loss_fcn_dict[loss_type] = HierLoss(loss_fcn, self.lambdas_levels)
+                elif loss_type == 'tv':
+                    self.loss_fcn_dict[loss_type] = TVLoss(self.lambdas_levels)
 
 
     def forward(self, lambdas_optim, target, model, source, source_indices=None, val=False, k=None):
@@ -363,12 +390,21 @@ class loss_calculator(nn.Module):
         total_loss = 0
 
         if self.mask_out_of_range:
-            in_range_mask = model.output_in_range[source_indices['global_cell']]
+            if self.multi_gpus:
+                in_range_mask = model.module.output_in_range[source_indices['global_cell']]
+            elif 'global_cell' in model.__dict__['_buffers'].keys():
+                in_range_mask = model.output_in_range[source_indices['global_cell']]
+            else:
+                in_range_mask = None
         else:
             in_range_mask = None
+
         for loss_type, loss_fcn in self.loss_fcn_dict.items():
-      
-            loss, loss_levels = loss_fcn(output_levels, target, in_range_mask)
+            
+            if loss_type == 'tv':
+                loss, loss_levels = loss_fcn(model, output_levels, source_indices, in_range_mask)
+            else:
+                loss, loss_levels = loss_fcn(output_levels, target, in_range_mask)
             total_loss += self.lambdas_static[loss_type] * lambdas_optim[loss_type] * loss
 
             loss_levels_keys = [f'{loss_type}_{key}' for key in loss_levels.keys()]
