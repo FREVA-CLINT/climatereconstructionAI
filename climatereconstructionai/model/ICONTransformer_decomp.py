@@ -61,7 +61,7 @@ class nha_layer(nn.Module):
         self.kv_dropout = kv_dropout
         self.qkv_bias = qkv_bias
         
-        self.norm = nn.LayerNorm(model_dim, elementwise_affine=True) 
+        self.norm = nn.LayerNorm(model_dim, elementwise_affine=True) if v_proj else nn.Identity()
         self.normkv = nn.LayerNorm(model_dim, elementwise_affine=True) if cross else self.norm
 
         if output_dim is not None:
@@ -429,7 +429,6 @@ class processing_layers(nn.Module):
         n_layers = model_hparams['n_processing_layers']
         kv_dropout = model_hparams['kv_dropout_processing']
         pos_emb_type = model_hparams['pos_emb_type']
-        seq_att = model_hparams['seq_att'] if 'seq_att' in model_hparams.keys() else False
 
         self.updated_lf_att = model_hparams['updated_lf_att']
 
@@ -460,21 +459,21 @@ class processing_layers(nn.Module):
                             cross=True) for _ in range(n_layers)])
             else:
                 cross_layers = nn.ModuleList([None for _ in range(n_layers)])
-
-            if seq_att:   
-                seq_layers = nn.ModuleList([nha_layer(input_dim= model_dim,
-                            model_dim = model_dim,
-                            ff_dim = model_dim,
-                            n_heads =  n_heads,
-                            dropout=dropout,
-                            pos_emb_type=pos_emb_type,
-                            pos_embedder=pos_embedders[int(global_level)]['pos_embedder_handle'],
-                            pos_emb_dim=pos_emb_dim,
-                            activation=nn.SiLU(),
-                            kv_dropout=kv_dropout) for _ in range(n_layers)])
-                
-            else:
-                seq_layers = nn.ModuleList([None for _ in range(n_layers)])
+            """   
+            seq_layers = nn.ModuleList([nha_layer(input_dim= model_dim,
+                        model_dim = model_dim,
+                        ff_dim = model_dim,
+                        n_heads =  n_heads,
+                        input_mlp = False,
+                        dropout=dropout,
+                        pos_emb_type=pos_emb_type,
+                        pos_embedder=pos_embedder_handle,
+                        pos_emb_dim=pos_emb_dim,
+                        activation=nn.SiLU(),
+                        kv_dropout=kv_dropout) for _ in range(n_layers)])
+            """ 
+            
+            seq_layers = nn.ModuleList([None for _ in range(n_layers)])
             
             nh_layers = nn.ModuleList([nha_layer(input_dim= model_dim,
                         model_dim = model_dim,
@@ -554,7 +553,6 @@ class decomp_layer(nn.Module):
         n_heads = model_hparams['n_heads']
         dropout = model_hparams['dropout']
         pos_emb_type = model_hparams['pos_emb_type']
-        self.max_seq_level = model_hparams['max_seq_level']
 
         pos_emb_dim = pos_embedders[0]['pos_emb_dim']
         self.polar = pos_embedders[0]['polar']
@@ -579,7 +577,9 @@ class decomp_layer(nn.Module):
                                 pos_emb_type=pos_emb_type,
                                 pos_embedder=pos_embedders[int(global_level)]['pos_embedder_handle'],
                                 pos_emb_dim=pos_emb_dim,
-                                kv_dropout=model_hparams['kv_dropout_decomp'])
+                                kv_dropout=model_hparams['kv_dropout_decomp'],
+                                v_proj=bool(1-residual_decomp),
+                                res_net=bool(1-residual_decomp))
                 
                 self.global_levels.append(int(global_level))
             
@@ -591,20 +591,17 @@ class decomp_layer(nn.Module):
             b,n,e = x.shape
             layer = self.layers[str(global_level)]
 
-            x_sections, mask_fov, coords_sections = self.grid_layers[str(global_level)].get_sections(x, indices_layers[global_level], section_level=self.max_seq_level)
+            x_sections, mask_fov, coords_sections = self.grid_layers[str(global_level)].get_sections(x, indices_layers[global_level], section_level=1)
 
             relative_positions = get_relative_positions(coords_sections, coords_sections, polar=self.polar)
-            x_sections = layer(x_sections, pos=relative_positions)
-            x_sections = x_sections.view(b,-1,4,e)
-
-            x_sections_mean = x_sections.mean(dim=-2, keepdim=True)
+            x_sections_f = layer(x_sections, pos=relative_positions).mean(dim=-2, keepdim=True)
 
             if self.residual_decomp:
-                x_levels[global_level] = (x_sections - x_sections_mean).view(b,n,-1)
+                x_levels[global_level] = (x_sections - x_sections_f).view(b,n,-1)
             else:
-                x_levels[global_level] = x_sections.view(b,n,-1)
+                x_levels[global_level] = x
             
-            x = x_sections_mean.squeeze(dim=-2)
+            x = x_sections_f.squeeze(dim=-2)
 
         if len(self.global_levels) == 0:
             x_levels[0] = x
