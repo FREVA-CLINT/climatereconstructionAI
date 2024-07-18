@@ -87,12 +87,12 @@ class nha_layer(nn.Module):
 
         if res_net:
             self.mlp_layer = nn.Sequential(
+                nn.LayerNorm(model_dim, elementwise_affine=True),
                 nn.Linear(model_dim, ff_dim, bias=False),
                 activation,
                 nn.Linear(ff_dim, model_dim, bias=False)
             )
             self.dropout2 = nn.Dropout(dropout)
-            self.norm2 = nn.LayerNorm(model_dim, elementwise_affine=True)
 
         self.dropout1 = nn.Dropout(dropout)
         self.res_net = res_net
@@ -166,7 +166,6 @@ class nha_layer(nn.Module):
 
         if self.res_net:
             x = q + self.dropout1(att_out)
-            x = self.norm2(x)
             x = x + self.dropout2(self.mlp_layer(x))
 
         else:
