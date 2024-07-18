@@ -65,8 +65,8 @@ class nha_layer(nn.Module):
         self.normkv = nn.LayerNorm(model_dim, elementwise_affine=True) if cross else self.norm
 
         if output_dim is not None:
-            self.output_layer = nn.Sequential(nn.LayerNorm(model_dim),
-                    nn.Linear(model_dim, output_dim, bias=True),
+            self.output_layer = nn.Sequential(
+                    nn.Linear(model_dim, output_dim, bias=False),
                 )
         else:
             self.output_layer = nn.Identity()
@@ -212,6 +212,7 @@ class input_layer(nn.Module):
                         pos_emb_dim=pos_emb_dim,
                         kv_dropout=kv_dropout,
                         qkv_bias=False,
+                        v_proj=False,
                         res_net=False)
         else:
             self.nha_layer = nn.Identity()
