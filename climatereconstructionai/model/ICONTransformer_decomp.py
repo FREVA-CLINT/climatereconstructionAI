@@ -613,7 +613,7 @@ class decomp_layer(nn.Module):
 
 
 class projection_layer(nn.Module):
-    def __init__(self, grid_layers: dict, model_hparams: dict, pos_embedders, output_dim, output_mappings=None, input_mappings=None, var_projection=False, periodic_fov=None) -> None: 
+    def __init__(self, grid_layers: dict, model_hparams: dict, pos_embedders, output_dim, output_mappings=None, input_mappings=None, var_projection=False, periodic_fov=None, coarsest_layer=-1) -> None: 
         super().__init__()
 
         self.output_mappings = output_mappings
@@ -631,28 +631,28 @@ class projection_layer(nn.Module):
 
         self.grid_layers = grid_layers
         
-        self.max_level = list(grid_layers.keys())[-1]
+        max_level = list(grid_layers.keys())[coarsest_layer]
         
         self.layers = nn.ModuleDict()
         self.global_levels = []
         for global_level in grid_layers.keys(): 
-
-            self.layers[str(global_level)] = nha_layer(
-                            input_dim = model_dim,
-                            model_dim = model_dim,
-                            output_dim = output_dim,
-                            ff_dim = model_dim,
-                            n_heads = n_heads,
-                            dropout=dropout,
-                            pos_emb_type='bias',
-                            qkv_bias=False,
-                            v_proj=False,
-                            pos_embedder=pos_embedders[int(global_level)]['pos_embedder_handle'],
-                            pos_emb_dim=pos_emb_dim,
-                            kv_dropout=model_hparams['kv_dropout_projection'],
-                            res_net=False)
+            if int(global_level) <= int(max_level):
+                self.layers[str(global_level)] = nha_layer(
+                                input_dim = model_dim,
+                                model_dim = model_dim,
+                                output_dim = output_dim,
+                                ff_dim = model_dim,
+                                n_heads = n_heads,
+                                dropout=dropout,
+                                pos_emb_type='bias',
+                                qkv_bias=False,
+                                v_proj=False,
+                                pos_embedder=pos_embedders[int(global_level)]['pos_embedder_handle'],
+                                pos_emb_dim=pos_emb_dim,
+                                kv_dropout=model_hparams['kv_dropout_projection'],
+                                res_net=False)
                 
-            self.global_levels.append(int(global_level))
+                self.global_levels.append(int(global_level))
             
     def forward(self, x_levels, indices_layers, sample_dict, output_coords=None):
         
@@ -740,6 +740,7 @@ class ICON_Transformer(nn.Module):
         self.output_data = self.model_settings['variables_target']
 
         share_emb_every = self.model_settings['share_emb_every'] if 'share_emb_every' in self.model_settings.keys() else n_grid_levels
+        share_embs = self.model_settings['share_embs'] if 'share_embs' in self.model_settings.keys() else False
         pos_embedder = {}
         pos_embedder['pos_emb_dim'] = self.model_settings["pos_emb_dim"]
         pos_embedder['polar'] = self.polar
@@ -773,14 +774,18 @@ class ICON_Transformer(nn.Module):
 
         self.processing_layers = nn.ModuleList()
         for _ in range(self.model_settings['n_proccesing_decomp_layers']):
-            self.processing_layers.append(processing_layers(grid_layers, self.model_settings, pos_embedders))
+            pos_embedders_processing = pos_embedders if share_embs else copy.deepcopy(pos_embedders)
+            self.processing_layers.append(processing_layers(grid_layers, self.model_settings, pos_embedders_processing))
 
+        coarsest_output_layer = self.model_settings['coarsest_output_layer'] if 'coarsest_output_layer' in self.model_settings.keys() else -1
+
+        pos_embedders_projection = pos_embedders if share_embs else copy.deepcopy(pos_embedders)
         if self.var_model:
-            self.proj_layer = projection_layer(grid_layers, self.model_settings, pos_embedders, output_dim=len(self.model_settings['variables_target']['cell'])*2, var_projection=True)
+            self.proj_layer = projection_layer(grid_layers, self.model_settings, pos_embedders_projection, output_dim=len(self.model_settings['variables_target']['cell'])*2, var_projection=True, coarsest_layer=coarsest_output_layer)
             self.output_mlp = nn.Identity()
 
         else:
-            self.proj_layer = projection_layer(grid_layers, self.model_settings, pos_embedders, output_dim=len(self.model_settings['variables_target']['cell']))
+            self.proj_layer = projection_layer(grid_layers, self.model_settings, pos_embedders_projection, output_dim=len(self.model_settings['variables_target']['cell']), coarsest_layer=coarsest_output_layer)
             self.output_mlp = nn.Identity()
             
         if self.model_settings['input_dim_var'] * len(self.input_data) != self.model_settings['model_dim']:
@@ -866,7 +871,6 @@ class ICON_Transformer(nn.Module):
         else:
             return output
 
-        
     
     #currently cell only
     
