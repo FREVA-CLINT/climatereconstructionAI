@@ -15,7 +15,7 @@ from .model.net import CRAINet
 from .utils import twriter, early_stopping
 from .utils.evaluation import create_snapshot_image
 from .utils.io import load_ckpt, load_model, save_ckpt
-from .utils.netcdfloader import NetCDFLoader, InfiniteSampler, load_steadymask
+from .utils.netcdfloader import NetCDFLoader, InfiniteSampler
 from .utils.profiler import load_profiler
 
 
@@ -46,18 +46,16 @@ def train(arg_file=None):
 
     # create data sets
     dataset_train = NetCDFLoader(cfg.data_root_dir, cfg.data_names, cfg.mask_dir, cfg.mask_names, 'train',
-                                 cfg.data_types, cfg.time_steps)
+                                 cfg.data_types, cfg.time_steps, cfg.steady_masks)
 
     dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.val_names, cfg.mask_dir, cfg.mask_names, 'val', cfg.data_types,
-                               cfg.time_steps)
+                               cfg.time_steps, cfg.steady_masks)
     iterator_train = iter(DataLoader(dataset_train, batch_size=cfg.batch_size,
                                      sampler=InfiniteSampler(len(dataset_train)),
-                                     num_workers=cfg.n_threads))
+                                     num_workers=cfg.n_threads, persistent_workers=True))
     iterator_val = iter(DataLoader(dataset_val, batch_size=cfg.batch_size,
                                    sampler=InfiniteSampler(len(dataset_val)),
-                                   num_workers=cfg.n_threads))
-
-    steady_mask = load_steadymask(cfg.mask_dir, cfg.steady_masks, cfg.data_types, cfg.device)
+                                   num_workers=cfg.n_threads, persistent_workers=True))
 
     image_sizes = dataset_train.img_sizes
     if cfg.conv_factor is None:
@@ -130,10 +128,10 @@ def train(arg_file=None):
 
         # train model
         model.train()
-        image, mask, gt = [x.to(cfg.device) for x in next(iterator_train)[:3]]
-        output = model(image, mask)
+        image, in_mask, out_mask, gt = [x.to(cfg.device) for x in next(iterator_train)[:4]]
+        output, latent_dist = model(image, in_mask)
 
-        train_loss = loss_comp(mask, steady_mask, output, gt)
+        train_loss = loss_comp(out_mask, output, latent_dist, gt)
 
         optimizer.zero_grad()
         train_loss['total'].backward()
@@ -145,10 +143,10 @@ def train(arg_file=None):
             model.eval()
             val_losses = []
             for _ in range(cfg.n_iters_val):
-                image, mask, gt = [x.to(cfg.device) for x in next(iterator_val)[:3]]
+                image, in_mask, out_mask, gt = [x.to(cfg.device) for x in next(iterator_val)[:4]]
                 with torch.no_grad():
-                    output = model(image, mask)
-                val_losses.append(list(loss_comp(mask, steady_mask, output, gt).values()))
+                    output, latent_dist = model(image, in_mask)
+                val_losses.append(list(loss_comp(out_mask, output, latent_dist, gt).values()))
 
             val_loss = torch.tensor(val_losses).mean(dim=0)
             val_loss = dict(zip(train_loss.keys(), val_loss))
@@ -192,10 +190,10 @@ def train(arg_file=None):
     if cfg.val_metrics is not None:
         val_metrics = []
         for _ in range(cfg.n_iters_val):
-            image, mask, gt = [x.to(cfg.device) for x in next(iterator_val)[:3]]
+            image, in_mask, out_mask, gt = [x.to(cfg.device) for x in next(iterator_val)[:4]]
             with torch.no_grad():
-                output = model(image, mask)
-            metric_dict = get_metrics(mask, steady_mask, output, gt, 'val')
+                output, latent_dist = model(image, in_mask)
+            metric_dict = get_metrics(out_mask, output, latent_dist, gt, 'val')
             val_metrics.append(list(metric_dict.values()))
         val_metrics = torch.tensor(val_metrics).mean(dim=0)
 
@@ -204,7 +202,7 @@ def train(arg_file=None):
             metric_dict.update({'iterations': n_iter, 'iterations_best_model': early_stop.global_iter_best})
         writer.update_hparams(metric_dict, n_iter)
 
-    writer.add_visualizations(mask, steady_mask, output, gt, n_iter, 'val')
+    writer.add_visualizations(out_mask, output, gt, n_iter, 'val')
 
     writer.close()
 
