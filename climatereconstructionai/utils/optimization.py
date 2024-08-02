@@ -284,6 +284,10 @@ class GaussLoss(nn.Module):
 
 
 def get_sum(output_levels, lowest_level, gauss=False):
+
+    if not isinstance(output_levels["x"], list):
+        return output_levels["x"].unsqueeze(dim=-2)
+    
     output = output_levels['x'][lowest_level:]
     if gauss:
         output_var = output_levels['x_var'][lowest_level:]
@@ -339,7 +343,7 @@ class TVLoss(nn.Module):
 
                 nh_values, _ ,nh_mask  = model.decomp_layer.grid_layers[str(0)].get_nh(output_levels["x"][int(level)], source_indices["global_cell"], source_indices)
 
-                nh_values_error = ((nh_values[:,:,[0]] - nh_values[:,:,1:])**2).sum(dim=[-2])
+                nh_values_error = ((nh_values[:,:,[0]] - nh_values[:,:,1:4])**4).sum(dim=[-2])
 
                 if in_range_mask is not None:
                     loss = lambda_ * nh_values_error[in_range_mask==True,:].mean()
@@ -375,7 +379,8 @@ class loss_calculator(nn.Module):
                     loss_fcn = torch.nn.MSELoss()
                     self.loss_fcn_dict[loss_type] = HierLoss(loss_fcn, self.lambdas_levels)
                 elif loss_type == 'tv':
-                    self.loss_fcn_dict[loss_type] = TVLoss(self.lambdas_levels)
+                    lambdas_tv = dict(zip(self.lambdas_levels.keys(), [lambda_*self.lambdas_static['tv'] for lambda_ in self.lambdas_levels.values()]))
+                    self.loss_fcn_dict[loss_type] = TVLoss(lambdas_tv)
 
 
     def forward(self, lambdas_optim, target, model, source, source_indices=None, val=False, k=None):
