@@ -108,10 +108,10 @@ class nha_layer(nn.Module):
         q = k = v = x
 
         if xq is not None:
+            b, nq = xq.shape[:2]
             xq = xq.reshape(b*nq,-1,xq.shape[-1])
             x_res = xq
             q = self.norm(xq)
-            b, nq = xq.shape[:2]
 
         if xv is not None:
             xv = self.normkv(xv)
