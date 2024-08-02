@@ -98,7 +98,9 @@ class nha_layer(nn.Module):
         self.res_net = res_net
 
     def forward(self, x: torch.tensor, xq=None, xv=None, mask=None, pos=None):    
-            
+        
+        x_res = x
+
         x = self.normkv(x)
 
         b, n, nh, e = x.shape
@@ -106,9 +108,10 @@ class nha_layer(nn.Module):
         q = k = v = x
 
         if xq is not None:
-            xq = self.norm(xq)
+            xq = xq.reshape(b*nq,-1,xq.shape[-1])
+            x_res = xq
+            q = self.norm(xq)
             b, nq = xq.shape[:2]
-            q = xq.reshape(b*nq,-1,xq.shape[-1])
 
         if xv is not None:
             xv = self.normkv(xv)
@@ -165,7 +168,7 @@ class nha_layer(nn.Module):
             att_out, att = self.MHA(v=v, bias=bias, return_debug=True, mask=mask) 
 
         if self.res_net:
-            x = q + self.dropout1(att_out)
+            x = x_res + self.dropout1(att_out)
             x = x + self.dropout2(self.mlp_layer(x))
 
         else:
