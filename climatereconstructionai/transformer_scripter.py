@@ -54,6 +54,9 @@ if __name__ == "__main__":
                 elif model_type=='icon_transformer_decmop':
                     from climatereconstructionai.model import ICONTransformer_decomp
                     model = ICONTransformer_decomp.ICON_Transformer(model_settings)
+                elif model_type=='icon_transformer_proj':
+                    from climatereconstructionai.model import ICONTransformer_proj
+                    model = ICONTransformer_proj.ICON_Transformer(model_settings)
                 model_init = True
 
         model.set_training_configuration(train_settings=train_settings)
