@@ -334,21 +334,22 @@ class TVLoss(nn.Module):
         super().__init__()
         self.lambdas_levels = lambdas_levels
 
-    def forward(self, model, output_levels, source_indices, in_range_mask):
+    def forward(self, model, output_levels, source_indices, in_range_mask, multi_gpu=False):
 
         loss_dict = {}
         total_loss = 0
         for level, lambda_ in self.lambdas_levels.items():
             if lambda_ > 0:
-
-                nh_values, _ ,nh_mask  = model.decomp_layer.grid_layers[str(0)].get_nh(output_levels["x"][int(level)], source_indices["global_cell"], source_indices)
+                
+                if multi_gpu:
+                    nh_values, _ ,nh_mask  = model.module.decomp_layer.grid_layers[str(0)].get_nh(output_levels["x"][int(level)], source_indices["global_cell"], source_indices)
+                else:
+                    nh_values, _ ,nh_mask  = model.decomp_layer.grid_layers[str(0)].get_nh(output_levels["x"][int(level)], source_indices["global_cell"], source_indices)
 
                 nh_values_error = ((nh_values[:,:,[0]] - nh_values[:,:,1:4])**4).sum(dim=[-2])
 
-                if in_range_mask is not None:
-                    loss = lambda_ * nh_values_error[in_range_mask==True,:].mean()
-                else:
-                    loss = lambda_ * nh_values_error.mean()
+                loss = lambda_ * nh_values_error.mean()
+
                 loss_dict[f'level_{level}'] = loss.item()
                 total_loss += loss
 
@@ -394,6 +395,7 @@ class loss_calculator(nn.Module):
         loss_dict = {}
         total_loss = 0
 
+
         if self.mask_out_of_range:
             if self.multi_gpus:
                 in_range_mask = model.module.output_in_range[source_indices['global_cell']]
@@ -407,7 +409,7 @@ class loss_calculator(nn.Module):
         for loss_type, loss_fcn in self.loss_fcn_dict.items():
             
             if loss_type == 'tv':
-                loss, loss_levels = loss_fcn(model, output_levels, source_indices, in_range_mask)
+                loss, loss_levels = loss_fcn(model, output_levels, source_indices, in_range_mask, multi_gpu=self.multi_gpus)
             else:
                 loss, loss_levels = loss_fcn(output_levels, target, in_range_mask)
             total_loss += self.lambdas_static[loss_type] * lambdas_optim[loss_type] * loss
