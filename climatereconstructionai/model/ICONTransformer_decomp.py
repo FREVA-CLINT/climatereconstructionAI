@@ -638,7 +638,7 @@ class projection_layer_simple(nn.Module):
         self.global_levels = []
         self.layers = nn.ModuleDict()
         for global_level in grid_layers.keys():
-            self.layers[global_level] = nn.Linear(model_dim, output_dim, bias=False)
+            self.layers[global_level] = nn.Linear(model_dim, output_dim + self.var_projection*output_dim, bias=False)
             self.global_levels.append(int(global_level))
             
     def forward(self, x_levels):
@@ -651,8 +651,13 @@ class projection_layer_simple(nn.Module):
             x = self.layers[str(global_level)](x_levels[global_level])
             x = x.unsqueeze(dim=-2).repeat_interleave(4**global_level,dim=-2)
             x = x.view(x.shape[0], -1, x.shape[-1])
-       
-            x_output_mean.append(x)
+
+            if self.var_projection:
+                x, x_var = x.split(x.shape[-1] // 2, dim=-1)
+                x_output_mean.append(x)
+                x_output_var.append(nn.functional.softplus(x_var))
+            else:
+                x_output_mean.append(x)
 
         return x_output_mean, x_output_var
 
@@ -684,7 +689,7 @@ class projection_layer(nn.Module):
                 self.layers[str(global_level)] = nha_layer(
                                 input_dim = model_dim,
                                 model_dim = model_dim,
-                                output_dim = output_dim,
+                                output_dim = output_dim + self.var_projection*output_dim,
                                 ff_dim = model_dim,
                                 n_heads = n_heads,
                                 dropout=dropout,
