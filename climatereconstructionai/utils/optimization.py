@@ -372,7 +372,7 @@ class loss_calculator(nn.Module):
             if value > 0:
                 if loss_type == 'gauss':
                     loss_fcn = GaussLoss()
-                    self.loss_fcn_dict[loss_type] = HierLoss(loss_fcn, {0:self.lambdas_levels[0]})
+                    self.loss_fcn_dict[loss_type] = HierLoss(loss_fcn, self.lambdas_levels)
                 elif loss_type == 'l1':
                     loss_fcn = torch.nn.L1Loss() 
                     self.loss_fcn_dict[loss_type] = HierLoss(loss_fcn, self.lambdas_levels)
