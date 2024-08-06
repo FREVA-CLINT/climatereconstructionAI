@@ -321,7 +321,7 @@ class HierLoss(nn.Module):
                 output = get_sum(output_levels, int(level), gauss=self.gauss)
 
                 if in_range_mask is not None:
-                    loss = lambda_ * self.loss_fcn(output[in_range_mask==True,:], target['cell'][in_range_mask==True,:])
+                    loss = lambda_ * self.loss_fcn(output[in_range_mask[:,:,0]==True,:,:], target['cell'][in_range_mask==True,:])
                 else:
                     loss = lambda_ * self.loss_fcn(output, target['cell'])
                 loss_dict[f'level_{level}'] = loss.item()
