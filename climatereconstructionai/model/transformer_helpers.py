@@ -361,15 +361,15 @@ class MultiHeadAttentionBlock(nn.Module):
         self.output_projection = nn.Linear(model_dim, output_dim, bias=False) if v_proj else nn.Identity()
                 
         if qkv_proj and qkv_bias and v_proj:
-            self.qkv_projection = nn.ModuleList([nn.Linear(input_dim, model_dim, bias=False)]*3)
+            self.qkv_projection = nn.ModuleList([nn.Linear(input_dim, model_dim, bias=False) for _ in range(3)])
 
         elif qkv_proj and qkv_bias:
-            self.qkv_projection = nn.ModuleList([nn.Linear(input_dim, model_dim, bias=False)]*2 + [nn.Identity()])
+            self.qkv_projection = nn.ModuleList([nn.Linear(input_dim, model_dim, bias=False)for _ in range(2)] + [nn.Identity()])
 
         elif qkv_proj and v_proj:
             self.v_projection = nn.Linear(input_dim, model_dim, bias=False)
         else:
-            self.qkv_projection = nn.ModuleList([nn.Identity()]*3)
+            self.qkv_projection = nn.ModuleList([nn.Identity() for _ in range(3)])
             self.v_projection = nn.Identity()
         
         self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
@@ -441,9 +441,9 @@ class MultiHeadAttentionBlock_swin(nn.Module):
             self.logit_scale = None
         
         if qkv_proj:
-            self.qkv_projection = nn.ModuleList([nn.Linear(model_dim, model_dim, bias=False)]*3)
+            self.qkv_projection = nn.ModuleList([nn.Linear(model_dim, model_dim, bias=False) for _ in range(3)])
         else:
-            self.qkv_projection = nn.ModuleList([nn.Identity()]*3)
+            self.qkv_projection = nn.ModuleList([nn.Identity()  for _ in range(3)])
         
         self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
 
