@@ -321,7 +321,7 @@ class HierLoss(nn.Module):
                 output = get_sum(output_levels, int(level), gauss=self.gauss)
 
                 if in_range_mask is not None:
-                    loss = lambda_ * self.loss_fcn(output[in_range_mask[:,:,0]==True,:,:], target['cell'][in_range_mask==True,:])
+                    loss = lambda_ * self.loss_fcn(output[in_range_mask==True,:], target['cell'][in_range_mask==True,:])
                 else:
                     loss = lambda_ * self.loss_fcn(output, target['cell'])
                 loss_dict[f'level_{level}'] = loss.item()
@@ -412,6 +412,7 @@ class loss_calculator(nn.Module):
                 loss, loss_levels = loss_fcn(model, output_levels, source_indices, in_range_mask, multi_gpu=self.multi_gpus)
             else:
                 loss, loss_levels = loss_fcn(output_levels, target, in_range_mask)
+                
             total_loss += self.lambdas_static[loss_type] * lambdas_optim[loss_type] * loss
 
             loss_levels_keys = [f'{loss_type}_{key}' for key in loss_levels.keys()]
