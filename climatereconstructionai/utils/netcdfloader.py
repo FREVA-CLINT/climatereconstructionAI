@@ -137,6 +137,7 @@ class NetCDFLoader(Dataset):
         super(NetCDFLoader, self).__init__()
 
         self.random = random.Random(cfg.loop_random_seed)
+        self.standard_conv = cfg.standard_conv
 
         self.data_types = data_types
         self.time_steps = time_steps
@@ -260,7 +261,10 @@ class NetCDFLoader(Dataset):
                 if cfg.n_target_data == 0 and i < cfg.n_output_data:
                     images.append(image[cfg.out_steps])
                     out_masks.append(self.create_out_mask(mask, i))
-                in_masks.append(mask[cfg.in_steps])
+                if self.standard_conv:
+                    in_masks.append(torch.ones_like(mask[cfg.in_steps]))
+                else:
+                    in_masks.append(mask[cfg.in_steps])
                 masked.append(image[cfg.in_steps] * mask[cfg.in_steps])
 
         if cfg.channel_steps:

@@ -239,6 +239,7 @@ def set_common_args():
     arg_parser.add_argument('--masked-bn', action='store_true',
                             help="Use masked batch normalization instead of standard BN")
     arg_parser.add_argument('--lazy-load', action='store_true', help="Use lazy loading for large datasets")
+    arg_parser.add_argument('--standard-conv', action='store_true', help="Disable partial convolution")
     arg_parser.add_argument('--global-padding', action='store_true', help="Use a custom padding for global dataset")
     arg_parser.add_argument('--normalize-data', action='store_true',
                             help="Normalize the input climate data to 0 mean and 1 std")
