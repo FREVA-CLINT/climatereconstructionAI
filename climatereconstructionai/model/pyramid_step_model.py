@@ -93,7 +93,7 @@ class output_net(nn.Module):
             if non_valid_mask is not None:
                 non_valid_mask_var.update(dict(zip(vars, [non_valid_mask[spatial_dim]]*len(vars))))
             else:
-                non_valid_mask_var.update(dict(zip(vars, [torch.zeros((data.shape[0],data.shape[-1]), dtype=bool)]*len(vars))))
+                non_valid_mask_var.update(dict(zip(vars, [torch.zeros((data.shape[0],data.shape[-1]), dtype=bool, device=data.device)]*len(vars))))
 
         return data_out, non_valid_mask_var
 
