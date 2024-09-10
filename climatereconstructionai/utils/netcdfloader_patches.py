@@ -309,11 +309,11 @@ class NetCDFLoader_lazy(Dataset):
             spatial_dim_indices[spatial_dim] = indices
 
             if patch_borders_lon[0] < lon_periodicity[0]:
-                shift_indices = coords[0,:] >= periodic_range + patch_borders_lon[0]
+                shift_indices = coords[0,:] > periodic_range + patch_borders_lon[0]
                 coords[0,shift_indices] =  coords[0, shift_indices] - periodic_range
 
             elif patch_borders_lon[1] > lon_periodicity[1]:
-                shift_indices = coords[0,:] <= patch_borders_lon[1]- periodic_range
+                shift_indices = coords[0,:] < patch_borders_lon[1]- periodic_range
                 coords[0,shift_indices] =  coords[0,shift_indices] + periodic_range
 
             rel_coords_lon = (coords[0,:] - patch_borders_lon[0])/(patch_borders_lon[1]-patch_borders_lon[0])

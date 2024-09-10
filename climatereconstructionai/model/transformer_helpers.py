@@ -497,8 +497,8 @@ class nu_grid_sampler_simple(nn.Module):
         positionsx = (coords[:,:,1])*(x.shape[-2]-1)
         positionsy = (coords[:,:,0])*(x.shape[-1]-1)    
 
-        positionsx = torch.clamp(positionsx, min=0, max=x.shape[-2])
-        positionsy = torch.clamp(positionsy, min=0, max=x.shape[-1])
+        positionsx = torch.clamp(positionsx, min=0, max=x.shape[-2]-1)
+        positionsy = torch.clamp(positionsy, min=0, max=x.shape[-1]-1)
 
         x = x[:,:,positionsx.long(), positionsy.long()]
 
