@@ -263,7 +263,7 @@ class NetCDFLoader_lazy(Dataset):
         self.normalizer = normalizer(self.norm_dict)
 
 
-    def get_ids_patches(self, ds, dims_variables_dict, patches, lon_periodicity):
+    def get_ids_patches(self, ds, dims_variables_dict, patches):
 
         spatial_dims_patches = {}
         spatial_dims_n_pts = {}
