@@ -279,10 +279,10 @@ def train(model, training_settings, model_settings={}):
         training_settings['lambdas_levels'] = training_settings['lambdas_levels']
 
     elif training_settings['lambdas_levels']==1:
-        training_settings['lambdas_levels'] = dict(zip([k for k in range(model_settings['n_grid_levels'])], torch.ones(model_settings['n_grid_levels'])))
+        training_settings['lambdas_levels'] = dict(zip([k for k in range(model_settings['n_grid_levels_out'])], torch.ones(model_settings['n_grid_levels_out'])))
     
     elif training_settings['lambdas_levels']==0:
-        training_settings['lambdas_levels'] = dict(zip([k for k in range(model_settings['n_grid_levels'])], torch.zeros(model_settings['n_grid_levels'])))
+        training_settings['lambdas_levels'] = dict(zip([k for k in range(model_settings['n_grid_levels_out'])], torch.zeros(model_settings['n_grid_levels_out'])))
 
 
     loss_calculator = optimization.loss_calculator(training_settings, model_settings['variables_target'], model_settings)    
@@ -350,7 +350,7 @@ def train(model, training_settings, model_settings={}):
         model.train()
 
         data = [data_to_device(x, device) for x in next(iterator_train)]
-        source, target, indices = data
+        source, target, indices, drop_mask = data
 
         if training_settings['mixed_precision']:
             with torch.autocast(device_type=training_settings['device'], dtype=torch.bfloat16):
@@ -359,6 +359,7 @@ def train(model, training_settings, model_settings={}):
                                                                         model, 
                                                                         source, 
                                                                         source_indices=indices, 
+                                                                        drop_mask=drop_mask,
                                                                         k=lambdas_optim['k_l1_relv'] if 'k_l1_relv' in lambdas_optim.keys() else None, 
                                                                         val=False)
         else:
@@ -367,6 +368,7 @@ def train(model, training_settings, model_settings={}):
                                                                         model, 
                                                                         source, 
                                                                         source_indices=indices, 
+                                                                        drop_mask=drop_mask,
                                                                         k=lambdas_optim['k_l1_relv'] if 'k_l1_relv' in lambdas_optim.keys() else None, 
                                                                         val=False)
         
@@ -426,7 +428,7 @@ def train(model, training_settings, model_settings={}):
             for _ in range(training_settings['n_iters_val']):
 
                 data = [data_to_device(x, device) for x in next(iterator_val)]
-                source, target, indices = data
+                source, target, indices, drop_mask = data
 
                 if training_settings['mixed_precision']:
                     with torch.autocast(device_type=training_settings['device'], dtype=torch.bfloat16):
@@ -435,6 +437,7 @@ def train(model, training_settings, model_settings={}):
                                                                                                 model, #model.module for multi_gpus?
                                                                                                 source, 
                                                                                                 source_indices=indices, 
+                                                                                                drop_mask=drop_mask, 
                                                                                                 k=lambdas_optim['k_l1_relv'] if 'k_l1_relv' in lambdas_optim.keys() else None, 
                                                                                                 val=True)
                 else:
@@ -442,7 +445,8 @@ def train(model, training_settings, model_settings={}):
                                                                                                 target, 
                                                                                                 model, #model.module for multi_gpus?
                                                                                                 source, 
-                                                                                                source_indices=indices, 
+                                                                                                source_indices=indices,
+                                                                                                drop_mask=drop_mask,
                                                                                                 k=lambdas_optim['k_l1_relv'] if 'k_l1_relv' in lambdas_optim.keys() else None, 
                                                                                                 val=True)
 
@@ -459,6 +463,7 @@ def train(model, training_settings, model_settings={}):
                 torch.save(output, os.path.join(log_dir,'output.pt'))
                 torch.save(target, os.path.join(log_dir,'target.pt'))
                 torch.save(source, os.path.join(log_dir,'source.pt'))
+                torch.save(drop_mask, os.path.join(log_dir,'drop_mask.pt'))
                 #input_mapping = {}
                 #for key, layer in model.input_layers.items():
                 #    input_mapping[key] = layer.input_mapping

@@ -117,8 +117,9 @@ class grid_layer(nn.Module):
     
     def get_projection_nh(self, x, local_indices, sample_dict, sigma_d, kappa_vm):
         x_nh, _, coords_nh = self.get_nh(x, local_indices, sample_dict)
+        x_nh = x_nh[:,:,1:,:]
 
-        distances, phis = get_relative_positions(coords_nh[:,:,:,0], coords_nh, polar=True)
+        distances, phis = get_relative_positions(coords_nh[:,:,:,0], coords_nh[:,:,:,1:], polar=True)
 
         weights = get_spatial_projection_weights(phis, 
                                                  distances, 
@@ -130,10 +131,10 @@ class grid_layer(nn.Module):
                                                  min_dist=0, 
                                                  device=x_nh.device)
 
-        x = proj_data(x_nh, weights)
+        x_nh = proj_data(x_nh, weights)
         
         # x.shape = batch, N, phis, dists, feat
-        return x
+        return x_nh
 
     def get_projection_cross(self, x, local_indices, sample_dict, coords_cross, sigma_d, kappa_vm):
         x_nh, mask_nh, coords_nh = self.get_nh(x, local_indices, sample_dict)
@@ -162,6 +163,27 @@ class grid_layer(nn.Module):
         
         # x.shape = batch, N, phis, dists, feat
         return x
+    
+def get_projection_cross_levels(coords_nh, coords_nh_target, local_indices, sample_dict, sigma_d, kappa_vm):
+
+
+    distances_nh, phis_nh = get_relative_positions(coords_nh_target[:,:,:,0], coords_nh, polar=True)
+    distances, phis = get_relative_positions(coords_nh_target[:,:,:,0], coords_nh_target, polar=True)
+
+    #distances_nh[mask_nh.unsqueeze(dim=-2)]=1e5
+
+    weights = get_spatial_projection_weights(phis_nh, 
+                                            distances_nh, 
+                                            kappa_vm=kappa_vm,
+                                            sigma_d=sigma_d,
+                                            n_theta=0,
+                                            n_dist=0,
+                                            max_dist=0, 
+                                            min_dist=0, 
+                                            device=coords_nh.device,
+                                            thetas_proj=phis,
+                                            dists_proj=distances)
+    return weights
 
 #def get_proejction_levels
 
@@ -193,7 +215,10 @@ def get_spatial_projection_weights(phis, dists, kappa_vm, sigma_d, n_theta, n_di
 
     if thetas_proj is None:
         thetas_proj = torch.linspace(-torch.pi, torch.pi, n_theta + 1, device=device)[:-1].unsqueeze(dim=0).repeat_interleave(n_dist, dim=0)
-
+    
+    #dists_0 = dists < 1e-8
+    #dists_proj_0 = dists_proj < 1e-8
+    #dist_0 = (dists_proj_0.unsqueeze(dim=-1) * dists_0.unsqueeze(dim=-2)).bool()
 
     vm_weights = von_mises(thetas_proj, phis, kappa_vm)
     dist_weights = normal_dist(dists_proj, dists, sigma_d)
@@ -350,7 +375,7 @@ class nh_processing_layer(nn.Module):
 
             nh_channel_att_layers = nn.ModuleList()
             for _ in range(model_hparams['n_processing_layers']):
-                nh_channel_att_layers.append(attention_block(n_dist*n_theta, n_dist*n_theta, n_dist*n_theta, n_heads=n_heads, output_dim=1))
+                nh_channel_att_layers.append(attention_block((n_dist+1)*n_theta, (n_dist+1)*n_theta, (n_dist+1)*n_theta, n_heads=n_heads, output_dim=1))
 
             self.channel_att_layers[global_level] = nh_channel_att_layers
 
@@ -365,11 +390,14 @@ class nh_processing_layer(nn.Module):
             b,n,f = x.shape
 
             for layer in self.channel_att_layers[str(global_level)]:
-                x = self.grid_layers[str(global_level)].get_projection_nh(x, indices_layers[global_level], sample_dict, self.simga_d[str(global_level)], self.kappa_vm[str(global_level)])        
+                x_proj = self.grid_layers[str(global_level)].get_projection_nh(x, indices_layers[global_level], sample_dict, self.simga_d[str(global_level)], self.kappa_vm[str(global_level)])    
+                x = torch.concat((x.unsqueeze(dim=-2).unsqueeze(dim=-2).repeat_interleave(x_proj.shape[-2], dim=-2), x_proj), dim=2)
                 x = x.view(b,n,-1,f).transpose(-1,-2)
                 x = layer(x)
                 x = x.view(b,n,f)
             x_levels[global_level] = x
+
+
         return x_levels
     
 
@@ -451,8 +479,9 @@ class projection_layer_output(nn.Module):
         for global_level in grid_layers.keys():
             self.layers[global_level] = nn.Linear(model_dim, output_dim, bias=False)
             self.global_levels.append(int(global_level))
-            self.simga_d[global_level] = nn.Parameter(grid_layers[global_level].min_dist/2, requires_grad=True)
-            self.kappa_vm[global_level] = nn.Parameter(torch.tensor(model_hparams["kappa_vm"], dtype=float), requires_grad=True)
+            if int(global_level) > 0:
+                self.simga_d[global_level] = nn.Parameter(grid_layers[global_level].min_dist/5, requires_grad=True)
+                self.kappa_vm[global_level] = nn.Parameter(torch.tensor(model_hparams["kappa_vm"], dtype=float), requires_grad=True)
             
     def forward(self, x_levels, indices_layers, sample_dict, output_coords=None):
         
@@ -467,10 +496,11 @@ class projection_layer_output(nn.Module):
 
             x = self.layers[str(global_level)](x_levels[global_level])
 
-            x = x.view(x.shape[0], -1, x.shape[-1])
+            if global_level > 0:
+                x = x.view(x.shape[0], -1, x.shape[-1])
 
-            x = self.grid_layers[str(global_level)].get_projection_cross(x, indices_layers[global_level], sample_dict, output_coords, self.simga_d[str(global_level)], self.kappa_vm[str(global_level)]) 
-            
+                x = self.grid_layers[str(global_level)].get_projection_cross(x, indices_layers[global_level], sample_dict, output_coords, self.simga_d[str(global_level)], self.kappa_vm[str(global_level)]) 
+                
             x = x.view(x.shape[0], -1, x.shape[-1])
 
             x_output.append(x)

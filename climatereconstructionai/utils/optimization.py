@@ -288,9 +288,11 @@ def get_sum(output_levels, lowest_level, gauss=False):
     if not isinstance(output_levels["x"], list):
         return output_levels["x"].unsqueeze(dim=-2)
     
-    output = output_levels['x'][lowest_level:]
+    output = output_levels['x'][::-1][lowest_level:]
+    #output = output_levels['x'][lowest_level:]
     if gauss:
-        output_var = output_levels['x_var'][lowest_level:]
+        output_var = output_levels['x_var'][::-1][lowest_level:]
+       #output_var = output_levels['x_var'][lowest_level:]
 
         x = torch.sum(torch.stack(output, dim=-1), dim=-1)
         x_var = torch.sum(torch.stack(output_var, dim=-1), dim=-1)
@@ -346,7 +348,7 @@ class TVLoss(nn.Module):
                 else:
                     nh_values, _ ,nh_mask  = model.decomp_layer.grid_layers[str(0)].get_nh(output_levels["x"][int(level)], source_indices["global_cell"], source_indices)
 
-                nh_values_error = ((nh_values[:,:,[0]] - nh_values[:,:,1:4])**4).sum(dim=[-2])
+                nh_values_error = ((nh_values[:,:,[0]] - nh_values[:,:,1:4]).abs()).sum(dim=[-2])
 
                 loss = lambda_ * nh_values_error.mean()
 
@@ -384,13 +386,13 @@ class loss_calculator(nn.Module):
                     self.loss_fcn_dict[loss_type] = TVLoss(lambdas_tv)
 
 
-    def forward(self, lambdas_optim, target, model, source, source_indices=None, val=False, k=None):
+    def forward(self, lambdas_optim, target, model, source, source_indices=None, drop_mask=None, val=False, k=None):
         
         if val:
             with torch.no_grad():
-                output_levels, debug_dict = model(source, source_indices, debug=True)
+                output_levels, debug_dict = model(source, source_indices, drop_mask=drop_mask,  debug=True)
         else:
-            output_levels = model(source, source_indices)
+            output_levels = model(source, source_indices, drop_mask=drop_mask)
 
         loss_dict = {}
         total_loss = 0

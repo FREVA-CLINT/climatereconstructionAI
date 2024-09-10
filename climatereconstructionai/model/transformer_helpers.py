@@ -74,8 +74,8 @@ def scaled_dot_product_rpe(q=None, k=None, v=None, aq=None, ak=None, av=None, bi
         attn_logits = bias
 
     if mask is not None:
-        mask = mask.reshape(attn_logits.shape[0],1,mask.shape[-2],mask.shape[-1]).repeat(1,attn_logits.shape[1],1,1)
-        mask_value = float("-inf")#-1e10 if attn_logits.dtype == torch.float32 else -1e4
+        mask = mask.view(mask.shape[0],1,1,mask.shape[1]).repeat_interleave(attn_logits.shape[1],dim=1)
+        mask_value = -1e10 if attn_logits.dtype == torch.float32 else -1e4
         attn_logits = attn_logits.masked_fill(mask, mask_value)
 
     #softmax and scale
@@ -119,21 +119,70 @@ def scaled_dot_product_rpe_swin(q, k, v, b=None, logit_scale=None, mask=None):
     return values, attn
 
 
+
+class PositionEmbedder_angular(nn.Module):
+
+    def __init__(self, min_pos_phys, max_pos_phys, n_pos_emb, n_heads=10, device='cpu', special_token=True, constant_init=False, continuous_projection=None):
+        super().__init__()
+        self.max_pos_phys = max_pos_phys
+        self.min_pos_phys = min_pos_phys
+        self.n_pos_emb = n_pos_emb      
+       
+        if constant_init:
+            self.embeddings_table = nn.Parameter(torch.ones(n_pos_emb + 1, n_heads))
+            if special_token:
+                self.special_token = nn.Parameter(torch.ones(1, n_heads))
+            else:
+                self.special_token = None
+        else:
+            self.embeddings_table = nn.Parameter(torch.Tensor(n_pos_emb + 1, n_heads))
+            if special_token:
+                self.special_token = nn.Parameter(torch.Tensor(1, n_heads))
+            else:
+                self.special_token = None
+            nn.init.xavier_uniform_(self.special_token)
+            nn.init.xavier_uniform_(self.embeddings_table)
+
+
+    def forward(self, coord, special_token_mask=None):
+        
+        coord_pos = self.n_pos_emb * (coord -self.min_pos_phys) / (self.max_pos_phys - self.min_pos_phys)
+
+       # if special_token_mask is not None:
+
+        coord_pos_clipped = torch.clamp(coord_pos, 0, self.n_pos_emb)
+        
+        embeddings = self.embeddings_table[coord_pos_clipped.long()]
+
+        if special_token_mask is not None:
+            embeddings[special_token_mask,:] = self.special_token
+
+        return embeddings
+
+
 class PositionEmbedder_phys(nn.Module):
 
-    def __init__(self, min_pos_phys, max_pos_phys, n_pos_emb, n_heads=10,device='cpu', special_token=True):
+    def __init__(self, min_pos_phys, max_pos_phys, n_pos_emb, n_heads=10, device='cpu', special_token=True, constant_init=False):
         super().__init__()
         self.max_pos_phys = max_pos_phys
         self.min_pos_phys = min_pos_phys
         self.n_pos_emb = n_pos_emb
         
-        self.embeddings_table = nn.Parameter(torch.Tensor(n_pos_emb + 1, n_heads))
-        if special_token:
-            self.special_token = nn.Parameter(torch.Tensor(1, n_heads))
+
+        if constant_init:
+            self.embeddings_table = nn.Parameter(torch.ones(n_pos_emb, n_heads))
+            if special_token:
+                self.special_token = nn.Parameter(torch.ones(1, n_heads))
+            else:
+                self.special_token = None
         else:
-            self.special_token = None
-        nn.init.xavier_uniform_(self.special_token)
-        nn.init.xavier_uniform_(self.embeddings_table)
+            self.embeddings_table = nn.Parameter(torch.Tensor(n_pos_emb + 1, n_heads))
+            if special_token:
+                self.special_token = nn.Parameter(torch.Tensor(1, n_heads))
+            else:
+                self.special_token = None
+            nn.init.xavier_uniform_(self.special_token)
+            nn.init.xavier_uniform_(self.embeddings_table)
 
 
     def forward(self, coord, special_token_mask=None):

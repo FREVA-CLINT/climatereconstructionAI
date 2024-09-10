@@ -376,18 +376,35 @@ class NetCDFLoader_lazy(Dataset):
                 if not os.path.isfile(sample_path):
                     torch.save({'data_source': data_source, 'data_target': data_target, 'indices': indices, 'level': 0}, sample_path)
         else:
-            sample = torch.load(source_file)
+            loaded = False
+            while not loaded:
+                try:
+                    sample = torch.load(source_file)
+                    loaded = True
+                except:
+                    source_index = torch.randint(0, len(self.files_source), (1,1))
+                    source_file = self.files_source[source_index]
+                    loaded = False
+
             indices =  sample['indices']
             data_source =  sample['data_source']
             data_target =  sample['data_target']
+
+        if self.p_dropout > 0:
+            drop_mask = (torch.rand_like(data_source['cell'][:,0,0])<self.p_dropout).bool()
+        else:
+            drop_mask = torch.zeros_like(data_source['cell'][:,0,0], dtype=bool)
+            
 
         if self.normalization is not None:
             data_source = self.normalizer(data_source, self.variables_source)    
             data_target = self.normalizer(data_target, self.variables_target)
 
+        data_source['cell'][drop_mask]=-10
+
         ds_target = ds_source = output_mapping = input_mapping = global_cells = global_cells = []
 
-        return data_source, data_target, indices
+        return data_source, data_target, indices, drop_mask
 
     def __len__(self):
         return len(self.files_source)

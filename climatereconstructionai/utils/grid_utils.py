@@ -828,10 +828,10 @@ def get_distance_angle(lon1, lat1, lon2, lat2, base="polar", periodic_fov=None):
         distance = torch.sqrt(d_lats**2 + d_lons**2)
         phi = torch.atan2(d_lats, d_lons)
 
-        return distance, phi
+        return distance.float(), phi.float()
 
     else:
-        return d_lons, d_lats
+        return d_lons.float(), d_lats.float()
     
 
 
