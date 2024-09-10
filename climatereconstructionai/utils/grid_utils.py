@@ -672,16 +672,15 @@ def generate_region(coords, range_lon=None, range_lat=None, n_points=None, radiu
     return out_dict
 
 
-def get_patches(grid_spacing_equator_km, pix_size, overlap):
-
-    total_grid_size_lon_pix = (2 * math.pi * radius_earth)/grid_spacing_equator_km
+def get_patches(grid_spacing_equator_km, pix_size, overlap, range_data_lon=[-math.pi, math.pi], range_data_lat =[-math.pi/2, math.pi/2]):
+    
+    total_grid_size_lon_pix = ((range_data_lon[1]-range_data_lon[0]) * radius_earth)/grid_spacing_equator_km
     total_grid_size_lon_pix = 2**np.ceil(np.log2(total_grid_size_lon_pix))
-
 
     n_patches_lon = total_grid_size_lon_pix/pix_size
 
-    border_patches_lon = np.linspace(-math.pi, math.pi,int(n_patches_lon)+1)
-    border_patches_lat = np.linspace(-math.pi/2, math.pi/2,int(n_patches_lon/2)+1)
+    border_patches_lon = np.linspace(range_data_lon[0], range_data_lon[1],int(n_patches_lon)+1)
+    border_patches_lat = np.linspace(range_data_lat[0], range_data_lat[1],int(n_patches_lon/2)+1)
 
     centers_lon = (border_patches_lon[1:] + border_patches_lon[:-1])/2
     centers_lat = (border_patches_lat[1:] + border_patches_lat[:-1])/2
@@ -705,12 +704,14 @@ def get_patches(grid_spacing_equator_km, pix_size, overlap):
     return patches
 
 
-def get_ids_in_patches(patches, coords, return_torch=True):
+def get_ids_in_patches(patches, coords, return_torch=True, lon_periodicity=[-math.pi,math.pi]):
 
     centers_lon = patches['centers_lon']
     centers_lat = patches['centers_lat']
     border_patches_lon = patches['borders_lon']
     border_patches_lat = patches['borders_lat']
+
+    periodic_range = lon_periodicity[1]-lon_periodicity[0]
 
     ids_in_patches = []
     patch_ids_lon = []
@@ -724,11 +725,11 @@ def get_ids_in_patches(patches, coords, return_torch=True):
 
             in_patch_lon = np.logical_and(coords[0] >= border_patch_lon[0], coords[0] < border_patch_lon[1])
 
-            if np.round(border_patch_lon[0],6) < np.round(math.pi,6):
-                in_patch_lon = np.logical_or(in_patch_lon, (coords[0] >= (2*math.pi + border_patch_lon[0])))
+            if np.round(border_patch_lon[0],6) < np.round(lon_periodicity[0],6):
+                in_patch_lon = np.logical_or(in_patch_lon, (coords[0] >= (periodic_range + border_patch_lon[0])))
 
-            elif np.round(border_patch_lon[1],6) > np.round(math.pi,6):
-                in_patch_lon = np.logical_or(in_patch_lon, (coords[0] <= (border_patch_lon[1] - 2*math.pi)))
+            elif np.round(border_patch_lon[1],6) > np.round(lon_periodicity[1],6):
+                in_patch_lon = np.logical_or(in_patch_lon, (coords[0] <= (border_patch_lon[1] - periodic_range)))
 
             in_patch_lat = np.logical_and(coords[1] >= border_patch_lat[0], coords[1] < border_patch_lat[1])
             

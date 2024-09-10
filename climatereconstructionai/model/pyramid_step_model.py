@@ -92,6 +92,8 @@ class output_net(nn.Module):
 
             if non_valid_mask is not None:
                 non_valid_mask_var.update(dict(zip(vars, [non_valid_mask[spatial_dim]]*len(vars))))
+            else:
+                non_valid_mask_var.update(dict(zip(vars, [torch.zeros((data.shape[0],data.shape[-1]), dtype=bool)]*len(vars))))
 
         return data_out, non_valid_mask_var
 
@@ -168,8 +170,9 @@ class pyramid_step_model(nn.Module):
         else:
             self.input_avg_pooling = nn.Identity()
 
-    def forward(self, x, coords_target, coords_source=None, norm=False, apply_res=True):
-    
+    def forward(self, x, coords_target, coords_source=None, norm=False, apply_res=True, depth=None):
+        # coords target: Values from 0 to 1
+
         if norm:
             x = self.normalize(x)
 
@@ -179,23 +182,22 @@ class pyramid_step_model(nn.Module):
         x_reg_lr = x
 
         if not isinstance(self.core_model, nn.Identity):
-            
             x = self.input_avg_pooling(x)
-            output = self.core_model(x)
+            output = self.core_model(x, depth=depth)
             core_output = output
             
-            coords_target_hr, non_valid = helpers.scale_coords(coords_target, self.range_region_target_radx, rngy=self.range_region_target_rady)
-            x, non_valid_var = self.output_net_post(output['x'], coords_target_hr, non_valid)
+            #coords_target_hr, non_valid = helpers.scale_coords(coords_target, self.range_region_target_radx, rngy=self.range_region_target_rady)
+            x, non_valid_var = self.output_net_post(output['x'], coords_target, None)
 
         else:
             core_output = {'x': x}
-            coords_target_hr, non_valid = helpers.scale_coords(coords_target, self.range_region_source_radx, rngy=self.range_region_source_rady)
-            x, non_valid_var = self.output_net_post(x[:,list(self.output_res_indices.values()),:,:], coords_target_hr, non_valid)
+            #coords_target_hr, non_valid = helpers.scale_coords(coords_target, self.range_region_source_radx, rngy=self.range_region_source_rady)
+            x, non_valid_var = self.output_net_post(x[:,list(self.output_res_indices.values()),:,:], coords_target, None)
 
         
         if self.res_mode == 'sample' and not isinstance(self.core_model, nn.Identity):
-            coords_target_lr, non_valid = helpers.scale_coords(coords_target, self.range_region_source_radx, rngy=self.range_region_source_rady)
-            x_pre = self.output_net_pre(x_reg_lr[:,list(self.output_res_indices.values()),:,:], coords_target_lr, non_valid)[0]
+            #coords_target_lr, non_valid = helpers.scale_coords_rel(coords_target, self.coord_scaling_source_target)
+            x_pre = self.output_net_pre(x_reg_lr[:,list(self.output_res_indices.values()),:,:], coords_target, None)[0]
 
             for var in self.output_res_indices.keys():
                 if self.use_gnlll:
@@ -245,15 +247,27 @@ class pyramid_step_model(nn.Module):
         data_source = {}
         coords_source = {}
 
+        range_lon = [float(ds.clon.min()), float(ds.clon.max())]
+        range_lat = [float(ds.clat.min()), float(ds.clat.max())]
+
         patches_target = gu.get_patches(
             self.model_settings["grid_spacing_equator_km"],
             self.model_settings["pix_size_patch"],
-            0)
-        
+            0,
+            range_data_lon=range_lon,
+            range_data_lat=range_lat)
+
+        # only for channel data
+        self.patches_source = gu.get_patches(
+                self.model_settings["grid_spacing_equator_km"],
+                self.model_settings["pix_size_patch"],
+                self.model_settings["patches_overlap_source"],
+                range_data_lon=range_lon,
+                range_data_lat=range_lat)
+
         spatial_dims_patches_source = {}
         spatial_dims_patches_target = {}
         spatial_dims_n_pts = {}
-
 
         #collect all data
         vars_target = self.model_settings['variables_target']
@@ -263,7 +277,7 @@ class pyramid_step_model(nn.Module):
             coord_dict = gu.get_coord_dict_from_var(ds, spatial_dim)
             coords = gu.get_coords_as_tensor(ds, lon=coord_dict['lon'], lat=coord_dict['lat'])
 
-            ids_in_patches_source, patch_ids = gu.get_ids_in_patches(self.patches_source, coords.numpy())
+            ids_in_patches_source, patch_ids = gu.get_ids_in_patches(self.patches_source, coords.numpy(), lon_periodicity=range_lon)
 
             spatial_dims_patches_source[spatial_dim] = ids_in_patches_source
 
@@ -272,7 +286,7 @@ class pyramid_step_model(nn.Module):
             coord_dict = gu.get_coord_dict_from_var(ds_target, spatial_dim)
             coords = gu.get_coords_as_tensor(ds_target, lon=coord_dict['lon'], lat=coord_dict['lat'])
 
-            ids_in_patches_target, patch_ids = gu.get_ids_in_patches(patches_target, coords.numpy())
+            ids_in_patches_target, patch_ids = gu.get_ids_in_patches(patches_target, coords.numpy(), lon_periodicity=range_lon)
             spatial_dims_patches_target[spatial_dim] = ids_in_patches_target
 
         # to batch: patch_indices
@@ -283,8 +297,8 @@ class pyramid_step_model(nn.Module):
             patch_borders_source_lon = self.patches_source["borders_lon"][patch_ids["lon"][int(patch_id_idx)]]
             patch_borders_source_lat = self.patches_source["borders_lat"][patch_ids["lat"][int(patch_id_idx)]]
 
-            patch_borders_target_lon = self.patches_target["borders_lon"][patch_ids["lon"][int(patch_id_idx)]]
-            patch_borders_target_lat = self.patches_target["borders_lat"][patch_ids["lat"][int(patch_id_idx)]]
+            patch_borders_target_lon = patches_target["borders_lon"][patch_ids["lon"][int(patch_id_idx)]]
+            patch_borders_target_lat = patches_target["borders_lat"][patch_ids["lat"][int(patch_id_idx)]]
     
             coords_source = {}
             data_source = {}
@@ -294,9 +308,9 @@ class pyramid_step_model(nn.Module):
                 coords = gu.get_coords_as_tensor(ds, lon=coord_dict['lon'], lat=coord_dict['lat'])
 
                 indices = spatial_dims_patches_source[spatial_dim][patch_id_idx]
-
-                coords_source[spatial_dim] = self.get_coordinates_frame(coords[:,indices], patch_borders_source_lon, patch_borders_source_lat).unsqueeze(dim=0).to(device)
                 
+                coords_source[spatial_dim] = self.get_coordinates_frame(coords[:,indices], patch_borders_source_lon, patch_borders_source_lat, lon_periodicity=range_lon).unsqueeze(dim=0).to(device)
+
                 for variable in vars:
                     data_source[variable] = torch.tensor(ds[variable].values[ts,0,indices]).unsqueeze(dim=-1).unsqueeze(dim=0).to(device)
 
@@ -310,7 +324,7 @@ class pyramid_step_model(nn.Module):
 
                 indices = spatial_dims_patches_target[spatial_dim][patch_id_idx]
 
-                coords_target[spatial_dim] = self.get_coordinates_frame(coords[:,indices], patch_borders_target_lon, patch_borders_target_lat).unsqueeze(dim=0).to(device)
+                coords_target[spatial_dim] = self.get_coordinates_frame(coords[:,indices], patch_borders_source_lon, patch_borders_source_lat, lon_periodicity=range_lon).unsqueeze(dim=0).to(device)
                 var_spatial_dims.update(dict(zip(vars,[spatial_dim]*len(vars))))
 
 
@@ -319,15 +333,16 @@ class pyramid_step_model(nn.Module):
         return data_input, spatial_dims_patches_target, var_spatial_dims
 
     def apply_patches(self, ds, ts=-1, device='cpu', ds_target=None):
-            
-        data_input, spatial_dims_patches_target, var_spatial_dims = self.preprocess_data_patches(ds, ts=ts, device='cpu', ds_target=ds_target)
+        if ds_target is None:
+            ds_target=ds
+        data_input, spatial_dims_patches_target, var_spatial_dims = self.preprocess_data_patches(ds, ts=ts, device=device, ds_target=ds_target)
 
         print(f'prepared data for {len(data_input)} patches')
 
-        output_global = dict(zip(var_spatial_dims.keys(), [torch.tensor(ds_target[variable][0].values).squeeze().to(device) for variable in var_spatial_dims.keys()]))
+        output_global = dict(zip(var_spatial_dims.keys(), [torch.tensor(ds_target[variable][0,0].values).squeeze().to(device) for variable in var_spatial_dims.keys()]))
 
         if self.model_settings['gauss']:
-            output_global_std = dict(zip(var_spatial_dims.keys(), [torch.tensor(ds_target[variable][0].values).squeeze().to(device) for variable in var_spatial_dims.keys()]))
+            output_global_std = dict(zip(var_spatial_dims.keys(), [torch.tensor(ds_target[variable][0,0].values).squeeze().to(device) for variable in var_spatial_dims.keys()]))
         else:
             output_global_std = {}
 
@@ -343,8 +358,12 @@ class pyramid_step_model(nn.Module):
                         apply_res = self.model_settings['apply_res']
                 else:
                     apply_res = True
-                output = self(data_source, coords_target, coords_source=coords_source, norm=True, apply_res=apply_res)[0]
-
+            #    print([var.std() for var in data_source.values()])
+                output, x_reg_lr, core_output, non_valid_var = self(data_source, coords_target, coords_source=coords_source, norm=True, apply_res=apply_res)
+                
+                #debug = {'x_reg_lr':x_reg_lr, 'core_output': core_output, 'non_valid_var': non_valid_var}
+                #torch.save(debug, f'/home/k/k204244/work_exaocean/baroclinic_unet/test/test_nudging_rel/debug_{patch_id_idx}.pt')
+            #    print([var.std() for var in output.values()])
             for variable in output.keys():
                 indices = spatial_dims_patches_target[var_spatial_dims[variable]][patch_id_idx]
                 output_global[variable][indices] = output[variable][0,0,0]
@@ -416,15 +435,17 @@ class pyramid_step_model(nn.Module):
         pass
         
 
-    def get_coordinates_frame(self, coords, patch_borders_lon, patch_borders_lat):
+    def get_coordinates_frame(self, coords, patch_borders_lon, patch_borders_lat, lon_periodicity=[-math.pi, math.pi]):
+        
+        periodic_range = (lon_periodicity[1]-lon_periodicity[0])
 
-        if patch_borders_lon[0] < -math.pi:
-            shift_indices = coords[0,:] > 2*math.pi + patch_borders_lon[0]
-            coords[0,shift_indices] =  coords[0, shift_indices] - 2*math.pi
+        if patch_borders_lon[0] < lon_periodicity[0]:
+            shift_indices = coords[0,:] >= periodic_range + patch_borders_lon[0]
+            coords[0,shift_indices] =  coords[0, shift_indices] - periodic_range
 
-        elif patch_borders_lon[1] > math.pi:
-            shift_indices = coords[0,:] < patch_borders_lon[1] - 2*math.pi
-            coords[0,shift_indices] =  coords[0,shift_indices] + 2*math.pi
+        elif patch_borders_lon[1] > lon_periodicity[1]:
+            shift_indices = coords[0,:] <= patch_borders_lon[1]- periodic_range
+            coords[0,shift_indices] =  coords[0,shift_indices] + periodic_range
 
         rel_coords_lon = (coords[0,:] - patch_borders_lon[0])/(patch_borders_lon[1]-patch_borders_lon[0])
         rel_coords_lat = (coords[1,:] - patch_borders_lat[0])/(patch_borders_lat[1]-patch_borders_lat[0])
@@ -471,54 +492,13 @@ class pyramid_step_model(nn.Module):
         self.radius_region_source_km = self.model_settings['radius_region_source_km']
         self.radius_region_target_km = self.model_settings['radius_region_target_km']
 
-        if self.model_settings['model_type']=="patches_km":
-            self.range_region_source_radx = [-self.radius_region_source_km/(6371), self.radius_region_source_km/(6371)]
-            self.range_region_target_radx = [-self.radius_region_target_km/(6371), self.radius_region_target_km/(6371)]
+        self.n_in = self.model_settings['n_regular'][0]
+        self.n_out = self.model_settings['n_regular'][1]
 
-            self.range_region_source_rady = self.range_region_source_radx
-            self.range_region_target_rady = self.range_region_target_radx
+        patch_overlap_target, patch_overlap_source = self.model_settings["patches_overlap_target"], self.model_settings["patches_overlap_source"]
 
-        elif self.model_settings['model_type']=="global":
-            self.range_region_source_radx = [-math.pi, math.pi]
-            self.range_region_target_radx = [-math.pi, math.pi]
+        self.coord_scaling_source_target = (self.n_out[0] + patch_overlap_target)/(self.n_in[0] + patch_overlap_source)
 
-            self.range_region_source_rady = [-math.pi/2, math.pi/2]
-            self.range_region_target_rady = [-math.pi/2, math.pi/2]
-        
-        elif self.model_settings['model_type']=="patches":
-            self.patches_source = gu.get_patches(
-                self.model_settings["grid_spacing_equator_km"],
-                self.model_settings["pix_size_patch"],
-                self.model_settings["patches_overlap_source"])
-
-            self.patches_target = gu.get_patches(
-                self.model_settings["grid_spacing_equator_km"],
-                self.model_settings["pix_size_patch"],
-                self.model_settings["patches_overlap_target"])
-            
-            range_target_lon = self.patches_target["borders_lon"][0]
-            range_source_lon = self.patches_source["borders_lon"][0]
-           
-
-            range_source_lon_rel = (range_source_lon - range_target_lon[0])/(range_target_lon[1] - range_target_lon[0])
-            self.range_region_source_radx = [range_source_lon_rel[0], range_source_lon_rel[1]]
-            self.range_region_target_radx = [0, 1]
-
-            range_target_lat = self.patches_target["borders_lat"][0]
-            range_source_lat = self.patches_source["borders_lat"][0]
-
-
-            range_source_lat_rel = (range_source_lat - range_target_lat[0])/(range_target_lat[1] - range_target_lat[0])
-            self.range_region_source_rady = [range_source_lat_rel[0], range_source_lat_rel[1]]
-            self.range_region_target_rady = [0, 1]
- 
-        self.n_in, self.n_out = self.model_settings['n_regular']
-
-
-        self.model_settings['range_region_source_radx'] = self.range_region_source_radx
-        self.model_settings['range_region_target_radx'] = self.range_region_target_radx
-        self.model_settings['range_region_source_rady'] = self.range_region_source_rady
-        self.model_settings['range_region_target_rady'] = self.range_region_target_rady
 
     def set_normalizer(self):
         self.normalize = normalizer(self.model_settings['normalization'])
@@ -613,8 +593,6 @@ class pyramid_step_model(nn.Module):
             'interpolate_source': True,
             'interpolate_target': False,
             'interpolation_size_s': self.n_in,
-            'range_source_x': self.range_region_source_radx,
-            'range_source_y': self.range_region_source_rady,
             'interpolation_method': self.model_settings['interpolation_method'] if 'interpolation_method' in self.model_settings else 'nearest' 
             }
 

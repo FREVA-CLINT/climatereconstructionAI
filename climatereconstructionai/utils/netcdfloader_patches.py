@@ -74,16 +74,19 @@ def get_dims_coordinates(ds, variables):
     
     spatial_dims = {}
     coord_dicts = {}
+    #depths_dict = {}
     for variable in variables:
         
         coord_dict = get_coord_dict_from_var(ds, variable)
 
         spatial_dims[variable] = coord_dict['spatial_dim']
         coord_dicts[coord_dict['spatial_dim']] = coord_dict
+        #depths_dict[variable] = ds[variable].shape[1]
 
     coord_dict_variables['var_spatial_dims'] = spatial_dims
     coord_dict_variables['coord_dicts'] = coord_dicts
     coord_dict_variables['spatial_dims_var'] = invert_dict(coord_dict_variables['var_spatial_dims'])
+    coord_dict_variables['depths'] = ds[variable].shape[1]
 
 
     return coord_dict_variables
@@ -185,8 +188,15 @@ class NetCDFLoader_lazy(Dataset):
         self.sample_patch_range_lat = sample_patch_range_lat
         self.sample_condition_dict = sample_condition_dict
 
-        self.patches_source = get_patches(grid_spacing_equator_km, pix_size_patch, patches_overlap_source)
-        self.patches_target = get_patches(grid_spacing_equator_km, pix_size_patch, patches_overlap_target)
+        ds_source = xr.open_dataset(files_source[0])
+        ds_target = xr.open_dataset(files_target[0])
+
+        range_lon = [float(ds_source.clon.min()), float(ds_source.clon.max())]
+        range_lat = [float(ds_source.clat.min()), float(ds_source.clat.max())]
+        self.lon_periodicity = range_lon
+
+        self.patches_source = get_patches(grid_spacing_equator_km, pix_size_patch, patches_overlap_source, range_data_lon=range_lon, range_data_lat=range_lat)
+        self.patches_target = get_patches(grid_spacing_equator_km, pix_size_patch, patches_overlap_target, range_data_lon=range_lon, range_data_lat=range_lat)
         
         if interpolation_dict is not None:
                  
@@ -198,8 +208,8 @@ class NetCDFLoader_lazy(Dataset):
                 if interpolation_dict['interpolate_target']:
                     self.input_mapper_t = unstructured_to_reg_interpolator(
                         interpolation_dict['interpolation_size_t'],
-                        interpolation_dict['range_target_x'],
-                        interpolation_dict['range_target_y'],
+                        [0,1],
+                        [0,1],
                         method=interpolation_dict['interpolation_method']
                         )
                     
@@ -218,9 +228,7 @@ class NetCDFLoader_lazy(Dataset):
         self.files_source = files_source
         self.files_target = files_target
 
-        ds_source = xr.open_dataset(files_source[0])
-        ds_target = xr.open_dataset(files_target[0])
-
+        
         self.dims_variables_source = get_dims_coordinates(ds_source, self.variables_source)    
         self.dims_variables_target = get_dims_coordinates(ds_target, self.variables_target)  
 
@@ -255,7 +263,7 @@ class NetCDFLoader_lazy(Dataset):
         self.normalizer = normalizer(self.norm_dict)
 
 
-    def get_ids_patches(self, ds, dims_variables_dict, patches):
+    def get_ids_patches(self, ds, dims_variables_dict, patches, lon_periodicity):
 
         spatial_dims_patches = {}
         spatial_dims_n_pts = {}
@@ -263,18 +271,19 @@ class NetCDFLoader_lazy(Dataset):
             
             coords = get_coords_as_tensor(ds, lon=coord_dict['lon'], lat=coord_dict['lat'])
 
-            ids_in_patches, patch_ids = get_ids_in_patches(patches, coords.numpy())
+            ids_in_patches, patch_ids = get_ids_in_patches(patches, coords.numpy(), lon_periodicity=self.lon_periodicity)
             spatial_dims_patches[spatial_dim] = ids_in_patches
             spatial_dims_n_pts[spatial_dim] = torch.tensor([len(ids_in_patch) for ids_in_patch in ids_in_patches])
 
         return spatial_dims_patches, spatial_dims_n_pts, patch_ids
 
 
-    def get_coordinates(self, ds, dims_variables_dict, spatial_dims_patches_ids, n_dict, patches, patch_id=None):
+    def get_coordinates(self, ds, dims_variables_dict, spatial_dims_patches_ids, n_dict, patches, patch_id=None, lon_periodicity=[-math.pi,math.pi]):
 
         spatial_dim_indices = {}
         rel_coords_dict = {} 
 
+        periodic_range = lon_periodicity[1] - lon_periodicity[0]
         
 
         for spatial_dim, coord_dict in dims_variables_dict['coord_dicts'].items():
@@ -287,6 +296,7 @@ class NetCDFLoader_lazy(Dataset):
 
             if n_pts > len(indices):
                 pad_indices = torch.randint(len(indices), size=(n_pts - len(indices),1)).view(-1)
+              
                 indices = torch.concat((indices, indices[pad_indices]))
             else:    
                 indices = indices[torch.randperm(len(indices-1))[:n_pts]]
@@ -298,13 +308,13 @@ class NetCDFLoader_lazy(Dataset):
 
             spatial_dim_indices[spatial_dim] = indices
 
-            if patch_borders_lon[0] < -math.pi:
-                shift_indices = coords[0,:] > 2*math.pi + patch_borders_lon[0]
-                coords[0,shift_indices] =  coords[0, shift_indices] - 2*math.pi
+            if patch_borders_lon[0] < lon_periodicity[0]:
+                shift_indices = coords[0,:] >= periodic_range + patch_borders_lon[0]
+                coords[0,shift_indices] =  coords[0, shift_indices] - periodic_range
 
-            elif patch_borders_lon[1] > math.pi:
-                shift_indices = coords[0,:] < patch_borders_lon[1] - 2*math.pi
-                coords[0,shift_indices] =  coords[0,shift_indices] + 2*math.pi
+            elif patch_borders_lon[1] > lon_periodicity[1]:
+                shift_indices = coords[0,:] <= patch_borders_lon[1]- periodic_range
+                coords[0,shift_indices] =  coords[0,shift_indices] + periodic_range
 
             rel_coords_lon = (coords[0,:] - patch_borders_lon[0])/(patch_borders_lon[1]-patch_borders_lon[0])
             rel_coords_lat = (coords[1,:] - patch_borders_lat[0])/(patch_borders_lat[1]-patch_borders_lat[0])
@@ -326,11 +336,12 @@ class NetCDFLoader_lazy(Dataset):
             dims = tuple(ds[vars[0]].dims)
            
             time_indices = np.arange(self.num_datapoints_time)
+            depth_indices = np.arange(dims_variables_dict['depths'])
 
             if len(dims)==2:
                 sel_indices = (time_indices, spatial_indices)
             else:
-                sel_indices = (time_indices,[0],spatial_indices)
+                sel_indices = (time_indices,depth_indices,spatial_indices)
             
             sel_dict = dict(zip(dims, sel_indices))
 
@@ -415,7 +426,6 @@ class NetCDFLoader_lazy(Dataset):
                 if self.sample_patch_range_lat[0]<center_lat and self.sample_patch_range_lat[1]>center_lat:
                     in_lat_range = True
 
-           
             spatial_dim_indices_source, rel_coords_dict_source, _ = self.get_coordinates(ds_source, self.dims_variables_source, spatial_dims_patches_ids_source, self.n_dict_source, self.patches_source, patch_id=patch_id)
             spatial_dim_indices_target, rel_coords_dict_target, _ = self.get_coordinates(ds_target, self.dims_variables_target, spatial_dims_patches_ids_target, self.n_dict_target, self.patches_target, patch_id=patch_id)
 
@@ -454,7 +464,7 @@ class NetCDFLoader_lazy(Dataset):
         return ds_source_sampled, ds_target_sampled, patch_id, spatial_dim_indices_source, spatial_dim_indices_target, rot_angle, ds_target_past_sampled, spatial_dim_indices_target_past
 
 
-    def get_data(self, ds, index, dims_variables_dict):
+    def get_data(self, ds, index, dims_variables_dict, depth=0):
 
         data = {}
         coords = {}
@@ -464,7 +474,12 @@ class NetCDFLoader_lazy(Dataset):
             coords[spatial_dim] = get_coords_as_tensor(ds, lon=coord_dict['lon'], lat=coord_dict['lat']).float()
 
             for var in vars:
-                data_var = torch.tensor(ds[var][index].values).squeeze().float()
+                values = torch.tensor(ds[var][index].values)
+                if values.shape[0]>1:
+                    values = values[depth]
+                else:
+                    values = values[0]
+                data_var = values.float().squeeze()
                 data[var] = data_var.unsqueeze(dim=-1)
 
         return data, coords
@@ -476,6 +491,8 @@ class NetCDFLoader_lazy(Dataset):
             if (index < self.index_range_source[0]) or (index > self.index_range_source[1]):
                 index = int(torch.randint(self.index_range_source[0], self.index_range_source[1]+1, (1,1)))
 
+        depth_idx = torch.randint(int(self.dims_variables_source['depths']), (1,1))
+        
         index_target = index + self.index_offset_target
 
         if len(self.files_source)>0:
@@ -487,8 +504,8 @@ class NetCDFLoader_lazy(Dataset):
 
         ds_source, ds_target, patch_id, spatial_dim_indices_source, spatial_dim_indices_target, rot_angle, ds_past, spatial_dim_indices_past = self.get_files(source_file, file_path_target=target_file, file_path_target_past=target_file_past)
 
-        data_source, rel_coords_source = self.get_data(ds_source, index, self.dims_variables_source)
-        data_target, rel_coords_target = self.get_data(ds_target, index_target, self.dims_variables_target)
+        data_source, rel_coords_source = self.get_data(ds_source, index, self.dims_variables_source, depth=depth_idx)
+        data_target, rel_coords_target = self.get_data(ds_target, index_target, self.dims_variables_target, depth=depth_idx)
 
         if ds_past is not None:
             data_past, rel_coords_past = self.get_data(ds_past, index, self.dims_variables_target)
@@ -518,7 +535,7 @@ class NetCDFLoader_lazy(Dataset):
             rel_coords_target = dict(zip(rel_coords_target.keys(),[torch.empty(0) for _ in rel_coords_target.values()]))
 
         if len(self.save_tensor_sample_path)>0:
-            save_path = os.path.join(self.save_tensor_sample_path, os.path.basename(source_file).replace('.nc', f'_{float(patch_id):.3f}_{float(rot_angle):.3f}.pt'))
+            save_path = os.path.join(self.save_tensor_sample_path, os.path.basename(source_file).replace('.nc', f'_{float(patch_id):.3f}_{float(rot_angle):.3f}_{int(depth_idx)}.pt'))
             if not os.path.isfile(save_path):
                 torch.save([data_source, data_target, rel_coords_source, rel_coords_target, spatial_dim_indices_source, spatial_dim_indices_target], save_path)
 
@@ -531,7 +548,7 @@ class NetCDFLoader_lazy(Dataset):
                 with open(os.path.join(self.save_tensor_sample_path,'dims_var_target.json'), 'w') as f:
                     json.dump(self.dims_variables_target, f, indent=4)
 
-        return data_source, data_target, rel_coords_source, rel_coords_target, spatial_dim_indices_source, spatial_dim_indices_target
+        return data_source, data_target, rel_coords_source, rel_coords_target, spatial_dim_indices_source, spatial_dim_indices_target, depth_idx
 
     def __len__(self):
         return self.num_datapoints_time
@@ -541,6 +558,7 @@ class SampleLoader(Dataset):
     def __init__(self, root_dir, dims_variables_source, dims_variables_target, variables_source, variables_target):
         self.root_dir = root_dir
         self.file_list = os.listdir(root_dir)
+        self.file_list = [file_path  for file_path in self.file_list if '.pt' in file_path]
         sample_path = os.path.join(self.root_dir, self.file_list[0])
         coords_source, coords_target = torch.load(sample_path, map_location='cpu')[2:4]
         
@@ -572,6 +590,8 @@ class SampleLoader(Dataset):
                    #     valid_file=False
                 except:
                     idx = torch.randint(0,len(self.file_list), size=(1,))
+        depth = path.split('_')[-1].replace('.pt','')
+        depth = int(depth) if '.' not in depth else 0
 
         source = data[0]
         target = data[1]
@@ -601,6 +621,6 @@ class SampleLoader(Dataset):
             target_indices[spatial_dim] = target_indices[spatial_dim][indices]
             coords_target[spatial_dim] = coords_target[spatial_dim][:,indices]
 
-        data = [source[self.indices_source], target, torch.zeros((10,)), coords_target, target_indices]
+        data = [source[self.indices_source], target, torch.zeros((10,)), coords_target, target_indices, depth]
         
         return data

@@ -288,12 +288,13 @@ def train(model, training_settings, model_settings={}):
 
         data = [data_to_device(x, device) for x in next(iterator_train)]
         source, target, coords_source, coords_target = data[:4] # for backward compability
-        target_indices = data[-1]
+        target_indices = data[-2]
+        depth = data[-1]
 
         if 'k_l1_relv' in lambdas_optim.keys():
-            train_total_loss, train_loss_dict = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, k=lambdas_optim['k_l1_relv'])
+            train_total_loss, train_loss_dict = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, k=lambdas_optim['k_l1_relv'], depth=depth)
         else:
-            train_total_loss, train_loss_dict = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, k=None)
+            train_total_loss, train_loss_dict = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, k=None, depth=depth)
 
         train_losses_hist.append(train_loss_dict['total_loss'])
 
@@ -331,12 +332,13 @@ def train(model, training_settings, model_settings={}):
 
                 data = [data_to_device(x, device) for x in next(iterator_val)]
                 source, target, coords_source, coords_target = data[:4] # for backward compability
-                target_indices = data[-1]               
+                target_indices = data[-2]
+                depth = data[-1]
 
                 if 'k_l1_relv' in lambdas_optim.keys():
-                    _, val_loss_dict, output, target, output_reg_hr, output_reg_lr, non_valid_mask = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, val=True, k=lambdas_optim['k_l1_relv'])
+                    _, val_loss_dict, output, target, output_reg_hr, output_reg_lr, non_valid_mask = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, val=True, k=lambdas_optim['k_l1_relv'], depth=depth)
                 else:
-                    _, val_loss_dict, output, target, output_reg_hr, output_reg_lr, non_valid_mask = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, val=True, k=None)
+                    _, val_loss_dict, output, target, output_reg_hr, output_reg_lr, non_valid_mask = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, val=True, k=None, depth=depth)
 
                 val_losses.append(list(val_loss_dict.values()))
             

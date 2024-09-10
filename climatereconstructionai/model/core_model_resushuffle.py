@@ -19,6 +19,39 @@ def ICNR(tensor, initializer, upscale_factor=2, *args, **kwargs):
     return sub_kernel.repeat_interleave(upscale_factor_squared, dim=0)
 
 
+class DepthEncoding(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.dim = dim
+
+    def forward(self, depth):
+        count = self.dim // 2
+        step = torch.arange(count, dtype=depth.dtype,
+                            device=depth.device) / count
+        encoding = depth.unsqueeze(
+            1) * torch.exp(-math.log(1e4) * step.unsqueeze(0))
+        encoding = torch.cat([torch.sin(encoding), torch.cos(encoding)], dim=-1)
+        return encoding
+    
+
+class FeatureWiseAffine(nn.Module):
+    def __init__(self, in_channels, out_channels, with_scale=False):
+        super(FeatureWiseAffine, self).__init__()
+        self.with_scale = with_scale
+        self.noise_func = nn.Sequential(
+            nn.Linear(in_channels, out_channels*(1+self.with_scale))
+        )
+
+    def forward(self, x, noise_embed):
+        batch = x.shape[0]
+        if self.with_scale:
+            gamma, beta = self.noise_func(noise_embed).view(
+                batch, -1, 1, 1).chunk(2, dim=1)
+            x = (1 + gamma) * x + beta
+        else:
+            x = x + self.noise_func(noise_embed).view(batch, -1, 1, 1)
+        return x
+
 class shuffle_upscaling(nn.Module):
     def __init__(self, in_channels, upscale_factor, k_size=3, bias=False, global_padding=False):
         super().__init__()
@@ -46,7 +79,7 @@ class shuffle_upscaling(nn.Module):
         return x
 
 class res_net_block(nn.Module):
-    def __init__(self, hw, in_channels, out_channels, k_size=3, batch_norm=True, stride=1, groups=1, dropout=0, with_att=False, with_res=True, bias=True, out_activation=True, global_padding=False):
+    def __init__(self, hw, in_channels, out_channels, k_size=3, batch_norm=True, stride=1, groups=1, dropout=0, with_att=False, with_res=True, bias=True, out_activation=True, global_padding=False, depth_embedding_dim=0):
         super().__init__()
 
         self.global_padding = global_padding
@@ -61,6 +94,11 @@ class res_net_block(nn.Module):
 
         if with_res:
             self.reduction = nn.Conv2d(in_channels, out_channels, stride=stride, padding=0, kernel_size=1, groups=groups, bias=bias)
+
+        self.with_depth_embedding = True if depth_embedding_dim>0 else False
+
+        if self.with_depth_embedding:
+            self.feat_affine = FeatureWiseAffine(depth_embedding_dim, out_channels, with_scale=True)
 
         self.with_res = with_res
 
@@ -77,7 +115,7 @@ class res_net_block(nn.Module):
         if with_att:
             self.att = helpers.ConvSelfAttention(out_channels, hw, n_heads=1)
 
-    def forward(self, x):
+    def forward(self, x, depth_emb=None):
 
         if self.with_res:
             x_res = self.reduction(x)
@@ -89,6 +127,9 @@ class res_net_block(nn.Module):
         x = self.bn1(x)
         x = self.activation1(x)
         x = self.dropout1(x)
+
+        if self.with_depth_embedding:
+            x = self.feat_affine(x, depth_emb)
 
         if self.global_padding:
             x = global_pad(x, self.padding)
@@ -108,15 +149,15 @@ class res_net_block(nn.Module):
         
 
 class res_blocks(nn.Module): 
-    def __init__(self, hw, n_blocks, in_channels, out_channels, k_size=3, batch_norm=True, groups=1, dropout=0, with_att=False, with_res=True, out_activation=True, bias=True, global_padding=False, factor=2, down_method='max'):
+    def __init__(self, hw, n_blocks, in_channels, out_channels, k_size=3, batch_norm=True, groups=1, dropout=0, with_att=False, with_res=True, out_activation=True, bias=True, global_padding=False, factor=2, down_method='max', depth_embedding_dim=0):
         super().__init__()
 
         self.res_net_blocks = nn.ModuleList()
 
-        self.res_net_blocks.append(res_net_block(hw, in_channels, out_channels, k_size=k_size, batch_norm=batch_norm, groups=groups, dropout=dropout, with_att=with_att, with_res=with_res, out_activation=out_activation, bias=bias, global_padding=global_padding))
+        self.res_net_blocks.append(res_net_block(hw, in_channels, out_channels, k_size=k_size, batch_norm=batch_norm, groups=groups, dropout=dropout, with_att=with_att, with_res=with_res, out_activation=out_activation, bias=bias, global_padding=global_padding, depth_embedding_dim=depth_embedding_dim))
         
         for _ in range(n_blocks-1):
-            self.res_net_blocks.append(res_net_block(hw, out_channels, out_channels, k_size=k_size, batch_norm=batch_norm, groups=groups, dropout=dropout, with_att=False, with_res=with_res, out_activation=out_activation, bias=bias, global_padding=global_padding))
+            self.res_net_blocks.append(res_net_block(hw, out_channels, out_channels, k_size=k_size, batch_norm=batch_norm, groups=groups, dropout=dropout, with_att=False, with_res=with_res, out_activation=out_activation, bias=bias, global_padding=global_padding, depth_embedding_dim=depth_embedding_dim))
 
         if down_method=='max':
             self.pool = nn.MaxPool2d(kernel_size=factor) if factor>1 else nn.Identity()
@@ -124,14 +165,14 @@ class res_blocks(nn.Module):
         elif down_method=='avg':
             self.pool = nn.AvgPool2d(kernel_size=factor) if factor>1 else nn.Identity()
 
-    def forward(self,x):
+    def forward(self, x, depth_emb=None):
         for layer in self.res_net_blocks:
-            x = layer(x)
+            x = layer(x, depth_emb=depth_emb)
 
         return self.pool(x), x
 
 class encoder(nn.Module): 
-    def __init__(self, hw_in, factor, n_levels, n_blocks, u_net_channels, in_channels, k_size=3, k_size_in=7, batch_norm=True, n_groups=1, dropout=0, bias=True, global_padding=False, initial_res=False,down_method='max'):
+    def __init__(self, hw_in, factor, n_levels, n_blocks, u_net_channels, in_channels, k_size=3, k_size_in=7, batch_norm=True, n_groups=1, dropout=0, bias=True, global_padding=False, initial_res=False,down_method='max', depth_embedding_dim=0):
         super().__init__()
 
         hw_in = torch.tensor(hw_in)
@@ -161,19 +202,19 @@ class encoder(nn.Module):
                                  'hw': hw})
             
 
-            self.layers.append(res_blocks(hw, n_blocks, in_channels_block, out_channels_block, k_size=k_size, batch_norm=batch_norm, groups=groups, with_res=with_res, factor=factor_level, dropout=dropout, bias=bias, global_padding=global_padding, down_method=down_method))
+            self.layers.append(res_blocks(hw, n_blocks, in_channels_block, out_channels_block, k_size=k_size, batch_norm=batch_norm, groups=groups, with_res=with_res, factor=factor_level, dropout=dropout, bias=bias, global_padding=global_padding, down_method=down_method, depth_embedding_dim=depth_embedding_dim))
 
     
-    def forward(self, x):
+    def forward(self, x, depth_emb=None):
         outputs = []
 
         for layer in self.layers:
-            x, x_skip = layer(x)
+            x, x_skip = layer(x, depth_emb=depth_emb)
             outputs.append(x_skip)
         return x, outputs
 
 class decoder_block_shuffle(nn.Module):
-    def __init__(self, hw, n_blocks, in_channels, out_channels, skip_channels, k_size=3, dropout=0, upscale_factor=2, bias=True, global_padding=False, out_activation=True, groups=1, with_res=True):
+    def __init__(self, hw, n_blocks, in_channels, out_channels, skip_channels, k_size=3, dropout=0, upscale_factor=2, bias=True, global_padding=False, out_activation=True, groups=1, with_res=True, depth_embedding_dim=0):
         super().__init__()
 
         self.skip_channels = skip_channels
@@ -181,21 +222,21 @@ class decoder_block_shuffle(nn.Module):
         
         in_channels = in_channels + skip_channels
 
-        self.res_blocks = res_blocks(hw, n_blocks, in_channels, out_channels, k_size=k_size, batch_norm=False, groups=groups, dropout=dropout, with_res=with_res, bias=bias, global_padding=global_padding, out_activation=out_activation, factor=1)
+        self.res_blocks = res_blocks(hw, n_blocks, in_channels, out_channels, k_size=k_size, batch_norm=False, groups=groups, dropout=dropout, with_res=with_res, bias=bias, global_padding=global_padding, out_activation=out_activation, factor=1, depth_embedding_dim=depth_embedding_dim)
 
-    def forward(self, x, skip_channels=None):
+    def forward(self, x, skip_channels=None, depth_emb=None):
 
         x = self.up(x)
 
         if self.skip_channels>0:
             x = torch.concat((x, skip_channels), dim=1)
       
-        x = self.res_blocks(x)[0]
+        x = self.res_blocks(x, depth_emb=depth_emb)[0]
 
         return x
 
 class decoder(nn.Module):
-    def __init__(self, layer_configs, factor, n_blocks, out_channels, global_upscale_factor=1, k_size=3, dropout=0, n_groups=1, bias=True, global_padding=False):
+    def __init__(self, layer_configs, factor, n_blocks, out_channels, global_upscale_factor=1, k_size=3, dropout=0, n_groups=1, bias=True, global_padding=False, depth_embedding_dim=0):
         super().__init__()
         # define total number of layers, first n_levels-1 with skip, others not
         #watch out for n_groups in last layer before last
@@ -241,27 +282,27 @@ class decoder(nn.Module):
                     in_channels_block = out_channels_block
 
             hw = hw_in/(factor**(n-1))
-            self.decoder_blocks.append(decoder_block_shuffle(hw, n_blocks, in_channels_block, out_channels_block, skip_channels, k_size=k_size, dropout=dropout, bias=bias, global_padding=global_padding, upscale_factor=upscale_factor, groups=groups, out_activation=out_activation))      
+            self.decoder_blocks.append(decoder_block_shuffle(hw, n_blocks, in_channels_block, out_channels_block, skip_channels, k_size=k_size, dropout=dropout, bias=bias, global_padding=global_padding, upscale_factor=upscale_factor, groups=groups, out_activation=out_activation, depth_embedding_dim=depth_embedding_dim))      
         
-    def forward(self, x, skip_channels):
+    def forward(self, x, skip_channels, depth_emb=None):
 
         for k, layer in enumerate(self.decoder_blocks):
             if k < self.skip_blocks:
                 x_skip = skip_channels[-(k+2)]  
-                x = layer(x, x_skip)
+                x = layer(x, x_skip, depth_emb=depth_emb)
             else:
-                x = layer(x)
+                x = layer(x, depth_emb=depth_emb)
         return x
 
 class mid(nn.Module):
-    def __init__(self, hw, n_blocks, channels, k_size=3,  dropout=0, with_att=False, bias=True, global_padding=False):
+    def __init__(self, hw, n_blocks, channels, k_size=3,  dropout=0, with_att=False, bias=True, global_padding=False, depth_embedding_dim=0):
         super().__init__()
 
-        self.res_blocks = res_blocks(hw, n_blocks, channels, channels, k_size=k_size, batch_norm=False, groups=1,  dropout=dropout, with_att=with_att, bias=bias, global_padding=global_padding, factor=1)
+        self.res_blocks = res_blocks(hw, n_blocks, channels, channels, k_size=k_size, batch_norm=False, groups=1,  dropout=dropout, with_att=with_att, bias=bias, global_padding=global_padding, factor=1, depth_embedding_dim=depth_embedding_dim)
 
-    def forward(self, x):
+    def forward(self, x, depth_emb=None):
 
-        x = self.res_blocks(x)[0]
+        x = self.res_blocks(x, depth_emb=depth_emb)[0]
 
         return x
     
@@ -320,25 +361,36 @@ class out_net(nn.Module):
 
 
 class ResUNet(nn.Module): 
-    def __init__(self, hw_in, hw_out, n_levels, factor, n_res_blocks, model_dim_unet, in_channels, out_channels, res_mode, res_indices, batch_norm=True, k_size=3, in_groups=1, out_groups=1, dropout=0, bias=True, global_padding=False, mid_att=False, initial_res=True, down_method="max"):
+    def __init__(self, hw_in, hw_out, n_levels, factor, n_res_blocks, model_dim_unet, in_channels, out_channels, res_mode, res_indices, batch_norm=True, k_size=3, in_groups=1, out_groups=1, dropout=0, bias=True, global_padding=False, mid_att=False, initial_res=True, down_method="max",depth_embedding_dim=0):
         super().__init__()
 
         global_upscale_factor = int(torch.tensor([(hw_out[0]) // hw_in[0], 1]).max())
 
-        self.encoder = encoder(hw_in, factor, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, 7, batch_norm=batch_norm, n_groups=in_groups, dropout=dropout, bias=bias, global_padding=global_padding, initial_res=initial_res, down_method=down_method)
-        self.decoder = decoder(self.encoder.layer_configs, factor, n_res_blocks, out_channels, global_upscale_factor=global_upscale_factor, k_size=k_size, dropout=dropout, n_groups=out_groups, bias=bias, global_padding=global_padding)
+        self.encoder = encoder(hw_in, factor, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, 7, batch_norm=batch_norm, n_groups=in_groups, dropout=dropout, bias=bias, global_padding=global_padding, initial_res=initial_res, down_method=down_method,depth_embedding_dim=depth_embedding_dim)
+        self.decoder = decoder(self.encoder.layer_configs, factor, n_res_blocks, out_channels, global_upscale_factor=global_upscale_factor, k_size=k_size, dropout=dropout, n_groups=out_groups, bias=bias, global_padding=global_padding,depth_embedding_dim=depth_embedding_dim)
 
         self.out_net = out_net(res_indices, hw_in, hw_out, res_mode=res_mode, global_padding=global_padding)
   
         hw_mid = torch.tensor(hw_in)// (factor**(n_levels-1))
-        self.mid = mid(hw_mid, n_res_blocks, model_dim_unet*(2**(n_levels-1)), with_att=mid_att, bias=bias, global_padding=global_padding)
+        self.mid = mid(hw_mid, n_res_blocks, model_dim_unet*(2**(n_levels-1)), with_att=mid_att, bias=bias, global_padding=global_padding,depth_embedding_dim=depth_embedding_dim)
 
-    def forward(self, x):
+        if depth_embedding_dim:
+            self.depth_level_mlp = nn.Sequential(
+                    DepthEncoding(model_dim_unet),
+                    nn.Linear(model_dim_unet, model_dim_unet * 4),
+                    nn.SiLU(),
+                    nn.Linear(model_dim_unet * 4, model_dim_unet)
+                )
+        else:
+            self.depth_level_mlp = None
+        
+    def forward(self, x, depth=None):
+        d = self.depth_level_mlp(depth) if self.depth_level_mlp is not None else None
 
         x_res = x
-        x, layer_outputs = self.encoder(x)
-        x = self.mid(x)
-        x = self.decoder(x, layer_outputs)
+        x, layer_outputs = self.encoder(x, depth_emb=d)
+        x = self.mid(x, depth_emb=d)
+        x = self.decoder(x, layer_outputs, depth_emb=d)
         x = self.out_net(x, x_res)
 
         return {'x': x}
@@ -365,6 +417,8 @@ class core_ResUNet(psm.pyramid_step_model):
         batch_norm = model_settings["batch_norm"]
         mid_att = model_settings["mid_att"] if "mid_att" in model_settings.keys() else False
         full_res = model_settings["full_res"] if "full_res" in model_settings.keys() else False
+
+        depth_embedding_dim = model_settings['model_dim_core'] if "with_depth_embedding" in model_settings.keys() else 0
 
         dropout = 0 if 'dropout' not in model_settings.keys() else model_settings['dropout']
         grouped = False if 'grouped' not in model_settings.keys() else model_settings['grouped']
@@ -397,7 +451,7 @@ class core_ResUNet(psm.pyramid_step_model):
         initial_res = model_settings['initial_res'] if "initial_res" in model_settings.keys() else False
         down_method = model_settings['down_method'] if "down_method" in model_settings.keys() else "max"
 
-        self.core_model = ResUNet(hw_in, hw_out, depth, factor, n_blocks, model_dim_core, input_dim, output_dim, model_settings['res_mode'], res_indices, batch_norm=batch_norm, in_groups=in_groups, out_groups=out_groups, dropout=dropout, bias=bias, global_padding=global_padding, mid_att=mid_att, initial_res=initial_res, down_method=down_method)
+        self.core_model = ResUNet(hw_in, hw_out, depth, factor, n_blocks, model_dim_core, input_dim, output_dim, model_settings['res_mode'], res_indices, batch_norm=batch_norm, in_groups=in_groups, out_groups=out_groups, dropout=dropout, bias=bias, global_padding=global_padding, mid_att=mid_att, initial_res=initial_res, down_method=down_method, depth_embedding_dim=depth_embedding_dim)
 
         if "pretrained_path" in self.model_settings.keys():
             self.check_pretrained(log_dir_check=self.model_settings['pretrained_path'])
