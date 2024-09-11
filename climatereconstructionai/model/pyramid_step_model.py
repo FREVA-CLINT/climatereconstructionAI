@@ -31,16 +31,22 @@ def set_device_and_init_torch_dist():
         rank = int(os.environ.get('RANK', os.environ.get('SLURM_PROCID')))
 
         dist_url = 'env://'
-        backend = 'gloo'
+
+        if torch.cuda.is_available():
+            cuda=True
+            backend = 'nccl'
+        else:
+            cuda=False
+            backend = 'gloo'
 
         dist.init_process_group(backend=backend, init_method=dist_url,
                                     world_size=world_size, rank=rank)
     
-    #local_rank = int(os.environ.get('LOCAL_RANK', os.environ.get('SLURM_LOCALID')))
+    if cuda:
+        local_rank = int(os.environ.get('LOCAL_RANK', os.environ.get('SLURM_LOCALID')))
+        torch.cuda.set_device(local_rank)
 
-    #torch.cuda.set_device(local_rank)
-
-    return rank, world_size
+    return rank, world_size, cuda
 
 class output_net(nn.Module):
     def __init__(self, model_settings, s, nh, n, use_gnlll=False, use_poly=False):
@@ -369,14 +375,14 @@ class pyramid_step_model(nn.Module):
         predictions = []
         for depth, patch_id in depths_patch_ids:
             #scatter in local processes        
-                
+            #batch size per gpu    
             data_source, coords_target, coords_source = self.get_data_patch_depth(ds, ds_target, patches, patch_id, ts, depth, device=device)
         
             with torch.no_grad():
                 output = self(data_source, coords_target, coords_source=coords_source, norm=True, depth=torch.tensor(depth, device=device, dtype=torch.float).view(1,1))[0]
 
             predictions.append((depth, patch_id, output))
-        
+            
         return predictions
 
 
@@ -387,7 +393,7 @@ class pyramid_step_model(nn.Module):
         if ds_target is None:
             ds_target=ds
         
-        rank, world_size = set_device_and_init_torch_dist()
+        rank, world_size, cuda = set_device_and_init_torch_dist()
         n_procs = world_size
 
         patches = self.get_patch_indices(ds, ds_target)
@@ -409,16 +415,16 @@ class pyramid_step_model(nn.Module):
 
         depths_patch_ids = split_list(depths_patch_ids, n_procs)
 
-        depths_patch_ids = depths_patch_ids[rank]
+        depths_patch_ids_rank = depths_patch_ids[rank]
 
         print(f'Correcting {len(depths_patch_ids)} patches on rank {rank}')
 
-        results = self.predict_depth_patches(ds, ds_target, patches, depths_patch_ids, ts, device='cpu')
+        results = self.predict_depth_patches(ds, ds_target, patches, depths_patch_ids_rank, ts, device='cpu')
         
         if rank==0:
             if n_procs > 1:
-                output = [None for _ in depths_patch_ids]
-                dist.gather_object(results, output)
+                output = [None for _ in range(n_procs)]
+                dist.gather_object(results, output, dst=0)
                 results = flatten_list(output)
             
             print(f'Got predictions from {len(results)} patches. Collecting data ...')
@@ -436,6 +442,7 @@ class pyramid_step_model(nn.Module):
                         
             return output_global, output_global_std
         else:
+            dist.gather_object(results, dst=0)
             return None
    
 

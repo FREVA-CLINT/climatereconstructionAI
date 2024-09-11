@@ -20,16 +20,17 @@ def ICNR(tensor, initializer, upscale_factor=2, *args, **kwargs):
 
 
 class DepthEncoding(nn.Module):
-    def __init__(self, dim):
+    def __init__(self, dim, max_period=1e4):
         super().__init__()
         self.dim = dim
+        self.max_period=max_period
 
     def forward(self, depth):
         count = self.dim // 2
         step = torch.arange(count, dtype=depth.dtype,
                             device=depth.device) / count
         encoding = depth.unsqueeze(
-            1) * torch.exp(-math.log(1e4) * step.unsqueeze(0))
+            1) * torch.exp(-math.log(self.max_period) * step.unsqueeze(0))
         encoding = torch.cat([torch.sin(encoding), torch.cos(encoding)], dim=-1)
         return encoding
     
