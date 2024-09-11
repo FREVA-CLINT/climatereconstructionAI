@@ -417,6 +417,8 @@ class pyramid_step_model(nn.Module):
 
         results = self.predict_depth_patches(ds, ds_target, patches, depths_patch_ids, ts, device='cpu')
 
+        dist.barrier()
+        
         if rank==0:
             if n_procs > 1:
                 results = flatten_list(results)
