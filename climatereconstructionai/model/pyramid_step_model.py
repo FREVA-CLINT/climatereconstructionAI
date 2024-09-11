@@ -2,11 +2,13 @@ import json
 import os
 import sys
 import copy
+import itertools
 import xarray as xr
 import math
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.distributed as dist
 
 from .. import transformer_training as trainer
 from torchvision.transforms import GaussianBlur
@@ -17,6 +19,28 @@ from ..utils.io import load_ckpt, load_model
 from ..utils import grid_utils as gu
 from ..utils.normalizer import normalizer
 
+
+def set_device_and_init_torch_dist():
+
+    # check out https://gist.github.com/TengdaHan/1dd10d335c7ca6f13810fff41e809904
+    if os.environ.get('WORLD_SIZE') is None and os.environ.get('SLURM_NTASKS') is None:
+        rank = 0
+        world_size = 1
+    else:
+        world_size = int(os.environ.get('WORLD_SIZE', os.environ.get('SLURM_NTASKS')))
+        rank = int(os.environ.get('RANK', os.environ.get('SLURM_PROCID')))
+
+        dist_url = 'env://'
+        backend = 'gloo'
+
+        dist.init_process_group(backend=backend, init_method=dist_url,
+                                    world_size=world_size, rank=rank)
+    
+    #local_rank = int(os.environ.get('LOCAL_RANK', os.environ.get('SLURM_LOCALID')))
+
+    #torch.cuda.set_device(local_rank)
+
+    return rank, world_size
 
 class output_net(nn.Module):
     def __init__(self, model_settings, s, nh, n, use_gnlll=False, use_poly=False):
@@ -241,11 +265,7 @@ class pyramid_step_model(nn.Module):
             return output, {}
 
     
-      
-    
-    def preprocess_data_patches(self, ds, ts=-1, device='cpu', ds_target=None):
-        data_source = {}
-        coords_source = {}
+    def get_patch_indices(self, ds, ds_target):
 
         range_lon = [float(ds.clon.min()), float(ds.clon.max())]
         range_lat = [float(ds.clat.min()), float(ds.clat.max())]
@@ -258,7 +278,7 @@ class pyramid_step_model(nn.Module):
             range_data_lat=range_lat)
 
         # only for channel data
-        self.patches_source = gu.get_patches(
+        patches_source = gu.get_patches(
                 self.model_settings["grid_spacing_equator_km"],
                 self.model_settings["pix_size_patch"],
                 self.model_settings["patches_overlap_source"],
@@ -267,17 +287,13 @@ class pyramid_step_model(nn.Module):
 
         spatial_dims_patches_source = {}
         spatial_dims_patches_target = {}
-        spatial_dims_n_pts = {}
 
-        #collect all data
-        vars_target = self.model_settings['variables_target']
-        
         for spatial_dim, vars in self.model_settings["spatial_dims_var_source"].items():
 
             coord_dict = gu.get_coord_dict_from_var(ds, spatial_dim)
             coords = gu.get_coords_as_tensor(ds, lon=coord_dict['lon'], lat=coord_dict['lat'])
 
-            ids_in_patches_source, patch_ids = gu.get_ids_in_patches(self.patches_source, coords.numpy(), lon_periodicity=range_lon)
+            ids_in_patches_source, patch_ids = gu.get_ids_in_patches(patches_source, coords.numpy(), lon_periodicity=range_lon)
 
             spatial_dims_patches_source[spatial_dim] = ids_in_patches_source
 
@@ -288,91 +304,141 @@ class pyramid_step_model(nn.Module):
 
             ids_in_patches_target, patch_ids = gu.get_ids_in_patches(patches_target, coords.numpy(), lon_periodicity=range_lon)
             spatial_dims_patches_target[spatial_dim] = ids_in_patches_target
-
-        # to batch: patch_indices
-            
-        data_input = []
-        for patch_id_idx in range(len(patch_ids['lon'])):
-
-            patch_borders_source_lon = self.patches_source["borders_lon"][patch_ids["lon"][int(patch_id_idx)]]
-            patch_borders_source_lat = self.patches_source["borders_lat"][patch_ids["lat"][int(patch_id_idx)]]
-
-            patch_borders_target_lon = patches_target["borders_lon"][patch_ids["lon"][int(patch_id_idx)]]
-            patch_borders_target_lat = patches_target["borders_lat"][patch_ids["lat"][int(patch_id_idx)]]
+        
+        patches = {'spatial_dims_patches_source': spatial_dims_patches_source,
+                   'spatial_dims_patches_target': spatial_dims_patches_target,
+                   'patches_source': patches_source,
+                   'patches_target': patches_target,
+                   'patch_ids': patch_ids,
+                   'lon_periodicity': range_lon}
+        
+        return patches
     
-            coords_source = {}
-            data_source = {}
-            for spatial_dim, vars in self.model_settings["spatial_dims_var_source"].items():
-        
-                coord_dict = gu.get_coord_dict_from_var(ds, spatial_dim)
-                coords = gu.get_coords_as_tensor(ds, lon=coord_dict['lon'], lat=coord_dict['lat'])
 
-                indices = spatial_dims_patches_source[spatial_dim][patch_id_idx]
+    def get_data_patch_depth(self, ds, ds_target, patches, patch_id_idx, ts, depth, device='cpu'):
+        
+        patch_ids = patches['patch_ids']
+        patches_target = patches['patches_target']
+        patches_source = patches['patches_source']
+        patch_ids = patches['patch_ids']
+        lon_periodicity = patches['lon_periodicity']
+        spatial_dims_patches_source = patches['spatial_dims_patches_source']
+        spatial_dims_patches_target = patches['spatial_dims_patches_target']
+
+        #data_input = []
+        #for patch_id_idx in range(len(patch_ids['lon'])):
+
+        patch_borders_source_lon = patches_source["borders_lon"][patch_ids["lon"][int(patch_id_idx)]]
+        patch_borders_source_lat = patches_source["borders_lat"][patch_ids["lat"][int(patch_id_idx)]]
+
+        #patch_borders_target_lon = patches_target["borders_lon"][patch_ids["lon"][int(patch_id_idx)]]
+        #patch_borders_target_lat = patches_target["borders_lat"][patch_ids["lat"][int(patch_id_idx)]]
+
+        coords_source = {}
+        data_source = {}
+        for spatial_dim, vars in self.model_settings["spatial_dims_var_source"].items():
+    
+            coord_dict = gu.get_coord_dict_from_var(ds, spatial_dim)
+            coords = gu.get_coords_as_tensor(ds, lon=coord_dict['lon'], lat=coord_dict['lat'])
+
+            indices = spatial_dims_patches_source[spatial_dim][patch_id_idx]
+            
+            coords_source[spatial_dim] = self.get_coordinates_frame(coords[:,indices], patch_borders_source_lon, patch_borders_source_lat, lon_periodicity=lon_periodicity).unsqueeze(dim=0).to(device)
+
+            for variable in vars:
+                data_source[variable] = torch.tensor(ds[variable].values[ts, depth, indices]).unsqueeze(dim=-1).unsqueeze(dim=0).to(device)
+
+        var_spatial_dims = {}
+        coords_target = {}
+        for spatial_dim, vars in self.model_settings["spatial_dims_var_target"].items():
+    
+            coord_dict = gu.get_coord_dict_from_var(ds_target, spatial_dim)
+            coords = gu.get_coords_as_tensor(ds_target, lon=coord_dict['lon'], lat=coord_dict['lat'])
+
+            indices = spatial_dims_patches_target[spatial_dim][patch_id_idx]
+
+            coords_target[spatial_dim] = self.get_coordinates_frame(coords[:,indices], patch_borders_source_lon, patch_borders_source_lat, lon_periodicity=lon_periodicity).unsqueeze(dim=0).to(device)
+            var_spatial_dims.update(dict(zip(vars,[spatial_dim]*len(vars))))
+
+        return data_source, coords_target, coords_source
+
+
+
+    def predict_depth_patches(self, ds, ds_target, patches, depths_patch_ids, ts, device='cpu'):
+        
+        predictions = []
+        for depth, patch_id in depths_patch_ids:
+            #scatter in local processes        
                 
-                coords_source[spatial_dim] = self.get_coordinates_frame(coords[:,indices], patch_borders_source_lon, patch_borders_source_lat, lon_periodicity=range_lon).unsqueeze(dim=0).to(device)
-
-                for variable in vars:
-                    data_source[variable] = torch.tensor(ds[variable].values[ts,0,indices]).unsqueeze(dim=-1).unsqueeze(dim=0).to(device)
-
-
-            var_spatial_dims = {}
-            coords_target = {}
-            for spatial_dim, vars in self.model_settings["spatial_dims_var_target"].items():
+            data_source, coords_target, coords_source = self.get_data_patch_depth(ds, ds_target, patches, patch_id, ts, depth, device=device)
         
-                coord_dict = gu.get_coord_dict_from_var(ds_target, spatial_dim)
-                coords = gu.get_coords_as_tensor(ds_target, lon=coord_dict['lon'], lat=coord_dict['lat'])
+            with torch.no_grad():
+                output = self(data_source, coords_target, coords_source=coords_source, norm=True, depth=torch.tensor(depth, device=device, dtype=torch.float).view(1,1))[0]
 
-                indices = spatial_dims_patches_target[spatial_dim][patch_id_idx]
+            predictions.append((depth, patch_id, output))
+        
+        return predictions
 
-                coords_target[spatial_dim] = self.get_coordinates_frame(coords[:,indices], patch_borders_source_lon, patch_borders_source_lat, lon_periodicity=range_lon).unsqueeze(dim=0).to(device)
-                var_spatial_dims.update(dict(zip(vars,[spatial_dim]*len(vars))))
 
+    def apply_patches(self, ds, ts=-1, device='cpu', ds_target=None, depths_to_process=-1):
 
-            data_input.append([patch_id_idx, data_source, coords_target, coords_source])
+        self.set_input_mapper(mode="interpolation")
 
-        return data_input, spatial_dims_patches_target, var_spatial_dims
-
-    def apply_patches(self, ds, ts=-1, device='cpu', ds_target=None):
         if ds_target is None:
             ds_target=ds
-        data_input, spatial_dims_patches_target, var_spatial_dims = self.preprocess_data_patches(ds, ts=ts, device=device, ds_target=ds_target)
+        
+        rank, world_size = set_device_and_init_torch_dist()
+        n_procs = world_size
 
-        print(f'prepared data for {len(data_input)} patches')
+        patches = self.get_patch_indices(ds, ds_target)
+        patch_ids = list(np.arange(len(patches['patch_ids']['lon'])))
 
-        output_global = dict(zip(var_spatial_dims.keys(), [torch.tensor(ds_target[variable][0,0].values).squeeze().to(device) for variable in var_spatial_dims.keys()]))
+        if rank==0:
+            spatial_dims_patches_target = patches['spatial_dims_patches_target']
 
-        if self.model_settings['gauss']:
-            output_global_std = dict(zip(var_spatial_dims.keys(), [torch.tensor(ds_target[variable][0,0].values).squeeze().to(device) for variable in var_spatial_dims.keys()]))
-        else:
+            var_spatial_dims = {}
+            for spatial_dim, vars in self.model_settings["spatial_dims_var_target"].items():
+                var_spatial_dims.update(dict(zip(vars,[spatial_dim]*len(vars))))
+
+        if depths_to_process ==-1:
+            depths_to_process = np.arange(ds_target.depth.shape[0])
+
+        print(f'correcting {len(depths_to_process)} depths...')
+        
+        output_global_std = {}
+        
+        depths_patch_ids = list(itertools.product(*(depths_to_process, patch_ids)))
+
+        depths_patch_ids = split_list(depths_patch_ids, n_procs)
+
+        depths_patch_ids = depths_patch_ids[rank]
+
+        print(f'Correcting {len(depths_patch_ids)} patches on rank {rank}')
+
+        results = self.predict_depth_patches(ds, ds_target, patches, depths_patch_ids, ts, device='cpu')
+
+        if rank==0:
+            if n_procs > 1:
+                results = flatten_list(results)
+            
+            print(f'Got predictions from {len(results)} patches. Collecting data ...')
+
+            output_global = dict(zip(var_spatial_dims.keys(), [torch.tensor(ds_target[variable][0].values).squeeze().to(device) for variable in var_spatial_dims.keys()]))
             output_global_std = {}
 
-        for data in data_input:
-            patch_id_idx, data_source, coords_target, coords_source = data
-            print(f'processing patch {patch_id_idx}')
+            for result in results:
+                if result is not None:
+                    depth, patch_id_idx, output = result
 
-            with torch.no_grad():
-                if self.model_settings['res_mode']=='sample':
-                    if 'apply_res' not in self.model_settings.keys():
-                        apply_res = False
-                    else:
-                        apply_res = self.model_settings['apply_res']
-                else:
-                    apply_res = True
-            #    print([var.std() for var in data_source.values()])
-                output, x_reg_lr, core_output, non_valid_var = self(data_source, coords_target, coords_source=coords_source, norm=True, apply_res=apply_res)
-                
-                #debug = {'x_reg_lr':x_reg_lr, 'core_output': core_output, 'non_valid_var': non_valid_var}
-                #torch.save(debug, f'/home/k/k204244/work_exaocean/baroclinic_unet/test/test_nudging_rel/debug_{patch_id_idx}.pt')
-            #    print([var.std() for var in output.values()])
-            for variable in output.keys():
-                indices = spatial_dims_patches_target[var_spatial_dims[variable]][patch_id_idx]
-                output_global[variable][indices] = output[variable][0,0,0]
+                    for variable in output.keys():
+                        indices = spatial_dims_patches_target[var_spatial_dims[variable]][patch_id_idx]
+                        output_global[variable][depth, indices] = output[variable][0,0,0]
+                        
+            return output_global, output_global_std
+        else:
+            return None
+   
 
-                if self.model_settings['gauss']:
-                    output_global_std[variable][indices] = output[variable][0,0,1]
-            
-        return output_global, output_global_std
-        
     def apply_parallel(self, ds, ts=-1, device='cpu', ds_target=None, n_procs=1):
         
         self.set_input_mapper(mode="interpolation")
