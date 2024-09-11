@@ -402,8 +402,6 @@ class pyramid_step_model(nn.Module):
 
         if depths_to_process ==-1:
             depths_to_process = np.arange(ds_target.depth.shape[0])
-
-        print(f'correcting {len(depths_to_process)} depths...')
         
         output_global_std = {}
         
@@ -416,12 +414,12 @@ class pyramid_step_model(nn.Module):
         print(f'Correcting {len(depths_patch_ids)} patches on rank {rank}')
 
         results = self.predict_depth_patches(ds, ds_target, patches, depths_patch_ids, ts, device='cpu')
-
-        dist.barrier()
         
         if rank==0:
             if n_procs > 1:
-                results = flatten_list(results)
+                output = [None for _ in depths_patch_ids]
+                dist.gather_object(results, output)
+                results = flatten_list(output)
             
             print(f'Got predictions from {len(results)} patches. Collecting data ...')
 
