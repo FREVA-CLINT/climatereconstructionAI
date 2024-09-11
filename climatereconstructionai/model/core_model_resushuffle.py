@@ -418,7 +418,8 @@ class core_ResUNet(psm.pyramid_step_model):
         mid_att = model_settings["mid_att"] if "mid_att" in model_settings.keys() else False
         full_res = model_settings["full_res"] if "full_res" in model_settings.keys() else False
 
-        depth_embedding_dim = model_settings['model_dim_core'] if "with_depth_embedding" in model_settings.keys() else 0
+        with_depth_embedding = model_settings["with_depth_embedding"] if "with_depth_embedding" in model_settings.keys() else False
+        depth_embedding_dim = model_settings['model_dim_core'] if with_depth_embedding else 0
 
         dropout = 0 if 'dropout' not in model_settings.keys() else model_settings['dropout']
         grouped = False if 'grouped' not in model_settings.keys() else model_settings['grouped']
