@@ -1136,13 +1136,13 @@ class processing_layer(nn.Module):
 
         for global_level in global_levels:
 
-            if mode=='nh_ca_VM':
+            if mode == 'nh_ca_VM':
                 self.processing_layers[str(global_level)] = nh_vm_channel_attention(grid_layers[str(global_level)], model_hparams)
             elif mode == 'nh_ca':
                 self.processing_layers[str(global_level)] = nh_channel_attention(grid_layers[str(global_level)], model_hparams)
             elif mode == 'ca':
                 self.processing_layers[str(global_level)] = channel_attention(grid_layers[str(global_level)], model_hparams)
-            elif mode=='linear':
+            elif mode == 'linear':
                 self.processing_layers[str(global_level)] = nn.Linear(model_hparams['model_dim'], model_hparams['model_dim'], bias=False)
 
         self.grid_layers = grid_layers
@@ -1561,30 +1561,31 @@ class projection_layer_learned_cont(nn.Module):
         #
 
         model_dim = model_hparams['model_dim']
+        pos_emb_calc = model_hparams['pos_emb_calc']
+        emb_table_bins = model_hparams['emb_table_bins']
+
+        if 'cartesian' in pos_emb_calc:
+            self.coord_system = 'cartesian'
+        else:
+            self.coord_system = 'polar'
 
         self.grid_layer_in = grid_layer_in
         self.grid_layer_out = grid_layer_out
 
-        bins=4
         self.seq_level = grid_layer_in.global_level - grid_layer_out.global_level
-      #  self.input_embedder = nh_pos_embedding(grid_layer_in, model_hparams['nh'], model_dim)
-      #  self.output_embedder = seq_grid_embedding(grid_layer_out, bins, grid_layer_in.global_level - grid_layer_out.global_level, model_dim, softmax=False, constant_init=False)
+      
+        self.positon_embedder = position_embedder(0,0, emb_table_bins, model_dim, pos_emb_calc=pos_emb_calc)
 
-        self.positon_embedder = position_embedder(0,0, 12, model_dim, pos_emb_calc='km_cartesian')
-
-        #x, mask, rel_coords, indices_layer = self.grid_layer.get_sections(x, indices_layer, section_level=1, relative_coordinates=True, return_indices=True, coord_system="polar")
-        #self.gamma = nn.Parameter(torch.ones(model_dim)*1e-6, requires_grad=True)
-
-        self.input_layer_norm = nn.Identity() #nn.LayerNorm(model_dim)
+        self.input_layer_norm = nn.Identity()
         self.output_layer_norm = nn.Identity()
             
     def forward(self, x_level_in, indices_layers_in, indices_layers_out, batch_dict, output_coords=None):
 
-        x_nh, mask, rel_coords_nh = self.grid_layer_in.get_nh(x_level_in, indices_layers_in, batch_dict, relative_coordinates=True, coord_system='cartesian')
+        x_nh, mask, rel_coords_nh = self.grid_layer_in.get_nh(x_level_in, indices_layers_in, batch_dict, relative_coordinates=True, coord_system=self.coord_system)
         pos_embeddings_in = self.positon_embedder(rel_coords_nh[0], rel_coords_nh[1])
 
         indices_layers_out_seq = sequenize(indices_layers_out, max_seq_level=self.seq_level)
-        rel_coords_out = self.grid_layer_out.get_relative_coordinates_from_grid_indices(indices_layers_out_seq, coord_system='cartesian')
+        rel_coords_out = self.grid_layer_out.get_relative_coordinates_from_grid_indices(indices_layers_out_seq, coord_system=self.coord_system)
         pos_embeddings_out = self.positon_embedder(rel_coords_out[0], rel_coords_out[1])
 
         b,n_in,nh,f = x_nh.shape 
@@ -1857,8 +1858,6 @@ class ICON_Transformer(nn.Module):
         self.register_buffer('global_indices', torch.arange(mgrids[0]['coords'].shape[1]).unsqueeze(dim=0), persistent=False)
         self.register_buffer('cell_coords_global', mgrids[0]['coords'], persistent=False)
         
-        self.n_grid_levels_out = self.model_settings['n_grid_levels_out']
-
         self.input_data  = self.model_settings['variables_source']
         self.output_data = self.model_settings['variables_target']
 
