@@ -23,6 +23,8 @@ from ..utils.normalizer import normalizer
 def set_device_and_init_torch_dist():
 
     # check out https://gist.github.com/TengdaHan/1dd10d335c7ca6f13810fff41e809904
+    
+    cuda=False
     if os.environ.get('WORLD_SIZE') is None and os.environ.get('SLURM_NTASKS') is None:
         rank = 0
         world_size = 1
@@ -36,7 +38,6 @@ def set_device_and_init_torch_dist():
             cuda=True
             backend = 'nccl'
         else:
-            cuda=False
             backend = 'gloo'
 
         dist.init_process_group(backend=backend, init_method=dist_url,
