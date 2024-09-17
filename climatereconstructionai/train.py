@@ -109,6 +109,9 @@ def train(arg_file=None):
             param_group['lr'] = lr
         print('Starting from iter ', start_iter)
 
+    if cfg.profiler == "dlprof":
+        import nvidia_dlprof_pytorch_nvtx
+        nvidia_dlprof_pytorch_nvtx.init()
     prof = load_profiler(start_iter)
 
     if cfg.multi_gpus:

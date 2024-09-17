@@ -250,7 +250,7 @@ def set_common_args():
                             help="Comma separated list of values defining the permitted lower-bound of output values")
     arg_parser.add_argument('--max-bounds', type=float_list, default="inf",
                             help="Comma separated list of values defining the permitted upper-bound of output values")
-    arg_parser.add_argument('--profile', action='store_true', help="Profile code using tensorboard profiler")
+    arg_parser.add_argument('--profiler', type=str, default=None, help="Use specified profiler")
     return arg_parser
 
 
