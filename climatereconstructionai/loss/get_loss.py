@@ -75,12 +75,32 @@ class loss_criterion(torch.nn.Module):
 
         return loss_dict
 
+class ModularizedFunction(torch.nn.Module):
+    def __init__(self, forward_op):
+        super().__init__()
+        self.forward_op = forward_op
+
+    def forward(self, *args, **kwargs):
+        return self.forward_op(*args, **kwargs)
+
+class CriterionParallel(torch.nn.Module):
+    def __init__(self, criterion):
+        super().__init__()
+        if not isinstance(criterion, torch.nn.Module):
+            criterion = ModularizedFunction(criterion)
+        self.criterion = torch.nn.DataParallel(criterion)
+
+    def forward(self, *args, **kwargs):
+        multi_dict = self.criterion(*args, **kwargs)
+        for key in multi_dict.keys():
+            multi_dict[key] = multi_dict[key].mean()
+        return multi_dict
 
 class LossComputation(torch.nn.Module):
     def __init__(self, lambda_dict):
         super().__init__()
         if cfg.multi_gpus:
-            self.criterion = torch.nn.DataParallel(loss_criterion(lambda_dict))
+            self.criterion = CriterionParallel(loss_criterion(lambda_dict))
         else:
             self.criterion = loss_criterion(lambda_dict)
 
