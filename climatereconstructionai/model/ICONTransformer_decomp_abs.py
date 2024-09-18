@@ -48,7 +48,158 @@ def append_debug_dict(debug_dict_all, debug_dict):
 
     return debug_dict_all
 
+
+
+
+class grid_layer(nn.Module):
+    def __init__(self, global_level, adjc, adjc_mask, coordinates, coord_system="polar", periodic_fov=None) -> None: 
+        super().__init__()
+
+        # introduce is_regid
+        # if not add learnable parameters? like federkonstante, that are added onto the coords
+        # all nodes have offsets, just the ones from the specified are learned
+        self.global_level = global_level
+        self.coord_system = coord_system
+        self.periodic_fov = periodic_fov
+
+        self.register_buffer("coordinates", coordinates, persistent=False)
+        self.register_buffer("adjc", adjc, persistent=False)
+        self.register_buffer("adjc_mask", adjc_mask==False, persistent=False)
+        self.register_buffer("fov_mask", ((adjc_mask==False).sum(dim=-1)==adjc_mask.shape[1]).view(-1,1),persistent=False)
+
+        n_samples = torch.min(torch.tensor([self.adjc.shape[0]-1, 100]))
+        nh_samples = self.adjc[:n_samples]
+        coords_nh = self.get_coordinates_from_grid_indices(nh_samples)
+        dists = get_relative_positions(coords_nh, coords_nh, polar=True)[0]
+
+        self.min_dist = dists[dists>1e-10].min()
+        self.max_dist = dists[dists>1e-10].max()
+        self.mean_dist = dists[dists>1e-10].mean()
+        self.median_dist = dists[dists>1e-10].median()
+
+    def get_nh(self, x, local_indices, sample_dict, relative_coordinates=True, coord_system=None):
+
+        indices_nh, mask = get_nh_indices(self.adjc, local_cell_indices=local_indices, global_level=int(self.global_level))
+        adjc_mask = self.adjc_mask[local_indices]
+        mask = torch.logical_or(mask, adjc_mask)
+        x = gather_nh_data(x, indices_nh, sample_dict['sample'], sample_dict['sample_level'], int(self.global_level))
+
+        if relative_coordinates:
+            coords = self.get_relative_coordinates_from_grid_indices(indices_nh, coord_system=coord_system)
+        else:
+            coords = self.get_coordinates_from_grid_indices(indices_nh)
+
+        return x, mask, coords
     
+    def get_nh_indices(self, local_indices):
+        return get_nh_indices(self.adjc, local_cell_indices=local_indices, global_level=int(self.global_level))
+
+
+    def get_coordinates_from_grid_indices(self, local_indices):
+        coords = self.coordinates[:, local_indices]
+        return coords
+    
+    def get_relative_coordinates_from_grid_indices(self, local_indices, coords=None, coord_system=None):
+        
+        if coord_system is None:
+            coord_system = self.coord_system
+        
+        if coords is None:
+            coords = self.get_coordinates_from_grid_indices(local_indices)
+
+        coords_rel = get_distance_angle(coords[0,:,:,[0]], coords[1,:,:,[0]], coords[0], coords[1], base=coord_system, periodic_fov=self.periodic_fov)
+
+        return coords_rel
+    
+    def get_relative_coordinates_cross(self, local_indices, coords, coord_system=None):
+
+        if coord_system is None:
+            coord_system = self.coord_system
+        
+        coords_ref = self.get_coordinates_from_grid_indices(local_indices)
+
+       # if coords.dim()>3:
+       #     n_c, b, n, nh = coords.shape
+       #     coords = coords.view(n_c, b ,-1)
+
+        coords_rel = get_distance_angle(coords_ref[0,:,:,[0]], coords_ref[1,:,:,[0]], coords[0], coords[1], base=coord_system, periodic_fov=self.periodic_fov) 
+        
+    #    if coords.dim()>3:
+     #       coords_rel = coords_rel.view(n_c, b, n, nh)
+        
+        return coords_rel
+
+    def get_sections(self, x, local_indices, section_level=1, relative_coordinates=True, return_indices=True, coord_system=None):
+        indices = sequenize(local_indices, max_seq_level=section_level)
+        x = sequenize(x, max_seq_level=section_level)
+        if relative_coordinates:
+            coords = self.get_relative_coordinates_from_grid_indices(indices, coord_system=coord_system)
+        else:
+            coords = self.get_coordinates_from_grid_indices(indices)
+
+        mask = self.fov_mask[indices]
+
+        if return_indices:
+            return x, mask, coords, indices
+        else:
+            return x, mask, coords
+    
+    def get_projection_cross_vm(self, x, local_indices, sample_dict, coords_cross, sigma_d, kappa_vm=None):
+        x_nh, mask_nh, coords_nh = self.get_nh(x, local_indices, sample_dict)
+
+       # x_nh = x_nh[:,:,1:,:]
+       # mask_nh = mask_nh[:,:,1:]
+       # coords_nh = coords_nh[:,:,:,1:]
+        distances_nh, phis_nh = get_relative_positions(coords_cross[:,:,:,0], coords_nh, polar=True)
+        distances, phis = get_relative_positions(coords_cross[:,:,:,0], coords_cross, polar=True)
+
+        distances_nh[mask_nh.unsqueeze(dim=-2)]=1e10
+
+ 
+        weights = get_spatial_projection_weights_vm_dist(phis, distances, phis_nh, kappa_vm, distances_nh, sigma_d)
+
+
+        x = proj_data(x_nh, weights)
+
+        return x
+    
+    def get_projection_cross_n(self, x, local_indices, sample_dict, coords_cross, sigma_lon, sigma_lat):
+        x_nh, mask_nh, coords_nh = self.get_nh(x, local_indices, sample_dict, relative_coordinates=False)
+
+
+        d_lon_0, d_lat_0 = get_relative_positions(coords_cross[:,:,:,0], coords_nh, polar=False)
+        d_lon, d_lat = get_relative_positions(coords_cross[:,:,:,0], coords_cross, polar=False)
+
+    
+ 
+        weights = get_spatial_projection_weights_n_dist(d_lon, d_lat, d_lon_0, sigma_lon, d_lat_0, sigma_lat)
+
+
+        x = proj_data(x_nh, weights)
+
+        return x
+    
+    def get_projection_nh_vm(self, x, local_indices, sample_dict, phi_0, dist_0, sigma_d, kappa_vm):
+        x_nh, _, coords_nh = self.get_nh(x, local_indices, sample_dict)
+        
+        distances, phis = get_relative_positions(coords_nh[:,:,:,0], coords_nh, polar=True)
+
+        weights = get_spatial_projection_weights_vm_dist(phis, distances, phi_0, kappa_vm, dist_0, sigma_d)
+
+        x_nh = proj_data(x_nh, weights)
+        
+        return x_nh
+    
+    def get_projection_nh_dist(self, x, local_indices, sample_dict, dist_0, sigma_d):
+        x_nh, _, coords_nh = self.get_nh(x, local_indices, sample_dict)
+        
+        distances, phis = get_relative_positions(coords_nh[:,:,:,0], coords_nh, polar=True)
+
+        weights = get_spatial_projection_weights_dists(distances, dist_0, sigma_d)
+
+        x_nh = proj_data(x_nh, weights)
+        
+        return x_nh
     
 class multi_grid_channel_attention(nn.Module):
     def __init__(self, n_grids ,model_hparams, chunks=4, output_reduction=True) -> None: 
@@ -150,6 +301,7 @@ class multi_grid_attention(nn.Module):
         ff_dim = model_dim
         n_heads = model_hparams['n_heads']
         embedding_dim = model_hparams['pos_emb_dim']
+        projection_mode = model_hparams['mga_projection_mode']
 
         self.projection_level = projection_level
         self.projection_grid_layer = grid_layers[projection_level]
@@ -180,8 +332,6 @@ class multi_grid_attention(nn.Module):
             self.position_embedder = nh_pos_embedding(self.projection_grid_layer, model_hparams['nh'], model_dim)
         else:
             self.position_embedder = seq_grid_embedding(self.projection_grid_layer, bins, model_hparams['max_seq_level'], model_dim, softmax=False, constant_init=False)
-
-        projection_mode = 'learned_cont'
 
         self.processing=True
         if self.processing:
@@ -215,7 +365,7 @@ class multi_grid_attention(nn.Module):
                                                                       uniform_simga=True))
                     
                 elif projection_mode == 'learned_cont' and k < self.n_grids-1:
-                    self.projection_layers.append(projection_layer_learned_cont(grid_layer_in=grid_layers[list(grid_layers.keys())[k]], 
+                    self.projection_layers.append(layer_layer_projection_nh(grid_layer_in=grid_layers[list(grid_layers.keys())[k]], 
                                                                       grid_layer_out=self.projection_grid_layer, 
                                                                       model_hparams=model_hparams))
                     
@@ -420,74 +570,64 @@ class input_layer_simple(nn.Module):
        # x[rem_mask]=0
         return x
 
+
+
 class input_projection_layer(nn.Module):
-    def __init__(self, mapping, in_range_mask, coordinates, projection_grid_layer, model_hparams) -> None: 
+    def __init__(self, mapping, in_range_mask, coordinates, projection_grid_layer: grid_layer, model_hparams) -> None: 
         super().__init__()
 
         self.register_buffer("mapping", mapping, persistent=False)
         self.register_buffer("in_range_mask", ~in_range_mask, persistent=False)
         self.register_buffer("coordinates", coordinates, persistent=False)
 
-        #test with shift and scale ambedding
+        model_dim = model_hparams['model_dim']
+        pos_emb_calc = model_hparams['pos_emb_calc']
+        emb_table_bins = model_hparams['emb_table_bins']
+
+        if 'cartesian' in pos_emb_calc:
+            self.coord_system = 'cartesian'
+        else:
+            self.coord_system = 'polar'
 
         model_dim = model_hparams['model_dim']
                 
-        n_heads = model_hparams['n_heads']
- 
-        self.position_embedder = position_embedder(0, 0, model_hparams['emb_table_bins'], model_dim, pos_emb_calc=model_hparams['pos_emb_calc'])
+        self.projection_layer = projection_layer_learned_cont(model_hparams)
 
         self.projection_grid_layer = projection_grid_layer
         self.input_seq_level = model_hparams['input_seq_level']
         
-        self.layer_norm = nn.LayerNorm(model_dim, elementwise_affine=True)
-
-        self.v_projection = nn.Linear(len(model_hparams['variables_source']['cell']), model_dim) 
-
-        self.mha_attention = helpers.MultiHeadAttentionBlock(
-            model_dim, model_dim, n_heads=n_heads, input_dim= model_hparams['pos_emb_dim'], qkv_proj=False, v_proj=False
-            )  
+        self.lin_projection = nn.Linear(len(model_hparams['variables_source']['cell']), model_dim) 
         
 
     def forward(self, x, indices_grid_layer, drop_mask=None):    
         
-        b,n,_,f = x.shape
-        
+        b, n_out, _, f_in = x.shape
+
+        x = x.view(b, -1, f_in)
+
+        x = self.lin_projection(x)
+
+        x = sequenize(x, max_seq_level=self.input_seq_level)
         indices = sequenize(indices_grid_layer, max_seq_level=self.input_seq_level)
+        drop_mask = sequenize(drop_mask, max_seq_level=self.input_seq_level)
 
-        # do it with shift + scale?
+        coords_input = self.coordinates[:,self.mapping[indices]]
 
-        rel_coords_grid  = self.projection_grid_layer.get_relative_coordinates_from_grid_indices(indices)
-                                    
-        rel_coords_input = self.projection_grid_layer.get_relative_coordinates_cross(indices, self.coordinates[:,self.mapping[indices]].view(2,b,indices.shape[1],-1))
+        n = x.shape[1]
+        coords_input = coords_input.view(2,b,n,-1)
 
-        q = self.position_embedder(rel_coords_grid[0], rel_coords_grid[1])
-        k = self.position_embedder(rel_coords_input[0], rel_coords_input[1])
+        rel_coords = self.projection_grid_layer.get_relative_coordinates_cross(indices, coords_input, coord_system=self.coord_system)
 
-        q = self.layer_norm(q).view(b*indices.shape[1],-1,q.shape[-1])
-        k = self.layer_norm(k).view(b*indices.shape[1],-1,k.shape[-1])
-      
-        drop_mask = sequenize(drop_mask, max_seq_level=self.input_seq_level).view(b*indices.shape[1],-1)
+        indices_layers_out_seq = sequenize(indices_grid_layer, max_seq_level=self.input_seq_level)
+        rel_coords_out = self.projection_grid_layer.get_relative_coordinates_from_grid_indices(indices_layers_out_seq, coord_system=self.coord_system)
+       
+        x = self.projection_layer(x, rel_coords, rel_coords_out, mask=drop_mask)
 
-        v = sequenize(x, max_seq_level=self.input_seq_level).view(b*indices.shape[1],-1,f)
+        drop_mask_update = drop_mask.clone()
+        drop_mask_update[drop_mask.sum(dim=-1)!=drop_mask.shape[-1]] = False
 
-        v = self.v_projection(v)
-        
-        v[drop_mask]=0
-
-        x, att = self.mha_attention(q=q,k=k,v=v, mask=drop_mask, return_debug=True)
-        
-        x = x.view(b,n,-1)
-
-      #  rem_mask = drop_mask.sum(dim=1)==4**self.input_seq_level
-       # rem_mask = rem_mask.view(b,-1)
-        # clear nans where sequence doesnt have at least on valid value
-       # x_nan = x.isnan()
-
-       # x = sequenize(x, max_seq_level=self.input_seq_level)
-       # x[rem_mask]=0
-
-        drop_mask = x.isnan()[:,:,0]
-        return x, drop_mask
+        x = x.view(b, n_out, -1)
+        return x, drop_mask_update.view(b,n_out)
 
 
 class shifting_mga_layer(nn.Module):
@@ -610,7 +750,7 @@ class cascading_layer_reduction(nn.Module):
 
 
 class cascading_layer(nn.Module):
-    def __init__(self, global_levels, grid_layers, model_hparams, input_aggregation='concat', output_projection_overlap=False) -> None: 
+    def __init__(self, global_levels, grid_layers, model_hparams, input_aggregation='concat', output_projection_overlap=False, nh_attention=False) -> None: 
         super().__init__()
         
         #to do: implement grid window + output projections
@@ -633,7 +773,7 @@ class cascading_layer(nn.Module):
 
 
             self.mga_layers_levels[str(global_level)] = nn.ModuleList(
-                [multi_grid_attention(str(global_level), grid_layers_, model_hparams, input_aggregation=input_aggregation, output_projection_overlap=output_projection_overlap) for _ in range(model_hparams['n_processing_layers'])]
+                [multi_grid_attention(str(global_level), grid_layers_, model_hparams, input_aggregation=input_aggregation, output_projection_overlap=output_projection_overlap, nh_attention=nh_attention) for _ in range(model_hparams['n_processing_layers'])]
                 )
             
                         
@@ -768,149 +908,6 @@ class position_embedder(nn.Module):
             elif self.operation == 'product':
                 return pos1_emb * pos2_emb
 
-
-class grid_layer(nn.Module):
-    def __init__(self, global_level, adjc, adjc_mask, coordinates, coord_system="polar", periodic_fov=None) -> None: 
-        super().__init__()
-
-        # introduce is_regid
-        # if not add learnable parameters? like federkonstante, that are added onto the coords
-        # all nodes have offsets, just the ones from the specified are learned
-        self.global_level = global_level
-        self.coord_system = coord_system
-        self.periodic_fov = periodic_fov
-
-        self.register_buffer("coordinates", coordinates, persistent=False)
-        self.register_buffer("adjc", adjc, persistent=False)
-        self.register_buffer("adjc_mask", adjc_mask==False, persistent=False)
-        self.register_buffer("fov_mask", ((adjc_mask==False).sum(dim=-1)==adjc_mask.shape[1]).view(-1,1),persistent=False)
-
-        n_samples = torch.min(torch.tensor([self.adjc.shape[0]-1, 100]))
-        nh_samples = self.adjc[:n_samples]
-        coords_nh = self.get_coordinates_from_grid_indices(nh_samples)
-        dists = get_relative_positions(coords_nh, coords_nh, polar=True)[0]
-
-        self.min_dist = dists[dists>1e-10].min()
-        self.max_dist = dists[dists>1e-10].max()
-        self.mean_dist = dists[dists>1e-10].mean()
-        self.median_dist = dists[dists>1e-10].median()
-
-    def get_nh(self, x, local_indices, sample_dict, relative_coordinates=True, coord_system=None):
-
-        indices_nh, mask = get_nh_indices(self.adjc, local_cell_indices=local_indices, global_level=int(self.global_level))
-        adjc_mask = self.adjc_mask[local_indices]
-        mask = torch.logical_or(mask, adjc_mask)
-        x = gather_nh_data(x, indices_nh, sample_dict['sample'], sample_dict['sample_level'], int(self.global_level))
-
-        if relative_coordinates:
-            coords = self.get_relative_coordinates_from_grid_indices(indices_nh, coord_system=coord_system)
-        else:
-            coords = self.get_coordinates_from_grid_indices(indices_nh)
-
-        return x, mask, coords
-    
-    def get_nh_indices(self, local_indices):
-        return get_nh_indices(self.adjc, local_cell_indices=local_indices, global_level=int(self.global_level))
-
-
-    def get_coordinates_from_grid_indices(self, local_indices):
-        coords = self.coordinates[:, local_indices]
-        return coords
-    
-    def get_relative_coordinates_from_grid_indices(self, local_indices, coords=None, coord_system=None):
-        
-        if coord_system is None:
-            coord_system = self.coord_system
-        
-        if coords is None:
-            coords = self.get_coordinates_from_grid_indices(local_indices)
-
-        coords_rel = get_distance_angle(coords[0,:,:,[0]], coords[1,:,:,[0]], coords[0], coords[1], base=coord_system, periodic_fov=self.periodic_fov)
-
-        return coords_rel
-    
-    def get_relative_coordinates_cross(self, local_indices, coords, coord_system=None):
-
-        if coord_system is None:
-            coord_system = self.coord_system
-        
-        coords_ref = self.get_coordinates_from_grid_indices(local_indices)
-
-        coords_rel = get_distance_angle(coords_ref[0,:,:,[0]], coords_ref[1,:,:,[0]], coords[0], coords[1], base=coord_system, periodic_fov=self.periodic_fov) 
-
-        return coords_rel
-
-    def get_sections(self, x, local_indices, section_level=1, relative_coordinates=True, return_indices=True, coord_system=None):
-        indices = sequenize(local_indices, max_seq_level=section_level)
-        x = sequenize(x, max_seq_level=section_level)
-        if relative_coordinates:
-            coords = self.get_relative_coordinates_from_grid_indices(indices, coord_system=coord_system)
-        else:
-            coords = self.get_coordinates_from_grid_indices(indices)
-
-        mask = self.fov_mask[indices]
-
-        if return_indices:
-            return x, mask, coords, indices
-        else:
-            return x, mask, coords
-    
-    def get_projection_cross_vm(self, x, local_indices, sample_dict, coords_cross, sigma_d, kappa_vm=None):
-        x_nh, mask_nh, coords_nh = self.get_nh(x, local_indices, sample_dict)
-
-       # x_nh = x_nh[:,:,1:,:]
-       # mask_nh = mask_nh[:,:,1:]
-       # coords_nh = coords_nh[:,:,:,1:]
-        distances_nh, phis_nh = get_relative_positions(coords_cross[:,:,:,0], coords_nh, polar=True)
-        distances, phis = get_relative_positions(coords_cross[:,:,:,0], coords_cross, polar=True)
-
-        distances_nh[mask_nh.unsqueeze(dim=-2)]=1e10
-
- 
-        weights = get_spatial_projection_weights_vm_dist(phis, distances, phis_nh, kappa_vm, distances_nh, sigma_d)
-
-
-        x = proj_data(x_nh, weights)
-
-        return x
-    
-    def get_projection_cross_n(self, x, local_indices, sample_dict, coords_cross, sigma_lon, sigma_lat):
-        x_nh, mask_nh, coords_nh = self.get_nh(x, local_indices, sample_dict, relative_coordinates=False)
-
-
-        d_lon_0, d_lat_0 = get_relative_positions(coords_cross[:,:,:,0], coords_nh, polar=False)
-        d_lon, d_lat = get_relative_positions(coords_cross[:,:,:,0], coords_cross, polar=False)
-
-    
- 
-        weights = get_spatial_projection_weights_n_dist(d_lon, d_lat, d_lon_0, sigma_lon, d_lat_0, sigma_lat)
-
-
-        x = proj_data(x_nh, weights)
-
-        return x
-    
-    def get_projection_nh_vm(self, x, local_indices, sample_dict, phi_0, dist_0, sigma_d, kappa_vm):
-        x_nh, _, coords_nh = self.get_nh(x, local_indices, sample_dict)
-        
-        distances, phis = get_relative_positions(coords_nh[:,:,:,0], coords_nh, polar=True)
-
-        weights = get_spatial_projection_weights_vm_dist(phis, distances, phi_0, kappa_vm, dist_0, sigma_d)
-
-        x_nh = proj_data(x_nh, weights)
-        
-        return x_nh
-    
-    def get_projection_nh_dist(self, x, local_indices, sample_dict, dist_0, sigma_d):
-        x_nh, _, coords_nh = self.get_nh(x, local_indices, sample_dict)
-        
-        distances, phis = get_relative_positions(coords_nh[:,:,:,0], coords_nh, polar=True)
-
-        weights = get_spatial_projection_weights_dists(distances, dist_0, sigma_d)
-
-        x_nh = proj_data(x_nh, weights)
-        
-        return x_nh
 
 def proj_data(data, weights):
 
@@ -1060,7 +1057,7 @@ class decomp_layer_angular_embedding(nn.Module):
         if drop_mask is not None:
             drop_masks_level = drop_masks_level[::-1]
 
-            assert int(drop_mask.sum())==0, "still nans in data, number of grid layers might not be sufficient"
+            #assert int(drop_mask.sum())==0, "still nans in data, number of grid layers might not be sufficient"
 
         return x_levels, drop_masks_level
 
@@ -1497,8 +1494,11 @@ class lin_projection(nn.Module):
 
 
 class output_layer(nn.Module):
-    def __init__(self, global_levels, grid_layers: dict, model_hparams, mode='learned') -> None: 
+    def __init__(self, mapping, coordinates, global_levels, grid_layers: dict, model_hparams, mode='learned') -> None: 
         super().__init__()
+
+        self.register_buffer("mapping", mapping, persistent=False)
+        self.register_buffer("coordinates", coordinates, persistent=False)
 
         output_dim = len(model_hparams['variables_target']['cell'])*(1+model_hparams['var_model'])
         self.var_projection = model_hparams['var_model']
@@ -1514,7 +1514,7 @@ class output_layer(nn.Module):
                 if mode=='learned':
                     self.projection_layers[str(global_level)] = projection_layer_learned(grid_layers[str(global_level)], grid_layers["0"], model_hparams)
                 elif mode=='learned_cont':
-                    self.projection_layers[str(global_level)] = projection_layer_learned_cont(grid_layers[str(global_level)], grid_layers["0"], model_hparams)
+                    self.projection_layers[str(global_level)] = layer_layer_projection_nh(grid_layers[str(global_level)], grid_layers["0"], model_hparams)
                 elif mode=='VM':
                     self.projection_layers[str(global_level)] = projection_layer_vm(grid_layers[str(global_level)], grid_layers["0"], model_hparams)
                 elif mode=='n':
@@ -1526,23 +1526,29 @@ class output_layer(nn.Module):
         self.grid_layers = grid_layers
 
             
-    def forward(self, x_levels, indices_layers, batch_dict, output_coords=None):
+    def forward(self, x_levels, indices_layers, batch_dict, coords_output=None):
         
         x_output_mean = []
         x_output_var = []
 
         x_level_out = x_levels[-1]
 
+        coords_output = self.coordinates[:,self.mapping[indices_layers[0]]]
+        n_c, b, n, n_nh = coords_output.shape
+
         for k, global_level in enumerate(self.global_levels):
             
             if global_level>0:
                 if self.mode == 'learned':
-                    x = self.projection_layers[str(global_level)](x_levels[k], x_level_out, indices_layers[global_level], indices_layers[0], batch_dict, output_coords=output_coords)
+                    x = self.projection_layers[str(global_level)](x_levels[k], x_level_out, indices_layers[global_level], indices_layers[0], batch_dict, coords_output=coords_output)
+                elif self.mode == 'simple':
+                    x = x_levels[k]
                 else:
-                    x = self.projection_layers[str(global_level)](x_levels[k], indices_layers[global_level], indices_layers[0], batch_dict, output_coords=output_coords)
+                    x = self.projection_layers[str(global_level)](x_levels[k], indices_layers[global_level], indices_layers[0], batch_dict, coords_output=coords_output)
             else:
                 x = x_levels[k]
 
+            x = x.view(b, n, -1)
             x = self.lin_projection_layers[str(global_level)](x)
            
             if self.var_projection:
@@ -1555,14 +1561,11 @@ class output_layer(nn.Module):
         return x_output_mean, x_output_var
 
 
-class projection_layer_learned_cont(nn.Module):
-    def __init__(self, grid_layer_in, grid_layer_out, model_hparams: dict) -> None: 
+class layer_layer_projection_nh(nn.Module):
+    def __init__(self, grid_layer_in: grid_layer, grid_layer_out: grid_layer, model_hparams: dict) -> None: 
         super().__init__()
-        #
 
-        model_dim = model_hparams['model_dim']
         pos_emb_calc = model_hparams['pos_emb_calc']
-        emb_table_bins = model_hparams['emb_table_bins']
 
         if 'cartesian' in pos_emb_calc:
             self.coord_system = 'cartesian'
@@ -1574,37 +1577,63 @@ class projection_layer_learned_cont(nn.Module):
 
         self.seq_level = grid_layer_in.global_level - grid_layer_out.global_level
       
-        self.positon_embedder = position_embedder(0,0, emb_table_bins, model_dim, pos_emb_calc=pos_emb_calc)
+        self.projection_layer = projection_layer_learned_cont(model_hparams)
 
-        self.input_layer_norm = nn.Identity()
-        self.output_layer_norm = nn.Identity()
             
-    def forward(self, x_level_in, indices_layers_in, indices_layers_out, batch_dict, output_coords=None):
-
+    def forward(self, x_level_in, indices_layers_in, indices_layers_out, batch_dict, coords_output=None):
+         
         x_nh, mask, rel_coords_nh = self.grid_layer_in.get_nh(x_level_in, indices_layers_in, batch_dict, relative_coordinates=True, coord_system=self.coord_system)
-        pos_embeddings_in = self.positon_embedder(rel_coords_nh[0], rel_coords_nh[1])
 
         indices_layers_out_seq = sequenize(indices_layers_out, max_seq_level=self.seq_level)
-        rel_coords_out = self.grid_layer_out.get_relative_coordinates_from_grid_indices(indices_layers_out_seq, coord_system=self.coord_system)
+
+        if coords_output is None:
+            rel_coords_out = self.grid_layer_out.get_relative_coordinates_from_grid_indices(indices_layers_out_seq, coord_system=self.coord_system)
+        else:
+            n_c, b, n, nh = coords_output.shape
+            coords_output = coords_output.view(n_c, b ,-1)
+        
+            coords_output = coords_output.view(n_c, b, -1, 4**self.seq_level)
+            rel_coords_out = self.grid_layer_out.get_relative_coordinates_cross(indices_layers_out_seq, coords_output, coord_system=self.coord_system)
+
+        x = self.projection_layer(x_nh, rel_coords_nh, rel_coords_out, mask)
+
+        return x
+
+class projection_layer_learned_cont(nn.Module):
+    def __init__(self, model_hparams: dict) -> None: 
+        super().__init__()
+        #
+
+        model_dim = model_hparams['model_dim']
+        pos_emb_calc = model_hparams['pos_emb_calc']
+        emb_table_bins = model_hparams['emb_table_bins']
+
+        if 'cartesian' in pos_emb_calc:
+            self.coord_system = 'cartesian'
+        else:
+            self.coord_system = 'polar'
+      
+        self.positon_embedder = position_embedder(0,0, emb_table_bins, model_dim, pos_emb_calc=pos_emb_calc)
+
+            
+    def forward(self, x, rel_coords_in, rel_coords_out, mask=None):
+         
+        pos_embeddings_in = self.positon_embedder(rel_coords_in[0], rel_coords_in[1])
         pos_embeddings_out = self.positon_embedder(rel_coords_out[0], rel_coords_out[1])
 
-        b,n_in,nh,f = x_nh.shape 
-        n_out = indices_layers_out.shape[-1]
+        b, n_in, n_seq, f = x.shape 
+        n_out = pos_embeddings_out.shape[-2]
         
-        pos_embeddings_in[mask] = -1e10#float("-inf")
+        if mask is not None:
+            pos_embeddings_in[mask] = -1e10#float("-inf")
         
         pos_embeddings_out = pos_embeddings_out.view(b, n_in, -1, f)
         
-        pos_embeddings = self.input_layer_norm(pos_embeddings_in.unsqueeze(dim=-3))*self.output_layer_norm(pos_embeddings_out.unsqueeze(dim=-2)) 
+        weights = pos_embeddings_in.unsqueeze(dim=-3) * pos_embeddings_out.unsqueeze(dim=-2)
 
-        pos_embeddings = F.softmax(pos_embeddings, dim=-2)
+        weights = F.softmax(weights, dim=-2)
 
-        #x_offset = x_nh[:,:,[0],:].repeat_interleave(pos_embeddings.shape[-3], dim=-2)
-
-        #x_out = (1-self.gamma)* x_offset + self.gamma*(pos_embeddings * x_nh.unsqueeze(dim=-3)).sum(dim=-2)
-        x_out = (pos_embeddings * x_nh.unsqueeze(dim=-3)).sum(dim=-2)
-        return x_out.view(b,n_out,-1)
-
+        return (weights * x.unsqueeze(dim=-3)).sum(dim=-2)
 
 
 class projection_layer_learned(nn.Module):
@@ -1631,7 +1660,7 @@ class projection_layer_learned(nn.Module):
         self.input_layer_norm = nn.Identity() #nn.LayerNorm(model_dim)
         self.output_layer_norm = nn.Identity()
             
-    def forward(self, x_level_in, x_level_out, indices_layers_in, indices_layers_out, batch_dict, output_coords=None):
+    def forward(self, x_level_in, x_level_out, indices_layers_in, indices_layers_out, batch_dict, coords_output=None):
 
         #x_nh, mask, _ = self.grid_layer_in.get_nh(x_level_in, indices_layers_in, batch_dict)
         b,n,f = x_level_in.shape
@@ -1695,9 +1724,9 @@ class projection_layer_vm(nn.Module):
         kappa_dim = 1 if uniform_kappa else model_hparams['model_dim']
         self.kappa_vm = nn.Parameter(torch.ones(kappa_dim) * model_hparams["kappa_vm"], requires_grad=True)
 
-    def forward(self, x_level_in, indices_layers_in, indices_layers_out, batch_dict, output_coords=None):
+    def forward(self, x_level_in, indices_layers_in, indices_layers_out, batch_dict, coords_output=None):
         
-        if output_coords is None:
+        if coords_output is None:
             output_coords = self.grid_layer_out.get_coordinates_from_grid_indices(indices_layers_out)
 
         output_coords = output_coords.reshape(2, output_coords.shape[1], -1, 4**self.global_level_diff)
@@ -1720,9 +1749,9 @@ class projection_layer_n(nn.Module):
         self.simga = nn.Parameter(torch.ones(sigma_dim) * grid_layer_in.min_dist*200, requires_grad=True)
         
 
-    def forward(self, x_level_in, indices_layers_in, indices_layers_out, batch_dict, output_coords=None):
+    def forward(self, x_level_in, indices_layers_in, indices_layers_out, batch_dict, coords_output=None):
         
-        if output_coords is None:
+        if coords_output is None:
             output_coords = self.grid_layer_out.get_coordinates_from_grid_indices(indices_layers_out)
 
         output_coords = output_coords.reshape(2, output_coords.shape[1], -1, 4**self.global_level_diff)
@@ -1763,9 +1792,9 @@ class projection_layer_vm_learned(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
 
-    def forward(self, x_level_in, x_level_out, indices_layers_in, indices_layers_out, batch_dict, output_coords=None):
+    def forward(self, x_level_in, x_level_out, indices_layers_in, indices_layers_out, batch_dict, coords_output=None):
         
-        if output_coords is None:
+        if coords_output is None:
             output_coords = self.grid_layer_out.get_coordinates_from_grid_indices(indices_layers_out)
 
         x = self.grid_layer_in.get_projection_nh(x_level_in, indices_layers_in, batch_dict, self.phi_0, self.dists_0, self.simga_scan, self.kappa_scan)
@@ -1880,9 +1909,11 @@ class ICON_Transformer(nn.Module):
         
         input_mapping, input_in_range, input_coordinates, output_mapping, output_in_range, output_coordinates = self.get_grid_mappings(mgrids[0]['coords'])
 
-      #  self.input_layer = input_projection_layer(input_mapping['cell']['cell'], input_in_range['cell']['cell'], input_coordinates['cell'], grid_layers["0"], self.model_settings)
+        if 'input_learned' in self.model_settings.keys() and self.model_settings['input_learned']:
+            self.input_layer = input_projection_layer(input_mapping['cell']['cell'], input_in_range['cell']['cell'], input_coordinates['cell'], grid_layers["0"], self.model_settings)
+        else:
+            self.input_layer = input_layer_simple(self.model_settings)
 
-        self.input_layer = input_layer_simple(self.model_settings)
 
         #self.reduction_layer = multi_grid_channel_attention(len(self.global_levels), self.model_settings, chunks=8, output_reduction=True)
 
@@ -1908,49 +1939,33 @@ class ICON_Transformer(nn.Module):
         # seq processing + nh cascade?
         # 
 
+        # model 1
+        self.decomp_layers = nn.ModuleList()
+        self.processing_layers = nn.ModuleList()
+        self.cascading_layers = nn.ModuleList()
 
-        self.decomp_layer = decomp_layer_angular_embedding(self.global_levels, grid_layers, self.model_settings)
-        #self.cascading_mga_layer = cascading_layer(self.global_levels, grid_layers, self.model_settings, input_aggregation='concat', output_projection_overlap=False) # to fill values
+        self.initial_decomp_layer = decomp_layer_angular_embedding(self.global_levels, grid_layers, self.model_settings)
 
-        #self.processing_layer = processing_layer(self.global_levels, grid_layers, self.model_settings, mode='nh_ca')
+        self.fill_layer = cascading_layer(self.global_levels, grid_layers, self.model_settings, input_aggregation='concat', output_projection_overlap=False) # to fill values
 
-        self.decomp_layer2 = decomp_layer_angular_embedding(self.global_levels, grid_layers, self.model_settings)
-        self.output_layer = output_layer(self.global_levels, grid_layers, self.model_settings, mode='n')
-        
-        self.cascading_layer_reduction = cascading_layer_reduction(self.global_levels, grid_layers, self.model_settings, reduction='ca')
-        #self.decomp_layer2 = decomp_layer_angular_embedding(self.global_levels, grid_layers, self.model_settings)
+        for _ in range(self.model_settings['n_layers']):
 
-        #self.output_layer = output_layer([0], grid_layers["0"], self.model_settings, mode='None')
-        #self.output_layer = output_layer(self.global_levels, grid_layers, self.model_settings, mode='learned')
+            self.decomp_layers.append(decomp_layer_angular_embedding(self.global_levels, grid_layers, self.model_settings))
 
-       # self.output_layer = projection_layer_simple(grid_layers, self.model_settings, var_projection=self.model_settings['var_model'])
+            self.processing_layers.append(processing_layer(self.global_levels, grid_layers, self.model_settings, mode='ca'))
+            self.cascading_layers.append(cascading_layer_reduction(self.global_levels, grid_layers, self.model_settings, reduction='ca', nh_attention=True))
 
-       # self.shifting_mga_layer = shifting_mga_layer(self.global_levels, grid_layers, self.model_settings, grid_window=1, nh_attention=True)
+        self.multi_level_output = self.model_settings["n_grid_levels_out"]>1
+        if self.multi_level_output:
+            self.output_decomp_layer = decomp_layer_angular_embedding(self.global_levels, grid_layers, self.model_settings)
+            self.output_projection_layer = cascading_layer(self.global_levels, grid_layers, self.model_settings, input_aggregation='concat', output_projection_overlap=False, nh_attention=True)
+            self.output_layer = output_layer(output_mapping['cell']['cell'], output_coordinates['cell'], self.global_levels, grid_layers, self.model_settings, mode='simple')
 
-       # self.lin_projection = lin_projection(grid_layers, self.model_settings)
-      #  self.decomp_layer2 = decomp_layer_angular_embedding(self.global_levels, grid_layers, self.model_settings)
-        #only grid_window = 1 works with rest so far
-        
-      #  self.shifting_mga_layer = shifting_mga_layer(self.global_levels, grid_layers, self.model_settings, grid_window=1)
-    
-      #  self.cascading_mga_layer = cascading_layer(self.global_levels, grid_layers, self.model_settings)
+            #alternative:
+            #processing + projection layer
+        else:
+            self.output_layer = output_layer(output_mapping['cell']['cell'], output_coordinates['cell'], [self.global_levels[-1]], grid_layers, self.model_settings, mode='learned_cont')
 
-        #self.shifting_mga_layer = shifting_mga_layer(self.global_levels, grid_layers, self.model_settings, grid_window=1)
-
-        #self.projection_layer_simple = projection_layer_simple(grid_layers, self.model_settings, var_projection=self.model_settings['var_model'], output_dim=self.model_settings['model_dim'])
-        
-
-        
-
-        #self.cascading_mga_layer2 = cascading_layer(self.global_levels, grid_layers, self.model_settings, input_aggregation='sum', output_projection_overlap=False)
-
-        #self.projection_layer_simple = projection_layer_simple(grid_layers, self.model_settings, var_projection=self.model_settings['var_model'])
-
-        #self.projection_layer2 = projection_layer_n(self.global_levels, grid_layers, self.model_settings, output_dim=len(self.model_settings['variables_target']['cell']))    
-
-        #self.projection_layer2 = output_layer(self.global_levels, grid_layers, self.model_settings)
-
-        #self.processing_layer = processing_layer(self.global_levels, grid_layers, self.model_settings, mode='ca')
 
         self.global_res = self.model_settings['global_res'] if 'global_res' in self.model_settings.keys() else False
      
@@ -1990,34 +2005,29 @@ class ICON_Transformer(nn.Module):
         else:
             indices_layers = dict(zip(self.global_levels,[self.get_global_indices_local(indices_batch_dict['sample'], indices_batch_dict['sample_level'], global_level) for global_level in self.global_levels]))
         
-        #input_data = []
-        #for key, values in x.items():
+
+        x, drop_mask = self.input_layer(x['cell'], indices_layers[0] ,drop_mask=drop_mask)
+
+        x_levels, drop_mask_levels = self.initial_decomp_layer(x, indices_layers, drop_mask=drop_mask)
+
+        x_levels = self.fill_layer(x_levels, drop_mask_levels, indices_layers, indices_batch_dict)
+
+        drop_mask_levels = [None for _ in range(len(x_levels))]
+        x = torch.stack(x_levels, dim=-1).sum(dim=-1)
+
+        for k in range(len(self.cascading_layers)):
+            x_levels, _ = self.decomp_layers[k](x, indices_layers)
+            x_levels = self.processing_layers[k](x_levels, indices_layers, indices_batch_dict)
+            x = self.cascading_layers[k](x_levels, drop_mask_levels, indices_layers, indices_batch_dict)
+
+
+        if self.multi_level_output:
+            x_levels, _ = self.output_decomp_layer(x, indices_layers)
+            x_levels = self.output_projection_layer(x_levels, drop_mask_levels, indices_layers, indices_batch_dict)
+            x, x_var = self.output_layer(x_levels, indices_layers, indices_batch_dict)
+        else:
+            x, x_var = self.output_layer([x], indices_layers, indices_batch_dict)
             
-        #x, drop_mask = self.input_layer(x['cell'], indices_batch_dict["local_cell"], drop_mask=drop_mask)
-
-        x = self.input_layer(x['cell'], drop_mask=drop_mask)
-        
-        x_levels, drop_mask_levels = self.decomp_layer(x, indices_layers, drop_mask=drop_mask)
-
-       # x = self.cascading_layer_reduction(x_levels, drop_mask_levels, indices_layers, indices_batch_dict)
-
-       # x_levels, _ = self.decomp_layer2(x, indices_layers)
-
-        x = self.cascading_layer_reduction(x_levels, drop_mask_levels, indices_layers, indices_batch_dict)
-
-        #x = torch.stack(x_levels, dim=-1).sum(dim=-1)
-
-        x_levels, _ = self.decomp_layer2(x, indices_layers)
-
-        #x_levels = self.processing_layer(x_levels, indices_layers, indices_batch_dict)
-        
-        #x, x_var = self.output_layer(x_levels, indices_layers, indices_batch_dict)
-      #  x = self.cascading_layer_reduction(x_levels, drop_mask_levels, indices_layers, indices_batch_dict)
-         
-        x, x_var = self.output_layer(x_levels, indices_layers, indices_batch_dict)
-        #x, x_var = self.output_layer(x_levels)
-
-        
 
 
         if output_sum:
