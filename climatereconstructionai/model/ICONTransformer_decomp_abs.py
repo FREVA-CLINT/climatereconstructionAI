@@ -1625,7 +1625,7 @@ class projection_layer_learned_cont(nn.Module):
         n_out = pos_embeddings_out.shape[-2]
         
         if mask is not None:
-            pos_embeddings_in[mask] = -1e10#float("-inf")
+            pos_embeddings_in[mask] = float("-inf")
         
         pos_embeddings_out = pos_embeddings_out.view(b, n_in, -1, f)
         
