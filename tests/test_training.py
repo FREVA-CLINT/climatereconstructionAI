@@ -14,13 +14,13 @@ def test_training_run(file):
 
 
 @pytest.mark.training
-@pytest.mark.parametrize("model", os.listdir(testdir + "in/training/"))
+@pytest.mark.parametrize("model", os.listdir(testdir + "ref/training/"))
 def test_comp_models(model):
     import torch
-    ckpt_dict = torch.load(testdir + "ref/" + model + ".pth")
+    ckpt_dict = torch.load(testdir + "ref/training/" + model)
     for label in ckpt_dict["labels"]:
         model_ref = ckpt_dict[label]["model"]
-        model_run = torch.load(testdir + "out/training/ckpt/" + model + ".pth")[label]["model"]
+        model_run = torch.load(testdir + "out/training/ckpt/" + model)[label]["model"]
         for k_ref, k_run in zip(model_ref.keys(), model_run.keys()):
             assert k_ref == k_run
             print("* Checking {}...".format(k_ref))

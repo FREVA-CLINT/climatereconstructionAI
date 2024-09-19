@@ -6,7 +6,6 @@
 --data-types tas
 --device cpu
 --n-filters 18
---out-channels 1
 --eval-names demo
 --dataset-name hadcrut-mod
 --plot-result 0
