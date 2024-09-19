@@ -71,7 +71,7 @@ class loss_criterion(torch.nn.Module):
             if lambda_value > 0 and loss in loss_dict.keys():
                 loss_w_lambda = loss_dict[loss] * lambda_value
                 loss_dict["total"] += loss_w_lambda
-                loss_dict[loss] = loss_w_lambda.item()
+                loss_dict[loss] = loss_w_lambda
 
         return loss_dict
 
