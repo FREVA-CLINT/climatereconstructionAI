@@ -1952,13 +1952,14 @@ class ICON_Transformer(nn.Module):
 
         processing_mode = self.model_settings['processing_mode'] if 'processing_mode' in self.model_settings.keys() else 'ca'
         reduction_mode = self.model_settings['reduction_mode'] if 'reduction_mode' in self.model_settings.keys() else 'ca'
+        cascading_nh_attention = self.model_settings['cascading_nh_attention'] if 'cascading_nh_attention' in self.model_settings.keys() else True
 
         for _ in range(self.model_settings['n_layers']):
 
             self.decomp_layers.append(decomp_layer_angular_embedding(self.global_levels, grid_layers, self.model_settings))
 
             self.processing_layers.append(processing_layer(self.global_levels, grid_layers, self.model_settings, mode=processing_mode))
-            self.cascading_layers.append(cascading_layer_reduction(self.global_levels, grid_layers, self.model_settings, reduction=reduction_mode, nh_attention=True))
+            self.cascading_layers.append(cascading_layer_reduction(self.global_levels, grid_layers, self.model_settings, reduction=reduction_mode, nh_attention=cascading_nh_attention))
 
         self.multi_level_output = self.model_settings["n_grid_levels_out"]>1
         if self.multi_level_output:
