@@ -553,7 +553,7 @@ class input_layer_simple(nn.Module):
         self.v_projection = nn.Linear(len(model_hparams['variables_source']['cell']), model_hparams['model_dim']) 
 
 
-    def forward(self, x, drop_mask=None):    
+    def forward(self, x):    
         
         b,n,_,f = x.shape
         
@@ -1911,8 +1911,10 @@ class ICON_Transformer(nn.Module):
 
         if 'input_learned' in self.model_settings.keys() and self.model_settings['input_learned']:
             self.input_layer = input_projection_layer(input_mapping['cell']['cell'], input_in_range['cell']['cell'], input_coordinates['cell'], grid_layers["0"], self.model_settings)
+            self.input_learned = True
         else:
             self.input_layer = input_layer_simple(self.model_settings)
+            self.input_learned = False
 
 
         #self.reduction_layer = multi_grid_channel_attention(len(self.global_levels), self.model_settings, chunks=8, output_reduction=True)
@@ -2005,8 +2007,10 @@ class ICON_Transformer(nn.Module):
         else:
             indices_layers = dict(zip(self.global_levels,[self.get_global_indices_local(indices_batch_dict['sample'], indices_batch_dict['sample_level'], global_level) for global_level in self.global_levels]))
         
-
-        x, drop_mask = self.input_layer(x['cell'], indices_layers[0] ,drop_mask=drop_mask)
+        if self.input_learned:
+            x, drop_mask = self.input_layer(x['cell'], indices_layers[0] ,drop_mask=drop_mask)
+        else:
+            x = self.input_layer(x['cell'])
 
         x_levels, drop_mask_levels = self.initial_decomp_layer(x, indices_layers, drop_mask=drop_mask)
 
