@@ -2072,7 +2072,7 @@ class ICON_Transformer(nn.Module):
         indices_batches = indices.split(batch_size, dim=0)
 
         sample_id = 0
-        outputs = []
+        outputs = [[] for _ in range(self.model_settings['n_grid_levels'])]
         for indices_batch in indices_batches:
             sample_idx_min = (sample_id) * (batch_size)
 
@@ -2081,7 +2081,7 @@ class ICON_Transformer(nn.Module):
             sample_indices = torch.arange(sample_idx_min, sample_idx_min + (len(indices_batch)))
 
             indices_batch_dict = {'global_cell': indices_batch,
-                    'local_cell': indices_batch // 4**self.model_settings['global_level_start'],
+                    'local_cell': indices_batch,
                         'sample': sample_indices,
                         'sample_level': sample_lvl* torch.ones((sample_indices.shape[0]), dtype=torch.int)}
             
@@ -2090,26 +2090,18 @@ class ICON_Transformer(nn.Module):
             with torch.no_grad():
                 output = self(data, indices_batch_dict=indices_batch_dict)
 
-            output = normalizer(output, self.model_settings["variables_target"], denorm=True)
-            outputs.append(output)
+            for k, x_lvl in enumerate(output['x']):
+                x_lvl = normalizer({'cell': x_lvl}, self.model_settings["variables_target"], denorm=True)
+                outputs[k].append(x_lvl['cell'])
+
             sample_id+=1
         
-        outputs_all = {}
-        for output in  outputs:
-            for key, output_batch in output.items():
-                if key in outputs_all.keys():
-                    outputs_all[key].append(output_batch)
-                else:
-                    outputs_all[key]= [output_batch]
-
-        outputs = outputs_all
-
-        for key, outputs in  outputs.items():
-            outputs_all[key] = torch.concat(outputs, dim=0)
-
-        #output = grid_dict_to_var_dict(outputs_all, self.model_settings["variables_target"])
+        output_lvls = []
+        for output_lvl in outputs:
+           output_lvls.append(torch.concat(output_lvl, dim=0))
         
-        return outputs_all
+        output_lvls = torch.stack(output_lvls, dim=0)
+        return output_lvls
 
 
     def get_data_from_ds(self, ds, ts, variables_dict, global_level_start, global_indices):
@@ -2124,7 +2116,7 @@ class ICON_Transformer(nn.Module):
 
             data_g = torch.stack(data_g, dim=-1)
 
-            indices = self.input_layers[key].input_mapping[global_indices // 4**global_level_start]
+            indices = global_indices
 
             data_g = data_g[indices]
             data_g = data_g.view(indices.shape[0], indices.shape[1], -1, len(variables))
