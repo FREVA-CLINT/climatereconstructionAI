@@ -1625,8 +1625,8 @@ class projection_layer_learned_cont(nn.Module):
         n_out = pos_embeddings_out.shape[-2]
         
         if mask is not None:
-            pos_embeddings_in[mask] = float("-inf")
-        
+            pos_embeddings_in[mask] = -1e30 if pos_embeddings_in.dtype == torch.float32 else -1e4
+
         pos_embeddings_out = pos_embeddings_out.view(b, n_in, -1, f)
         
         weights = pos_embeddings_in.unsqueeze(dim=-3) * pos_embeddings_out.unsqueeze(dim=-2)
