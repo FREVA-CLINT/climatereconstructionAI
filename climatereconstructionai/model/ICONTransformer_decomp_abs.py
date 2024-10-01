@@ -1993,7 +1993,7 @@ class ICON_Transformer(nn.Module):
             self.check_pretrained(log_dir_check=self.model_settings['pretrained_pos_embeddings_path'], strict=False, match_list='pos_embedder')
 
         if "pretrained_model_wo_input" in self.model_settings.keys():
-            self.check_pretrained(log_dir_check=self.model_settings['pretrained_model_wo_input'], strict=False, match_list='pos_embedder', not_match='input')
+            self.check_pretrained(log_dir_check=self.model_settings['pretrained_model_wo_input'], strict=False, not_match='input')
 
         self.trained_iterations = trained_iterations
 
@@ -2057,7 +2057,12 @@ class ICON_Transformer(nn.Module):
         else:
             return output
 
-    
+ #  def precompute_distances(self):
+ #       self.eval()
+
+ #       with torch.no_grad():
+
+
     #currently cell only
     
     def apply_on_nc(self, ds, ts, sample_lvl=6, batch_size=8):
@@ -2125,7 +2130,7 @@ class ICON_Transformer(nn.Module):
 
         return sampled_data        
 
-    def get_grid_mappings(self, mgrid_0_coords):
+    def get_grid_mappings(self, mgrid_coords_input, mgrid_coords_output):
         
         indices_path = os.path.join(self.model_settings["model_dir"],"indices_data.pickle")
 
@@ -2136,7 +2141,7 @@ class ICON_Transformer(nn.Module):
                                         search_raadius=self.model_settings['search_raadius'], 
                                         max_nh=self.model_settings['nh_input'], 
                                         lowest_level=0,
-                                        coords_icon=mgrid_0_coords,
+                                        coords_icon=mgrid_coords_input,
                                         scale_input = self.scale_input,
                                         periodic_fov= self.model_settings['clon_fov'] if ('input_periodicty' in self.model_settings.keys() and self.model_settings['input_periodicty']) else None
                                         )
@@ -2147,7 +2152,7 @@ class ICON_Transformer(nn.Module):
                                         max_nh=1, 
                                         lowest_level=0,
                                         reverse_last=False,
-                                        coords_icon=mgrid_0_coords,
+                                        coords_icon=mgrid_coords_output,
                                         scale_input = self.scale_output,
                                         periodic_fov= self.model_settings['clon_fov'] if ('input_periodicty' in self.model_settings.keys() and self.model_settings['input_periodicty']) else None
                                         )
