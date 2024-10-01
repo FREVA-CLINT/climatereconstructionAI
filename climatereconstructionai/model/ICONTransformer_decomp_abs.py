@@ -291,7 +291,7 @@ class multi_grid_channel_attention(nn.Module):
 
 
 class multi_grid_attention(nn.Module):
-    def __init__(self, projection_level, grid_layers, model_hparams, nh_attention=False, input_aggregation='concat', output_projection_overlap=False) -> None: 
+    def __init__(self, projection_level, grid_layers, model_hparams, nh_attention=False, input_aggregation='concat', output_projection_overlap=False, projection_mode='') -> None: 
         super().__init__()
         
         # with interpolation to lowest grid
@@ -301,7 +301,7 @@ class multi_grid_attention(nn.Module):
         ff_dim = model_dim
         n_heads = model_hparams['n_heads']
         embedding_dim = model_hparams['pos_emb_dim']
-        projection_mode = model_hparams['mga_projection_mode']
+        #projection_mode = model_hparams['mga_projection_mode']
 
         self.projection_level = projection_level
         self.projection_grid_layer = grid_layers[projection_level]
@@ -455,12 +455,11 @@ class multi_grid_attention(nn.Module):
             
             # should be just dependend on the different shapes
 
-            if isinstance(self.projection_layers[i], nn.Identity):
-                x = x.unsqueeze(dim=-2).repeat_interleave(n_proj//n, dim=-2)
-            else:
-               # x = self.projection_layers[i](x, indices_grid_layers[int(self.grid_levels[i])], indices_grid_layers[int(self.projection_level)], batch_dict)
-                x = self.projection_layers[i](x, indices_grid_layers[int(self.grid_levels[i])], indices_grid_layers[int(self.projection_level)], batch_dict)
-
+            if n_proj//n > 1:
+                if isinstance(self.projection_layers[i], nn.Identity):
+                    x = x.unsqueeze(dim=-2).repeat_interleave(n_proj//n, dim=-2)
+                else:
+                    x = self.projection_layers[i](x, indices_grid_layers[int(self.grid_levels[i])], indices_grid_layers[int(self.projection_level)], batch_dict)
 
             x = x.view(b,-1,f)
             
@@ -687,7 +686,7 @@ class shifting_mga_layers(nn.Module):
 
 
 class cascading_layer_reduction(nn.Module):
-    def __init__(self, global_levels, grid_layers, model_hparams, input_aggregation='concat', output_projection_overlap=True, reduction='sum', nh_attention=False) -> None: 
+    def __init__(self, global_levels, grid_layers, model_hparams, input_aggregation='concat', output_projection_overlap=True, reduction='sum', nh_attention=False, projection_mode='') -> None: 
         super().__init__()
         
         #to do: implement grid window + output projections
@@ -712,7 +711,7 @@ class cascading_layer_reduction(nn.Module):
             grid_layers_ = dict(zip(grid_layers_keys, [grid_layers[key] for key in grid_layers_keys]))
 
             self.mga_layers_levels[str(global_level)] = nn.ModuleList(
-                [multi_grid_attention(str(global_level), grid_layers_, model_hparams, input_aggregation=input_aggregation, output_projection_overlap=output_projection_overlap, nh_attention=nh_attention) for _ in range(model_hparams['n_processing_layers'])]
+                [multi_grid_attention(str(global_level), grid_layers_, model_hparams, input_aggregation=input_aggregation, output_projection_overlap=output_projection_overlap, nh_attention=nh_attention, projection_mode=projection_mode) for _ in range(model_hparams['n_processing_layers'])]
                 )
             
             if reduction != 'sum' and n > 0:
@@ -750,7 +749,7 @@ class cascading_layer_reduction(nn.Module):
 
 
 class cascading_layer(nn.Module):
-    def __init__(self, global_levels, grid_layers, model_hparams, input_aggregation='concat', output_projection_overlap=False, nh_attention=False) -> None: 
+    def __init__(self, global_levels, grid_layers, model_hparams, input_aggregation='concat', output_projection_overlap=False, nh_attention=False, projection_mode='') -> None: 
         super().__init__()
         
         #to do: implement grid window + output projections
@@ -773,7 +772,7 @@ class cascading_layer(nn.Module):
 
 
             self.mga_layers_levels[str(global_level)] = nn.ModuleList(
-                [multi_grid_attention(str(global_level), grid_layers_, model_hparams, input_aggregation=input_aggregation, output_projection_overlap=output_projection_overlap, nh_attention=nh_attention) for _ in range(model_hparams['n_processing_layers'])]
+                [multi_grid_attention(str(global_level), grid_layers_, model_hparams, input_aggregation=input_aggregation, output_projection_overlap=output_projection_overlap, nh_attention=nh_attention, projection_mode=projection_mode) for _ in range(model_hparams['n_processing_layers'])]
                 )
             
                         
@@ -1948,23 +1947,25 @@ class ICON_Transformer(nn.Module):
 
         self.initial_decomp_layer = decomp_layer_angular_embedding(self.global_levels, grid_layers, self.model_settings)
 
-        self.fill_layer = cascading_layer(self.global_levels, grid_layers, self.model_settings, input_aggregation='concat', output_projection_overlap=False) # to fill values
+        self.fill_layer = cascading_layer(self.global_levels, grid_layers, self.model_settings, input_aggregation='concat', output_projection_overlap=False, projection_mode='learned_cont') # to fill values
 
         processing_mode = self.model_settings['processing_mode'] if 'processing_mode' in self.model_settings.keys() else 'ca'
         reduction_mode = self.model_settings['reduction_mode'] if 'reduction_mode' in self.model_settings.keys() else 'ca'
         cascading_nh_attention = self.model_settings['cascading_nh_attention'] if 'cascading_nh_attention' in self.model_settings.keys() else True
+        projection_mode_output = self.model_settings['projection_mode_output'] if 'projection_mode_output' in self.model_settings.keys() else 'learned_cont'
+        projection_mode_processing = self.model_settings['projection_mode_processing'] if 'projection_mode_processing' in self.model_settings.keys() else 'learned_cont'
 
         for _ in range(self.model_settings['n_layers']):
 
             self.decomp_layers.append(decomp_layer_angular_embedding(self.global_levels, grid_layers, self.model_settings))
 
             self.processing_layers.append(processing_layer(self.global_levels, grid_layers, self.model_settings, mode=processing_mode))
-            self.cascading_layers.append(cascading_layer_reduction(self.global_levels, grid_layers, self.model_settings, reduction=reduction_mode, nh_attention=cascading_nh_attention))
+            self.cascading_layers.append(cascading_layer_reduction(self.global_levels, grid_layers, self.model_settings, reduction=reduction_mode, nh_attention=cascading_nh_attention, projection_mode=projection_mode_processing))
 
         self.multi_level_output = self.model_settings["n_grid_levels_out"]>1
         if self.multi_level_output:
             self.output_decomp_layer = decomp_layer_angular_embedding(self.global_levels, grid_layers, self.model_settings)
-            self.output_projection_layer = cascading_layer(self.global_levels, grid_layers, self.model_settings, input_aggregation='concat', output_projection_overlap=False, nh_attention=True)
+            self.output_projection_layer = cascading_layer(self.global_levels, grid_layers, self.model_settings, input_aggregation='concat', output_projection_overlap=False, nh_attention=True, projection_mode=projection_mode_output)
             self.output_layer = output_layer(output_mapping['cell']['cell'], output_coordinates['cell'], self.global_levels, grid_layers, self.model_settings, mode='simple')
 
             #alternative:
