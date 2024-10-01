@@ -1907,7 +1907,7 @@ class ICON_Transformer(nn.Module):
 
         self.global_levels.sort(reverse=True)
         
-        input_mapping, input_in_range, input_coordinates, output_mapping, output_in_range, output_coordinates = self.get_grid_mappings(mgrids[0]['coords'])
+        input_mapping, input_in_range, input_coordinates, output_mapping, output_in_range, output_coordinates = self.get_grid_mappings(mgrids[0]['coords'],mgrids[0]['coords'])
 
         if 'input_learned' in self.model_settings.keys() and self.model_settings['input_learned']:
             self.input_layer = input_projection_layer(input_mapping['cell']['cell'], input_in_range['cell']['cell'], input_coordinates['cell'], grid_layers["0"], self.model_settings)
