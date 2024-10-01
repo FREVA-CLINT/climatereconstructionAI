@@ -267,8 +267,8 @@ class multi_grid_channel_attention(nn.Module):
         x = torch.concat(xs,dim=-1)
 
         b,n,f = x.shape
-        x = x.reshape(b, n, self.chunks, -1)
-        x = x.reshape(b*n, self.chunks, -1)
+        x = x.view(b, n, self.chunks, -1)
+        x = x.view(b*n, self.chunks, -1)
 
         att_out = self.mha_attention(q=x, k=x, v=x) 
 
@@ -1196,7 +1196,7 @@ class channel_attention(nn.Module):
 
         x = x_level.view(b*n,f)
 
-        x = x.reshape(b*n,self.n_chunks,-1)
+        x = x.view(b*n,self.n_chunks,-1)
 
         x = self.norm(x)
 
@@ -1249,7 +1249,7 @@ class nh_channel_attention(nn.Module):
 
         b,n,f = x_nh.shape
     
-        x_nh = x_nh.reshape(b*n,self.n_chunks,-1)
+        x_nh = x_nh.view(b*n,self.n_chunks,-1)
         
         x_nh = self.norm(x_nh)
 
@@ -1310,7 +1310,7 @@ class nh_vm_channel_attention(nn.Module):
         b,n,nd,nvm,f = x_vm.shape
         x_vm = x_vm.view(b*n,nd,nvm,f)
 
-        x_vm = x_vm.reshape(b*n,nd,nvm,-1,self.n_chunks).reshape(b*n,-1,self.n_chunks).transpose(-1,-2)
+        x_vm = x_vm.view(b*n,nd,nvm,-1,self.n_chunks).view(b*n,-1,self.n_chunks).transpose(-1,-2)
         
         x_vm = self.norm(x_vm)
         x_vm = self.MHA(q=x_vm, k=x_vm, v=x_vm)
@@ -1729,7 +1729,7 @@ class projection_layer_vm(nn.Module):
         if coords_output is None:
             output_coords = self.grid_layer_out.get_coordinates_from_grid_indices(indices_layers_out)
 
-        output_coords = output_coords.reshape(2, output_coords.shape[1], -1, 4**self.global_level_diff)
+        output_coords = output_coords.view(2, output_coords.shape[1], -1, 4**self.global_level_diff)
       
         x = self.grid_layer_in.get_projection_cross_vm(x_level_in, indices_layers_in, batch_dict, output_coords, self.simga_d, self.kappa_vm) 
         
@@ -1754,7 +1754,7 @@ class projection_layer_n(nn.Module):
         if coords_output is None:
             output_coords = self.grid_layer_out.get_coordinates_from_grid_indices(indices_layers_out)
 
-        output_coords = output_coords.reshape(2, output_coords.shape[1], -1, 4**self.global_level_diff)
+        output_coords = output_coords.view(2, output_coords.shape[1], -1, 4**self.global_level_diff)
       
         x = self.grid_layer_in.get_projection_cross_n(x_level_in, indices_layers_in, batch_dict, output_coords, self.simga, self.simga) 
         
@@ -1810,14 +1810,14 @@ class projection_layer_vm_learned(nn.Module):
         direction = torch.matmul(direction_weights, torch.cos(self.phi_0[0].view(-1,1)))
         direction = torch.acos(direction) + torch.pi/2
 
-        x = (x * direction_weights.reshape(b*n,1,nvm,f)).sum(dim=-2)
+        x = (x * direction_weights.view(b*n,1,nvm,f)).sum(dim=-2)
 
         wl = F.softmax(x, dim=-2) * self.dists_0[:,0].view(-1,1)
         wl = self.sigmoid(self.proj_wl(wl.transpose(-1,-2))) + self.min_val
 
         amp = self.proj_amp((x - x_offset).transpose(-1,-2))
 
-        output_coords = output_coords.reshape(2, output_coords.shape[1], -1, 4**self.global_level_diff)
+        output_coords = output_coords.view(2, output_coords.shape[1], -1, 4**self.global_level_diff)
 
         distances, phis = get_relative_positions(output_coords[:,:,:,0], output_coords, polar=True)
         distances = distances.transpose(-1,-2)
@@ -2067,7 +2067,7 @@ class ICON_Transformer(nn.Module):
         if isinstance(ds, str):
             ds = xr.open_dataset(ds)
         
-        indices = self.global_indices.reshape(-1, 4**sample_lvl)
+        indices = self.global_indices.view(-1, 4**sample_lvl)
 
         indices_batches = indices.split(batch_size, dim=0)
 
@@ -2204,18 +2204,18 @@ class ICON_Transformer(nn.Module):
 
     def get_global_indices_global(self, batch_sample_indices, sampled_level_fov, global_level):
 
-        global_indices_sampled  = self.global_indices.reshape(-1, 4**sampled_level_fov[0])[batch_sample_indices]
+        global_indices_sampled  = self.global_indices.view(-1, 4**sampled_level_fov[0])[batch_sample_indices]
         
         return self.get_global_indices_relative(global_indices_sampled, global_level)
     
     def get_global_indices_local(self, batch_sample_indices, sampled_level_fov, global_level):
 
-        global_indices_sampled  = self.global_indices.reshape(-1, 4**sampled_level_fov[0])[batch_sample_indices]
+        global_indices_sampled  = self.global_indices.view(-1, 4**sampled_level_fov[0])[batch_sample_indices]
         global_indices_sampled = self.get_global_indices_relative(global_indices_sampled, global_level)    
         return global_indices_sampled // 4**global_level
     
     def get_global_indices_relative(self, sampled_indices, level):
-        return sampled_indices.reshape(sampled_indices.shape[0], -1, 4**level)[:,:,0]
+        return sampled_indices.view(sampled_indices.shape[0], -1, 4**level)[:,:,0]
     
 
     def localize_global_indices(self, sample_indices_dict, level):
@@ -2242,7 +2242,7 @@ class ICON_Transformer(nn.Module):
         return adjc, mask
 
     def get_coordinates_level(self, global_level):
-        indices = self.global_indices.reshape(-1,4**int(global_level))[:,0]
+        indices = self.global_indices.view(-1,4**int(global_level))[:,0]
         coords = self.cell_coords_global[:,indices]
         return coords
 
@@ -2362,7 +2362,7 @@ def gather_nh_data(x, local_cell_indices_nh, batch_sample_indices, sampled_level
 
     local_cell_indices_nh_batch = local_cell_indices_nh - (batch_sample_indices*4**(sampled_level - global_level)).view(-1,1,1)
 
-    return torch.gather(x.reshape(b,-1,e),1, index=local_cell_indices_nh_batch.reshape(b,-1,1).repeat(1,1,e)).reshape(b,n,nh,e)
+    return torch.gather(x.view(b,-1,e),1, index=local_cell_indices_nh_batch.view(b,-1,1).repeat(1,1,e)).view(b,n,nh,e)
 
 def getint(name):
     basename = name.partition('.')
