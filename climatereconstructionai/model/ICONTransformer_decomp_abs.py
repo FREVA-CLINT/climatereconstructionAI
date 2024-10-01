@@ -1916,6 +1916,9 @@ class ICON_Transformer(nn.Module):
         
         input_mapping, input_in_range, input_coordinates, output_mapping, output_in_range, output_coordinates = self.get_grid_mappings(mgrids[0]['coords'],mgrids[0]['coords'])
 
+        self.input_mapping = input_mapping
+        #self.register_buffer('input_in_range', input_in_range['cell']['cell'], persistent=False)
+
         if 'input_learned' in self.model_settings.keys() and self.model_settings['input_learned']:
             self.input_layer = input_projection_layer(input_mapping['cell']['cell'], input_in_range['cell']['cell'], input_coordinates['cell'], grid_layers["0"], self.model_settings)
             self.input_learned = True
@@ -2132,7 +2135,7 @@ class ICON_Transformer(nn.Module):
 
             indices = global_indices
 
-            data_g = data_g[indices]
+            data_g = data_g[self.input_mapping['cell']['cell'][indices]]
             data_g = data_g.view(indices.shape[0], indices.shape[1], -1, len(variables))
 
             sampled_data[key] = data_g
