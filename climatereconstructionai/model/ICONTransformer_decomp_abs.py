@@ -574,11 +574,17 @@ class input_layer_simple(nn.Module):
 class input_projection_layer(nn.Module):
     def __init__(self, mapping, in_range_mask, coordinates, projection_grid_layer: grid_layer, model_hparams) -> None: 
         super().__init__()
+        
+        mask_out_of_range = model_hparams['mask_out_of_range'] if 'mask_out_of_range' in model_hparams.keys() else False
 
         self.register_buffer("mapping", mapping, persistent=False)
-        self.register_buffer("in_range_mask", ~in_range_mask, persistent=False)
         self.register_buffer("coordinates", coordinates, persistent=False)
-
+        
+        if mask_out_of_range:
+            self.register_buffer("out_of_range_mask", ~in_range_mask.bool().squeeze(), persistent=False)
+        else:
+            self.register_buffer("out_of_range_mask", torch.ones_like(in_range_mask.squeeze(), dtype=bool), persistent=False)
+            
         model_dim = model_hparams['model_dim']
         pos_emb_calc = model_hparams['pos_emb_calc']
         emb_table_bins = model_hparams['emb_table_bins']
@@ -609,6 +615,8 @@ class input_projection_layer(nn.Module):
         x = sequenize(x, max_seq_level=self.input_seq_level)
         indices = sequenize(indices_grid_layer, max_seq_level=self.input_seq_level)
         drop_mask = sequenize(drop_mask, max_seq_level=self.input_seq_level)
+
+        drop_mask = torch.logical_or(self.out_of_range_mask[indices], drop_mask)
 
         coords_input = self.coordinates[:,self.mapping[indices]]
 
