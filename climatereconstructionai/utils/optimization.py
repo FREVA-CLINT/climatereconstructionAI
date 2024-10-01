@@ -398,15 +398,15 @@ class loss_calculator(nn.Module):
         total_loss = 0
 
 
-        if self.mask_out_of_range:
-            if self.multi_gpus:
-                in_range_mask = model.module.output_in_range[source_indices['global_cell']]
-            elif 'global_cell' in model.__dict__['_buffers'].keys():
-                in_range_mask = model.output_in_range[source_indices['global_cell']]
-            else:
-                in_range_mask = None
-        else:
-            in_range_mask = None
+       # if self.mask_out_of_range:
+       #     if self.multi_gpus:
+       #         in_range_mask = model.module.output_in_range[source_indices['global_cell']]
+       #     elif 'global_cell' in model.__dict__['_buffers'].keys():
+       #         in_range_mask = model.output_in_range[source_indices['global_cell']]
+       #     else:
+       #         in_range_mask = None
+       # else:
+        in_range_mask = None
 
         for loss_type, loss_fcn in self.loss_fcn_dict.items():
             
