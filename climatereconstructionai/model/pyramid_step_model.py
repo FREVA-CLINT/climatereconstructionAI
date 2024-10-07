@@ -415,10 +415,10 @@ class pyramid_step_model(nn.Module):
         depths_patch_ids = list(itertools.product(*(depths_to_process, patch_ids)))
 
         depths_patch_ids = split_list(depths_patch_ids, n_procs)
-
+        
         depths_patch_ids_rank = depths_patch_ids[rank]
 
-        print(f'Correcting {len(depths_patch_ids)} patches on rank {rank}')
+        print(f'Correcting {len(depths_patch_ids_rank)} patches on rank {rank}')
 
         results = self.predict_depth_patches(ds, ds_target, patches, depths_patch_ids_rank, ts, device='cpu')
         
@@ -431,7 +431,11 @@ class pyramid_step_model(nn.Module):
             print(f'Got predictions from {len(results)} patches. Collecting data ...')
 
             output_global = dict(zip(var_spatial_dims.keys(), [torch.tensor(ds_target[variable][0].values).squeeze().to(device) for variable in var_spatial_dims.keys()]))
-            output_global_std = {}
+
+            if self.model_settings['gauss']:
+                output_global_std = dict(zip(var_spatial_dims.keys(), [torch.tensor(ds_target[variable][0].values).squeeze().to(device) for variable in var_spatial_dims.keys()]))
+            else:
+                output_global_std = {}
 
             for result in results:
                 if result is not None:
@@ -440,6 +444,9 @@ class pyramid_step_model(nn.Module):
                     for variable in output.keys():
                         indices = spatial_dims_patches_target[var_spatial_dims[variable]][patch_id_idx]
                         output_global[variable][depth, indices] = output[variable][0,0,0]
+
+                        if len(output_global_std) > 0:
+                            output_global_std[variable][depth, indices] = output[variable][0,0,1]
                         
             return output_global, output_global_std
         else:
