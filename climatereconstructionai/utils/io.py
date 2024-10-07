@@ -46,6 +46,12 @@ def load_model(ckpt_dict, model, optimizer=None, label=None, strict=False, match
         for key, value in ckpt_dict[label]["model"].items():
             if ((not_match is not None) and (not_match not in key)) or match_list in key:
                 ckpt_dict_match[key]=value
+
+    elif not_match is not None:
+        ckpt_dict_match = {}
+        for key, value in ckpt_dict[label]["model"].items():
+            if (not_match not in key):
+                ckpt_dict_match[key]=value
     else:
         ckpt_dict_match = ckpt_dict[label]["model"]
 
