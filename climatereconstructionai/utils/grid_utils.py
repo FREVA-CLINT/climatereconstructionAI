@@ -804,12 +804,18 @@ class grid_interpolator(nn.Module):
 
 def get_distance_angle(lon1, lat1, lon2, lat2, base="polar", periodic_fov=None):
 
-    d_lons = distance_on_sphere(lon1, lat1, lon2, lat1)
-    d_lats = distance_on_sphere(lon1, lat1, lon1, lat2)
+
+    d_lons =  2*torch.arcsin(torch.cos(lat1)*torch.sin(torch.abs(lon2-lon1)/2))
+
+    d_lats = (lat2-lat1).abs() 
+
+
+    #d_lons = distance_on_sphere(lon1, lat1, lon2, lat1)
+    #d_lats = distance_on_sphere(lon1, lat1, lon1, lat2)
     
 
     sgn = torch.sign(lat2-lat1)
-    sgn[(d_lats ).abs()/torch.pi>1] = sgn[(d_lats).abs()/torch.pi>1]*-1
+    sgn[(d_lats).abs()/torch.pi>1] = sgn[(d_lats).abs()/torch.pi>1]*-1
     d_lats = d_lats*sgn
 
     sgn = torch.sign(lon2-lon1)

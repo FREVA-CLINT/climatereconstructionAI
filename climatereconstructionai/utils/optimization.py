@@ -344,9 +344,9 @@ class TVLoss(nn.Module):
             if lambda_ > 0:
                 
                 if multi_gpu:
-                    nh_values, _ ,nh_mask  = model.module.decomp_layer.grid_layers[str(0)].get_nh(output_levels["x"][int(level)], source_indices["global_cell"], source_indices)
+                    nh_values, _ ,nh_mask  = model.module.initial_decomp_layer.grid_layers[str(0)].get_nh(output_levels["x"][int(level)], source_indices["global_cell"], source_indices)
                 else:
-                    nh_values, _ ,nh_mask  = model.decomp_layer.grid_layers[str(0)].get_nh(output_levels["x"][int(level)], source_indices["global_cell"], source_indices)
+                    nh_values, _ ,nh_mask  = model.initial_decomp_layer.grid_layers[str(0)].get_nh(output_levels["x"][int(level)], source_indices["global_cell"], source_indices)
 
                 nh_values_error = ((nh_values[:,:,[0]] - nh_values[:,:,1:4]).abs()).sum(dim=[-2])
 
