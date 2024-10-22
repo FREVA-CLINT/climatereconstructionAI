@@ -506,30 +506,11 @@ class multi_grid_projection(nn.Module):
         for k, cross_level in enumerate(cross_levels):
             cross_level = str(cross_level)
 
-            if projection_mode == 'vm' and cross_level != projection_level:
-                self.projection_layers.append(projection_layer_vm(model_hparams, grid_layers[cross_level].mean_dist, uniform_simga=False))
-
-            elif projection_mode == 'n' and cross_level != projection_level:
-                self.projection_layers.append(projection_layer_n(model_hparams,grid_layers[cross_level].max_dist, grid_layers[cross_level].min_dist))
-
-            elif projection_mode == 'n_ca' and cross_level != projection_level:
-                self.projection_layers.append(projection_layer_n_multi_ca(model_hparams,grid_layers[cross_level].mean_dist, self.projection_grid_layer.min_dist, kernel_dim=8, n_chunks=4))
-
-            elif projection_mode == 'n_ll_ca' and cross_level != projection_level:
-                self.projection_layers.append(projection_layer_n_lon_lat_multi_ca(model_hparams,grid_layers[cross_level].mean_dist, self.projection_grid_layer.min_dist, kernel_dim=4, n_chunks=8))
-            
-            elif projection_mode == 'vm_ca' and cross_level != projection_level:
-                self.projection_layers.append(projection_layer_VM_multi_ca(model_hparams, grid_layers[cross_level].mean_dist, self.projection_grid_layer.min_dist, kernel_dim=4, n_chunks=8))
-
-            elif projection_mode == 'learned_cont' and cross_level != projection_level:
-                self.projection_layers.append(projection_layer_learned_cont(model_hparams))
-
-            elif projection_mode == 'mha' and cross_level != projection_level:
-                self.projection_layers.append(projection_layer_mha(model_hparams, mean_res=False))
-                
+            if cross_level != projection_level:
+                self.projection_layers.append(get_projection_layer(projection_mode, model_hparams, self.projection_grid_layer))
             else:
                 self.projection_layers.append(nn.Identity())
-                    
+                   
 
 
     def forward(self, x_levels, drop_masks_level, indices_grid_layers, batch_dict):
@@ -560,7 +541,10 @@ class multi_grid_projection(nn.Module):
                                                         sample_dict=batch_dict,
                                                         nh_projection=True,
                                                         mask=drop_mask_level)
-                        drop_mask_proj_level = torch.logical_and(drop_mask_level.view(drop_mask_proj_level.shape), drop_mask_proj_level)
+                        if drop_mask_proj_level is not None:
+                            drop_mask_proj_level = torch.logical_and(drop_mask_level.view(drop_mask_proj_level.shape), drop_mask_proj_level)
+                        else:
+                            drop_mask_proj_level = drop_mask_level.view(x.shape[0],-1,1)
                 x = x.view(b,-1,f)
                 
                 x_levels_output[int(self.projection_level)].append(x)
@@ -645,27 +629,8 @@ class multi_grid_spatial_attention_ds(nn.Module):
         for k, cross_level in enumerate(cross_levels):
             cross_level = str(cross_level)
 
-            if projection_mode == 'vm' and cross_level != projection_level:
-                self.projection_layers.append(projection_layer_vm(model_hparams, grid_layers[cross_level].max_dist, uniform_simga=False))
-
-            elif projection_mode == 'n' and cross_level != projection_level:
-                self.projection_layers.append(projection_layer_n(model_hparams, grid_layers[cross_level].max_dist, grid_layers[cross_level].min_dist))
-
-            elif projection_mode == 'n_ca' and cross_level != projection_level:
-                self.projection_layers.append(projection_layer_n_multi_ca(model_hparams, grid_layers[cross_level].mean_dist, self.projection_grid_layer.min_dist, kernel_dim=4, n_chunks=4))
-            
-            elif projection_mode == 'vm_ca' and cross_level != projection_level:
-                self.projection_layers.append(projection_layer_VM_multi_ca(model_hparams, grid_layers[cross_level].mean_dist, self.projection_grid_layer.min_dist, kernel_dim=4, n_chunks=8))
-
-            elif projection_mode == 'n_ll_ca' and cross_level != projection_level:
-                self.projection_layers.append(projection_layer_n_lon_lat_multi_ca(model_hparams,grid_layers[cross_level].mean_dist, self.projection_grid_layer.min_dist, kernel_dim=4, n_chunks=8))
-
-            elif projection_mode == 'learned_cont' and cross_level != projection_level:
-                self.projection_layers.append(projection_layer_learned_cont(model_hparams))
-
-            elif projection_mode == 'mha' and cross_level != projection_level:
-                self.projection_layers.append(projection_layer_mha(model_hparams, mean_res=False))
-
+            if cross_level != projection_level:
+                self.projection_layers.append(get_projection_layer(projection_mode, model_hparams, self.projection_grid_layer))
             else:
                 self.projection_layers.append(nn.Identity())
                     
@@ -823,6 +788,7 @@ class multi_grid_spatial_attention_ds(nn.Module):
     
 
 
+
 class input_projection_layer(nn.Module):
     def __init__(self, mapping, in_range_mask, coordinates, projection_grid_layer: grid_layer, model_hparams, projection_mode='learned_cont') -> None: 
         super().__init__()
@@ -849,22 +815,7 @@ class input_projection_layer(nn.Module):
         model_dim = model_hparams['model_dim']
 
         if int(projection_grid_layer.global_level)>0:
-
-            if projection_mode == 'vm':
-                self.projection_layer = (projection_layer_vm(model_hparams, projection_grid_layer.max_dist, projection_grid_layer.min_dist, uniform_simga=False))
-
-            elif projection_mode == 'n':
-                self.projection_layer = (projection_layer_n(model_hparams, projection_grid_layer.max_dist, projection_grid_layer.min_dist, kernel_dim=4))
-
-            elif projection_mode == 'n_ca':
-                self.projection_layer = (projection_layer_n_multi_ca(model_hparams, projection_grid_layer.max_dist, projection_grid_layer.min_dist, kernel_dim=4, n_chunks=4))
-            
-            elif projection_mode == 'vm_ca':
-                self.projection_layer = (projection_layer_VM_multi_ca(model_hparams, projection_grid_layer.max_dist, projection_grid_layer.min_dist, kernel_dim=4, n_chunks=8))
-
-            elif projection_mode == 'learned_cont':
-                self.projection_layer = (projection_layer_learned_cont(model_hparams))
-
+            self.projection_layer = get_projection_layer(projection_mode, model_hparams, projection_grid_layer)
         else:
             self.projection_layer=nn.Identity()
 
@@ -1257,30 +1208,9 @@ class decomp_layer_diff_(nn.Module):
 
         for global_level in global_levels[:-1]:
             global_level = str(int(global_level))
-
-            if aggregation_fcn == 'vm':
-                self.aggregation_layers[global_level] = projection_layer_vm(model_hparams, grid_layers[global_level].mean_dist, uniform_simga=False)
-
-            elif aggregation_fcn == 'n':
-                self.aggregation_layers[global_level] = (projection_layer_n(model_hparams,grid_layers[global_level].max_dist, grid_layers[global_level].min_dist, kernel_dim=8))
-
-            elif aggregation_fcn == 'n_ca':
-                self.aggregation_layers[global_level] = (projection_layer_n_multi_ca(model_hparams,grid_layers[global_level].mean_dist, grid_layers[global_level].min_dist, kernel_dim=8, n_chunks=4))
-
-
-            elif aggregation_fcn == 'n_ll_ca':
-                self.aggregation_layers[global_level] = (projection_layer_n_lon_lat_multi_ca(model_hparams,grid_layers[global_level].mean_dist, grid_layers[global_level].min_dist, kernel_dim=4, n_chunks=8))
-
-
-            elif aggregation_fcn == 'vm_ca':
-                self.aggregation_layers[global_level] = (projection_layer_VM_multi_ca(model_hparams, grid_layers[global_level].mean_dist, grid_layers[global_level].min_dist, kernel_dim=4, n_chunks=8, residual=True))
-
-
-            elif aggregation_fcn == 'learned_cont':
-                self.aggregation_layers[global_level] = (projection_layer_learned_cont(model_hparams))
-
-            elif aggregation_fcn == 'mha':
-                self.aggregation_layers[global_level] = (projection_layer_mha(model_hparams, mean_res=True))
+            
+            self.aggregation_layers[global_level] = (get_projection_layer(aggregation_fcn, model_hparams, grid_layers[global_level]))
+            
                 
 
             
@@ -1380,6 +1310,10 @@ class processing_layer(nn.Module):
         super().__init__()
 
         output_dim = len(model_hparams['variables_target']['cell'])*(1+model_hparams['var_model'])
+        kernel_dim = 4 if "projection_kernel_dim" not in model_hparams.keys() else model_hparams["projection_kernel_dim"]
+        n_chunks = 8 if "projection_n_chunks" not in model_hparams.keys() else model_hparams["projection_n_chunks"]
+        residual = True if "projection_residual" not in model_hparams.keys() else model_hparams["projection_residual"]
+
         self.var_projection = model_hparams['var_model']
 
         self.global_levels = global_levels
@@ -1394,18 +1328,16 @@ class processing_layer(nn.Module):
 
             if mode == 'spatial_seq':
                 self.processing_layers[global_level] = multi_grid_spatial_attention_ds(global_level, global_level, grid_layers, model_hparams, nh_attention=False, continous_pos_embedding=True)
+
             elif mode == 'spatial_nh':
                 self.processing_layers[global_level] = multi_grid_spatial_attention_ds(global_level, global_level, grid_layers, model_hparams, nh_attention=True, continous_pos_embedding=True)
-            elif mode == 'nh_ca_VM':
-                self.processing_layers[global_level] = projection_layer_VM_multi_ca(model_hparams, grid_layers[global_level].mean_dist, grid_layers[global_level].min_dist, kernel_dim=4, n_chunks=8, residual=False)
-                self.gammas[global_level] = nn.Parameter(torch.ones(model_hparams["model_dim"])*1e-6, requires_grad=True)
 
-            elif mode == 'n_ca':
-                self.processing_layers[global_level] = projection_layer_n(model_hparams, grid_layers[global_level].mean_dist, grid_layers[global_level].min_dist, kernel_dim=4, n_chunks=8)
+            elif mode == 'nh_ca_VM':
+                self.processing_layers[global_level] = projection_layer_VM_multi_ca(model_hparams, grid_layers[global_level].min_dist, grid_layers[global_level].min_dist/2, kernel_dim=kernel_dim, n_chunks=n_chunks, residual=False)
                 self.gammas[global_level] = nn.Parameter(torch.ones(model_hparams["model_dim"])*1e-6, requires_grad=True)
 
             elif mode == 'n_ll_ca':
-                self.processing_layers[global_level] = projection_layer_n_lon_lat_multi_ca(model_hparams, grid_layers[global_level].mean_dist, grid_layers[global_level].min_dist, kernel_dim=4, n_chunks=8)
+                self.processing_layers[global_level] = projection_layer_n_lon_lat_multi_ca(model_hparams, grid_layers[global_level].min_dist, grid_layers[global_level].min_dist/2, kernel_dim=kernel_dim, n_chunks=n_chunks, residual=residual)
                 self.gammas[global_level] = nn.Parameter(torch.ones(model_hparams["model_dim"])*1e-6, requires_grad=True)
 
             elif mode == 'linear':
@@ -1779,13 +1711,7 @@ class output_layer(nn.Module):
         for global_level in global_levels:
             if global_level >0:
                 global_level = str(int(global_level))
-
-                if mode=='learned_cont':
-                    self.projection_layers[global_level] = projection_layer_learned_cont(model_hparams)
-                elif mode=='VM':
-                    self.projection_layers[global_level] = projection_layer_vm(model_hparams, grid_layers[global_level].max_dist)
-                elif mode=='n':
-                    self.projection_layers[global_level] = projection_layer_n(model_hparams, grid_layers[global_level].max_dist)
+                self.projection_layers[global_level] = get_projection_layer(mode, model_hparams, grid_layers[global_level])
             
             self.lin_projection_layers[str(int(global_level))] = nn.Linear(model_hparams['model_dim'], output_dim, bias=False)
 
@@ -1835,8 +1761,38 @@ def get_coordinates_grid_layers(grid_layers, indices, grid_levels=None):
     return coordinates
 
 
+def get_projection_layer(projection_mode, model_hparams, grid_layer):
+
+    kernel_dim = 4 if "projection_kernel_dim" not in model_hparams.keys() else model_hparams["projection_kernel_dim"]
+    n_chunks = 8 if "projection_n_chunks" not in model_hparams.keys() else model_hparams["projection_n_chunks"]
+    residual = True if "projection_residual" not in model_hparams.keys() else model_hparams["projection_residual"]
+    
+    if projection_mode == 'vm':
+        projection_layer = projection_layer_vm(model_hparams, grid_layer.min_dist/2)
+
+    elif projection_mode == 'n':
+        projection_layer = projection_layer_n(model_hparams, grid_layer.min_dist, grid_layer.min_dist/2)
+
+    elif projection_mode == 'n_ca':
+        projection_layer = (projection_layer_n_multi_ca(model_hparams, grid_layer.min_dist, grid_layer.min_dist/2, kernel_dim=kernel_dim, n_chunks=n_chunks, residual=residual))
+    
+    elif projection_mode == 'vm_ca':
+        projection_layer = (projection_layer_VM_multi_ca(model_hparams, grid_layer.min_dist, grid_layer.min_dist/2, kernel_dim=kernel_dim, n_chunks=n_chunks, residual=residual))
+
+    elif projection_mode == 'learned_cont':
+        projection_layer = (projection_layer_learned_cont(model_hparams))
+
+    elif projection_mode == 'n_ll_ca':
+        projection_layer = (projection_layer_n_lon_lat_multi_ca(model_hparams, grid_layer.min_dist, grid_layer.min_dist/2, kernel_dim=kernel_dim, n_chunks=n_chunks, residual=residual))
+
+    elif projection_mode == 'mha':
+        projection_layer = projection_layer_mha(model_hparams, mean_res=False)
+    
+    model_dim_out = model_hparams['model_dim']
+    return projection_layer
+
 class projection_layer(nn.Module):
-    def __init__(self, model_hparams, polar=None, requires_arel_positions=True) -> None: 
+    def __init__(self, model_hparams, polar=None, requires_arel_positions=True, residual=True, channel_attention=True, output_model_dim=None) -> None: 
         super().__init__()
 
         self.periodic_fov = model_hparams['periodic_fov']
@@ -1853,6 +1809,28 @@ class projection_layer(nn.Module):
             self.coord_system = 'polar' if polar else 'cartesian'
         
         self.requires_arel_positions = requires_arel_positions
+
+        if output_model_dim is None:
+            output_model_dim = model_hparams['model_dim']
+
+        '''
+        if channel_attention:
+        
+            self.MHA = helpers.MultiHeadAttentionBlock(
+                mha_dim, model_dim, model_hparams['n_heads'], input_dim=mha_dim, qkv_proj=True
+                )   
+            self.layer_norm = nn.LayerNorm(mha_dim, elementwise_affine=True)
+
+            self.mlp_layer = nn.Sequential(
+                nn.Linear(self.n_chunks*model_dim, model_dim, bias=False),
+                nn.SiLU(),
+                nn.Linear(model_dim, model_dim, bias=False)
+            )
+
+            if residual:
+                self.mlp_norm = nn.LayerNorm(self.n_chunks*model_dim, elementwise_affine=True)
+                self.gamma = nn.Parameter(torch.ones(model_dim)*1e-6, requires_grad=True)
+        '''
 
     def forward(self, 
                 x, 
@@ -1949,32 +1927,39 @@ class projection_layer_learned_cont(projection_layer):
 
 class projection_layer_vm(projection_layer):
     # define as projection_layer
-    def __init__(self, sigma_mean, model_hparams) -> None: 
+    # to be done
+    def __init__(self, model_hparams: dict, dist_min) -> None: 
         super().__init__(model_hparams, polar=True, requires_arel_positions=False)
 
-        self.sigma_d = nn.Parameter(torch.ones(model_hparams['model_dim']) * sigma_mean, requires_grad=True)
-        self.kappa_vm = nn.Parameter(torch.ones(1) * model_hparams['kappa_vm'], requires_grad=True)
+        model_dim = model_hparams['model_dim']
 
-        self.register_buffer('phi_0', torch.linspace(-torch.pi, torch.pi, model_hparams['model_dim']+1)[:-1])
+        self.register_buffer('phi_0', torch.linspace(-torch.pi, torch.pi, model_dim+1)[:-1])
 
-    def project(self, x, coordinates_rel, mask=None):
-       
-        vm_weights = von_mises(coordinates_rel[1], self.kappa_vm, self.phi_0)
-        dist_weights = normal_dist(coordinates_rel[0], self.sigma_d)
+        self.kappa_vm = nn.Parameter(torch.ones(1) * model_hparams["kappa_vm"], requires_grad=True)
+        self.sigma = nn.Parameter(torch.ones(1)*dist_min, requires_grad=True)
+
+
+    def project(self, x: torch.tensor, coordinates_rel, mask=None):
         
-        vm_weights[dist_weights==1] = torch.exp(self.kappa_vm)
+        b, n, nh, f = x.shape
 
-        weights = vm_weights.squeeze(dim=-2) * dist_weights
+        dists = coordinates_rel[0]
+        thetas = coordinates_rel[1]
+
+        weights_dist = normal_dist(dists, self.sigma, sigma_cross=False)
+        weights_vm = von_mises(thetas, self.kappa_vm, self.phi_0).squeeze(dim=-1)/torch.exp(self.kappa_vm)
+
+        weights_vm = weights_vm.masked_fill(dists.unsqueeze(dim=-1)==0, 1)
+ 
+        weights = weights_dist.unsqueeze(dim=-1)*weights_vm
 
         if mask is not None:
-            weights = weights.transpose(2,3)
-            weights[mask] = -1e30 if weights.dtype == torch.float32 else -1e4
-            weights = weights.transpose(2,3)
+            weights = weights.masked_fill(mask.unsqueeze(dim=2).unsqueeze(dim=-1), -1e30 if x.dtype == torch.float32 else -1e4)
 
         weights = F.softmax(weights, dim=-2)
 
-        x = (x.unsqueeze(dim=-3) * weights).sum(dim=-2)
-
+        x = (x.unsqueeze(dim=2)*weights).sum(dim=-2)
+   
         if mask is not None:
             mask_update = mask.sum(dim=-1)==mask.shape[-1]
 
@@ -2066,6 +2051,42 @@ class projection_layer_mha(projection_layer):
 
         return x, mask_update
 
+'''
+class projection_layer_spatial_kernel_polar(projection_layer):
+    # define as projection_layer
+    def __init__(self, model_hparams: dict, n_phis, sigmas_start, dists_start=None, cross_calculation=False) -> None: 
+        super().__init__(model_hparams, polar=True, requires_arel_positions=False)
+
+        #sigma = torch.linspace(sigma_min, sigma_max, model_hparams['model_dim'])
+        self.sigma = nn.Parameter(sigmas_start, requires_grad=True)
+
+        if dists_start is not None:
+            self.dists_start = nn.Parameter(dists_start, requires_grad=True)
+
+
+    def project(self, x, coordinates_rel, mask=None):
+       
+        dists = coordinates_rel[0]
+ 
+        weights = normal_dist(dists, self.sigma)
+        
+        if mask is not None:
+            weights = weights.masked_fill(mask.unsqueeze(dim=2).unsqueeze(dim=-1), -1e30 if x.dtype == torch.float32 else -1e4)
+
+        weights = F.softmax(weights, dim=-2)
+
+        x = (weights * x.unsqueeze(dim=2)).sum(dim=[-2])
+
+        if mask is not None:
+            mask_update = mask.sum(dim=-1)==mask.shape[-1]
+
+            if x.shape[1]*x.shape[2] > mask_update.shape[-1]:
+                mask_update = mask_update.unsqueeze(dim=-1).repeat_interleave(x.shape[-2], dim=-1)
+        else:
+            mask_update = mask
+
+        return x, mask_update
+'''
 
 class projection_layer_n(projection_layer):
     # define as projection_layer
@@ -2208,8 +2229,8 @@ class projection_layer_n_lon_lat_multi_ca(projection_layer):
 
         model_dim = model_hparams['model_dim']
 
-        dist_lat = torch.linspace(0, (sigma_max), kernel_dim)
-        dist_lon = torch.linspace(0, (sigma_max), kernel_dim)
+        dist_lat = torch.linspace(0, (sigma_min), kernel_dim)
+        dist_lon = torch.linspace(0, (sigma_min), kernel_dim)
         sigma = dist_lat.clamp(min=sigma_min)/2
 
         self.dist_lat = nn.Parameter(dist_lat, requires_grad=True)
@@ -2306,7 +2327,7 @@ class projection_layer_n_multi_ca(projection_layer):
 
         model_dim = model_hparams['model_dim']
 
-        dist = torch.linspace(0, sigma_max, kernel_dim)
+        dist = torch.linspace(0, sigma_min, kernel_dim)
         sigma = dist.clamp(min=sigma_min)/2
 
         self.dist_0 = nn.Parameter(dist, requires_grad=True)
@@ -2389,78 +2410,6 @@ class projection_layer_n_multi_ca(projection_layer):
         return x, mask_update
     
 
-class projection_layer_vm_learned(nn.Module):
-    # define as projection_layer: Use Channel attention
-    def __init__(self, grid_layer_in, grid_layer_out, model_hparams: dict) -> None: 
-        super().__init__()
-
-        self.grid_layer_in = grid_layer_in
-        self.grid_layer_out = grid_layer_out
-        self.global_level_diff = self.grid_layer_in.global_level - self.grid_layer_out.global_level
-
-        # channel attention is good here!
-        self.n_vm = 4
-        self.n_d  = 6
-
-        self.kappa_scan = nn.Parameter(torch.tensor(model_hparams["kappa_vm"], dtype=float), requires_grad=True)
-    
-        self.simga_scan = nn.Parameter(grid_layer_in.min_dist, requires_grad=True)
-                       
-        self.proj_amp = nn.Sequential(nn.Linear(self.n_d, 1, bias=False))
-        self.proj_wl = nn.Sequential(nn.Linear(self.n_d, 1, bias=False))
-
-        self.min_val = self.grid_layer_in.min_dist/10
-        self.max_val = self.grid_layer_in.max_dist
-                    
-        self.dists_0 = nn.Parameter(torch.linspace(0, self.max_val, self.n_d).unsqueeze(dim=-1).repeat_interleave(self.n_vm, dim=-1), requires_grad=False)
-        self.phi_0 = nn.Parameter(torch.linspace(-torch.pi, torch.pi, self.n_vm + 1)[:-1].unsqueeze(dim=0).repeat_interleave(self.n_d, dim=0), requires_grad=False)
-
-        self.dist_weights_phi = nn.Parameter(torch.arange(self.n_d, 1., -1), requires_grad=True)
-
-        self.sigmoid = nn.Sigmoid()
-
-
-    def forward(self, x_level_in, x_level_out, indices_layers_in, indices_layers_out, batch_dict, coords_output=None):
-        
-        if coords_output is None:
-            output_coords = self.grid_layer_out.get_coordinates_from_grid_indices(indices_layers_out)
-
-        x = self.grid_layer_in.get_projection_nh(x_level_in, indices_layers_in, batch_dict, self.phi_0, self.dists_0, self.simga_scan, self.kappa_scan)
-
-        b,n,nd,nvm,f = x.shape
-        x = x.view(b*n,nd,nvm,f)
-
-        x_offset, x_env = x.split([1,self.n_d-1], dim=1) #split in offset and rest
-        x_offset = x[:,[0],:,:].mean(dim=[-2])
-
-        direction = (F.softmax(self.dist_weights_phi, dim=0).view(1,self.n_d-1,1,1) * x_env).sum(dim=1)
-        direction_weights = F.softmax(direction, dim=-2).transpose(-1,-2)
-        direction = torch.matmul(direction_weights, torch.cos(self.phi_0[0].view(-1,1)))
-        direction = torch.acos(direction) + torch.pi/2
-
-        x = (x * direction_weights.view(b*n,1,nvm,f)).sum(dim=-2)
-
-        wl = F.softmax(x, dim=-2) * self.dists_0[:,0].view(-1,1)
-        wl = self.sigmoid(self.proj_wl(wl.transpose(-1,-2))) + self.min_val
-
-        amp = self.proj_amp((x - x_offset).transpose(-1,-2))
-
-        output_coords = output_coords.view(2, output_coords.shape[1], -1, 4**self.global_level_diff)
-
-        distances, phis = get_relative_positions(output_coords[:,:,:,0], output_coords, polar=True)
-        distances = distances.transpose(-1,-2)
-        phis = phis.transpose(-1,-2)
-
-        amp = amp.view(b,n,1,f)
-        wl = wl.view(b,n,1,f)
-        x_offset = x_offset.view(b,n,1,f)
-        direction = direction.view(b,n,1,f)
-
-        x = amp*torch.cos(2*torch.pi/wl*torch.cos(direction-phis)*distances) + x_offset
-
-        x = x.view(b,-1,f)
-        return x
-
 
 def get_relative_positions(coords1, coords2, polar=False, periodic_fov=None):
     
@@ -2512,6 +2461,10 @@ class MultiGridBlock(nn.Module):
         return x, drop_mask_levels
 
 
+def check_value(value, n_repeat):
+    if not isinstance(value, list):
+        value = [value]*n_repeat
+    return value
 
 
 class ICON_Transformer(nn.Module):
@@ -2571,27 +2524,42 @@ class ICON_Transformer(nn.Module):
         self.input_mapping = input_mapping
   
      
-        self.input_layer = input_projection_layer(input_mapping['cell']['cell'], input_in_range['cell']['cell'], input_coordinates['cell'], grid_layers[str(int(global_levels[-1]))], self.model_settings, projection_mode='n')
+        input_projection = self.model_settings['input_projection']
 
-
-        decomp_layer_settings = {'proj_mode':'vm_ca'}
-
-        processing_settings = {'mode':'nh_ca_VM',
-                               'lowest_processing_level': 3}
+        self.input_layer = input_projection_layer(input_mapping['cell']['cell'], input_in_range['cell']['cell'], input_coordinates['cell'], grid_layers[str(int(global_levels[-1]))], self.model_settings, projection_mode=input_projection)
         
-        multi_grid_settings = {'nh_attention': True,
-                               'proj_mode': 'n',
-                               'with_spatial_attention': False,
-                               'cascading': False}
+    
+        global_levels_block = self.model_settings['global_levels_blocks']
+        n_blocks = len(global_levels_block)
 
-        self.multi_grid_block  = MultiGridBlock(grid_layers, global_levels, self.model_settings, decomp_layer_settings, multi_grid_settings, processing_settings=processing_settings)
+        decomp_projection = check_value(self.model_settings['decomp_projection'], n_blocks)
+
+        processing_type = check_value(self.model_settings['processing_type'], n_blocks)
+        lowest_processing_levels = check_value(self.model_settings['lowest_processing_levels'], n_blocks)
+
+        multi_nh_attention = check_value(self.model_settings['multi_nh_attention'], n_blocks)
+        multi_grids_projection = check_value(self.model_settings['multi_grids_projection'], n_blocks)
+        multi_grids_spatial_attention = check_value(self.model_settings['multi_grids_spatial_attention'], n_blocks)
+        multi_grids_cascading = check_value(self.model_settings['multi_grids_cascading'], n_blocks)
+
+        self.MGBlocks = nn.ModuleList()
+
+        for k in range(n_blocks):
+            decomp_layer_settings = {'proj_mode': decomp_projection[k]}
+
+
+            processing_settings = {'mode':processing_type[k],
+                                 'lowest_processing_level': lowest_processing_levels[k]}
+
+
+            multi_grid_settings = {'nh_attention': multi_nh_attention[k],
+                                'proj_mode': multi_grids_projection[k],
+                                'with_spatial_attention': multi_grids_spatial_attention[k],
+                                'cascading': multi_grids_cascading[k]}
+            
+            self.MGBlocks.append(MultiGridBlock(grid_layers, global_levels, self.model_settings, decomp_layer_settings, multi_grid_settings, processing_settings=processing_settings))
         
-
-       # multi_grid_settings['with_spatial_attention'] = True
-       # multi_grid_settings['cascading'] = False
-       # self.multi_grid_block2  = MultiGridBlock(grid_layers, global_levels[global_levels<3], self.model_settings, decomp_layer_settings, multi_grid_settings, processing_settings=processing_settings)
-
-
+        
 
         output_projection = self.model_settings['output_projection']
         self.output_layer = output_layer(output_mapping['cell']['cell'], output_coordinates['cell'], [self.global_levels[-1]], grid_layers, self.model_settings, mode=output_projection)
@@ -2638,9 +2606,12 @@ class ICON_Transformer(nn.Module):
      
         x, drop_mask = self.input_layer(x['cell'], indices_0, indices_layers[self.global_levels.tolist()[-1]] ,drop_mask=drop_mask)
 
-        x, drop_mask = self.multi_grid_block(x, indices_layers, indices_batch_dict, mask=drop_mask)
-
-       # x = self.multi_grid_block2(x, indices_layers, indices_batch_dict)[0]
+        for k, multi_grid_block in enumerate(self.MGBlocks):
+            
+            if k==0:
+                x, drop_mask = multi_grid_block(x, indices_layers, indices_batch_dict, mask=drop_mask)
+            else:
+                x, drop_mask = multi_grid_block(x, indices_layers, indices_batch_dict)
 
         x, x_var = self.output_layer(x, indices_0, indices_layers, indices_batch_dict)
             
