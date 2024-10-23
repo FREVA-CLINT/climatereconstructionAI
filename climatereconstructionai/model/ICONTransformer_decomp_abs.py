@@ -1885,7 +1885,7 @@ class projection_layer(nn.Module):
 
 
 class projection_layer_learned_cont(projection_layer):
-    def __init__(self, model_dim, model_hparams) -> None: 
+    def __init__(self, model_hparams) -> None: 
         super().__init__(model_hparams)
     
         model_dim = model_hparams['model_dim']
