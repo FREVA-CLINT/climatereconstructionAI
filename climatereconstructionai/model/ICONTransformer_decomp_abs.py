@@ -543,7 +543,7 @@ class multi_grid_projection(nn.Module):
                                                         mask=drop_mask_level)
                         if drop_mask_proj_level is not None:
                             drop_mask_proj_level = torch.logical_and(drop_mask_level.view(drop_mask_proj_level.shape), drop_mask_proj_level)
-                        else:
+                        elif drop_mask_level is not None:
                             drop_mask_proj_level = drop_mask_level.view(x.shape[0],-1,1)
                 x = x.view(b,-1,f)
                 
@@ -1150,6 +1150,17 @@ def get_spatial_projection_weights_vm_dist(phis, dists, phi_0, kappa_vm, dists_0
     weights = F.softmax(weights, dim=-2)
 
     return weights
+
+def cosine(thetas, wavelengths, distances, theta_offsets=None):
+
+    freq = 2*torch.pi/wavelengths
+
+    if theta_offsets is not None:
+        Z = torch.cos(freq * (torch.cos(thetas.unsqueeze(dim=-1)-theta_offsets)*distances.unsqueeze(dim=-1)).unsqueeze(dim=-1))
+    else:
+        Z = torch.cos(freq * distances)
+
+    return Z
 
 
 def von_mises(thetas, kappa, theta_offsets=None):
@@ -1779,6 +1790,12 @@ def get_projection_layer(projection_mode, model_hparams, grid_layer):
     elif projection_mode == 'vm_ca':
         projection_layer = (projection_layer_VM_multi_ca(model_hparams, grid_layer.min_dist, grid_layer.min_dist/2, kernel_dim=kernel_dim, n_chunks=n_chunks, residual=residual))
 
+    elif projection_mode == 'vm_ca_red':
+        projection_layer = (projection_layer_VM_multi_ca_red(model_hparams, grid_layer.min_dist, grid_layer.min_dist/2, kernel_dim=kernel_dim, n_chunks=n_chunks, residual=residual))
+
+    elif projection_mode == 'cosine_ca':
+        projection_layer = (projection_layer_cosine_multi_ca(model_hparams, grid_layer.max_dist, grid_layer.min_dist, kernel_dim=kernel_dim, n_chunks=n_chunks, residual=residual))
+
     elif projection_mode == 'learned_cont':
         projection_layer = (projection_layer_learned_cont(model_hparams))
 
@@ -1863,7 +1880,11 @@ class projection_layer(nn.Module):
                 mask = mask.view(b, seq_dim_out, -1)
             coordinates_out = coordinates_out.view(n_c, b, seq_dim_out, -1)
         else:
+            coordinates = coordinates.view(n_c, b, seq_dim_in,-1)
             coordinates_out = coordinates_out.view(n_c, b, seq_dim_in, -1)
+            x = x.view(b, seq_dim_in, coordinates.shape[-1], -1)
+            if mask is not None:
+                mask = mask.view(b, seq_dim_in, -1)
 
         if self.requires_arel_positions:
             coords_ref = coordinates[:,:,:,[0]]
@@ -1946,7 +1967,7 @@ class projection_layer_vm(projection_layer):
         dists = coordinates_rel[0]
         thetas = coordinates_rel[1]
 
-        weights_dist = normal_dist(dists, self.sigma, sigma_cross=False)
+        weights_dist = normal_dist(dists, self.sigma, sigma_cross=True)
         weights_vm = von_mises(thetas, self.kappa_vm, self.phi_0).squeeze(dim=-1)/torch.exp(self.kappa_vm)
 
         weights_vm = weights_vm.masked_fill(dists.unsqueeze(dim=-1)==0, 1)
@@ -2121,6 +2142,211 @@ class projection_layer_n(projection_layer):
         return x, mask_update
 
 
+class projection_layer_cosine_multi_ca(projection_layer):
+    # define as projection_layer
+    def __init__(self, model_hparams: dict, sigma_max, sigma_min, kernel_dim=4, n_chunks=4, residual=True) -> None: 
+        super().__init__(model_hparams, polar=True, requires_arel_positions=False)
+
+        model_dim = model_hparams['model_dim']
+
+        self.register_buffer('phi_0', torch.linspace(-torch.pi, torch.pi, kernel_dim+1)[:-1])
+
+        #dist = torch.linspace(0, sigma_max, model_dim)
+        #sigma = dist.clamp(min=sigma_min)/2
+
+        #self.dist_0 = nn.Parameter(dist, requires_grad=True)
+        self.min_wl = sigma_min*2
+       
+        #self.sigma = nn.Parameter(torch.randn(model_dim).abs() * sigma_min, requires_grad=True)
+        self.wavelengths = nn.Parameter(torch.linspace(self.min_wl, sigma_max*10, model_dim), requires_grad=True)
+
+        mha_dim = kernel_dim
+
+        self.n_chunks = n_chunks
+        total_dim = kernel_dim * model_dim
+
+        mha_dim = total_dim//n_chunks
+        self.mha_dim = mha_dim
+
+        self.MHA = helpers.MultiHeadAttentionBlock(
+            mha_dim, model_dim, model_hparams['n_heads'], input_dim=mha_dim, qkv_proj=True
+            )   
+        
+        self.layer_norm = nn.LayerNorm(mha_dim, elementwise_affine=True)
+
+        self.mlp_layer = nn.Sequential(
+            
+            nn.Linear(self.n_chunks*model_dim, model_dim, bias=False),
+            nn.SiLU(),
+            nn.Linear(model_dim, model_dim, bias=False)
+        )
+
+        if residual:
+            self.mlp_norm = nn.LayerNorm(self.n_chunks*model_dim, elementwise_affine=True)
+            self.gamma = nn.Parameter(torch.ones(model_dim)*1e-6, requires_grad=True)
+        
+        self.residual = residual
+
+    def project(self, x: torch.tensor, coordinates_rel, mask=None):
+        
+        b, n, nh, f = x.shape
+
+        dists = coordinates_rel[0]
+        thetas = coordinates_rel[1]
+
+        wavelengths = self.wavelengths.clamp(min=self.min_wl)
+        weights = cosine(thetas, wavelengths, dists, theta_offsets=self.phi_0)
+
+        if mask is not None:
+            #min_val = 1e10 if x.dtype == torch.float32 else 1e4
+            weights = weights.masked_fill(mask.unsqueeze(dim=2).unsqueeze(dim=-1).unsqueeze(dim=-1), 0)
+            scaling = (mask==False).sum(dim=-1)
+       # scaling =     
+        #weights = F.softmax(weights, dim=-3)
+
+            x_p = (x.unsqueeze(dim=2).unsqueeze(dim=-2) * weights).sum(dim=-3)/(scaling.view(b,n,1,1,1)+1e-10)
+
+            #x_p[scaling==0] = 0
+        else:
+            x_p = (x.unsqueeze(dim=2).unsqueeze(dim=-2) * weights).mean(dim=-3)
+
+        if self.residual:
+            x_res = x_p.mean(dim=-2)
+
+        b,n,nt,f,n_k = x_p.shape
+
+        x_p = x_p.view(b,n,nt,-1)
+        x_p = x_p.view(b*n,nt,-1)
+        x_p = x_p.view(b*n*nt,-1,self.n_chunks).transpose(-1,-2)
+
+        q = k = v = self.layer_norm(x_p)
+        
+        if not self.residual:
+            v = x_p
+
+        x_mha = self.MHA(q=q, k=k, v=v)
+        x_mha = x_mha.view(b*n,nt,-1)
+        x_mha = x_mha.view(b,n,nt,-1)
+
+        if self.residual:
+            x_mha = self.mlp_norm(x_mha)
+            x = x_res + self.gamma* self.mlp_layer(x_mha)
+        else:
+            x = self.mlp_layer(x_mha)
+   
+        if mask is not None:
+            mask_update = mask.sum(dim=-1)==mask.shape[-1]
+
+            if x.shape[1]*x.shape[2] > mask_update.shape[-1]:
+                mask_update = mask_update.unsqueeze(dim=-1).repeat_interleave(x_mha.shape[-2], dim=-1)
+        else:
+            mask_update = mask
+
+        return x, mask_update
+
+class projection_layer_VM_multi_ca_red(projection_layer):
+    # define as projection_layer
+    def __init__(self, model_hparams: dict, sigma_max, sigma_min, kernel_dim=4, n_chunks=4, residual=True) -> None: 
+        super().__init__(model_hparams, polar=True, requires_arel_positions=False)
+
+        model_dim = model_hparams['model_dim']
+
+        self.register_buffer('phi_0', torch.linspace(-torch.pi, torch.pi, kernel_dim+1)[:-1])
+
+        #dist = torch.linspace(0, sigma_max, model_dim)
+        #sigma = dist.clamp(min=sigma_min)/2
+
+        #self.dist_0 = nn.Parameter(dist, requires_grad=True)
+
+        self.kappa_vm = nn.Parameter(torch.ones(1) * model_hparams["kappa_vm"], requires_grad=True)
+        self.sigma = nn.Parameter(torch.randn(model_dim).abs() * sigma_min, requires_grad=True)
+
+        mha_dim = kernel_dim
+
+        self.n_chunks = n_chunks
+        total_dim = kernel_dim * model_dim
+
+        mha_dim = total_dim//n_chunks
+        self.mha_dim = mha_dim
+
+        self.MHA = helpers.MultiHeadAttentionBlock(
+            mha_dim, model_dim, model_hparams['n_heads'], input_dim=mha_dim, qkv_proj=True
+            )   
+        
+        self.layer_norm = nn.LayerNorm(mha_dim, elementwise_affine=True)
+
+        self.mlp_layer = nn.Sequential(
+            
+            nn.Linear(self.n_chunks*model_dim, model_dim, bias=False),
+            nn.SiLU(),
+            nn.Linear(model_dim, model_dim, bias=False)
+        )
+
+        if residual:
+            self.mlp_norm = nn.LayerNorm(self.n_chunks*model_dim, elementwise_affine=True)
+            self.gamma = nn.Parameter(torch.ones(model_dim)*1e-6, requires_grad=True)
+        
+        self.residual = residual
+
+    def project(self, x: torch.tensor, coordinates_rel, mask=None):
+        
+        b, n, nh, f = x.shape
+
+        min_val = 1e10 if x.dtype == torch.float32 else 1e4
+        sigma = self.sigma.clamp(min=min_val)
+
+        dists = coordinates_rel[0]
+        thetas = coordinates_rel[1]
+
+        weights_dist = normal_dist(dists.unsqueeze(dim=-1), sigma, sigma_cross=False)
+        weights_vm = von_mises(thetas, self.kappa_vm, self.phi_0).squeeze(dim=-1)/torch.exp(self.kappa_vm)
+
+        weights_vm = weights_vm.masked_fill(dists.unsqueeze(dim=-1)==0, 1)
+
+        weights = weights_dist.unsqueeze(dim=-1)*weights_vm.unsqueeze(dim=-2)
+
+        if mask is not None:
+            weights = weights.masked_fill(mask.unsqueeze(dim=2).unsqueeze(dim=-1).unsqueeze(dim=-1), -min_val)
+            
+        weights = F.softmax(weights, dim=-3)
+
+        x_p = (x.unsqueeze(dim=2).unsqueeze(dim=-1) * weights).sum(dim=-3)
+
+        if self.residual:
+            x_res = x_p.mean(dim=-1)
+
+        b,n,nt,f,n_k = x_p.shape
+
+        x_p = x_p.view(b,n,nt,-1)
+        x_p = x_p.view(b*n,nt,-1)
+        x_p = x_p.view(b*n*nt,-1,self.n_chunks).transpose(-1,-2)
+
+        q = k = v = self.layer_norm(x_p)
+        
+        if not self.residual:
+            v = x_p
+
+        x_mha = self.MHA(q=q, k=k, v=v)
+        x_mha = x_mha.view(b*n,nt,-1)
+        x_mha = x_mha.view(b,n,nt,-1)
+
+        if self.residual:
+            x_mha = self.mlp_norm(x_mha)
+            x = x_res + self.gamma* self.mlp_layer(x_mha)
+        else:
+            x = self.mlp_layer(x_mha)
+   
+        if mask is not None:
+            mask_update = mask.sum(dim=-1)==mask.shape[-1]
+
+            if x.shape[1]*x.shape[2] > mask_update.shape[-1]:
+                mask_update = mask_update.unsqueeze(dim=-1).repeat_interleave(x_mha.shape[-2], dim=-1)
+        else:
+            mask_update = mask
+
+        return x, mask_update
+
+
 class projection_layer_VM_multi_ca(projection_layer):
     # define as projection_layer
     def __init__(self, model_hparams: dict, sigma_max, sigma_min, kernel_dim=4, n_chunks=4, residual=True) -> None: 
@@ -2172,7 +2398,10 @@ class projection_layer_VM_multi_ca(projection_layer):
         dists = coordinates_rel[0]
         thetas = coordinates_rel[1]
 
-        weights_dist = normal_dist(dists, self.sigma, self.dist_0, sigma_cross=False)
+        min_val = 1e10 if x.dtype == torch.float32 else 1e4
+        sigma = self.sigma.clamp(min=min_val)
+
+        weights_dist = normal_dist(dists, sigma, self.dist_0, sigma_cross=False)
         weights_vm = von_mises(thetas, self.kappa_vm, self.phi_0).squeeze(dim=-1)/torch.exp(self.kappa_vm)
 
         weights_vm = weights_vm.masked_fill(dists.unsqueeze(dim=-1)==0, 1)
@@ -2271,8 +2500,11 @@ class projection_layer_n_lon_lat_multi_ca(projection_layer):
         dists_lon = coordinates_rel[0]
         dists_lat = coordinates_rel[1]
 
-        weights_lon = normal_dist(dists_lon, self.sigma, self.dist_lat, sigma_cross=False)
-        weights_lat = normal_dist(dists_lat, self.sigma, self.dist_lon, sigma_cross=False)
+        min_val = 1e10 if x.dtype == torch.float32 else 1e4
+        sigma = self.sigma.clamp(min=min_val)
+
+        weights_lon = normal_dist(dists_lon, sigma, self.dist_lat, sigma_cross=False)
+        weights_lat = normal_dist(dists_lat, sigma, self.dist_lon, sigma_cross=False)
 
         weights = weights_lon.unsqueeze(dim=-1)*weights_lat.unsqueeze(dim=-2)
 
@@ -2366,7 +2598,10 @@ class projection_layer_n_multi_ca(projection_layer):
 
         dists = coordinates_rel[0]
 
-        weights = normal_dist(dists, self.sigma, self.dist_0, sigma_cross=False)
+        min_val = 1e10 if x.dtype == torch.float32 else 1e4
+        sigma = self.sigma.clamp(min=min_val)
+
+        weights = normal_dist(dists, sigma, self.dist_0, sigma_cross=False)
         
         b,n,nt,nh,_ = weights.shape
 
@@ -2506,7 +2741,7 @@ class ICON_Transformer(nn.Module):
         self.input_data  = self.model_settings['variables_source']
         self.output_data = self.model_settings['variables_target']
 
-        projection_dict = {"kappa_vm": 1,
+        projection_dict = {"kappa_vm": 0.5,
                            "n_theta": 6,
                            "n_dist": self.model_settings["nh"]}
 
@@ -2557,7 +2792,7 @@ class ICON_Transformer(nn.Module):
                                 'with_spatial_attention': multi_grids_spatial_attention[k],
                                 'cascading': multi_grids_cascading[k]}
             
-            self.MGBlocks.append(MultiGridBlock(grid_layers, global_levels, self.model_settings, decomp_layer_settings, multi_grid_settings, processing_settings=processing_settings))
+            self.MGBlocks.append(MultiGridBlock(grid_layers, torch.tensor(global_levels_block[k]), self.model_settings, decomp_layer_settings, multi_grid_settings, processing_settings=processing_settings))
         
         
 
