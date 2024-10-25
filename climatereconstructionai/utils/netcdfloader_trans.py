@@ -112,9 +112,12 @@ class NetCDFLoader_lazy(Dataset):
                  model_settings={},
                  random_time_idx=True,
                  p_dropout=0,
+                 p_average=0,
+                 p_average_dropout=0,
                  save_samples_path=None,
                  train_on_samples=False,
-                 min_coverage=0):
+                 min_coverage=0,
+                 max_average_lvl=0):
         
         super(NetCDFLoader_lazy, self).__init__()
         
@@ -130,6 +133,9 @@ class NetCDFLoader_lazy(Dataset):
         self.sample_condition_dict = sample_condition_dict
         self.random_time_idx = random_time_idx
         self.p_dropout = p_dropout
+        self.p_average = p_average
+        self.p_average_dropout = p_average_dropout
+        self.max_average_lvl = max_average_lvl
         self.min_coverage = min_coverage
 
         self.files_source = files_source
@@ -293,25 +299,26 @@ class NetCDFLoader_lazy(Dataset):
 
     def get_data(self, ds, ts, global_indices, variables_dict, global_level_start, index_mapping_dict=None):
         
-        
+        if index_mapping_dict is not None:
+            indices = index_mapping_dict['cell'][global_indices // 4**global_level_start]
+        else:
+            indices = global_indices.view(-1,1)
+
+        n, nh = indices.shape
+        indices = indices.view(-1)
+        ds = ds.isel(cell=indices, time=ts)
+
         sampled_data = {}
         for key, variables in variables_dict.items():
             data_g = []
             for variable in variables:
-                data = torch.tensor(ds[variable][ts].values)
+                data = torch.tensor(ds[variable].values)
                 data = data[0] if data.dim() > 1  else data
                 data_g.append(data)
 
             data_g = torch.stack(data_g, dim=-1)
 
-            if index_mapping_dict is not None:
-                indices = index_mapping_dict[key][global_indices // 4**global_level_start]
-
-            else:
-                indices = global_indices.reshape(-1,1)
-
-            data_g = data_g[indices]
-            data_g = data_g.view(indices.shape[0], -1, len(variables))
+            data_g = data_g.view(n, nh, len(variables))
 
             sampled_data[key] = data_g
 
@@ -390,11 +397,31 @@ class NetCDFLoader_lazy(Dataset):
             data_source =  sample['data_source']
             data_target =  sample['data_target']
 
-        if self.p_dropout > 0:
-            drop_mask = (torch.rand_like(data_source['cell'][:,0,0])<self.p_dropout).bool()
-        else:
+        if self.p_average > 0 and torch.rand(1)<self.p_average:
+            n, nh, f = data_source['cell'].shape
+            avg_level = int(torch.randint(1,self.max_average_lvl+1,(1,)))
+            data_source_resh = data_source['cell'].view(-1,4**avg_level,nh,f)
+            data_source_resh = data_source_resh.mean(dim=[1,2], keepdim=True)
+            data_source_resh = data_source_resh.repeat_interleave(4**avg_level, dim=1)
+            data_source_resh = data_source_resh.repeat_interleave(nh, dim=2)
+            data_source['cell'] = data_source_resh.view(n,nh, f)
+
+            if self.p_average_dropout >0:
+               drop_mask = (torch.rand_like(data_source['cell'][:,0,0])<self.p_average_dropout).bool()
+
             drop_mask = torch.zeros_like(data_source['cell'][:,0,0], dtype=bool)
-            
+
+            if self.p_average_dropout >0:
+                drop_mask_p = (torch.rand(n//4**avg_level)<self.p_average_dropout).bool()
+                drop_mask = drop_mask.view(-1,4**avg_level)
+                drop_mask[drop_mask_p]=True
+                drop_mask = drop_mask.view(-1)
+        else:
+            if self.p_dropout > 0:
+                drop_mask = (torch.rand_like(data_source['cell'][:,0,0])<self.p_dropout).bool()
+            else:
+                drop_mask = torch.zeros_like(data_source['cell'][:,0,0], dtype=bool)
+                
 
         if self.normalization is not None:
             data_source = self.normalizer(data_source, self.variables_source)    
