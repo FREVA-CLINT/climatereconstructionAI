@@ -25,7 +25,7 @@ def prepare_data_dict(mask, output, latent_dist, gt, tensor_keys):
 
 
 class loss_criterion(torch.nn.Module):
-    def __init__(self, lambda_dict):
+    def __init__(self, lambda_dict, devices):
         super().__init__()
 
         self.criterions = []
@@ -35,7 +35,7 @@ class loss_criterion(torch.nn.Module):
         for loss, lambda_ in lambda_dict.items():
             if lambda_ > 0:
                 if (loss == 'style' or loss == 'prc') and not style_added:
-                    self.criterions.append(FeatureLoss(VGG16FeatureExtractor()).to(cfg.device))
+                    self.criterions.append(FeatureLoss(VGG16FeatureExtractor, devices).to(cfg.device))
                     self.tensors.append('comp')
                     style_added = True
 
@@ -71,7 +71,7 @@ class loss_criterion(torch.nn.Module):
             if lambda_value > 0 and loss in loss_dict.keys():
                 loss_w_lambda = loss_dict[loss] * lambda_value
                 loss_dict["total"] += loss_w_lambda
-                loss_dict[loss] = loss_w_lambda
+                loss_dict[loss] = loss_w_lambda#.item()
 
         return loss_dict
 
@@ -97,12 +97,12 @@ class CriterionParallel(torch.nn.Module):
         return multi_dict
 
 class LossComputation(torch.nn.Module):
-    def __init__(self, lambda_dict):
+    def __init__(self, lambda_dict, devices):
         super().__init__()
         if cfg.multi_gpus:
-            self.criterion = CriterionParallel(loss_criterion(lambda_dict))
+            self.criterion = CriterionParallel(loss_criterion(lambda_dict, devices))
         else:
-            self.criterion = loss_criterion(lambda_dict)
+            self.criterion = loss_criterion(lambda_dict, devices)
 
     def forward(self, mask, output, latent_dist, gt):
         loss_dict = self.criterion(mask, output, latent_dist, gt)

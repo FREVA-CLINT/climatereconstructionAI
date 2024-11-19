@@ -10,6 +10,7 @@ from tqdm import tqdm
 
 from . import config as cfg
 from .loss import get_loss
+from .loss.utils import get_devices
 from .metrics.get_metrics import get_metrics
 from .model.net import CRAINet
 from .utils import twriter, early_stopping
@@ -91,7 +92,6 @@ def train(arg_file=None):
         lr = cfg.lr
 
     early_stop = early_stopping.early_stopping()
-    loss_comp = get_loss.LossComputation(cfg.lambda_dict)
 
     # define optimizer and loss functions
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
@@ -116,6 +116,8 @@ def train(arg_file=None):
 
     if cfg.multi_gpus:
         model = torch.nn.DataParallel(model)
+   
+    loss_comp = get_loss.LossComputation(cfg.lambda_dict, get_devices(model))
 
     i = cfg.max_iter - (cfg.n_final_models - 1) * cfg.final_models_interval
     final_models = range(i, cfg.max_iter + 1, cfg.final_models_interval)
