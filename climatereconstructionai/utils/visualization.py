@@ -3,12 +3,7 @@ import numpy as np
 import torch
 
 
-def calculate_distributions(mask, steady_mask, output, gt, domain="valid", num_samples=1000):
-    if steady_mask is not None:
-        mask += steady_mask
-        mask[mask < 0] = 0
-        mask[mask > 1] = 1
-        assert ((mask == 0) | (mask == 1)).all(), "Not all values in mask are zeros or ones!"
+def calculate_distributions(mask, output, gt, domain="valid", num_samples=1000):
 
     value_list_pred = []
     value_list_target = []
@@ -36,14 +31,8 @@ def calculate_distributions(mask, steady_mask, output, gt, domain="valid", num_s
     return value_list_pred, value_list_target
 
 
-def calculate_error_distributions(mask, steady_mask, output, gt, operation="AE", domain="valid", num_samples=1000):
-    preds, targets = calculate_distributions(mask, steady_mask, output, gt, domain=domain, num_samples=num_samples)
-
-    if steady_mask is not None:
-        mask += steady_mask
-        mask[mask < 0] = 0
-        mask[mask > 1] = 1
-        assert ((mask == 0) | (mask == 1)).all(), "Not all values in mask are zeros or ones!"
+def calculate_error_distributions(mask, output, gt, operation="AE", domain="valid", num_samples=1000):
+    preds, targets = calculate_distributions(mask, output, gt, domain=domain, num_samples=num_samples)
 
     value_list = []
     for ch in range(len(preds)):
@@ -65,8 +54,8 @@ def calculate_error_distributions(mask, steady_mask, output, gt, operation="AE",
     return value_list
 
 
-def create_error_dist_plot(mask, steady_mask, output, gt, operation='E', domain="valid", num_samples=1000):
-    preds, targets = calculate_distributions(mask, steady_mask, output, gt, domain=domain, num_samples=num_samples)
+def create_error_dist_plot(mask, output, gt, operation='E', domain="valid", num_samples=1000):
+    preds, targets = calculate_distributions(mask, output, gt, domain=domain, num_samples=num_samples)
 
     fig, axs = plt.subplots(1, len(preds), squeeze=False)
 
@@ -97,8 +86,8 @@ def create_error_dist_plot(mask, steady_mask, output, gt, operation='E', domain=
     return fig
 
 
-def create_correlation_plot(mask, steady_mask, output, gt, domain="valid", num_samples=1000):
-    preds, targets = calculate_distributions(mask, steady_mask, output, gt, domain=domain, num_samples=num_samples)
+def create_correlation_plot(mask, output, gt, domain="valid", num_samples=1000):
+    preds, targets = calculate_distributions(mask, output, gt, domain=domain, num_samples=num_samples)
 
     fig, axs = plt.subplots(1, len(preds), squeeze=False)
 
@@ -117,12 +106,7 @@ def create_correlation_plot(mask, steady_mask, output, gt, domain="valid", num_s
     return fig
 
 
-def create_error_map(mask, steady_mask, output, gt, num_samples=3, operation="AE", domain="valid"):
-    if steady_mask is not None:
-        mask += steady_mask
-        mask[mask < 0] = 0
-        mask[mask > 1] = 1
-        assert ((mask == 0) | (mask == 1)).all(), "Not all values in mask are zeros or ones!"
+def create_error_map(mask, output, gt, num_samples=3, operation="AE", domain="valid"):
 
     num_channels = output.shape[2]
     samples = torch.randint(output.shape[0], (num_samples,))
@@ -161,12 +145,7 @@ def create_error_map(mask, steady_mask, output, gt, num_samples=3, operation="AE
     return fig
 
 
-def create_map(mask, steady_mask, output, gt, num_samples=3):
-    if steady_mask is not None:
-        mask += steady_mask
-        mask[mask < 0] = 0
-        mask[mask > 1] = 1
-        assert ((mask == 0) | (mask == 1)).all(), "Not all values in mask are zeros or ones!"
+def create_map(mask, output, gt, num_samples=3):
 
     samples = torch.randint(output.shape[0], (num_samples,))
 
@@ -196,13 +175,13 @@ def create_map(mask, steady_mask, output, gt, num_samples=3):
     return fig
 
 
-def get_all_error_distributions(mask, steady_mask, output, gt, domain="valid", num_samples=1000):
-    error_dists = [calculate_error_distributions(mask, steady_mask, output, gt, operation=op, domain=domain,
+def get_all_error_distributions(mask, output, gt, domain="valid", num_samples=1000):
+    error_dists = [calculate_error_distributions(mask, output, gt, operation=op, domain=domain,
                                                  num_samples=num_samples) for op in ['E', 'AE', 'RE', 'RAE']]
     return error_dists
 
 
-def get_all_error_maps(mask, steady_mask, output, gt, num_samples=3):
-    error_maps = [create_error_map(mask, steady_mask, output, gt, num_samples=num_samples, operation=op, domain="valid")
+def get_all_error_maps(mask, output, gt, num_samples=3):
+    error_maps = [create_error_map(mask, output, gt, num_samples=num_samples, operation=op, domain="valid")
                   for op in ['E', 'AE', 'RE', 'RAE']]
     return error_maps
