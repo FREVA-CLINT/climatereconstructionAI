@@ -265,7 +265,7 @@ class NetCDFLoader_lazy(Dataset):
 
         self.norm_dict = normalization
         self.normalizer = grid_normalizer(self.norm_dict)
-
+    
     def get_files(self, file_path_source, file_path_target=None, file_path_target_past=None):
       
         include_past = True if file_path_target_past is not None else False
@@ -306,7 +306,12 @@ class NetCDFLoader_lazy(Dataset):
 
         n, nh = indices.shape
         indices = indices.view(-1)
-        ds = ds.isel(cell=indices, time=ts)
+
+        #index_array = xr.DataArray([0, 2], dims="student")
+        if 'ncells' in dict(ds.sizes).keys():
+            ds = ds.isel(ncells=indices, time=ts)
+        else:
+            ds = ds.isel(cell=indices, time=ts)
 
         sampled_data = {}
         for key, variables in variables_dict.items():
@@ -365,6 +370,11 @@ class NetCDFLoader_lazy(Dataset):
                 f_output = output_in_range['cell']['cell'][global_cells[sample_index]]
                 f_output = f_output.sum()/f_output.numel()
                 covered = (f_input + f_output)/2 >= self.min_coverage
+
+         #   if input_mapping['cell'] is not None:
+         #       indices = input_mapping['cell'][global_cells[sample_index]]
+         #   else:
+         #       indices = global_indices.view(-1,1)
 
             data_source = self.get_data(ds_source, index, global_cells[sample_index] , self.variables_source, 0, input_mapping['cell'])
 
