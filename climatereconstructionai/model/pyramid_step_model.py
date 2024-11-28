@@ -436,7 +436,7 @@ class pyramid_step_model(nn.Module):
                 output_global_std = dict(zip(var_spatial_dims.keys(), [torch.zeros(ds_target[variable][0].values.shape).squeeze().to(device) for variable in var_spatial_dims.keys()]))
             else:
                 output_global_std = {}
-
+ 
             for result in results:
                 if result is not None:
                     depth, patch_id_idx, output = result
