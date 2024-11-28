@@ -201,7 +201,7 @@ class pyramid_step_model(nn.Module):
         else:
             self.input_avg_pooling = nn.Identity()
 
-    def forward(self, x, coords_target, coords_source=None, norm=False, apply_res=True, depth=None):
+    def forward(self, x, coords_target, coords_source=None, norm=False, apply_res=True, depth=None, dist_to_boundary=None):
         # coords target: Values from 0 to 1
 
         if norm:
@@ -214,7 +214,7 @@ class pyramid_step_model(nn.Module):
 
         if not isinstance(self.core_model, nn.Identity):
             x = self.input_avg_pooling(x)
-            output = self.core_model(x, depth=depth)
+            output = self.core_model(x, depth=depth, dist_to_boundary=dist_to_boundary)
             core_output = output
             
             #coords_target_hr, non_valid = helpers.scale_coords(coords_target, self.range_region_target_radx, rngy=self.range_region_target_rady)
