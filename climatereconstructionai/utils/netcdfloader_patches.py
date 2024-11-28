@@ -569,7 +569,7 @@ class NetCDFLoader_lazy(Dataset):
         if len(self.save_tensor_sample_path)>0:
             save_path = os.path.join(self.save_tensor_sample_path, os.path.basename(source_file).replace('.nc', f'_{float(patch_id):.3f}_{float(rot_angle):.3f}_{int(depth_idx)}.pt'))
             if not os.path.isfile(save_path):
-                torch.save([data_source, data_target, rel_coords_source, rel_coords_target, spatial_dim_indices_source, spatial_dim_indices_target], save_path)
+                torch.save([data_source, data_target, rel_coords_source, rel_coords_target, spatial_dim_indices_source, spatial_dim_indices_target, dist_to_boundary], save_path)
 
             dict_file = os.path.join(self.save_tensor_sample_path,'dims_var_source.json')
             
@@ -629,7 +629,8 @@ class SampleLoader(Dataset):
         target = data[1]
         coords_source = data[2]
         coords_target = data[3]
-        target_indices = data[-1]
+        target_indices = data[-2]
+        dist_to_boundary = data[-1]
 
         n_dict_source_sample = dict(zip(coords_source.keys(),[val.shape[-1] for val in coords_source.values()]))
         n_dict_target_sample = dict(zip(coords_target.keys(),[val.shape[-1] for val in coords_target.values()]))
@@ -653,6 +654,6 @@ class SampleLoader(Dataset):
             target_indices[spatial_dim] = target_indices[spatial_dim][indices]
             coords_target[spatial_dim] = coords_target[spatial_dim][:,indices]
 
-        data = [source[self.indices_source], target, torch.zeros((10,)), coords_target, target_indices, depth]
+        data = [source[self.indices_source], target, torch.zeros((10,)), coords_target, target_indices, depth, dist_to_boundary]
         
         return data
