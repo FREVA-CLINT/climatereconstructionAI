@@ -33,7 +33,21 @@ class DepthEncoding(nn.Module):
             1) * torch.exp(-math.log(self.max_period) * step.unsqueeze(0))
         encoding = torch.cat([torch.sin(encoding), torch.cos(encoding)], dim=-1)
         return encoding
-    
+
+class DistBndEncoding(nn.Module):
+    def __init__(self, dim, max_period=1e4):
+        super().__init__()
+        self.dim = dim
+        self.max_period=max_period
+
+    def forward(self, dist_to_bnd):
+        count = self.dim // 2
+        step = torch.arange(count, dtype=dist_to_bnd.dtype,
+                            device=dist_to_bnd.device) / count
+        encoding = dist_to_bnd.unsqueeze(
+            -1).log() * torch.exp(-math.log(self.max_period) * step)
+        encoding = torch.cat([torch.sin(encoding), torch.cos(encoding)], dim=-1)
+        return encoding
 
 class FeatureWiseAffine(nn.Module):
     def __init__(self, in_channels, out_channels, with_scale=False):
@@ -45,12 +59,21 @@ class FeatureWiseAffine(nn.Module):
 
     def forward(self, x, noise_embed):
         batch = x.shape[0]
+        dim_y = x.shape[-1]
+
         if self.with_scale:
-            gamma, beta = self.noise_func(noise_embed).view(
-                batch, -1, 1, 1).chunk(2, dim=1)
+            reduce = noise_embed.shape[1] // dim_y
+
+            if reduce > 1:
+                noise_embed = noise_embed.permute(0,-1,1,2)
+                noise_embed = nn.functional.avg_pool2d(noise_embed, reduce)
+                noise_embed = noise_embed.permute(0,2,3,1)
+            gamma, beta = self.noise_func(noise_embed).chunk(2, dim=-1)
+            gamma = gamma.permute(0,-1,1,2)
+            beta = beta.permute(0,-1,1,2)
             x = (1 + gamma) * x + beta
         else:
-            x = x + self.noise_func(noise_embed).view(batch, -1, 1, 1)
+            x = x + self.noise_func(noise_embed).permute(0,-1,1,2)
         return x
 
 class shuffle_upscaling(nn.Module):
@@ -362,7 +385,7 @@ class out_net(nn.Module):
 
 
 class ResUNet(nn.Module): 
-    def __init__(self, hw_in, hw_out, n_levels, factor, n_res_blocks, model_dim_unet, in_channels, out_channels, res_mode, res_indices, batch_norm=True, k_size=3, in_groups=1, out_groups=1, dropout=0, bias=True, global_padding=False, mid_att=False, initial_res=True, down_method="max",depth_embedding_dim=0):
+    def __init__(self, hw_in, hw_out, n_levels, factor, n_res_blocks, model_dim_unet, in_channels, out_channels, res_mode, res_indices, batch_norm=True, k_size=3, in_groups=1, out_groups=1, dropout=0, bias=True, global_padding=False, mid_att=False, initial_res=True, down_method="max", depth_embedding_dim=0, dist_to_boundary_emb_dim=0):
         super().__init__()
 
         global_upscale_factor = int(torch.tensor([(hw_out[0]) // hw_in[0], 1]).max())
@@ -375,23 +398,42 @@ class ResUNet(nn.Module):
         hw_mid = torch.tensor(hw_in)// (factor**(n_levels-1))
         self.mid = mid(hw_mid, n_res_blocks, model_dim_unet*(2**(n_levels-1)), with_att=mid_att, bias=bias, global_padding=global_padding,depth_embedding_dim=depth_embedding_dim)
 
-        if depth_embedding_dim:
+        if depth_embedding_dim>0:
             self.depth_level_mlp = nn.Sequential(
-                    DepthEncoding(model_dim_unet),
-                    nn.Linear(model_dim_unet, model_dim_unet * 4),
+                    DepthEncoding(model_dim_unet*4),
+                    nn.Linear(model_dim_unet*4, model_dim_unet * 4),
                     nn.SiLU(),
                     nn.Linear(model_dim_unet * 4, model_dim_unet)
                 )
         else:
             self.depth_level_mlp = None
+
+        if dist_to_boundary_emb_dim>0:
+            self.boundary_mlp = nn.Sequential(
+                    DistBndEncoding(model_dim_unet*4),
+                    nn.Linear(model_dim_unet*4, model_dim_unet * 4),
+                    nn.SiLU(),
+                    nn.Linear(model_dim_unet * 4, model_dim_unet)
+                )
+        else:
+            self.boundary_mlp = None
         
-    def forward(self, x, depth=None):
+        
+    def forward(self, x, depth=None, dist_to_boundary=None):
         d = self.depth_level_mlp(depth) if self.depth_level_mlp is not None else None
+        b = self.boundary_mlp(dist_to_boundary) if self.boundary_mlp is not None else None
+
+        if isinstance(b, torch.Tensor) and isinstance(d, torch.Tensor):
+            emb = b.squeeze(dim=1) + d
+        elif isinstance(b, torch.Tensor):
+            emb = b.squeeze(dim=1)
+        elif isinstance(d, torch.Tensor):
+            emb = d
 
         x_res = x
-        x, layer_outputs = self.encoder(x, depth_emb=d)
-        x = self.mid(x, depth_emb=d)
-        x = self.decoder(x, layer_outputs, depth_emb=d)
+        x, layer_outputs = self.encoder(x, depth_emb=emb)
+        x = self.mid(x, depth_emb=emb)
+        x = self.decoder(x, layer_outputs, depth_emb=emb)
         x = self.out_net(x, x_res)
 
         return {'x': x}
@@ -421,6 +463,8 @@ class core_ResUNet(psm.pyramid_step_model):
 
         with_depth_embedding = model_settings["with_depth_embedding"] if "with_depth_embedding" in model_settings.keys() else False
         depth_embedding_dim = model_settings['model_dim_core'] if with_depth_embedding else 0
+        with_boundary_embedding = model_settings["with_boundary_embedding"] if "with_boundary_embedding" in model_settings.keys() else False
+        dist_to_boundary_emb_dim = model_settings['model_dim_core'] if with_boundary_embedding else 0
 
         dropout = 0 if 'dropout' not in model_settings.keys() else model_settings['dropout']
         grouped = False if 'grouped' not in model_settings.keys() else model_settings['grouped']
@@ -453,7 +497,21 @@ class core_ResUNet(psm.pyramid_step_model):
         initial_res = model_settings['initial_res'] if "initial_res" in model_settings.keys() else False
         down_method = model_settings['down_method'] if "down_method" in model_settings.keys() else "max"
 
-        self.core_model = ResUNet(hw_in, hw_out, depth, factor, n_blocks, model_dim_core, input_dim, output_dim, model_settings['res_mode'], res_indices, batch_norm=batch_norm, in_groups=in_groups, out_groups=out_groups, dropout=dropout, bias=bias, global_padding=global_padding, mid_att=mid_att, initial_res=initial_res, down_method=down_method, depth_embedding_dim=depth_embedding_dim)
+        self.core_model = ResUNet(hw_in, 
+                                  hw_out, 
+                                  depth, 
+                                  factor, 
+                                  n_blocks, 
+                                  model_dim_core, 
+                                  input_dim, 
+                                  output_dim, 
+                                  model_settings['res_mode'], 
+                                  res_indices, 
+                                  batch_norm=batch_norm, 
+                                  in_groups=in_groups, 
+                                  out_groups=out_groups, 
+                                  dropout=dropout, 
+                                  bias=bias, global_padding=global_padding, mid_att=mid_att, initial_res=initial_res, down_method=down_method, depth_embedding_dim=depth_embedding_dim, dist_to_boundary_emb_dim=dist_to_boundary_emb_dim)
 
         if "pretrained_path" in self.model_settings.keys():
             self.check_pretrained(log_dir_check=self.model_settings['pretrained_path'])

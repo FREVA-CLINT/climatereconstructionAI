@@ -167,7 +167,8 @@ class NetCDFLoader_lazy(Dataset):
                  rotate_cs=False,
                  interpolation_dict=None,
                  sample_patch_range_lat=[-math.pi/2,math.pi/2],
-                 sample_condition_dict={}):
+                 sample_condition_dict={},
+                 calc_dist_to_static_boundary_lat=False):
         
         super(NetCDFLoader_lazy, self).__init__()
         
@@ -187,6 +188,7 @@ class NetCDFLoader_lazy(Dataset):
         self.rotate_cs = rotate_cs
         self.sample_patch_range_lat = sample_patch_range_lat
         self.sample_condition_dict = sample_condition_dict
+        self.calc_dist_to_static_boundary_lat = calc_dist_to_static_boundary_lat
 
         ds_source = xr.open_dataset(files_source[0])
         ds_target = xr.open_dataset(files_target[0])
@@ -194,9 +196,19 @@ class NetCDFLoader_lazy(Dataset):
         range_lon = [float(ds_source.clon.min()), float(ds_source.clon.max())]
         range_lat = [float(ds_source.clat.min()), float(ds_source.clat.max())]
         self.lon_periodicity = range_lon
+        self.static_boundary_range_lat = range_lat
 
-        self.patches_source = get_patches(grid_spacing_equator_km, pix_size_patch, patches_overlap_source, range_data_lon=range_lon, range_data_lat=range_lat)
-        self.patches_target = get_patches(grid_spacing_equator_km, pix_size_patch, patches_overlap_target, range_data_lon=range_lon, range_data_lat=range_lat)
+        self.patches_source = get_patches(grid_spacing_equator_km, 
+                                          pix_size_patch, 
+                                          patches_overlap_source, 
+                                          range_data_lon=range_lon, 
+                                          range_data_lat=range_lat)
+        
+        self.patches_target = get_patches(grid_spacing_equator_km, 
+                                          pix_size_patch, 
+                                          patches_overlap_target, 
+                                          range_data_lon=range_lon, 
+                                          range_data_lat=range_lat)
         
         if interpolation_dict is not None:
                  
@@ -278,11 +290,18 @@ class NetCDFLoader_lazy(Dataset):
         return spatial_dims_patches, spatial_dims_n_pts, patch_ids
 
 
-    def get_coordinates(self, ds, dims_variables_dict, spatial_dims_patches_ids, n_dict, patches, patch_id=None, lon_periodicity=[-math.pi,math.pi]):
+    def get_coordinates(self, 
+                        ds, 
+                        dims_variables_dict, 
+                        spatial_dims_patches_ids, 
+                        n_dict, 
+                        patches, 
+                        patch_id=None, 
+                        lon_periodicity=[-math.pi,math.pi]):
 
         spatial_dim_indices = {}
         rel_coords_dict = {} 
-
+        coords_dict = {}
         periodic_range = lon_periodicity[1] - lon_periodicity[0]
         
 
@@ -315,12 +334,15 @@ class NetCDFLoader_lazy(Dataset):
             elif patch_borders_lon[1] > lon_periodicity[1]:
                 shift_indices = coords[0,:] < patch_borders_lon[1]- periodic_range
                 coords[0,shift_indices] =  coords[0,shift_indices] + periodic_range
-
+            
             rel_coords_lon = (coords[0,:] - patch_borders_lon[0])/(patch_borders_lon[1]-patch_borders_lon[0])
             rel_coords_lat = (coords[1,:] - patch_borders_lat[0])/(patch_borders_lat[1]-patch_borders_lat[0])
             rel_coords_dict[spatial_dim] = torch.stack((rel_coords_lon,rel_coords_lat),dim=0)
 
-        return spatial_dim_indices, rel_coords_dict, patch_id
+            coords_dict[spatial_dim] = coords
+
+
+        return spatial_dim_indices, rel_coords_dict, patch_id, coords_dict
 
 
     def apply_spatial_dim_indices(self, ds, dims_variables_dict, spatial_dim_indices, rel_coords_dict={}):
@@ -426,8 +448,8 @@ class NetCDFLoader_lazy(Dataset):
                 if self.sample_patch_range_lat[0]<center_lat and self.sample_patch_range_lat[1]>center_lat:
                     in_lat_range = True
 
-            spatial_dim_indices_source, rel_coords_dict_source, _ = self.get_coordinates(ds_source, self.dims_variables_source, spatial_dims_patches_ids_source, self.n_dict_source, self.patches_source, patch_id=patch_id)
-            spatial_dim_indices_target, rel_coords_dict_target, _ = self.get_coordinates(ds_target, self.dims_variables_target, spatial_dims_patches_ids_target, self.n_dict_target, self.patches_target, patch_id=patch_id)
+            spatial_dim_indices_source, rel_coords_dict_source, _, coords_dict_source = self.get_coordinates(ds_source, self.dims_variables_source, spatial_dims_patches_ids_source, self.n_dict_source, self.patches_source, patch_id=patch_id)
+            spatial_dim_indices_target, rel_coords_dict_target, _, _ = self.get_coordinates(ds_target, self.dims_variables_target, spatial_dims_patches_ids_target, self.n_dict_target, self.patches_target, patch_id=patch_id)
 
             ds_source_sampled = self.apply_spatial_dim_indices(ds_source, self.dims_variables_source, spatial_dim_indices_source, rel_coords_dict=rel_coords_dict_source)
             ds_target_sampled = self.apply_spatial_dim_indices(ds_target, self.dims_variables_target, spatial_dim_indices_target, rel_coords_dict=rel_coords_dict_target)
@@ -461,7 +483,7 @@ class NetCDFLoader_lazy(Dataset):
                 save_path_target = os.path.join(self.save_nc_sample_path, os.path.basename(file_path_target).replace('.nc', f'_{float(patch_id):.3f}_target.nc'))
             ds_target_sampled.to_netcdf(save_path_target)
 
-        return ds_source_sampled, ds_target_sampled, patch_id, spatial_dim_indices_source, spatial_dim_indices_target, rot_angle, ds_target_past_sampled, spatial_dim_indices_target_past
+        return ds_source_sampled, ds_target_sampled, patch_id, spatial_dim_indices_source, spatial_dim_indices_target, rot_angle, ds_target_past_sampled, spatial_dim_indices_target_past, coords_dict_source
 
 
     def get_data(self, ds, index, dims_variables_dict, depth=0):
@@ -502,7 +524,7 @@ class NetCDFLoader_lazy(Dataset):
         target_file = self.files_target[source_index]
         target_file_past = self.files_target_past[source_index] if self.files_target_past is not None else None
 
-        ds_source, ds_target, patch_id, spatial_dim_indices_source, spatial_dim_indices_target, rot_angle, ds_past, spatial_dim_indices_past = self.get_files(source_file, file_path_target=target_file, file_path_target_past=target_file_past)
+        ds_source, ds_target, patch_id, spatial_dim_indices_source, spatial_dim_indices_target, rot_angle, ds_past, _, coords_source = self.get_files(source_file, file_path_target=target_file, file_path_target_past=target_file_past)
 
         data_source, rel_coords_source = self.get_data(ds_source, index, self.dims_variables_source, depth=depth_idx)
         data_target, rel_coords_target = self.get_data(ds_target, index_target, self.dims_variables_target, depth=depth_idx)
@@ -534,10 +556,20 @@ class NetCDFLoader_lazy(Dataset):
             data_target = self.input_mapper_t(data_target, rel_coords_target, self.dims_variables_target['spatial_dims_var'])
             rel_coords_target = dict(zip(rel_coords_target.keys(),[torch.empty(0) for _ in rel_coords_target.values()]))
 
+        if self.calc_dist_to_static_boundary_lat is not None:
+            key = list(coords_source.keys())[0]
+            dist_to_boundary = (torch.tensor(self.static_boundary_range_lat).view(-1,1) - coords_source[key][1].view(1,-1)).abs().min(dim=0).values
+            dist_to_boundary = {"dist": dist_to_boundary.view(-1,1)}
+            coords = {"coords": coords_source[key]}
+            dict_ = {"coords":["dist"]}
+            dist_to_boundary = self.input_mapper_s(dist_to_boundary, coords, dict_)
+        else:
+            dist_to_boundary = torch.tensor([])
+
         if len(self.save_tensor_sample_path)>0:
             save_path = os.path.join(self.save_tensor_sample_path, os.path.basename(source_file).replace('.nc', f'_{float(patch_id):.3f}_{float(rot_angle):.3f}_{int(depth_idx)}.pt'))
             if not os.path.isfile(save_path):
-                torch.save([data_source, data_target, rel_coords_source, rel_coords_target, spatial_dim_indices_source, spatial_dim_indices_target], save_path)
+                torch.save([data_source, data_target, rel_coords_source, rel_coords_target, spatial_dim_indices_source, spatial_dim_indices_target, dist_to_boundary], save_path)
 
             dict_file = os.path.join(self.save_tensor_sample_path,'dims_var_source.json')
             
@@ -548,7 +580,7 @@ class NetCDFLoader_lazy(Dataset):
                 with open(os.path.join(self.save_tensor_sample_path,'dims_var_target.json'), 'w') as f:
                     json.dump(self.dims_variables_target, f, indent=4)
 
-        return data_source, data_target, rel_coords_source, rel_coords_target, spatial_dim_indices_source, spatial_dim_indices_target, depth_idx
+        return data_source, data_target, rel_coords_source, rel_coords_target, spatial_dim_indices_source, spatial_dim_indices_target, depth_idx, dist_to_boundary
 
     def __len__(self):
         return self.num_datapoints_time
@@ -597,7 +629,8 @@ class SampleLoader(Dataset):
         target = data[1]
         coords_source = data[2]
         coords_target = data[3]
-        target_indices = data[-1]
+        target_indices = data[-2]
+        dist_to_boundary = data[-1]
 
         n_dict_source_sample = dict(zip(coords_source.keys(),[val.shape[-1] for val in coords_source.values()]))
         n_dict_target_sample = dict(zip(coords_target.keys(),[val.shape[-1] for val in coords_target.values()]))
@@ -621,6 +654,6 @@ class SampleLoader(Dataset):
             target_indices[spatial_dim] = target_indices[spatial_dim][indices]
             coords_target[spatial_dim] = coords_target[spatial_dim][:,indices]
 
-        data = [source[self.indices_source], target, torch.zeros((10,)), coords_target, target_indices, depth]
+        data = [source[self.indices_source], target, torch.zeros((10,)), coords_target, target_indices, depth, dist_to_boundary]
         
         return data

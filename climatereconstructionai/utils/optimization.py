@@ -725,13 +725,13 @@ class loss_calculator(nn.Module):
                     phys_calc = physics_calculator(training_settings['grid_file'], device=training_settings['device'])
                 self.loss_fcn_dict['kin_energy_sum'] = SummedKinEnergyLoss(phys_calc)
 
-    def forward(self, lambdas_optim, target, model, source, coords_target, target_indices, coords_source=None, val=False, k=None, depth=None):
+    def forward(self, lambdas_optim, target, model, source, coords_target, target_indices, coords_source=None, val=False, k=None, depth=None, dist_to_boundary=None):
         
         if val:
             with torch.no_grad():
-                output, output_reg_lr, output_core, non_valid_mask = model(source, coords_target, coords_source=coords_source, depth=depth)
+                output, output_reg_lr, output_core, non_valid_mask = model(source, coords_target, coords_source=coords_source, depth=depth, dist_to_boundary=dist_to_boundary)
         else:
-            output, _, output_core, non_valid_mask = model(source, coords_target, coords_source=coords_source,depth=depth)
+            output, _, output_core, non_valid_mask = model(source, coords_target, coords_source=coords_source,depth=depth, dist_to_boundary=dist_to_boundary)
 
         if 'trivial' in self.loss_fcn_dict.keys() and not self.loss_fcn_dict['trivial'].registered:
             self.loss_fcn_dict['trivial'].register_samples(source, coords_target, target)
