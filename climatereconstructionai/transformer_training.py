@@ -184,8 +184,7 @@ def train(model, training_settings, model_settings={}):
                                     rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False,
                                     interpolation_dict=training_settings['interpolation'],
                                     sample_patch_range_lat=training_settings['sample_patch_range_lat'] if 'sample_patch_range_lat' in training_settings else [-math.pi,math.pi],
-                                    sample_condition_dict=training_settings['sample_condition_dict'] if 'sample_condition_dict' in training_settings else {},
-                                    calc_dist_to_static_boundary_lat=training_settings['calc_dist_to_static_boundary_lat'] if 'calc_dist_to_static_boundary_lat' in training_settings else False)
+                                    sample_condition_dict=training_settings['sample_condition_dict'] if 'sample_condition_dict' in training_settings else {})
         
         dataset_val = NetCDFLoader_lazy(source_files_val, 
                                     target_files_val,
@@ -210,8 +209,7 @@ def train(model, training_settings, model_settings={}):
                                     rotate_cs=training_settings['rotate_cs'] if 'rotate_cs' in training_settings else False,
                                     interpolation_dict=training_settings['interpolation'],
                                     sample_patch_range_lat=training_settings['sample_patch_range_lat'] if 'sample_patch_range_lat' in training_settings else [-math.pi,math.pi],
-                                    sample_condition_dict=training_settings['sample_condition_dict'] if 'sample_condition_dict' in training_settings else {},
-                                    calc_dist_to_static_boundary_lat=training_settings['calc_dist_to_static_boundary_lat'] if 'calc_dist_to_static_boundary_lat' in training_settings else False)
+                                    sample_condition_dict=training_settings['sample_condition_dict'] if 'sample_condition_dict' in training_settings else {})
 
         model_settings['normalization'] = norm_dict = dataset_train.norm_dict
 
@@ -290,14 +288,13 @@ def train(model, training_settings, model_settings={}):
 
         data = [data_to_device(x, device) for x in next(iterator_train)]
         source, target, coords_source, coords_target = data[:4] # for backward compability
-        target_indices = data[-3]
-        depth = data[-2]
-        dist_to_boundary = data[-1]
+        target_indices = data[-2]
+        depth = data[-1]
 
         if 'k_l1_relv' in lambdas_optim.keys():
-            train_total_loss, train_loss_dict = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, k=lambdas_optim['k_l1_relv'], depth=depth,dist_to_boundary=dist_to_boundary)
+            train_total_loss, train_loss_dict = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, k=lambdas_optim['k_l1_relv'], depth=depth)
         else:
-            train_total_loss, train_loss_dict = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, k=None, depth=depth, dist_to_boundary=dist_to_boundary)
+            train_total_loss, train_loss_dict = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, k=None, depth=depth)
 
         train_losses_hist.append(train_loss_dict['total_loss'])
 
@@ -335,14 +332,13 @@ def train(model, training_settings, model_settings={}):
 
                 data = [data_to_device(x, device) for x in next(iterator_val)]
                 source, target, coords_source, coords_target = data[:4] # for backward compability
-                target_indices = data[-3]
-                depth = data[-2]
-                dist_to_boundary = data[-1]
+                target_indices = data[-2]
+                depth = data[-1]
 
                 if 'k_l1_relv' in lambdas_optim.keys():
-                    _, val_loss_dict, output, target, output_reg_hr, output_reg_lr, non_valid_mask = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, val=True, k=lambdas_optim['k_l1_relv'], depth=depth, dist_to_boundary=dist_to_boundary)
+                    _, val_loss_dict, output, target, output_reg_hr, output_reg_lr, non_valid_mask = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, val=True, k=lambdas_optim['k_l1_relv'], depth=depth)
                 else:
-                    _, val_loss_dict, output, target, output_reg_hr, output_reg_lr, non_valid_mask = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, val=True, k=None, depth=depth, dist_to_boundary=dist_to_boundary)
+                    _, val_loss_dict, output, target, output_reg_hr, output_reg_lr, non_valid_mask = loss_calculator(lambdas_optim, target, model, source, coords_target, target_indices, coords_source=coords_source, val=True, k=None, depth=depth)
 
                 val_losses.append(list(val_loss_dict.values()))
             

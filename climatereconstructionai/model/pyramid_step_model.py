@@ -201,7 +201,7 @@ class pyramid_step_model(nn.Module):
         else:
             self.input_avg_pooling = nn.Identity()
 
-    def forward(self, x, coords_target, coords_source=None, norm=False, apply_res=True, depth=None, dist_to_boundary=None):
+    def forward(self, x, coords_target, coords_source=None, norm=False, apply_res=True, depth=None):
         # coords target: Values from 0 to 1
 
         if norm:
@@ -214,7 +214,7 @@ class pyramid_step_model(nn.Module):
 
         if not isinstance(self.core_model, nn.Identity):
             x = self.input_avg_pooling(x)
-            output = self.core_model(x, depth=depth, dist_to_boundary=dist_to_boundary)
+            output = self.core_model(x, depth=depth)
             core_output = output
             
             #coords_target_hr, non_valid = helpers.scale_coords(coords_target, self.range_region_target_radx, rngy=self.range_region_target_rady)
@@ -436,7 +436,7 @@ class pyramid_step_model(nn.Module):
                 output_global_std = dict(zip(var_spatial_dims.keys(), [torch.zeros(ds_target[variable][0].values.shape).squeeze().to(device) for variable in var_spatial_dims.keys()]))
             else:
                 output_global_std = {}
- 
+
             for result in results:
                 if result is not None:
                     depth, patch_id_idx, output = result
