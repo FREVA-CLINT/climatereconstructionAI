@@ -419,8 +419,8 @@ class core_ResUNet(psm.pyramid_step_model):
         n_blocks = model_settings['n_blocks_core']
         model_dim_core = model_settings['model_dim_core']
         depth = model_settings["depth_core"]
-        batch_norm = model_settings["batch_norm"]
-        instance_norm = model_settings["instance_norm"]
+        batch_norm = model_settings["batch_norm"] if 'batch_norm' in model_settings.keys() else False
+        instance_norm = model_settings["instance_norm"] if 'instance_norm' in model_settings.keys() else False
         mid_att = model_settings["mid_att"] if "mid_att" in model_settings.keys() else False
         full_res = model_settings["full_res"] if "full_res" in model_settings.keys() else False
 
