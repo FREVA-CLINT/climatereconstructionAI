@@ -312,7 +312,7 @@ class NetCDFLoader_lazy(Dataset):
                 shift_indices = coords[0,:] > periodic_range + patch_borders_lon[0]
                 coords[0,shift_indices] =  coords[0, shift_indices] - periodic_range
 
-            elif patch_borders_lon[1] > lon_periodicity[1]:
+            if patch_borders_lon[1] > lon_periodicity[1]:
                 shift_indices = coords[0,:] < patch_borders_lon[1]- periodic_range
                 coords[0,shift_indices] =  coords[0,shift_indices] + periodic_range
 
@@ -426,14 +426,14 @@ class NetCDFLoader_lazy(Dataset):
                 if self.sample_patch_range_lat[0]<center_lat and self.sample_patch_range_lat[1]>center_lat:
                     in_lat_range = True
 
-            spatial_dim_indices_source, rel_coords_dict_source, _ = self.get_coordinates(ds_source, self.dims_variables_source, spatial_dims_patches_ids_source, self.n_dict_source, self.patches_source, patch_id=patch_id)
-            spatial_dim_indices_target, rel_coords_dict_target, _ = self.get_coordinates(ds_target, self.dims_variables_target, spatial_dims_patches_ids_target, self.n_dict_target, self.patches_target, patch_id=patch_id)
+            spatial_dim_indices_source, rel_coords_dict_source, _ = self.get_coordinates(ds_source, self.dims_variables_source, spatial_dims_patches_ids_source, self.n_dict_source, self.patches_source, patch_id=patch_id, lon_periodicity=self.lon_periodicity)
+            spatial_dim_indices_target, rel_coords_dict_target, _ = self.get_coordinates(ds_target, self.dims_variables_target, spatial_dims_patches_ids_target, self.n_dict_target, self.patches_target, patch_id=patch_id, lon_periodicity=self.lon_periodicity)
 
             ds_source_sampled = self.apply_spatial_dim_indices(ds_source, self.dims_variables_source, spatial_dim_indices_source, rel_coords_dict=rel_coords_dict_source)
             ds_target_sampled = self.apply_spatial_dim_indices(ds_target, self.dims_variables_target, spatial_dim_indices_target, rel_coords_dict=rel_coords_dict_target)
 
             if include_past:
-                spatial_dim_indices_target_past, rel_coords_dict_target_past, _ = self.get_coordinates(ds_target_past, self.dims_variables_target, spatial_dims_patches_ids_target_past, self.n_dict_target, self.patches_source, patch_id=patch_id)
+                spatial_dim_indices_target_past, rel_coords_dict_target_past, _ = self.get_coordinates(ds_target_past, self.dims_variables_target, spatial_dims_patches_ids_target_past, self.n_dict_target, self.patches_source, patch_id=patch_id, lon_periodicity=self.lon_periodicity)
                 ds_target_past_sampled = self.apply_spatial_dim_indices(ds_target_past, self.dims_variables_target, spatial_dim_indices_target_past, rel_coords_dict=rel_coords_dict_target_past)
             else:
                 ds_target_past_sampled=None
