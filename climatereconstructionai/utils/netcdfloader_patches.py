@@ -420,7 +420,7 @@ class NetCDFLoader_lazy(Dataset):
             in_lat_range = False
 
             while not in_lat_range:
-                patch_id = torch.randint(0, len(self.patches_source['centers_lon'])* len(self.patches_source['centers_lat']) -1, (1,))
+                patch_id = torch.randint(0, len(self.patches_source['centers_lon'])* len(self.patches_source['centers_lat']), (1,))
                 center_lat = self.patches_source["centers_lat"][self.patch_ids["lat"][int(patch_id)]]
 
                 if self.sample_patch_range_lat[0]<center_lat and self.sample_patch_range_lat[1]>center_lat:
