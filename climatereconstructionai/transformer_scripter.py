@@ -1,7 +1,7 @@
 import os
 import json
 import argparse
-from climatereconstructionai.model import core_model_crai, pyramid_step_model, core_model_resushuffle, core_model_resushuffle_vae, pyramid_model, ICONTransformer
+from climatereconstructionai.model import core_model_crai, pyramid_step_model, core_model_resushuffle, core_model_resushuffle_vae, pyramid_model
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-f","--script_dict")
@@ -43,8 +43,6 @@ if __name__ == "__main__":
                     model = core_model_resushuffle.core_ResUNet(model_settings, model_dir=model_dir)
                 elif model_type=='shuffle_vae':
                     model = core_model_resushuffle_vae.core_ResVAE(model_settings, model_dir=model_dir)
-                elif model_type=='icon_transformer':
-                    model = ICONTransformer.ICON_Transformer(model_settings)
                 model_init = True
 
         model.set_training_configuration(train_settings=train_settings)
