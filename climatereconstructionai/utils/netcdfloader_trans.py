@@ -237,6 +237,12 @@ class NetCDFLoader_lazy(Dataset):
 
         if self.random_time_idx:
             index = int(torch.randint(0, len(ds_source.time.values), (1,1)))
+
+        sample_index = torch.randint(self.global_cells.shape[0],(1,))[0]
+        global_cells_sample = self.global_cells[sample_index]
+        
+        data_source = self.get_data(ds_source, index, global_cells_sample, self.variables_source, self.input_mapping['cell'])
+        data_target = self.get_data(ds_target, index, global_cells_sample, self.variables_target, self.output_mapping['cell'])
         '''
         condition_not_met = True
         while condition_not_met:
