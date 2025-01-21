@@ -680,7 +680,7 @@ def get_patches(grid_spacing_equator_km, pix_size, overlap, range_data_lon=[-mat
     n_patches_lon = total_grid_size_lon_pix/pix_size
 
     border_patches_lon = np.linspace(range_data_lon[0], range_data_lon[1],int(n_patches_lon)+1)
-    border_patches_lat = np.linspace(range_data_lat[0], range_data_lat[1],int(n_patches_lon/2)+1)
+    border_patches_lat = np.linspace(range_data_lat[0], range_data_lat[1],int(n_patches_lon)+1)
 
     centers_lon = (border_patches_lon[1:] + border_patches_lon[:-1])/2
     centers_lat = (border_patches_lat[1:] + border_patches_lat[:-1])/2
@@ -728,7 +728,7 @@ def get_ids_in_patches(patches, coords, return_torch=True, lon_periodicity=[-mat
             if np.round(border_patch_lon[0],6) < np.round(lon_periodicity[0],6):
                 in_patch_lon = np.logical_or(in_patch_lon, (coords[0] > (periodic_range + border_patch_lon[0])))
 
-            elif np.round(border_patch_lon[1],6) > np.round(lon_periodicity[1],6):
+            if np.round(border_patch_lon[1],6) > np.round(lon_periodicity[1],6):
                 in_patch_lon = np.logical_or(in_patch_lon, (coords[0] < (border_patch_lon[1] - periodic_range)))
 
             in_patch_lat = np.logical_and(coords[1] >= border_patch_lat[0], coords[1] <= border_patch_lat[1])
