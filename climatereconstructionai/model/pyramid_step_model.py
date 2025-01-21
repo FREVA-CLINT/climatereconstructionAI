@@ -69,13 +69,7 @@ class output_net(nn.Module):
                                         s=s,
                                         nh=nh,
                                         train_s=train_s)
-        
-     #   self.grid_to_target_sampler = helpers.trans_nu_grid_sampler(n_res=n,
-     #                                 s=s,
-     #                                 nh=nh,
-     #                                 model_dim=model_settings['output_dim_core'],
-     #                                 output_dim=int(np.array(model_settings['output_dims']).sum()))
-        
+
         self.n_output_groups = model_settings['n_output_groups']
         self.output_dims = model_settings['output_dims']
         self.spatial_dim_var_dict = model_settings['spatial_dims_var_target']
@@ -168,7 +162,8 @@ class pyramid_step_model(nn.Module):
 
         self.core_model = nn.Identity()
         
-        self.create_grids()
+        self.n_in = self.model_settings['n_regular'][0]
+        self.n_out = self.model_settings['n_regular'][1]
         
         model_settings_pre = self.model_settings
 
@@ -568,19 +563,6 @@ class pyramid_step_model(nn.Module):
             json.dump(self.train_settings, f, indent=4)
 
 
-    def create_grids(self):
-       
-        self.radius_region_source_km = self.model_settings['radius_region_source_km']
-        self.radius_region_target_km = self.model_settings['radius_region_target_km']
-
-        self.n_in = self.model_settings['n_regular'][0]
-        self.n_out = self.model_settings['n_regular'][1]
-
-        patch_overlap_target, patch_overlap_source = self.model_settings["patches_overlap_target"], self.model_settings["patches_overlap_source"]
-
-        self.coord_scaling_source_target = (self.n_out[0] + patch_overlap_target)/(self.n_in[0] + patch_overlap_source)
-
-
     def set_normalizer(self):
         self.normalize = normalizer(self.model_settings['normalization'])
 
@@ -602,44 +584,6 @@ class pyramid_step_model(nn.Module):
                 method=self.model_settings['interpolation_method'] if 'interpolation_method' in self.model_settings else 'nearest' 
             )
     
-    def get_region_generator_settings(self, lon_trans=False):
-        if lon_trans:
-            region_gen_dict = {
-                    'rect_source': False,
-                    'radius_source': -1,
-                    'rect_target': False,
-                    'radius_target': -1,
-                    "lon_range": [
-                            -180,
-                            180
-                        ],
-                        "lat_range": [
-                            -0,
-                            0.0001
-                        ],
-                    "batch_size": 1,
-                    "generate_interval": 1
-                }
-        else:
-            region_gen_dict = {
-                    'rect_source': False,
-                    'radius_source': self.radius_region_source_km,
-                    'rect_target': False,
-                    'radius_target': self.radius_region_target_km,
-                    "lon_range": [
-                            -180,
-                            180
-                        ],
-                        "lat_range": [
-                            -90,
-                            90
-                        ],
-                    "batch_size": 1,
-                    "generate_interval": 1
-                }
-        return region_gen_dict
-
-    
 
     def train_(self, train_settings=None, subdir=None, pretrain_subdir=None, optimization=True):
 
@@ -655,16 +599,6 @@ class pyramid_step_model(nn.Module):
             self.check_pretrained(os.path.join(self.model_dir, pretrain_subdir, 'logs'))
 
         train_settings = self.train_settings
-
-        if "use_samples" in train_settings.keys() and train_settings["use_samples"]:
-            train_settings["rel_coords"]=True
-        else:
-            if "random_region" not in self.train_settings.keys() and self.model_settings['model_type']=="patches_km":
-                train_settings["random_region"] = self.get_region_generator_settings()
-            
-            if 'lon_trans' in self.train_settings.keys() and self.train_settings['lon_trans']:
-                train_settings["random_region"] = self.get_region_generator_settings(lon_trans=True)
-
         train_settings["gauss_loss"] = self.model_settings['gauss'] 
         train_settings["variables_source"] = self.model_settings["variables_source"]
         train_settings["variables_target"] = self.model_settings["variables_target"]
