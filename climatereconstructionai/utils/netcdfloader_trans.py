@@ -101,7 +101,8 @@ class NetCDFLoader_lazy(Dataset):
                  sample_for_norm=-1,
                  lazy_load=False,
                  sample_condition_dict={},
-                 model_settings={}):
+                 model_settings={},
+                 random_time_idx=True):
         
         super(NetCDFLoader_lazy, self).__init__()
         
@@ -115,6 +116,7 @@ class NetCDFLoader_lazy(Dataset):
         self.sample_for_norm = sample_for_norm
         self.lazy_load=lazy_load
         self.sample_condition_dict = sample_condition_dict
+        self.random_time_idx = random_time_idx
 
         self.files_source = files_source
         self.files_target = files_target
@@ -226,12 +228,15 @@ class NetCDFLoader_lazy(Dataset):
 
         if len(self.files_source)>0:
             source_index = torch.randint(0, len(self.files_source), (1,1))
-            source_file = self.files_source[source_index]
-
+            source_file = self.files_source[source_index]   
+        
         target_file = self.files_target[source_index]
         target_file_past = self.files_target_past[source_index] if self.files_target_past is not None else None
 
         ds_source, ds_target = self.get_files(source_file, file_path_target=target_file, file_path_target_past=target_file_past)
+
+        if self.random_time_idx:
+            index = int(torch.randint(0, len(ds_source.time.values), (1,1)))
 
         condition_not_met = True
         while condition_not_met:
