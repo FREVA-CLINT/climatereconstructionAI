@@ -150,6 +150,8 @@ class pyramid_step_model(nn.Module):
         self.model_settings['output_dims'] = [len(values) - int(self.model_settings['calc_vort'])*int('vort' in values) for key, values in self.model_settings['spatial_dims_var_target'].items()]   
         self.model_settings['output_dims'] = [dims for dims in self.model_settings['output_dims'] if dims>0]
 
+        self.hist_mode = self.model_settings.get('hist_mode','')
+
         self.output_res_indices = {}
         for var_target in self.model_settings['variables_target']:
             var_in_source = [k for k, var_source in enumerate(self.model_settings['variables_source']) if var_source==var_target]
@@ -196,7 +198,7 @@ class pyramid_step_model(nn.Module):
         else:
             self.input_avg_pooling = nn.Identity()
 
-    def forward(self, x, coords_target, coords_source=None, norm=False, apply_res=True, depth=None):
+    def forward(self, x: torch.tensor, coords_target, coords_source=None, norm=False, apply_res=True, depth=None):
         # coords target: Values from 0 to 1
 
         if norm:
@@ -209,7 +211,12 @@ class pyramid_step_model(nn.Module):
 
         if not isinstance(self.core_model, nn.Identity):
             x = self.input_avg_pooling(x)
-            output = self.core_model(x, depth=depth)
+            x_res=None
+            if self.hist_mode=='diff_res':
+                x, x_past = x.chunk(2, dim=1)
+                x_res = x
+                x = x_past-x
+            output = self.core_model(x, depth=depth, x_res=x_res)
             core_output = output
             
             #coords_target_hr, non_valid = helpers.scale_coords(coords_target, self.range_region_target_radx, rngy=self.range_region_target_rady)

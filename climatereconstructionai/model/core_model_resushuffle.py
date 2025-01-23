@@ -389,10 +389,11 @@ class ResUNet(nn.Module):
         else:
             self.depth_level_mlp = None
         
-    def forward(self, x, depth=None):
+    def forward(self, x, depth=None, x_res=None):
         d = self.depth_level_mlp(depth) if self.depth_level_mlp is not None else None
 
-        x_res = x
+        if x_res is None:
+            x_res = x
         x, layer_outputs = self.encoder(x, depth_emb=d)
         x = self.mid(x, depth_emb=d)
         x = self.decoder(x, layer_outputs, depth_emb=d)
