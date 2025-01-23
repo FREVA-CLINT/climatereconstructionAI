@@ -512,7 +512,6 @@ class NetCDFLoader_lazy(Dataset):
 
             if ds_source_past is not None:
                 data_past = self.input_mapper_s(data_past, rel_coords_source, self.dims_variables_source['spatial_dims_var'])
-                data_past = torch.zeros_like(data_past)
                 data_source = torch.concat((data_source, data_past), dim=0)
 
             rel_coords_source = dict(zip(rel_coords_source.keys(),[torch.empty(0) for _ in rel_coords_source.values()]))
