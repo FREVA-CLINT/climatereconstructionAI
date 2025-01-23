@@ -551,8 +551,8 @@ class SampleLoader(Dataset):
         self.n_dict_source = dict(zip(coords_source.keys(),[val.shape[-1] for val in coords_source.values()]))
         self.n_dict_target = dict(zip(coords_target.keys(),[val.shape[-1] for val in coords_target.values()]))
         
-        sample_variables_source = list(dims_variables_source['var_spatial_dims'].keys())
-        self.indices_source = [k for k,var in enumerate(sample_variables_source) if var in variables_source]
+       # sample_variables_source = list(dims_variables_source['var_spatial_dims'].keys())
+       # self.indices_source = [k for k,var in enumerate(sample_variables_source) if var in variables_source]
 
         self.dims_variables_source = dims_variables_source
         self.dims_variables_target = dims_variables_target
@@ -607,6 +607,6 @@ class SampleLoader(Dataset):
             target_indices[spatial_dim] = target_indices[spatial_dim][indices]
             coords_target[spatial_dim] = coords_target[spatial_dim][:,indices]
 
-        data = [source[self.indices_source], target, torch.zeros((10,)), coords_target, target_indices, depth]
+        data = [source, target, torch.zeros((10,)), coords_target, target_indices, depth]
         
         return data
