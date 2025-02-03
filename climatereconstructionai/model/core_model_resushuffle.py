@@ -410,8 +410,12 @@ class core_ResUNet(psm.pyramid_step_model):
 
         input_dim = len(model_settings["variables_source"])
         
+        if 'concat' in self.hist_mode:
+            input_dim=input_dim*2
+
         if 'output_dim_core' not in model_settings.keys():
             output_dim = len(model_settings["variables_target"]) - int(model_settings["calc_vort"]) * int('vort' in model_settings["variables_target"])
+
         else:
             output_dim = model_settings['output_dim_core']
 
@@ -464,4 +468,5 @@ class core_ResUNet(psm.pyramid_step_model):
         if "pretrained_path" in self.model_settings.keys():
             self.check_pretrained(log_dir_check=self.model_settings['pretrained_path'])
         elif self.eval_mode:
-            self.check_pretrained(log_dir_check=self.log_dir)
+            pass
+           # self.check_pretrained(log_dir_check=self.log_dir)

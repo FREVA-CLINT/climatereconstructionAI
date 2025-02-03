@@ -198,14 +198,8 @@ class pyramid_step_model(nn.Module):
         else:
             self.input_avg_pooling = nn.Identity()
 
-    def forward(self, x: torch.tensor, coords_target, coords_source=None, norm=False, apply_res=True, depth=None):
+    def forward(self, x: torch.tensor, coords_target, coords_source=None, apply_res=True, depth=None):
         # coords target: Values from 0 to 1
-
-        if norm:
-            x = self.normalize(x)
-
-        if self.input_mapper is not None:
-            x = self.input_mapper(x, coords_source, self.model_settings['spatial_dims_var_source'])
 
         x_reg_lr = x
 
@@ -216,6 +210,15 @@ class pyramid_step_model(nn.Module):
                 x, x_past = x.chunk(2, dim=1)
                 x_res = x
                 x = x_past-x
+
+            elif self.hist_mode=='concat_res':
+                x_res, _ = x.chunk(2, dim=1)
+
+            elif self.hist_mode=='concat_diff_res':
+                x, x_past = x.chunk(2, dim=1)
+                x_res = x
+                x = torch.concat((x, x_past-x), dim=1)
+
             output = self.core_model(x, depth=depth, x_res=x_res)
             core_output = output
             
@@ -241,8 +244,7 @@ class pyramid_step_model(nn.Module):
                     if apply_res:
                         x[var] = x[var] + x_pre[var]
         
-        if norm:
-            x = self.normalize(x, denorm=True)
+   
 
         return x, x_reg_lr, core_output, non_valid_var
     
@@ -324,7 +326,7 @@ class pyramid_step_model(nn.Module):
         return patches
     
 
-    def get_data_patch_depth(self, ds, ds_target, patches, patch_id_idx, ts, depth, device='cpu'):
+    def get_data_patch_depth(self, ds, ds_target, patches, patch_id_idx, ts, depth, ds_source_hist=None, device='cpu'):
         
         patch_ids = patches['patch_ids']
         patches_target = patches['patches_target']
@@ -345,6 +347,7 @@ class pyramid_step_model(nn.Module):
 
         coords_source = {}
         data_source = {}
+        data_source_hist = {}
         for spatial_dim, vars in self.model_settings["spatial_dims_var_source"].items():
     
             coord_dict = gu.get_coord_dict_from_var(ds, spatial_dim)
@@ -356,6 +359,9 @@ class pyramid_step_model(nn.Module):
 
             for variable in vars:
                 data_source[variable] = torch.tensor(ds[variable].values[ts, depth, indices]).unsqueeze(dim=-1).unsqueeze(dim=0).to(device)
+
+                if ds_source_hist is not None:
+                    data_source_hist[variable] = torch.tensor(ds[variable].values[ts, depth, indices]).unsqueeze(dim=-1).unsqueeze(dim=0).to(device)
 
         var_spatial_dims = {}
         coords_target = {}
@@ -369,27 +375,38 @@ class pyramid_step_model(nn.Module):
             coords_target[spatial_dim] = self.get_coordinates_frame(coords[:,indices], patch_borders_source_lon, patch_borders_source_lat, lon_periodicity=lon_periodicity).unsqueeze(dim=0).to(device)
             var_spatial_dims.update(dict(zip(vars,[spatial_dim]*len(vars))))
 
-        return data_source, coords_target, coords_source
+        return data_source, coords_target, coords_source, data_source_hist
 
 
 
-    def predict_depth_patches(self, ds, ds_target, patches, depths_patch_ids, ts, device='cpu'):
+    def predict_depth_patches(self, ds, ds_target, patches, depths_patch_ids, ts, device='cpu', ds_source_hist=None):
         
         predictions = []
         for depth, patch_id in depths_patch_ids:
             #scatter in local processes        
             #batch size per gpu    
-            data_source, coords_target, coords_source = self.get_data_patch_depth(ds, ds_target, patches, patch_id, ts, depth, device=device)
-        
+            data_source, coords_target, coords_source, data_source_hist = self.get_data_patch_depth(ds, ds_target, patches, patch_id, ts, depth, device=device, ds_source_hist=ds_source_hist)
+            
+            
+            data_source = self.normalize(data_source)
+            data_source = self.input_mapper(data_source, coords_source, self.model_settings['spatial_dims_var_source'])
+
+            if len(data_source_hist)>0:
+                data_source_hist = self.normalize(data_source_hist)
+                data_source_hist = self.input_mapper(data_source_hist, coords_source, self.model_settings['spatial_dims_var_source'])
+                data_source = torch.concat((data_source, data_source_hist), dim=1)
+
             with torch.no_grad():
-                output = self(data_source, coords_target, coords_source=coords_source, norm=True, depth=torch.tensor(depth, device=device, dtype=torch.float).view(1,1))[0]
+                output = self(data_source, coords_target, coords_source=coords_source, depth=torch.tensor(depth, device=device, dtype=torch.float).view(1,1))[0]
+
+            output = self.normalize(output, denorm=True)
 
             predictions.append((depth, patch_id, output))
             
         return predictions
 
 
-    def apply_patches(self, ds, ts=-1, device='cpu', ds_target=None, depths_to_process=-1):
+    def apply_patches(self, ds, ts=-1, device='cpu', ds_target=None, depths_to_process=-1, ds_source_hist=None):
 
         self.set_input_mapper(mode="interpolation")
 
@@ -422,7 +439,7 @@ class pyramid_step_model(nn.Module):
 
         print(f'Correcting {len(depths_patch_ids_rank)} patches on rank {rank}')
 
-        results = self.predict_depth_patches(ds, ds_target, patches, depths_patch_ids_rank, ts, device='cpu')
+        results = self.predict_depth_patches(ds, ds_target, patches, depths_patch_ids_rank, ts, device='cpu', ds_source_hist=ds_source_hist)
         
         if rank==0:
             if n_procs > 1:
