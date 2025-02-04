@@ -33,7 +33,45 @@ class DepthEncoding(nn.Module):
             1) * torch.exp(-math.log(self.max_period) * step.unsqueeze(0))
         encoding = torch.cat([torch.sin(encoding), torch.cos(encoding)], dim=-1)
         return encoding
-    
+
+class SpatialEncoding(nn.Module):
+    def __init__(self, in_channels, spatial_emb_channels):
+        super().__init__()
+
+        self.res_net_blocks = nn.ModuleList()
+        for in_channel in in_channels:
+            self.res_net_blocks.append(res_net_block(512, in_channel, spatial_emb_channels, k_size=3, batch_norm=False, with_res=False))
+
+    def forward(self, data_list):
+        
+        for idx, data_ in enumerate(data_list):
+            if idx==0:
+                out = self.res_net_blocks[idx](data_)
+            else:
+                out = out + self.res_net_blocks[idx](data_)
+
+        return out
+
+class SpatialAffine(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+
+        self.shift_scale = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels*2, kernel_size=3, padding=1, padding_mode='replicate',groups=2)
+        )
+
+    def forward(self, x, spatial_embs):
+        
+        rescale_factor = spatial_embs.shape[-1] // x.shape[-1]
+
+        spatial_embs = nn.functional.avg_pool2d(spatial_embs, kernel_size=rescale_factor)
+        embs = self.shift_scale(spatial_embs)
+        shift, scale = embs.chunk(2, dim=1)
+
+        x = x*shift + scale
+
+        return x
+
 
 class FeatureWiseAffine(nn.Module):
     def __init__(self, in_channels, out_channels, with_scale=False):
@@ -80,7 +118,7 @@ class shuffle_upscaling(nn.Module):
         return x
 
 class res_net_block(nn.Module):
-    def __init__(self, hw, in_channels, out_channels, k_size=3, batch_norm=True, stride=1, groups=1, dropout=0, with_att=False, with_res=True, bias=True, out_activation=True, global_padding=False, depth_embedding_dim=0, instance_norm=False):
+    def __init__(self, hw, in_channels, out_channels, k_size=3, batch_norm=True, stride=1, groups=1, dropout=0, with_att=False, with_res=True, bias=True, out_activation=True, global_padding=False, depth_embedding_dim=0, spatial_emb_channels=0, instance_norm=False):
         super().__init__()
 
         self.global_padding = global_padding
@@ -101,6 +139,11 @@ class res_net_block(nn.Module):
         if self.with_depth_embedding:
             self.feat_affine = FeatureWiseAffine(depth_embedding_dim, out_channels, with_scale=True)
 
+        self.with_spatial_embedding = True if spatial_emb_channels>0 else False
+
+        if self.with_spatial_embedding:
+            self.spatial_affine = SpatialAffine(spatial_emb_channels, out_channels)
+
         self.with_res = with_res
 
         if instance_norm:
@@ -120,7 +163,7 @@ class res_net_block(nn.Module):
         if with_att:
             self.att = helpers.ConvSelfAttention(out_channels, hw, n_heads=1)
 
-    def forward(self, x, depth_emb=None):
+    def forward(self, x, depth_emb=None, spatial_embs=[]):
 
         if self.with_res:
             x_res = self.reduction(x)
@@ -135,6 +178,9 @@ class res_net_block(nn.Module):
 
         if self.with_depth_embedding:
             x = self.feat_affine(x, depth_emb)
+
+        if self.with_spatial_embedding:
+            x = self.spatial_affine(x, spatial_embs)
 
         if self.global_padding:
             x = global_pad(x, self.padding)
@@ -154,15 +200,15 @@ class res_net_block(nn.Module):
         
 
 class res_blocks(nn.Module): 
-    def __init__(self, hw, n_blocks, in_channels, out_channels, k_size=3, batch_norm=True, groups=1, dropout=0, with_att=False, with_res=True, out_activation=True, bias=True, global_padding=False, factor=2, down_method='max', depth_embedding_dim=0,instance_norm=True):
+    def __init__(self, hw, n_blocks, in_channels, out_channels, k_size=3, batch_norm=True, groups=1, dropout=0, with_att=False, with_res=True, out_activation=True, bias=True, global_padding=False, factor=2, down_method='max', depth_embedding_dim=0,instance_norm=True,spatial_emb_channels=0):
         super().__init__()
 
         self.res_net_blocks = nn.ModuleList()
 
-        self.res_net_blocks.append(res_net_block(hw, in_channels, out_channels, k_size=k_size, batch_norm=batch_norm, groups=groups, dropout=dropout, with_att=with_att, with_res=with_res, out_activation=out_activation, bias=bias, global_padding=global_padding, depth_embedding_dim=depth_embedding_dim, instance_norm=instance_norm))
+        self.res_net_blocks.append(res_net_block(hw, in_channels, out_channels, k_size=k_size, batch_norm=batch_norm, groups=groups, dropout=dropout, with_att=with_att, with_res=with_res, out_activation=out_activation, bias=bias, global_padding=global_padding, depth_embedding_dim=depth_embedding_dim, instance_norm=instance_norm,spatial_emb_channels=spatial_emb_channels))
         
         for _ in range(n_blocks-1):
-            self.res_net_blocks.append(res_net_block(hw, out_channels, out_channels, k_size=k_size, batch_norm=batch_norm, groups=groups, dropout=dropout, with_att=False, with_res=with_res, out_activation=out_activation, bias=bias, global_padding=global_padding, depth_embedding_dim=depth_embedding_dim, instance_norm=instance_norm))
+            self.res_net_blocks.append(res_net_block(hw, out_channels, out_channels, k_size=k_size, batch_norm=batch_norm, groups=groups, dropout=dropout, with_att=False, with_res=with_res, out_activation=out_activation, bias=bias, global_padding=global_padding, depth_embedding_dim=depth_embedding_dim, instance_norm=instance_norm,spatial_emb_channels=spatial_emb_channels))
 
         if down_method=='max':
             self.pool = nn.MaxPool2d(kernel_size=factor) if factor>1 else nn.Identity()
@@ -170,14 +216,14 @@ class res_blocks(nn.Module):
         elif down_method=='avg':
             self.pool = nn.AvgPool2d(kernel_size=factor) if factor>1 else nn.Identity()
 
-    def forward(self, x, depth_emb=None):
+    def forward(self, x, depth_emb=None, spatial_embs=[]):
         for layer in self.res_net_blocks:
-            x = layer(x, depth_emb=depth_emb)
+            x = layer(x, depth_emb=depth_emb, spatial_embs=spatial_embs)
 
         return self.pool(x), x
 
 class encoder(nn.Module): 
-    def __init__(self, hw_in, factor, n_levels, n_blocks, u_net_channels, in_channels, k_size=3, k_size_in=7, batch_norm=True, n_groups=1, dropout=0, bias=True, global_padding=False, initial_res=False,down_method='max', depth_embedding_dim=0,instance_norm=True):
+    def __init__(self, hw_in, factor, n_levels, n_blocks, u_net_channels, in_channels, k_size=3, k_size_in=7, batch_norm=True, n_groups=1, dropout=0, bias=True, global_padding=False, initial_res=False,down_method='max', depth_embedding_dim=0,instance_norm=True, spatial_emb_channels=0):
         super().__init__()
 
         hw_in = torch.tensor(hw_in)
@@ -207,19 +253,19 @@ class encoder(nn.Module):
                                  'hw': hw})
             
 
-            self.layers.append(res_blocks(hw, n_blocks, in_channels_block, out_channels_block, k_size=k_size, batch_norm=batch_norm, groups=groups, with_res=with_res, factor=factor_level, dropout=dropout, bias=bias, global_padding=global_padding, down_method=down_method, depth_embedding_dim=depth_embedding_dim, instance_norm=instance_norm))
+            self.layers.append(res_blocks(hw, n_blocks, in_channels_block, out_channels_block, k_size=k_size, batch_norm=batch_norm, groups=groups, with_res=with_res, factor=factor_level, dropout=dropout, bias=bias, global_padding=global_padding, down_method=down_method, depth_embedding_dim=depth_embedding_dim, instance_norm=instance_norm,spatial_emb_channels=spatial_emb_channels))
 
     
-    def forward(self, x, depth_emb=None):
+    def forward(self, x, depth_emb=None, spatial_embs=[]):
         outputs = []
 
         for layer in self.layers:
-            x, x_skip = layer(x, depth_emb=depth_emb)
+            x, x_skip = layer(x, depth_emb=depth_emb, spatial_embs=spatial_embs)
             outputs.append(x_skip)
         return x, outputs
 
 class decoder_block_shuffle(nn.Module):
-    def __init__(self, hw, n_blocks, in_channels, out_channels, skip_channels, k_size=3, dropout=0, upscale_factor=2, bias=True, global_padding=False, out_activation=True, groups=1, with_res=True, depth_embedding_dim=0, instance_norm=True):
+    def __init__(self, hw, n_blocks, in_channels, out_channels, skip_channels, k_size=3, dropout=0, upscale_factor=2, bias=True, global_padding=False, out_activation=True, groups=1, with_res=True, depth_embedding_dim=0, instance_norm=True, spatial_emb_channels=0):
         super().__init__()
 
         self.skip_channels = skip_channels
@@ -227,21 +273,21 @@ class decoder_block_shuffle(nn.Module):
         
         in_channels = in_channels + skip_channels
 
-        self.res_blocks = res_blocks(hw, n_blocks, in_channels, out_channels, k_size=k_size, batch_norm=False, groups=groups, dropout=dropout, with_res=with_res, bias=bias, global_padding=global_padding, out_activation=out_activation, factor=1, depth_embedding_dim=depth_embedding_dim, instance_norm=instance_norm)
+        self.res_blocks = res_blocks(hw, n_blocks, in_channels, out_channels, k_size=k_size, batch_norm=False, groups=groups, dropout=dropout, with_res=with_res, bias=bias, global_padding=global_padding, out_activation=out_activation, factor=1, depth_embedding_dim=depth_embedding_dim, instance_norm=instance_norm, spatial_emb_channels=spatial_emb_channels)
 
-    def forward(self, x, skip_channels=None, depth_emb=None):
+    def forward(self, x, skip_channels=None, depth_emb=None, spatial_embs=[]):
 
         x = self.up(x)
 
         if self.skip_channels>0:
             x = torch.concat((x, skip_channels), dim=1)
       
-        x = self.res_blocks(x, depth_emb=depth_emb)[0]
+        x = self.res_blocks(x, depth_emb=depth_emb, spatial_embs=spatial_embs)[0]
 
         return x
 
 class decoder(nn.Module):
-    def __init__(self, layer_configs, factor, n_blocks, out_channels, global_upscale_factor=1, k_size=3, dropout=0, n_groups=1, bias=True, global_padding=False, depth_embedding_dim=0, instance_norm=True):
+    def __init__(self, layer_configs, factor, n_blocks, out_channels, global_upscale_factor=1, k_size=3, dropout=0, n_groups=1, bias=True, global_padding=False, depth_embedding_dim=0, instance_norm=True, spatial_emb_channels=0):
         super().__init__()
         # define total number of layers, first n_levels-1 with skip, others not
         #watch out for n_groups in last layer before last
@@ -287,27 +333,27 @@ class decoder(nn.Module):
                     in_channels_block = out_channels_block
 
             hw = hw_in/(factor**(n-1))
-            self.decoder_blocks.append(decoder_block_shuffle(hw, n_blocks, in_channels_block, out_channels_block, skip_channels, k_size=k_size, dropout=dropout, bias=bias, global_padding=global_padding, upscale_factor=upscale_factor, groups=groups, out_activation=out_activation, depth_embedding_dim=depth_embedding_dim, instance_norm=instance_norm))      
+            self.decoder_blocks.append(decoder_block_shuffle(hw, n_blocks, in_channels_block, out_channels_block, skip_channels, k_size=k_size, dropout=dropout, bias=bias, global_padding=global_padding, upscale_factor=upscale_factor, groups=groups, out_activation=out_activation, depth_embedding_dim=depth_embedding_dim, instance_norm=instance_norm, spatial_emb_channels=spatial_emb_channels))      
         
-    def forward(self, x, skip_channels, depth_emb=None):
+    def forward(self, x, skip_channels, depth_emb=None, spatial_embs=[]):
 
         for k, layer in enumerate(self.decoder_blocks):
             if k < self.skip_blocks:
                 x_skip = skip_channels[-(k+2)]  
-                x = layer(x, x_skip, depth_emb=depth_emb)
+                x = layer(x, x_skip, depth_emb=depth_emb, spatial_embs=spatial_embs)
             else:
-                x = layer(x, depth_emb=depth_emb)
+                x = layer(x, depth_emb=depth_emb, spatial_embs=spatial_embs)
         return x
 
 class mid(nn.Module):
-    def __init__(self, hw, n_blocks, channels, k_size=3,  dropout=0, with_att=False, bias=True, global_padding=False, depth_embedding_dim=0):
+    def __init__(self, hw, n_blocks, channels, k_size=3,  dropout=0, with_att=False, bias=True, global_padding=False, depth_embedding_dim=0, spatial_emb_dim=0):
         super().__init__()
 
-        self.res_blocks = res_blocks(hw, n_blocks, channels, channels, k_size=k_size, batch_norm=False, groups=1,  dropout=dropout, with_att=with_att, bias=bias, global_padding=global_padding, factor=1, depth_embedding_dim=depth_embedding_dim)
+        self.res_blocks = res_blocks(hw, n_blocks, channels, channels, k_size=k_size, batch_norm=False, groups=1,  dropout=dropout, with_att=with_att, bias=bias, global_padding=global_padding, factor=1, depth_embedding_dim=depth_embedding_dim, spatial_emb_channels=spatial_emb_dim)
 
-    def forward(self, x, depth_emb=None):
+    def forward(self, x, depth_emb=None, spatial_embs=[]):
 
-        x = self.res_blocks(x, depth_emb=depth_emb)[0]
+        x = self.res_blocks(x, depth_emb=depth_emb, spatial_embs=spatial_embs)[0]
 
         return x
     
@@ -366,18 +412,18 @@ class out_net(nn.Module):
 
 
 class ResUNet(nn.Module): 
-    def __init__(self, hw_in, hw_out, n_levels, factor, n_res_blocks, model_dim_unet, in_channels, out_channels, res_mode, res_indices, batch_norm=True, k_size=3, in_groups=1, out_groups=1, dropout=0, bias=True, global_padding=False, mid_att=False, initial_res=True, down_method="max",depth_embedding_dim=0, instance_norm=True):
+    def __init__(self, hw_in, hw_out, n_levels, factor, n_res_blocks, model_dim_unet, in_channels, out_channels, res_mode, res_indices, batch_norm=True, k_size=3, in_groups=1, out_groups=1, dropout=0, bias=True, global_padding=False, mid_att=False, initial_res=True, down_method="max",depth_embedding_dim=0, instance_norm=True, spatial_emb_in_dims:list=[], spatial_emb_channels=4):
         super().__init__()
 
         global_upscale_factor = int(torch.tensor([(hw_out[0]) // hw_in[0], 1]).max())
 
-        self.encoder = encoder(hw_in, factor, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, 7, batch_norm=batch_norm, n_groups=in_groups, dropout=dropout, bias=bias, global_padding=global_padding, initial_res=initial_res, down_method=down_method,depth_embedding_dim=depth_embedding_dim,instance_norm=instance_norm)
-        self.decoder = decoder(self.encoder.layer_configs, factor, n_res_blocks, out_channels, global_upscale_factor=global_upscale_factor, k_size=k_size, dropout=dropout, n_groups=out_groups, bias=bias, global_padding=global_padding,depth_embedding_dim=depth_embedding_dim,instance_norm=instance_norm)
+        self.encoder = encoder(hw_in, factor, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, 7, batch_norm=batch_norm, n_groups=in_groups, dropout=dropout, bias=bias, global_padding=global_padding, initial_res=initial_res, down_method=down_method,depth_embedding_dim=depth_embedding_dim,instance_norm=instance_norm, spatial_emb_channels=spatial_emb_channels)
+        self.decoder = decoder(self.encoder.layer_configs, factor, n_res_blocks, out_channels, global_upscale_factor=global_upscale_factor, k_size=k_size, dropout=dropout, n_groups=out_groups, bias=bias, global_padding=global_padding,depth_embedding_dim=depth_embedding_dim,instance_norm=instance_norm, spatial_emb_channels=spatial_emb_channels)
 
         self.out_net = out_net(res_indices, hw_in, hw_out, res_mode=res_mode, global_padding=global_padding)
   
         hw_mid = torch.tensor(hw_in)// (factor**(n_levels-1))
-        self.mid = mid(hw_mid, n_res_blocks, model_dim_unet*(2**(n_levels-1)), with_att=mid_att, bias=bias, global_padding=global_padding,depth_embedding_dim=depth_embedding_dim)
+        self.mid = mid(hw_mid, n_res_blocks, model_dim_unet*(2**(n_levels-1)), with_att=mid_att, bias=bias, global_padding=global_padding,depth_embedding_dim=depth_embedding_dim,spatial_emb_dim=spatial_emb_channels)
 
         if depth_embedding_dim:
             self.depth_level_mlp = nn.Sequential(
@@ -389,14 +435,20 @@ class ResUNet(nn.Module):
         else:
             self.depth_level_mlp = None
         
-    def forward(self, x, depth=None, x_res=None):
+        if len(spatial_emb_in_dims)>0:
+            self.spatial_encoder = SpatialEncoding(spatial_emb_in_dims, spatial_emb_channels)
+        else:
+            self.spatial_encoder = None
+
+    def forward(self, x, depth=None, x_res=None, spatial_embs=[]):
+        spatial_embs = self.spatial_encoder(spatial_embs) if self.spatial_encoder is not None else None
         d = self.depth_level_mlp(depth) if self.depth_level_mlp is not None else None
 
         if x_res is None:
             x_res = x
-        x, layer_outputs = self.encoder(x, depth_emb=d)
-        x = self.mid(x, depth_emb=d)
-        x = self.decoder(x, layer_outputs, depth_emb=d)
+        x, layer_outputs = self.encoder(x, depth_emb=d, spatial_embs=spatial_embs)
+        x = self.mid(x, depth_emb=d, spatial_embs=spatial_embs)
+        x = self.decoder(x, layer_outputs, depth_emb=d, spatial_embs=spatial_embs)
         x = self.out_net(x, x_res)
 
         return {'x': x}
@@ -407,17 +459,25 @@ class core_ResUNet(psm.pyramid_step_model):
         super().__init__(model_settings, model_dir=model_dir, eval=eval)
         
         model_settings = self.model_settings
+        spatial_emb_dims = []
 
         input_dim = len(model_settings["variables_source"])
         
         if 'concat' in self.hist_mode:
             input_dim=input_dim*2
 
+        elif 'emb_res' in self.hist_mode:
+            spatial_emb_dims.append(input_dim)
+
         if 'output_dim_core' not in model_settings.keys():
             output_dim = len(model_settings["variables_target"]) - int(model_settings["calc_vort"]) * int('vort' in model_settings["variables_target"])
 
         else:
             output_dim = model_settings['output_dim_core']
+
+        if self.variable_as_embedding_indices is not None:
+            input_dim = input_dim - len(self.variable_as_embedding_indices) 
+            spatial_emb_dims.append(len(self.variable_as_embedding_indices))
 
         dropout = model_settings['dropout']
 
@@ -446,6 +506,7 @@ class core_ResUNet(psm.pyramid_step_model):
         else:
             in_groups = out_groups = 1
 
+        
         hw_in = model_settings['n_regular'][0]
         hw_out = model_settings['n_regular'][1]
 
@@ -463,7 +524,29 @@ class core_ResUNet(psm.pyramid_step_model):
         initial_res = model_settings['initial_res'] if "initial_res" in model_settings.keys() else False
         down_method = model_settings['down_method'] if "down_method" in model_settings.keys() else "max"
 
-        self.core_model = ResUNet(hw_in, hw_out, depth, factor, n_blocks, model_dim_core, input_dim, output_dim, model_settings['res_mode'], res_indices, batch_norm=batch_norm, in_groups=in_groups, out_groups=out_groups, dropout=dropout, bias=bias, global_padding=global_padding, mid_att=mid_att, initial_res=initial_res, down_method=down_method, depth_embedding_dim=depth_embedding_dim,instance_norm=instance_norm)
+        self.core_model = ResUNet(hw_in, 
+                                  hw_out, 
+                                  depth, 
+                                  factor, 
+                                  n_blocks,
+                                  model_dim_core, 
+                                  input_dim, 
+                                  output_dim, 
+                                  model_settings['res_mode'], 
+                                  res_indices, 
+                                  batch_norm=batch_norm, 
+                                  in_groups=in_groups, 
+                                  out_groups=out_groups, 
+                                  dropout=dropout, 
+                                  bias=bias, 
+                                  global_padding=global_padding, 
+                                  mid_att=mid_att, 
+                                  initial_res=initial_res, 
+                                  down_method=down_method, 
+                                  depth_embedding_dim=depth_embedding_dim,
+                                  instance_norm=instance_norm, 
+                                  spatial_emb_in_dims=spatial_emb_dims,
+                                  spatial_emb_channels=4)
 
         if "pretrained_path" in self.model_settings.keys():
             self.check_pretrained(log_dir_check=self.model_settings['pretrained_path'])

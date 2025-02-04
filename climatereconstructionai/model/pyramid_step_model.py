@@ -161,6 +161,11 @@ class pyramid_step_model(nn.Module):
         self.res_mode = self.model_settings['res_mode']
         self.use_gnlll = self.model_settings['gauss']
         self.use_poly = self.model_settings['poly']
+        variable_as_embedding = self.model_settings.get('variable_as_embedding',None)
+        if variable_as_embedding is not None:
+            self.variable_as_embedding_indices = [idx for idx,var in enumerate(self.model_settings['variables_source']) if var==variable_as_embedding]
+        else:
+            self.variable_as_embedding_indices = None
 
         self.core_model = nn.Identity()
         
@@ -210,16 +215,27 @@ class pyramid_step_model(nn.Module):
                 x, x_past = x.chunk(2, dim=1)
                 x_res = x
                 x = x_past-x
+                spatial_embs=[]
 
             elif self.hist_mode=='concat_res':
                 x_res, _ = x.chunk(2, dim=1)
+                spatial_embs=[]
 
             elif self.hist_mode=='concat_diff_res':
                 x, x_past = x.chunk(2, dim=1)
                 x_res = x
                 x = torch.concat((x, x_past-x), dim=1)
+                spatial_embs=[]
 
-            output = self.core_model(x, depth=depth, x_res=x_res)
+            elif self.hist_mode=='emb_res':
+                x, x_past = x.chunk(2, dim=1)
+                spatial_embs=[x_past]
+
+            if self.variable_as_embedding_indices is not None:
+                spatial_embs.append(x[:,self.variable_as_embedding_indices])
+                x = torch.cat((x[:,:self.variable_as_embedding_indices[0]], x[:,1+self.variable_as_embedding_indices[0]:]), dim=1)
+      
+            output = self.core_model(x, depth=depth, x_res=x_res, spatial_embs=spatial_embs)
             core_output = output
             
             #coords_target_hr, non_valid = helpers.scale_coords(coords_target, self.range_region_target_radx, rngy=self.range_region_target_rady)
