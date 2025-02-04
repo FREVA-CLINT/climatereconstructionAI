@@ -417,6 +417,12 @@ class ResUNet(nn.Module):
 
         global_upscale_factor = int(torch.tensor([(hw_out[0]) // hw_in[0], 1]).max())
 
+        if len(spatial_emb_in_dims)>0:
+            self.spatial_encoder = SpatialEncoding(spatial_emb_in_dims, spatial_emb_channels)
+        else:
+            self.spatial_encoder = None
+            spatial_emb_channels = 0
+            
         self.encoder = encoder(hw_in, factor, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, 7, batch_norm=batch_norm, n_groups=in_groups, dropout=dropout, bias=bias, global_padding=global_padding, initial_res=initial_res, down_method=down_method,depth_embedding_dim=depth_embedding_dim,instance_norm=instance_norm, spatial_emb_channels=spatial_emb_channels)
         self.decoder = decoder(self.encoder.layer_configs, factor, n_res_blocks, out_channels, global_upscale_factor=global_upscale_factor, k_size=k_size, dropout=dropout, n_groups=out_groups, bias=bias, global_padding=global_padding,depth_embedding_dim=depth_embedding_dim,instance_norm=instance_norm, spatial_emb_channels=spatial_emb_channels)
 
@@ -435,10 +441,6 @@ class ResUNet(nn.Module):
         else:
             self.depth_level_mlp = None
         
-        if len(spatial_emb_in_dims)>0:
-            self.spatial_encoder = SpatialEncoding(spatial_emb_in_dims, spatial_emb_channels)
-        else:
-            self.spatial_encoder = None
 
     def forward(self, x, depth=None, x_res=None, spatial_embs=[]):
         spatial_embs = self.spatial_encoder(spatial_embs) if self.spatial_encoder is not None else None
