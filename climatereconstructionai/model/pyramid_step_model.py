@@ -211,6 +211,7 @@ class pyramid_step_model(nn.Module):
         if not isinstance(self.core_model, nn.Identity):
             x = self.input_avg_pooling(x)
             x_res=None
+            spatial_embs=[]
             if self.hist_mode=='diff_res':
                 x, x_past = x.chunk(2, dim=1)
                 x_res = x
