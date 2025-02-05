@@ -253,7 +253,7 @@ class encoder(nn.Module):
                                  'hw': hw})
             
 
-            self.layers.append(res_blocks(hw, n_blocks, in_channels_block, out_channels_block, k_size=k_size, batch_norm=batch_norm, dropout=dropout, groups=groups, with_res=with_res, factor=factor_level, dropout=dropout, bias=bias, global_padding=global_padding, down_method=down_method, depth_embedding_dim=depth_embedding_dim, instance_norm=instance_norm,spatial_emb_channels=spatial_emb_channels))
+            self.layers.append(res_blocks(hw, n_blocks, in_channels_block, out_channels_block, k_size=k_size, batch_norm=batch_norm, dropout=dropout, groups=groups, with_res=with_res, factor=factor_level, bias=bias, global_padding=global_padding, down_method=down_method, depth_embedding_dim=depth_embedding_dim, instance_norm=instance_norm,spatial_emb_channels=spatial_emb_channels))
 
     
     def forward(self, x, depth_emb=None, spatial_embs=[]):
