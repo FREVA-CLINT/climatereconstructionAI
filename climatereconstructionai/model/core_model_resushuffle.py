@@ -553,5 +553,4 @@ class core_ResUNet(psm.pyramid_step_model):
         if "pretrained_path" in self.model_settings.keys():
             self.check_pretrained(log_dir_check=self.model_settings['pretrained_path'])
         elif self.eval_mode:
-            pass
-    #        self.check_pretrained(log_dir_check=self.log_dir)
+            self.check_pretrained(log_dir_check=self.log_dir)
