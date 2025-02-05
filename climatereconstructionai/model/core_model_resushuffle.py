@@ -253,7 +253,7 @@ class encoder(nn.Module):
                                  'hw': hw})
             
 
-            self.layers.append(res_blocks(hw, n_blocks, in_channels_block, out_channels_block, k_size=k_size, batch_norm=batch_norm, groups=groups, with_res=with_res, factor=factor_level, dropout=dropout, bias=bias, global_padding=global_padding, down_method=down_method, depth_embedding_dim=depth_embedding_dim, instance_norm=instance_norm,spatial_emb_channels=spatial_emb_channels))
+            self.layers.append(res_blocks(hw, n_blocks, in_channels_block, out_channels_block, k_size=k_size, batch_norm=batch_norm, dropout=dropout, groups=groups, with_res=with_res, factor=factor_level, dropout=dropout, bias=bias, global_padding=global_padding, down_method=down_method, depth_embedding_dim=depth_embedding_dim, instance_norm=instance_norm,spatial_emb_channels=spatial_emb_channels))
 
     
     def forward(self, x, depth_emb=None, spatial_embs=[]):
@@ -422,7 +422,7 @@ class ResUNet(nn.Module):
         else:
             self.spatial_encoder = None
             spatial_emb_channels = 0
-            
+
         self.encoder = encoder(hw_in, factor, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, 7, batch_norm=batch_norm, n_groups=in_groups, dropout=dropout, bias=bias, global_padding=global_padding, initial_res=initial_res, down_method=down_method,depth_embedding_dim=depth_embedding_dim,instance_norm=instance_norm, spatial_emb_channels=spatial_emb_channels)
         self.decoder = decoder(self.encoder.layer_configs, factor, n_res_blocks, out_channels, global_upscale_factor=global_upscale_factor, k_size=k_size, dropout=dropout, n_groups=out_groups, bias=bias, global_padding=global_padding,depth_embedding_dim=depth_embedding_dim,instance_norm=instance_norm, spatial_emb_channels=spatial_emb_channels)
 
@@ -553,4 +553,5 @@ class core_ResUNet(psm.pyramid_step_model):
         if "pretrained_path" in self.model_settings.keys():
             self.check_pretrained(log_dir_check=self.model_settings['pretrained_path'])
         elif self.eval_mode:
-            self.check_pretrained(log_dir_check=self.log_dir)
+            pass
+    #        self.check_pretrained(log_dir_check=self.log_dir)
