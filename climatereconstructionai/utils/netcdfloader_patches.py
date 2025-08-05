@@ -3,7 +3,8 @@ import random
 import copy
 import json
 from typing import Any
-import datetime
+from datetime import datetime
+import re
 import math
 import numpy as np
 import torch
@@ -541,7 +542,7 @@ class NetCDFLoader_lazy(Dataset):
 
 
 class SampleLoader(Dataset):
-    def __init__(self, root_dir, dims_variables_source, dims_variables_target, variables_source, variables_target):
+    def __init__(self, root_dir, dims_variables_source, dims_variables_target, variables_source, variables_target, min_time=None, max_time=None):
         self.root_dir = root_dir
         self.file_list = os.listdir(root_dir)
         self.file_list = [file_path  for file_path in self.file_list if '.pt' in file_path]
@@ -550,6 +551,19 @@ class SampleLoader(Dataset):
         
         self.n_dict_source = dict(zip(coords_source.keys(),[val.shape[-1] for val in coords_source.values()]))
         self.n_dict_target = dict(zip(coords_target.keys(),[val.shape[-1] for val in coords_target.values()]))
+
+        if min_time is not None:
+            min_time = datetime.strptime(min_time, "%Y%m%d")
+            max_time = datetime.strptime(max_time, "%Y%m%d")
+
+            file_list = []
+            for file_name in self.file_list:
+                date_str = file_name.split('_')[-4]  # Assumes position 7 always holds the date
+                file_datetime = datetime.strptime(date_str, "%Y%m%dT%H%M%SZ")
+                if min_time <= file_datetime <= max_time:
+                    file_list.append(file_name)
+            
+            self.file_list = file_list
         
        # sample_variables_source = list(dims_variables_source['var_spatial_dims'].keys())
        # self.indices_source = [k for k,var in enumerate(sample_variables_source) if var in variables_source]

@@ -152,8 +152,13 @@ def train(model, training_settings, model_settings={}):
         with open(os.path.join(sample_dir_train, 'dims_var_source.json'), 'r') as f:
             dims_variables_source = json.load(f)
 
-        dataset_train = SampleLoader(sample_dir_train, dims_variables_source, dims_variables_target, training_settings['variables_source'], training_settings['variables_target'])
-        dataset_val = SampleLoader(sample_dir_val, dims_variables_source, dims_variables_target, training_settings['variables_source'], training_settings['variables_target'])
+        min_time = training_settings['min_time'] if 'min_time' in training_settings.keys() else None
+        max_time = training_settings['max_time'] if 'max_time' in training_settings.keys() else None
+        min_time_val = training_settings['min_time_val'] if 'min_time_val' in training_settings.keys() else None
+        max_time_val = training_settings['max_time_val'] if 'max_time_val' in training_settings.keys() else None
+
+        dataset_train = SampleLoader(sample_dir_train, dims_variables_source, dims_variables_target, training_settings['variables_source'], training_settings['variables_target'],min_time=min_time, max_time=max_time)
+        dataset_val = SampleLoader(sample_dir_val, dims_variables_source, dims_variables_target, training_settings['variables_source'], training_settings['variables_target'], min_time=min_time_val, max_time=max_time_val)
        
         with open(os.path.join(sample_dir_train,'norm_dict.json'), 'r') as f:
             norm_dict = json.load(f)
