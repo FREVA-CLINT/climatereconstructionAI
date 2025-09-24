@@ -412,7 +412,7 @@ class out_net(nn.Module):
 
 
 class ResUNet(nn.Module): 
-    def __init__(self, hw_in, hw_out, n_levels, factor, n_res_blocks, model_dim_unet, in_channels, out_channels, res_mode, res_indices, batch_norm=True, k_size=3, in_groups=1, out_groups=1, dropout=0, bias=True, global_padding=False, mid_att=False, initial_res=True, down_method="max",depth_embedding_dim=0, instance_norm=True, spatial_emb_in_dims:list=[], spatial_emb_channels=4):
+    def __init__(self, hw_in, hw_out, n_levels, factor, n_res_blocks, model_dim_unet, in_channels, out_channels, res_mode, res_indices, batch_norm=True, k_size=3, in_groups=1, out_groups=1, dropout=0, bias=True, global_padding=False, mid_att=False, initial_res=True, down_method="max",depth_embedding_dim=0, instance_norm=True, spatial_emb_in_dims:list=[], spatial_emb_channels=4, k_start=7):
         super().__init__()
 
         global_upscale_factor = int(torch.tensor([(hw_out[0]) // hw_in[0], 1]).max())
@@ -423,7 +423,7 @@ class ResUNet(nn.Module):
             self.spatial_encoder = None
             spatial_emb_channels = 0
 
-        self.encoder = encoder(hw_in, factor, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, 7, batch_norm=batch_norm, n_groups=in_groups, dropout=dropout, bias=bias, global_padding=global_padding, initial_res=initial_res, down_method=down_method,depth_embedding_dim=depth_embedding_dim,instance_norm=instance_norm, spatial_emb_channels=spatial_emb_channels)
+        self.encoder = encoder(hw_in, factor, n_levels, n_res_blocks, model_dim_unet, in_channels, k_size, k_start, batch_norm=batch_norm, n_groups=in_groups, dropout=dropout, bias=bias, global_padding=global_padding, initial_res=initial_res, down_method=down_method,depth_embedding_dim=depth_embedding_dim,instance_norm=instance_norm, spatial_emb_channels=spatial_emb_channels)
         self.decoder = decoder(self.encoder.layer_configs, factor, n_res_blocks, out_channels, global_upscale_factor=global_upscale_factor, k_size=k_size, dropout=dropout, n_groups=out_groups, bias=bias, global_padding=global_padding,depth_embedding_dim=depth_embedding_dim,instance_norm=instance_norm, spatial_emb_channels=spatial_emb_channels)
 
         self.out_net = out_net(res_indices, hw_in, hw_out, res_mode=res_mode, global_padding=global_padding)
@@ -525,6 +525,7 @@ class core_ResUNet(psm.pyramid_step_model):
         factor = model_settings['factor'] if "factor" in model_settings.keys() else 2
         initial_res = model_settings['initial_res'] if "initial_res" in model_settings.keys() else False
         down_method = model_settings['down_method'] if "down_method" in model_settings.keys() else "max"
+        k_start = model_settings['k_start'] if "k_start" in model_settings.keys() else 7
 
         self.core_model = ResUNet(hw_in, 
                                   hw_out, 
@@ -548,7 +549,8 @@ class core_ResUNet(psm.pyramid_step_model):
                                   depth_embedding_dim=depth_embedding_dim,
                                   instance_norm=instance_norm, 
                                   spatial_emb_in_dims=spatial_emb_dims,
-                                  spatial_emb_channels=4)
+                                  spatial_emb_channels=4,
+                                  k_start=k_start)
 
         if "pretrained_path" in self.model_settings.keys():
             self.check_pretrained(log_dir_check=self.model_settings['pretrained_path'])
