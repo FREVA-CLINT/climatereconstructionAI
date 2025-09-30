@@ -3,10 +3,10 @@
 Software to train/evaluate models to reconstruct missing values in climate data (e.g., HadCRUT4) based on a U-Net with partial convolutions.
 
 ## Dependencies
-- pytorch>=1.11.0
-- tqdm>=4.64.0
-- torchvision>=0.12.0
+- torch>=2.0.0 (PyTorch)
+- torchvision>=0.15.0
 - torchmetrics>=0.11.2
+- tqdm>=4.64.0
 - numpy>=1.21.6
 - matplotlib>=3.5.1
 - tensorboardX>=2.5
@@ -14,10 +14,59 @@ Software to train/evaluate models to reconstruct missing values in climate data 
 - xarray>=2022.3.0
 - dask>=2022.7.0
 - netcdf4>=1.5.8
-- setuptools==59.5.0
+- setuptools>=59.5.0
 - xesmf>=0.6.2
 - cartopy>=0.20.2
 - numba>=0.55.1
+
+## Installation
+
+### Option 1: Using uv (Recommended for modern Python environments)
+
+If you're using `uv` (a fast Python package installer), create a new virtual environment and install the package:
+
+```bash
+# Create a new virtual environment
+uv venv .venv
+
+# Activate the virtual environment
+source .venv/bin/activate  # On Linux/macOS
+# or
+.venv\Scripts\activate     # On Windows
+
+# Install PyTorch first (recommended to avoid conflicts)
+uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# For CUDA support, use:
+# uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+
+# Install the package
+uv pip install .
+```
+
+### Option 2: Using pip
+
+```bash
+# Create a virtual environment
+python -m venv .venv
+
+# Activate the virtual environment
+source .venv/bin/activate  # On Linux/macOS
+# or
+.venv\Scripts\activate     # On Windows
+
+# Upgrade pip to latest version
+pip install --upgrade pip
+
+# Install PyTorch first (recommended to avoid conflicts)
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# For CUDA support, use:
+# pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+
+# Install the package
+pip install .
+```
+
+### Option 3: Using Conda (Traditional approach)
 
 An Anaconda environment with all the required dependencies can be created using `environment.yml`:
 ```bash
@@ -30,12 +79,30 @@ conda activate crai
 
 `environment-cuda.yml` should be used when working with GPUs using CUDA.
 
-## Installation
+### Troubleshooting Installation Issues
 
-`climatereconstructionAI` can be installed using `pip` in the current directory:
-```bash
-pip install .
-```
+If you encounter import errors like `ModuleNotFoundError: No module named 'torch.nn'`, this usually indicates:
+
+1. **Incomplete PyTorch installation**: Remove and reinstall PyTorch:
+   ```bash
+   pip uninstall torch torchvision
+   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+   ```
+
+2. **Virtual environment issues**: Create a fresh virtual environment:
+   ```bash
+   rm -rf .venv  # Remove old environment
+   python -m venv .venv  # Create new environment
+   source .venv/bin/activate  # Activate
+   pip install --upgrade pip  # Upgrade pip
+   # Then install dependencies as above
+   ```
+
+3. **Package conflicts**: Install PyTorch separately before other dependencies:
+   ```bash
+   pip install torch torchvision  # Install PyTorch first
+   pip install .  # Then install the package
+   ```
 
 ## Usage
 

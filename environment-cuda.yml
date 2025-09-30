@@ -2,13 +2,15 @@ name: crai
 channels:
   - conda-forge
   - pytorch
+  - nvidia
   - defaults
 dependencies:
-  - pytorch>=1.11.0
-  - cudatoolkit>=11.7
-  - tqdm>=4.64.0
-  - torchvision>=0.12.0
+  - python>=3.10
+  - pytorch>=2.0.0
+  - pytorch-cuda>=11.8
+  - torchvision>=0.15.0
   - torchmetrics>=0.11.2
+  - tqdm>=4.64.0
   - numpy>=1.21.6
   - matplotlib>=3.5.1
   - tensorboardX>=2.5
@@ -16,7 +18,7 @@ dependencies:
   - xarray>=2022.3.0
   - dask>=2022.7.0
   - netcdf4>=1.5.8
-  - setuptools==59.5.0
+  - setuptools>=59.5.0
   - xesmf>=0.6.2
   - cartopy>=0.20.2
   - numba>=0.55.1
