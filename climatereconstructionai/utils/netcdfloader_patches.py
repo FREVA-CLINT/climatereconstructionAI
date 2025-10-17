@@ -464,14 +464,10 @@ class NetCDFLoader_lazy(Dataset):
 
             coords[spatial_dim] = get_coords_as_tensor(ds, lon=coord_dict['lon'], lat=coord_dict['lat']).float()
 
+            isel_dict = {'depth': int(depth), 'depth_2': int(depth), 'time': index}
+            ds_copy = ds.isel(isel_dict)
             for var in vars:
-                values = torch.tensor(ds[var][index].values)
-                if values.shape[0]>1:
-                    values = values[depth]
-                else:
-                    values = values[0]
-                data_var = values.float().squeeze()
-                data[var] = data_var.unsqueeze(dim=-1)
+                data[var] = torch.tensor(ds_copy[var].to_numpy()).view(-1,1).float()
 
         return data, coords
 

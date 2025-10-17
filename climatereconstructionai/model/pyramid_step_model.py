@@ -374,11 +374,17 @@ class pyramid_step_model(nn.Module):
             
             coords_source[spatial_dim] = self.get_coordinates_frame(coords[:,indices], patch_borders_source_lon, patch_borders_source_lat, lon_periodicity=lon_periodicity).unsqueeze(dim=0).to(device)
 
+            isel_dict = {'time': ts, 'depth':depth, 'depth_2':depth, spatial_dim: indices}
+            data = ds.isel(isel_dict)
+            
+            if ds_source_hist is not None:
+                data_hist = ds_source_hist.isel(isel_dict)
+
             for variable in vars:
-                data_source[variable] = torch.tensor(ds[variable].values[ts, depth, indices]).unsqueeze(dim=-1).unsqueeze(dim=0).to(device)
+                data_source[variable] = torch.as_tensor(data[variable].values).unsqueeze(-1).unsqueeze(0).to(device)
 
                 if ds_source_hist is not None:
-                    data_source_hist[variable] = torch.tensor(ds[variable].values[ts, depth, indices]).unsqueeze(dim=-1).unsqueeze(dim=0).to(device)
+                    data_source_hist[variable] = torch.as_tensor(data_hist[variable].values).unsqueeze(-1).unsqueeze(0).to(device)
 
         var_spatial_dims = {}
         coords_target = {}
@@ -431,6 +437,8 @@ class pyramid_step_model(nn.Module):
             ds_target=ds
         
         rank, world_size, cuda = set_device_and_init_torch_dist()
+
+        self = self.to(device)
         n_procs = world_size
 
         patches = self.get_patch_indices(ds, ds_target)
@@ -466,10 +474,10 @@ class pyramid_step_model(nn.Module):
             
             print(f'Got predictions from {len(results)} patches. Collecting data ...')
 
-            output_global = dict(zip(var_spatial_dims.keys(), [torch.zeros(ds_target[variable][0].values.shape).squeeze().to(device) for variable in var_spatial_dims.keys()]))
+            output_global = dict(zip(var_spatial_dims.keys(), [torch.zeros(ds_target[variable][0].shape).squeeze().to(device) for variable in var_spatial_dims.keys()]))
 
             if self.model_settings['gauss']:
-                output_global_std = dict(zip(var_spatial_dims.keys(), [torch.zeros(ds_target[variable][0].values.shape).squeeze().to(device) for variable in var_spatial_dims.keys()]))
+                output_global_std = dict(zip(var_spatial_dims.keys(), [torch.zeros(ds_target[variable][0].shape).squeeze().to(device) for variable in var_spatial_dims.keys()]))
             else:
                 output_global_std = {}
 
@@ -525,9 +533,9 @@ class pyramid_step_model(nn.Module):
             
             print(f'Got predictions from {len(results)} patches. Collecting data ...')
 
-            output_global = dict(zip(var_spatial_dims.keys(), [torch.tensor(ds_target[variable][0].values).squeeze().to(device) for variable in var_spatial_dims.keys()]))
+            output_global = dict(zip(var_spatial_dims.keys(), [torch.zeros(ds_target[variable][0].shape).squeeze().to(device) for variable in var_spatial_dims.keys()]))
             if self.model_settings['gauss']:
-                output_global_std = dict(zip(var_spatial_dims.keys(), [torch.tensor(ds_target[variable][0].values).squeeze().to(device) for variable in var_spatial_dims.keys()]))
+                output_global_std = dict(zip(var_spatial_dims.keys(), [torch.zeros_like(ds_target[variable][0].shape).squeeze().to(device) for variable in var_spatial_dims.keys()]))
             else:
                 output_global_std = {}
 
