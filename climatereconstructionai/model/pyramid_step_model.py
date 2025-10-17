@@ -464,7 +464,7 @@ class pyramid_step_model(nn.Module):
 
         print(f'Correcting {len(depths_patch_ids_rank)} patches on rank {rank}')
 
-        results = self.predict_depth_patches(ds, ds_target, patches, depths_patch_ids_rank, ts, device='cpu', ds_source_hist=ds_source_hist)
+        results = self.predict_depth_patches(ds, ds_target, patches, depths_patch_ids_rank, ts, device=device, ds_source_hist=ds_source_hist)
         
         if rank==0:
             if n_procs > 1:
