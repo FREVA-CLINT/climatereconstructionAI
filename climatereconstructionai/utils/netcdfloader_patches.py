@@ -168,7 +168,8 @@ class NetCDFLoader_lazy(Dataset):
                  rotate_cs=False,
                  interpolation_dict=None,
                  sample_patch_range_lat=[-math.pi/2,math.pi/2],
-                 sample_condition_dict={}):
+                 sample_condition_dict={},
+                 source_only=False):
         
         super(NetCDFLoader_lazy, self).__init__()
         
@@ -189,6 +190,7 @@ class NetCDFLoader_lazy(Dataset):
         self.sample_patch_range_lat = sample_patch_range_lat
         self.sample_condition_dict = sample_condition_dict
 
+        self.source_only = source_only
         ds_source = xr.open_dataset(files_source[0])
         ds_target = xr.open_dataset(files_target[0])
 
@@ -324,7 +326,7 @@ class NetCDFLoader_lazy(Dataset):
 
     def apply_spatial_dim_indices(self, ds, dims_variables_dict, spatial_dim_indices, rel_coords_dict={}):
         
-        ds_return = copy.deepcopy(ds)
+        ds_return = ds
 
         for spatial_dim, vars in dims_variables_dict['spatial_dims_var'].items():
             
@@ -380,7 +382,7 @@ class NetCDFLoader_lazy(Dataset):
             ds_source = xr.load_dataset(file_path_source)
 
         if file_path_target is None:
-            ds_target = copy.deepcopy(ds_source)
+            ds_target = None
         else:
             if self.lazy_load:
                 ds_target = xr.open_dataset(file_path_target)
@@ -397,7 +399,7 @@ class NetCDFLoader_lazy(Dataset):
         if self.rotate_cs:
             rot_angle = np.random.rand(1)*np.pi-np.pi/2
             ds_source = rotate_ds(ds_source, rot_angle)
-            ds_target = rotate_ds(ds_target, rot_angle)
+            ds_target = rotate_ds(ds_target, rot_angle) if ds_target is None else None
             spatial_dims_patches_ids_source, _, _ = self.get_ids_patches(ds_source, self.dims_variables_source, self.patches_source)
             spatial_dims_patches_ids_target, _, _ = self.get_ids_patches(ds_target, self.dims_variables_target, self.patches_target)
 
@@ -423,7 +425,10 @@ class NetCDFLoader_lazy(Dataset):
             spatial_dim_indices_target, rel_coords_dict_target, _ = self.get_coordinates(ds_target, self.dims_variables_target, spatial_dims_patches_ids_target, self.n_dict_target, self.patches_target, patch_id=patch_id, lon_periodicity=self.lon_periodicity)
 
             ds_source_sampled = self.apply_spatial_dim_indices(ds_source, self.dims_variables_source, spatial_dim_indices_source, rel_coords_dict=rel_coords_dict_source)
-            ds_target_sampled = self.apply_spatial_dim_indices(ds_target, self.dims_variables_target, spatial_dim_indices_target, rel_coords_dict=rel_coords_dict_target)
+            if ds_target is None:
+                ds_target_sampled = self.apply_spatial_dim_indices(ds_target, self.dims_variables_target, spatial_dim_indices_target, rel_coords_dict=rel_coords_dict_target)
+            else:
+                ds_target_sampled = None
 
             if include_past:
                 ds_source_past_sampled = self.apply_spatial_dim_indices(ds_source_past, self.dims_variables_source, spatial_dim_indices_source, rel_coords_dict=rel_coords_dict_source)
@@ -492,14 +497,19 @@ class NetCDFLoader_lazy(Dataset):
         ds_source, ds_target, patch_id, spatial_dim_indices_source, spatial_dim_indices_target, rot_angle, ds_source_past = self.get_files(source_file, file_path_target=target_file, file_path_source_past=source_file_past)
 
         data_source, rel_coords_source = self.get_data(ds_source, index, self.dims_variables_source, depth=depth_idx)
-        data_target, rel_coords_target = self.get_data(ds_target, index_target, self.dims_variables_target, depth=depth_idx)
+
+        if ds_target is not None:
+            data_target, rel_coords_target = self.get_data(ds_target, index_target, self.dims_variables_target, depth=depth_idx)
+        else:
+            data_target = None
+            rel_coords_target = rel_coords_source
 
         if ds_source_past is not None:
             data_past, _ = self.get_data(ds_source_past, index, self.dims_variables_source, depth=depth_idx)
 
         if self.normalization is not None:
             data_source = self.normalizer(data_source)
-            data_target = self.normalizer(data_target)
+            data_target = self.normalizer(data_target) if data_target is not None else None
 
             if ds_source_past is not None:
                 ds_source_past = self.normalizer(data_past)
@@ -513,7 +523,7 @@ class NetCDFLoader_lazy(Dataset):
 
             rel_coords_source = dict(zip(rel_coords_source.keys(),[torch.empty(0) for _ in rel_coords_source.values()]))
 
-        if self.interpolate_target:
+        if self.interpolate_target and data_target is not None:
             data_target = self.input_mapper_t(data_target, rel_coords_target, self.dims_variables_target['spatial_dims_var'])
             rel_coords_target = dict(zip(rel_coords_target.keys(),[torch.empty(0) for _ in rel_coords_target.values()]))
 
@@ -530,6 +540,10 @@ class NetCDFLoader_lazy(Dataset):
 
                 with open(os.path.join(self.save_tensor_sample_path,'dims_var_target.json'), 'w') as f:
                     json.dump(self.dims_variables_target, f, indent=4)
+
+        if data_target is None:
+            data_target = torch.zeros(1)
+            #rel_coords_target = rel_coords_source
 
         return data_source, data_target, rel_coords_source, rel_coords_target, spatial_dim_indices_source, spatial_dim_indices_target, depth_idx
 
