@@ -50,7 +50,7 @@ class InfiniteSampler(Sampler):
 
 class FiniteSampler(Sampler):
     def __init__(self, num_samples):
-        super().__init__(data_sourcedata_source)
+        super().__init__()
         self.num_samples = num_samples
 
     def __iter__(self):
