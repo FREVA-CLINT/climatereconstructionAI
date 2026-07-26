@@ -1,6 +1,6 @@
 import torch
 import torch.nn.functional as F
-
+from .. import config as cfg
 
 def gram_matrix(feat):
     (b, ch, h, w) = feat.size()
@@ -24,3 +24,12 @@ def conv_variance(data, k=11):
         exp2 = torch.pow(F.conv2d(data, weights, padding='valid'), 2)
 
     return (exp - exp2)
+
+def get_devices(model): 
+    try:
+        device_ids = model.device_ids
+    except:
+        device_ids = [torch.cuda.current_device()]
+    
+    return [f'{cfg.device}:{id}' for id in device_ids]
+

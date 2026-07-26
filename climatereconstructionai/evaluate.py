@@ -15,6 +15,12 @@ def store_encoding(ds):
     return ds
 
 
+def format_time(ds):
+    ds['time'].encoding = encoding
+    ds['time'].encoding['original_shape'] = len(ds["time"])
+    return ds.transpose("time", ...).reset_coords(drop=True)
+
+
 def evaluate(arg_file=None, prog_func=None):
     cfg.set_evaluate_args(arg_file, prog_func)
 
@@ -36,7 +42,7 @@ def evaluate(arg_file=None, prog_func=None):
             data_stats = None
 
         dataset_val = NetCDFLoader(cfg.data_root_dir, cfg.data_names, cfg.mask_dir, cfg.mask_names, "infill",
-                                   cfg.data_types, cfg.time_steps, data_stats)
+                                   cfg.data_types, cfg.time_steps, cfg.steady_masks, data_stats)
 
         n_samples = len(dataset_val)
 
@@ -79,28 +85,38 @@ def evaluate(arg_file=None, prog_func=None):
             batch_size = get_batch_size(model.parameters(), n_samples, image_sizes)
             iterator_val = iter(DataLoader(dataset_val, batch_size=batch_size,
                                            sampler=FiniteSampler(len(dataset_val)), num_workers=0))
-            infill(model, iterator_val, eval_path, output_names, data_stats, dataset_val.xr_dss, count)
+            infill(model, iterator_val, eval_path, output_names, dataset_val.steady_mask, data_stats,
+                   dataset_val.xr_dss, count)
 
     for name in output_names:
         if len(output_names[name]) == 1 and len(output_names[name][1]) == 1:
             os.rename(output_names[name][1][0], name + ".nc")
         else:
-            if not cfg.split_outputs:
-                dss = []
-                for i_model in output_names[name]:
-                    dss.append(xr.open_mfdataset(output_names[name][i_model], preprocess=store_encoding, autoclose=True,
-                                                combine='nested', data_vars='minimal', concat_dim="time", chunks={}))
-                    dss[-1] = dss[-1].assign_coords({"member": i_model})
+            if cfg.split_outputs is not None:
 
-                if len(dss) == 1:
-                    ds = dss[-1].drop("member")
+                if cfg.split_outputs == "time":
+                    k = 0
+                    for names in zip(*(output_names[name].values())):
+                        k += 1
+                        dss = [xr.open_dataset(names[i]).assign_coords({"member": i}) for i in range(len(names))]
+                        xr.concat(dss, dim="member").to_netcdf("{}-{}.nc".format(name, k))
                 else:
-                    ds = xr.concat(dss, dim="member")
+                    dss = []
+                    for i_model in output_names[name]:
+                        ds = xr.open_mfdataset(output_names[name][i_model], preprocess=store_encoding, autoclose=True,
+                                               combine='nested', data_vars='minimal', concat_dim="time", chunks={})
+                        ds = ds.assign_coords({"member": i_model})
+                        if cfg.split_outputs == "member":
+                            format_time(ds).to_netcdf("{}.{}.nc".format(name, i_model))
+                        else:
+                            dss.append(ds)
 
-                ds['time'].encoding = encoding
-                ds['time'].encoding['original_shape'] = len(ds["time"])
-                ds = ds.transpose("time", ...).reset_coords(drop=True)
-                ds.to_netcdf(name + ".nc")
+                    if cfg.split_outputs != "member":
+                        if len(dss) == 1:
+                            ds = dss[-1].drop("member")
+                        else:
+                            ds = xr.concat(dss, dim="member")
+                        format_time(ds).to_netcdf(name + ".nc")
 
                 for i_model in output_names[name]:
                     for output_name in output_names[name][i_model]:

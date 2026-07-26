@@ -3,7 +3,7 @@ from .. import config as cfg
 
 
 def load_profiler(start_iter):
-    if cfg.profile:
+    if cfg.profiler == "tensorboard":
         return torch.profiler.profile(
             activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
             schedule=torch.profiler.schedule(wait=1, warmup=1, active=cfg.max_iter - start_iter, repeat=1),

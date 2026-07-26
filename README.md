@@ -30,12 +30,16 @@ conda activate crai
 
 `environment-cuda.yml` should be used when working with GPUs using CUDA.
 
+The installation time of the required dependencies should not exceed 15 minutes using a stable and standard internet connection
+
 ## Installation
 
 `climatereconstructionAI` can be installed using `pip` in the current directory:
 ```bash
 pip install .
 ```
+
+The installation time of the Python package should not exceed 1 minute on a regular computer 
 
 ## Usage
 

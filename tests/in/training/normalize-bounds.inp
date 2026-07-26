@@ -1,0 +1,24 @@
+--device cpu --batch-size 2
+--n-threads 4
+--data-root-dir data/
+--mask-dir data/masks/
+--log-dir tests/out/training/logs/
+--snapshot-dir tests/out/training/
+--data-names 20cr-1ens.nc,20cr-1ens.nc
+--mask-names hadcrut_missmask_1.nc,hadcrut_missmask_1.nc
+--max-iter 10
+--data-types tas,tas
+--encoding-layers 3,3
+--pooling-layers 0,0
+--save-model-interval 5
+--loss-criterion l1-hole
+--weights kaiming
+--loop-random-seed 3
+--cuda-random-seed 3
+--deterministic
+--shuffle-masks
+--normalize-data
+--min-bounds=0,-inf
+--max-bounds 10,inf
+--steady-mask steady_tas_hadcrut.nc,steady_tas_hadcrut.nc
+--n-output-data 2

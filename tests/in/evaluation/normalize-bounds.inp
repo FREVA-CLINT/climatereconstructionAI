@@ -1,0 +1,17 @@
+--device cpu
+--data-root-dir data/
+--mask-dir data/masks/
+--model-dir tests/ref/training/
+--model-names normalize-bounds.inp.pth
+--evaluation-dirs tests/out/evaluation/
+--data-names tas_hadcrut_187709_189308.nc,tas_hadcrut_187709_189308.nc
+--mask-names masks_tas_hadcrut_187709_189308.nc,masks_tas_hadcrut_187709_189308.nc
+--eval-names normalize-bounds_1,normalize-bounds_2
+--data-types tas,tas
+--encoding-layers 3,3
+--pooling-layers 0,0
+--normalize-data
+--min-bounds=0,-inf
+--max-bounds 10,inf
+--steady-mask steady_tas_hadcrut.nc,steady_tas_hadcrut.nc
+--n-output-data 2

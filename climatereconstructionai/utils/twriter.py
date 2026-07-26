@@ -65,22 +65,22 @@ class writer():
             name_tag = self.suffix
         self.writer.add_figure(name_tag, fig, global_step=iter_index)
 
-    def add_error_maps(self, mask, steady_mask, output, gt, iter_index, setname):
-        error_maps = visualization.get_all_error_maps(mask, steady_mask, output, gt, num_samples=3)
+    def add_error_maps(self, mask, output, gt, iter_index, setname):
+        error_maps = visualization.get_all_error_maps(mask, output, gt, num_samples=3)
 
         for error_map, name in zip(error_maps, ['error', 'relative error', 'abs error', 'relative abs error']):
             self.add_figure(error_map, iter_index, f'map/{setname}/{name}')
 
-    def add_correlation_plots(self, mask, steady_mask, output, gt, iter_index, setname):
-        fig = visualization.create_correlation_plot(mask, steady_mask, output, gt)
+    def add_correlation_plots(self, mask, output, gt, iter_index, setname):
+        fig = visualization.create_correlation_plot(mask, output, gt)
         self.add_figure(fig, iter_index, name_tag=f'plot/{setname}/correlation')
 
-    def add_error_dist_plot(self, mask, steady_mask, output, gt, iter_index, setname):
-        fig = visualization.create_error_dist_plot(mask, steady_mask, output, gt)
+    def add_error_dist_plot(self, mask, output, gt, iter_index, setname):
+        fig = visualization.create_error_dist_plot(mask, output, gt)
         self.add_figure(fig, iter_index, name_tag=f'plot/{setname}/error_dist')
 
-    def add_maps(self, mask, steady_mask, output, gt, iter_index, setname):
-        fig = visualization.create_map(mask, steady_mask, output, gt, num_samples=3)
+    def add_maps(self, mask, output, gt, iter_index, setname):
+        fig = visualization.create_map(mask, output, gt, num_samples=3)
         self.add_figure(fig, iter_index, name_tag=f'map/{setname}/values')
 
     def add_distribution(self, values, iter_index, name_tag=None):
@@ -88,26 +88,26 @@ class writer():
             name_tag = self.suffix
         self.writer.add_histogram(name_tag, values, global_step=iter_index)
 
-    def add_distributions(self, mask, steady_mask, output, gt, iter_index, setname):
+    def add_distributions(self, mask, output, gt, iter_index, setname):
 
-        errors_dists = visualization.get_all_error_distributions(mask, steady_mask, output, gt, num_samples=1000)
+        errors_dists = visualization.get_all_error_distributions(mask, output, gt, num_samples=1000)
         for error_dist, suffix in zip(errors_dists, ['error', 'abs error', 'relative error', 'relative abs error']):
             name = f'dist/{setname}/{suffix}'
             # entries in value_list correspond to channels
             for ch, values in enumerate(error_dist):
                 self.add_distribution(values, iter_index, name_tag=f'{name}_channel{ch}')
 
-    def add_visualizations(self, mask, steady_mask, output, gt, iter_index, setname):
+    def add_visualizations(self, mask, output, gt, iter_index, setname):
         if "correlation" in cfg.tensor_plots:
-            self.add_correlation_plots(mask, steady_mask, output, gt, iter_index, setname)
-            self.add_error_dist_plot(mask, steady_mask, output, gt, iter_index, setname)
+            self.add_correlation_plots(mask, output, gt, iter_index, setname)
+            self.add_error_dist_plot(mask, output, gt, iter_index, setname)
 
         if "distribution" in cfg.tensor_plots:
-            self.add_distributions(mask, steady_mask, output, gt, iter_index, setname)
+            self.add_distributions(mask, output, gt, iter_index, setname)
 
         if "error" in cfg.tensor_plots:
-            self.add_error_maps(mask, steady_mask, output, gt, iter_index, setname)
-            self.add_maps(mask, steady_mask, output, gt, iter_index, setname)
+            self.add_error_maps(mask, output, gt, iter_index, setname)
+            self.add_maps(mask, output, gt, iter_index, setname)
 
     def close(self):
         self.writer.close()

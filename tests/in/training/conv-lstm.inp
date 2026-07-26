@@ -1,7 +1,7 @@
 --device cpu --batch-size 2
 --n-threads 4
 --data-root-dir data/
---mask-dir data/
+--mask-dir data/masks/
 --log-dir tests/out/training/logs/
 --snapshot-dir tests/out/training/
 --data-names 20cr-1ens.nc

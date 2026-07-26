@@ -3,12 +3,11 @@ import torch.nn as nn
 
 from .utils import gram_matrix
 
-
 class FeatureLoss(nn.Module):
-    def __init__(self, extractor):
+    def __init__(self, extractor, devices):
         super().__init__()
         self.l1 = nn.L1Loss()
-        self.extractor = extractor
+        self.extractor = {f'{device}': extractor(device) for device in devices}
 
     def forward(self, data_dict):
         loss_dict = {
@@ -20,6 +19,8 @@ class FeatureLoss(nn.Module):
         output = data_dict['output']
         gt = data_dict['gt']
 
+        extractor = self.extractor[str(output.device)]
+
         # calculate loss for all channels
         for channel in range(output.shape[1]):
 
@@ -28,9 +29,9 @@ class FeatureLoss(nn.Module):
             output_comp_ch = torch.unsqueeze(output_comp[:, channel, :, :], dim=1)
 
             # define different loss function from features from output and output_comp
-            feat_output = self.extractor(output_ch)
-            feat_output_comp = self.extractor(output_comp_ch)
-            feat_gt = self.extractor(gt_ch)
+            feat_output = extractor(output_ch)
+            feat_output_comp = extractor(output_comp_ch)
+            feat_gt = extractor(gt_ch)
             for i in range(len(feat_gt)):
                 loss_dict['prc'] += self.l1(feat_output[i], feat_gt[i])
                 loss_dict['prc'] += self.l1(feat_output_comp[i], feat_gt[i])
